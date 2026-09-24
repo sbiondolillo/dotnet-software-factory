@@ -1,0 +1,34 @@
+# A `factory` label on an issue starts a homelab-factory run against it
+# (sam/homelab-factory#92). The Python factory builds this repo one module per
+# issue. The job runs on llm-01's self-hosted runner, which homelab-ansible
+# roles/factory_runner installs, and delivers a PR here.
+#
+# Only the repo owner can start a run. A self-hosted runner executes for any
+# event that matches, and the owner check is what keeps a label from anyone
+# else from reaching it.
+name: factory
+
+on:
+  issues:
+    types: [labeled]
+
+# One run at a time: the manager binds one proxy port on llm-01. A label
+# applied while a run is live waits here. GitHub keeps one waiting job per
+# group, so a third label cancels the second.
+concurrency:
+  group: factory
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  run:
+    if: github.event.label.name == 'factory' && github.event.sender.login == github.repository_owner
+    runs-on: [self-hosted, factory]
+    timeout-minutes: 180
+    steps:
+      - name: Run the factory on this issue
+        env:
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: sudo -n -u sam /home/sam/dev/git/homelab-factory/scripts/action-run.sh "$REPO" "$ISSUE"

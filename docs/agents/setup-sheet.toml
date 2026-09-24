@@ -3,11 +3,14 @@
 # docs/agents/layout.md describes the directories and does not restate these values.
 #
 # No [fixture] table: the test project calls the library in process, and
-# nothing starts a server. No integration_dir: nothing here needs a network.
+# nothing starts a server.
 
 toolchain = "csharp"
 spec_dir = "specs/features"
 binding_dir = "tests/Specs"
+# The integration suite: tests that reach GitHub, docker and Claude Code.
+# The test command never collects it. ci.yml's integration job runs it.
+integration_dir = "tests/Integration"
 # The documenter's own namespace: one write-up per run, and no other agent
 # may write here.
 docs_dir = "app_docs"

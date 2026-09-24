@@ -15,8 +15,11 @@ first commit. What each file is:
 | `Directory.Build.props`, `.editorconfig`, `global.json` | the build settings, the code style and the SDK pin. The factory compares them against the pin |
 | `src/Core/` | the library, with `Greeter` |
 | `src/App/` | the console program, built as `dotnet-software-factory` |
+| `.github/workflows/factory.yml` | a `factory` label on an issue starts a homelab-factory run on it |
+| `.github/workflows/ci.yml` | the checks: the `build` job, then the `integration` job |
 | `specs/features/` | the pinned `.feature` files. One ships here, so the first build has a binding to follow |
 | `tests/Specs/` | the test project: Reqnroll under xUnit v3, with the step class for that feature |
+| `tests/Integration/` | the integration suite: xUnit v3 tests against the real GitHub, `docker` and Claude Code. `dotnet test` skips it |
 
 ## Commands
 
@@ -25,5 +28,6 @@ dotnet restore --locked-mode             # the packages, from the locks
 dotnet build --no-restore                # build; every warning is an error
 dotnet format --verify-no-changes        # lint
 dotnet test --no-restore                 # the test suite, no network needed
+dotnet run --project tests/Integration   # the integration suite, network needed
 dotnet run --project src/App -- Ada      # the console program
 ```
