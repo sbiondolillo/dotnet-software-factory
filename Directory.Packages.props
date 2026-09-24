@@ -1,0 +1,14 @@
+<Project>
+  <!-- The manifest: every package version, in one place. A project names a
+       package with a PackageReference and no version. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="Moq" Version="4.20.72" />
+    <PackageVersion Include="Reqnroll.xunit.v3" Version="3.3.4" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="xunit.v3" Version="3.2.2" />
+  </ItemGroup>
+</Project>

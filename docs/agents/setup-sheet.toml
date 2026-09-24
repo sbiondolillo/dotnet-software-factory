@@ -1,0 +1,13 @@
+# The factory's setup sheet for this repo (homelab-factory ADR-0011).
+# The keys are the factory's; the values are this repo's layout.
+# docs/agents/layout.md describes the directories and does not restate these values.
+#
+# No [fixture] table: the test project calls the library in process, and
+# nothing starts a server. No integration_dir: nothing here needs a network.
+
+toolchain = "csharp"
+spec_dir = "specs/features"
+binding_dir = "tests/Specs"
+# The documenter's own namespace: one write-up per run, and no other agent
+# may write here.
+docs_dir = "app_docs"
