@@ -28,6 +28,20 @@ public sealed class CommandRunnerTests
     }
 
     [Fact]
+    public async Task RunAsyncPassesAnArgumentContainingARealDoubleQuoteThroughUnchanged()
+    {
+        var runner = new CommandRunner();
+        var value = "a \"b\" $HOME c";
+
+        var result = await runner.RunAsync(
+            "sh",
+            new[] { "-c", "printf %s \"$1\"", "_", value },
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(value, result.StandardOutput);
+    }
+
+    [Fact]
     public async Task RunAsyncThrowsAnExceptionNamingTheProgramWhenItCannotBeStarted()
     {
         var runner = new CommandRunner();
