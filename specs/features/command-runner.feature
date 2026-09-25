@@ -7,9 +7,9 @@ Feature: CommandRunner runs a program with a timeout and returns its exit code a
     Then the result's exit code is 3
 
   Scenario: Standard output is captured whole
-    Given the program "sh" with arguments "-c" and "printf \"hello world\""
+    Given the program "sh" with arguments "-c" and "printf 'hello world'"
     When I run the program with CommandRunner
-    # sh -c 'printf "hello world"' -> hello world
+    # sh -c "printf 'hello world'" -> hello world
     Then the result's standard output is "hello world"
 
   Scenario: Standard error is captured separately from standard output
@@ -28,9 +28,9 @@ Feature: CommandRunner runs a program with a timeout and returns its exit code a
     And the result's standard error is exactly 1048576 bytes of "y"
 
   Scenario: An argument with a space, a double quote and a dollar sign reaches the program whole
-    Given the program "sh" with arguments "-c", "printf '%s' \"$1\"" and '_' and 'a "b" $c'
+    Given the program "sh" with arguments "-c", 'printf %s "$1"' and '_' and 'a "b" $c'
     When I run the program with CommandRunner
-    # sh -c 'printf "%s" "$1"' _ 'a "b" $c' -> a "b" $c
+    # sh -c 'printf %s "$1"' _ 'a "b" $c' -> a "b" $c
     Then the result's standard output is 'a "b" $c'
 
   Scenario: The program runs in the given working directory
@@ -40,20 +40,20 @@ Feature: CommandRunner runs a program with a timeout and returns its exit code a
     Then the result's standard output, trimmed, is "/tmp"
 
   Scenario: An extra environment variable is visible to the program
-    Given the program "sh" with arguments "-c" and "printf '%s' \"$FACTORY_TEST_VAR\""
+    Given the program "sh" with arguments "-c" and 'printf %s "$FACTORY_TEST_VAR"'
     And an extra environment variable "FACTORY_TEST_VAR" set to "extra-value"
     When I run the program with CommandRunner
     Then the result's standard output is "extra-value"
 
   Scenario: An extra environment variable replaces an inherited variable of the same name
-    Given the program "sh" with arguments "-c" and "printf '%s' \"$FACTORY_TEST_VAR\""
+    Given the program "sh" with arguments "-c" and 'printf %s "$FACTORY_TEST_VAR"'
     And an inherited environment variable "FACTORY_TEST_VAR" set to "inherited-value"
     And an extra environment variable "FACTORY_TEST_VAR" set to "overriding-value"
     When I run the program with CommandRunner
     Then the result's standard output is "overriding-value"
 
   Scenario: An inherited variable the extra variables leave out keeps its inherited value
-    Given the program "sh" with arguments "-c" and "printf '%s' \"$FACTORY_TEST_VAR\""
+    Given the program "sh" with arguments "-c" and 'printf %s "$FACTORY_TEST_VAR"'
     And an inherited environment variable "FACTORY_TEST_VAR" set to "inherited-value"
     When I run the program with CommandRunner
     Then the result's standard output is "inherited-value"
