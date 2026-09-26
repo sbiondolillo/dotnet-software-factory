@@ -31,15 +31,15 @@ public sealed class GitIntegrationTests
         DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-git-integration-");
         var git = new Git(new CommandRunner());
 
-        await git.CloneAsync($"https://github.com/{Owner}/{Repo}.git", token, directory.FullName);
-        await git.CheckoutBranchAsync(branch, directory.FullName);
+        await git.CloneAsync($"https://github.com/{Owner}/{Repo}.git", token, directory.FullName, TestContext.Current.CancellationToken);
+        await git.CheckoutBranchAsync(branch, directory.FullName, TestContext.Current.CancellationToken);
 
         await File.AppendAllTextAsync(Path.Combine(directory.FullName, "README.md"), $"\nfactory integration {branch}\n", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(Path.Combine(directory.FullName, newFile), "factory integration test file\n", TestContext.Current.CancellationToken);
 
-        await git.CommitAllAsync(directory.FullName, $"Factory integration test {branch}", authorName, authorEmail);
-        string headSha = await git.ReadHeadShaAsync(directory.FullName);
-        await git.PushAsync(branch, directory.FullName, token);
+        await git.CommitAllAsync(directory.FullName, $"Factory integration test {branch}", authorName, authorEmail, TestContext.Current.CancellationToken);
+        string headSha = await git.ReadHeadShaAsync(directory.FullName, TestContext.Current.CancellationToken);
+        await git.PushAsync(branch, directory.FullName, token, TestContext.Current.CancellationToken);
 
         BranchInfo branchInfo = await ReadBranchAsync(http, branch);
         Assert.Equal(headSha, branchInfo.Commit.Sha);
@@ -49,7 +49,7 @@ public sealed class GitIntegrationTests
         string mainShaAfter = await ReadBranchShaAsync(http, "main");
         Assert.Equal(mainShaBefore, mainShaAfter);
 
-        string[] changedFiles = await git.ListChangedFilesAsync("main", directory.FullName);
+        string[] changedFiles = await git.ListChangedFilesAsync("main", directory.FullName, TestContext.Current.CancellationToken);
         Assert.Contains("README.md", changedFiles);
         Assert.Contains(newFile, changedFiles);
     }
@@ -62,13 +62,13 @@ public sealed class GitIntegrationTests
         var git = new Git(new CommandRunner());
         string branch = $"factory-integration-{Guid.NewGuid():N}";
 
-        await git.CloneAsync($"https://github.com/{Owner}/{Repo}.git", token, directory.FullName);
-        await git.CheckoutBranchAsync(branch, directory.FullName);
+        await git.CloneAsync($"https://github.com/{Owner}/{Repo}.git", token, directory.FullName, TestContext.Current.CancellationToken);
+        await git.CheckoutBranchAsync(branch, directory.FullName, TestContext.Current.CancellationToken);
         await File.AppendAllTextAsync(Path.Combine(directory.FullName, "README.md"), $"\nfactory integration {branch}\n", TestContext.Current.CancellationToken);
-        await git.CommitAllAsync(directory.FullName, $"Factory integration test {branch}", "Factory Integration Test", "factory-integration@example.com");
+        await git.CommitAllAsync(directory.FullName, $"Factory integration test {branch}", "Factory Integration Test", "factory-integration@example.com", TestContext.Current.CancellationToken);
 
         GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
-            () => git.PushAsync(branch, directory.FullName, "invalid"));
+            () => git.PushAsync(branch, directory.FullName, "invalid", TestContext.Current.CancellationToken));
 
         Assert.Contains("push", exception.Message);
         Assert.Contains("Authentication failed", exception.Message);
@@ -81,10 +81,10 @@ public sealed class GitIntegrationTests
         DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-git-integration-");
         var git = new Git(new CommandRunner());
 
-        await git.CloneAsync($"https://github.com/{Owner}/{Repo}.git", token, directory.FullName);
+        await git.CloneAsync($"https://github.com/{Owner}/{Repo}.git", token, directory.FullName, TestContext.Current.CancellationToken);
 
         GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
-            () => git.ListChangedFilesAsync("no-such-base", directory.FullName));
+            () => git.ListChangedFilesAsync("no-such-base", directory.FullName, TestContext.Current.CancellationToken));
 
         Assert.Contains("diff", exception.Message);
         Assert.Contains("unknown revision", exception.Message);

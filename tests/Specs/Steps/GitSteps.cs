@@ -10,6 +10,9 @@ public sealed class GitSteps(ExceptionState exceptionState)
 {
     private readonly List<CommandSpec> _recorded = [];
     private readonly Dictionary<string, CommandResult> _results = new();
+    private readonly List<CancellationToken> _recordedTokens = [];
+    private readonly Dictionary<string, CancellationToken> _tokens = new();
+    private readonly Dictionary<string, string> _throwOnSubcommand = new();
 
     private Mock<CommandRunner>? _mock;
     private Git? _git;
@@ -20,11 +23,16 @@ public sealed class GitSteps(ExceptionState exceptionState)
     public void GivenACallerHasAGitBuiltOverAMockOfCommandRunner()
     {
         _mock = new Mock<CommandRunner>();
-        _mock.Setup(mock => mock.RunAsync(It.IsAny<CommandSpec>()))
-            .Returns((CommandSpec spec) =>
+        _mock.Setup(mock => mock.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
+            .Returns((CommandSpec spec, CancellationToken _) =>
             {
                 _recorded.Add(spec);
                 string operation = spec.Arguments.Count > 0 ? spec.Arguments[0] : "";
+                if (_throwOnSubcommand.ContainsKey(operation))
+                {
+                    throw new OperationCanceledException();
+                }
+
                 CommandResult result = _results.TryGetValue(operation, out CommandResult? configured)
                     ? configured
                     : new CommandResult { ExitCode = 0 };
@@ -32,6 +40,30 @@ public sealed class GitSteps(ExceptionState exceptionState)
             });
         _git = new Git(_mock.Object);
     }
+
+    [Given("a caller has a Git built over a mock of CommandRunner that records the cancellation token each call receives")]
+    public void GivenACallerHasAGitBuiltOverAMockOfCommandRunnerThatRecordsTheCancellationToken()
+    {
+        _mock = new Mock<CommandRunner>();
+        _mock.Setup(mock => mock.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
+            .Returns((CommandSpec spec, CancellationToken token) =>
+            {
+                _recordedTokens.Add(token);
+                return Task.FromResult(new CommandResult { ExitCode = 0 });
+            });
+        _git = new Git(_mock.Object);
+    }
+
+    [Given("the caller has one cancellation token named {string}")]
+    public void GivenTheCallerHasOneCancellationTokenNamed(string name)
+    {
+        var cts = new CancellationTokenSource();
+        _tokens[name] = cts.Token;
+    }
+
+    [Given("the mock CommandRunner throws OperationCanceledException when Git runs {string}")]
+    public void GivenTheMockCommandRunnerThrowsOperationCanceledExceptionWhenGitRuns(string subcommand)
+        => _throwOnSubcommand[subcommand] = subcommand;
 
     [Given("git answers the head read with exit code {int} and the standard output {string}")]
     public void GivenGitAnswersTheHeadReadWith(int exitCode, string standardOutput)
@@ -81,6 +113,50 @@ public sealed class GitSteps(ExceptionState exceptionState)
         try
         {
             _changedFiles = await _git!.ListChangedFilesAsync(baseCommit, directory);
+            exceptionState.Exception = null;
+        }
+        catch (Exception ex)
+        {
+            exceptionState.Exception = ex;
+        }
+    }
+
+    [When("Git clones {string} with the token {string} into {string} using the cancellation token {string}")]
+    public Task WhenGitClonesUsingTheCancellationToken(string url, string token, string directory, string tokenName)
+        => RunAsync(() => _git!.CloneAsync(url, token, directory, _tokens[tokenName]));
+
+    [When("Git checks out the new branch {string} in {string} using the cancellation token {string}")]
+    public Task WhenGitChecksOutTheNewBranchUsingTheCancellationToken(string branch, string directory, string tokenName)
+        => RunAsync(() => _git!.CheckoutBranchAsync(branch, directory, _tokens[tokenName]));
+
+    [When("Git commits all changes in {string} with the message {string} and the author name {string} and the author email {string} using the cancellation token {string}")]
+    public Task WhenGitCommitsAllChangesUsingTheCancellationToken(string directory, string message, string authorName, string authorEmail, string tokenName)
+        => RunAsync(() => _git!.CommitAllAsync(directory, message, authorName, authorEmail, _tokens[tokenName]));
+
+    [When("Git pushes the branch {string} from {string} with the token {string} using the cancellation token {string}")]
+    public Task WhenGitPushesTheBranchUsingTheCancellationToken(string branch, string directory, string token, string tokenName)
+        => RunAsync(() => _git!.PushAsync(branch, directory, token, _tokens[tokenName]));
+
+    [When("Git reads the head SHA in {string} using the cancellation token {string}")]
+    public async Task WhenGitReadsTheHeadShaUsingTheCancellationToken(string directory, string tokenName)
+    {
+        try
+        {
+            _headSha = await _git!.ReadHeadShaAsync(directory, _tokens[tokenName]);
+            exceptionState.Exception = null;
+        }
+        catch (Exception ex)
+        {
+            exceptionState.Exception = ex;
+        }
+    }
+
+    [When("Git lists the files changed since {string} in {string} using the cancellation token {string}")]
+    public async Task WhenGitListsTheFilesChangedSinceUsingTheCancellationToken(string baseCommit, string directory, string tokenName)
+    {
+        try
+        {
+            _changedFiles = await _git!.ListChangedFilesAsync(baseCommit, directory, _tokens[tokenName]);
             exceptionState.Exception = null;
         }
         catch (Exception ex)
@@ -178,6 +254,22 @@ public sealed class GitSteps(ExceptionState exceptionState)
         Assert.IsType<GitCommandException>(exceptionState.Exception);
         Assert.Contains(text, exceptionState.Exception!.Message);
     }
+
+    [Then("every call the mock CommandRunner recorded received the cancellation token named {string}")]
+    public void ThenEveryCallTheMockCommandRunnerRecordedReceivedTheCancellationTokenNamed(string tokenName)
+    {
+        Assert.NotEmpty(_recordedTokens);
+        CancellationToken expected = _tokens[tokenName];
+        Assert.All(_recordedTokens, token => Assert.Equal(expected, token));
+    }
+
+    [Then("Git throws an OperationCanceledException")]
+    public void ThenGitThrowsAnOperationCanceledException()
+        => Assert.IsAssignableFrom<OperationCanceledException>(exceptionState.Exception);
+
+    [Then("the mock CommandRunner recorded no {string} command")]
+    public void ThenTheMockCommandRunnerRecordedNoCommand(string subcommand)
+        => Assert.DoesNotContain(_recorded, spec => spec.Arguments.Count > 0 && spec.Arguments[0] == subcommand);
 
     private async Task RunAsync(Func<Task> action)
     {
