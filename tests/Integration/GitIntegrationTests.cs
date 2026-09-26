@@ -71,6 +71,7 @@ public sealed class GitIntegrationTests
             () => git.PushAsync(branch, directory.FullName, "invalid"));
 
         Assert.Contains("push", exception.Message);
+        Assert.Contains("Authentication failed", exception.Message);
     }
 
     [Fact]
