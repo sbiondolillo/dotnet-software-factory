@@ -7,8 +7,10 @@ namespace Core;
 public class CommandRunner
 {
     /// <summary>Runs the program <paramref name="spec"/> describes and captures its result.</summary>
-    public virtual async Task<CommandResult> RunAsync(CommandSpec spec)
+    public virtual async Task<CommandResult> RunAsync(CommandSpec spec, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var psi = new ProcessStartInfo
         {
             FileName = spec.Command,
@@ -45,27 +47,40 @@ public class CommandRunner
 
         using (process)
         {
-            Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
-            Task<string> stderrTask = process.StandardError.ReadToEndAsync();
+            Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
+            Task<string> stderrTask = process.StandardError.ReadToEndAsync(CancellationToken.None);
 
             if (spec.Timeout is { } timeout)
             {
                 using var cts = new CancellationTokenSource(timeout);
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, cancellationToken);
                 try
                 {
-                    await process.WaitForExitAsync(cts.Token).ConfigureAwait(false);
+                    await process.WaitForExitAsync(linked.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
                     StopProcessTree(process);
                     await stdoutTask.ConfigureAwait(false);
                     await stderrTask.ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
+
                     throw new TimeoutException($"{spec.Command} did not finish within {FormatSeconds(timeout)}");
                 }
             }
             else
             {
-                await process.WaitForExitAsync().ConfigureAwait(false);
+                try
+                {
+                    await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    StopProcessTree(process);
+                    await stdoutTask.ConfigureAwait(false);
+                    await stderrTask.ConfigureAwait(false);
+                    throw;
+                }
             }
 
             string stdout = await stdoutTask.ConfigureAwait(false);

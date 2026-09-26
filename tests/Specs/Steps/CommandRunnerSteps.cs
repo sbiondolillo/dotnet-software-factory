@@ -65,18 +65,9 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState)
     [When("I run the command")]
     public async Task WhenIRunTheCommand()
     {
-        var spec = new CommandSpec
-        {
-            Command = _command ?? string.Empty,
-            Arguments = _arguments,
-            WorkingDirectory = _workingDirectory,
-            EnvironmentVariables = _extraEnvironment,
-            Timeout = _timeout,
-        };
-
         try
         {
-            _result = await _runner.RunAsync(spec);
+            _result = await _runner.RunAsync(BuildSpec());
             exceptionState.Exception = null;
         }
         catch (Exception ex)
@@ -85,6 +76,53 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState)
             exceptionState.Exception = ex;
         }
     }
+
+    [When("I run the command and cancel the token {int} second after the call starts")]
+    public async Task WhenIRunTheCommandAndCancelTheTokenSecondAfterTheCallStarts(int seconds)
+    {
+        using var cts = new CancellationTokenSource();
+        Task<CommandResult> task = _runner.RunAsync(BuildSpec(), cts.Token);
+        await Task.Delay(TimeSpan.FromSeconds(seconds));
+        cts.Cancel();
+
+        try
+        {
+            _result = await task;
+            exceptionState.Exception = null;
+        }
+        catch (Exception ex)
+        {
+            _result = null;
+            exceptionState.Exception = ex;
+        }
+    }
+
+    [When("I run the command with a token that is already cancelled")]
+    public async Task WhenIRunTheCommandWithATokenThatIsAlreadyCancelled()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        try
+        {
+            _result = await _runner.RunAsync(BuildSpec(), cts.Token);
+            exceptionState.Exception = null;
+        }
+        catch (Exception ex)
+        {
+            _result = null;
+            exceptionState.Exception = ex;
+        }
+    }
+
+    private CommandSpec BuildSpec() => new()
+    {
+        Command = _command ?? string.Empty,
+        Arguments = _arguments,
+        WorkingDirectory = _workingDirectory,
+        EnvironmentVariables = _extraEnvironment,
+        Timeout = _timeout,
+    };
 
     [When("the caller asks the mock to run {string}")]
     public async Task WhenTheCallerAsksTheMockToRun(string command)
@@ -129,6 +167,13 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState)
 
     [Then("RunAsync throws a TimeoutException")]
     public void ThenRunAsyncThrowsATimeoutException() => Assert.IsType<System.TimeoutException>(exceptionState.Exception);
+
+    [Then("RunAsync throws an OperationCanceledException")]
+    public void ThenRunAsyncThrowsAnOperationCanceledException()
+        => Assert.IsAssignableFrom<OperationCanceledException>(exceptionState.Exception);
+
+    [Then("the file {string} does not exist")]
+    public static void ThenTheFileDoesNotExist(string path) => Assert.False(File.Exists(path));
 
     [Then("RunAsync throws an exception")]
     public void ThenRunAsyncThrowsAnException() => Assert.NotNull(exceptionState.Exception);
