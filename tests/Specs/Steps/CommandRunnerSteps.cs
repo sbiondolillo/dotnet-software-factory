@@ -55,7 +55,7 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState)
     public void GivenTheTimeoutIs(int seconds) => _timeout = TimeSpan.FromSeconds(seconds);
 
     [Given("a caller receives a mock of CommandRunner")]
-    public void GivenACallerReceivesAMockOfCommandRunner() => _mock = new Mock<CommandRunner>();
+    public void GivenACallerReceivesAMockOfCommandRunner() => _mock = new Mock<CommandRunner>(MockBehavior.Strict);
 
     [Given("the mock returns a CommandResult with exit code {int} and standard output {string}")]
     public void GivenTheMockReturns(int exitCode, string standardOutput)

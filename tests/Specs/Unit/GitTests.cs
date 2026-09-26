@@ -23,7 +23,7 @@ public sealed class GitTests
     public async Task CommitAllThrowsNamingAddWhenGitAddFailsAndNeverRunsCommit()
     {
         var runs = new List<string>();
-        var mock = new Mock<CommandRunner>();
+        var mock = new Mock<CommandRunner>(MockBehavior.Strict);
         mock.Setup(runner => runner.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec spec, CancellationToken _) =>
             {
@@ -43,7 +43,7 @@ public sealed class GitTests
     [Fact]
     public async Task CommitAllThrowsNamingCommitWhenGitCommitFails()
     {
-        var mock = new Mock<CommandRunner>();
+        var mock = new Mock<CommandRunner>(MockBehavior.Strict);
         mock.Setup(runner => runner.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec spec, CancellationToken _) => Task.FromResult(spec.Arguments[0] == "add"
                 ? new CommandResult { ExitCode = 0 }
@@ -123,7 +123,7 @@ public sealed class GitTests
     public async Task PushNeverPassesTheTokenAsAnArgument()
     {
         CommandSpec? recorded = null;
-        var mock = new Mock<CommandRunner>();
+        var mock = new Mock<CommandRunner>(MockBehavior.Strict);
         mock.Setup(runner => runner.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec spec, CancellationToken _) =>
             {
@@ -142,7 +142,7 @@ public sealed class GitTests
     public async Task CommitAllSetsTheAuthorEnvironmentVariablesAlongsideTheCommitterOnes()
     {
         CommandSpec? commitSpec = null;
-        var mock = new Mock<CommandRunner>();
+        var mock = new Mock<CommandRunner>(MockBehavior.Strict);
         mock.Setup(runner => runner.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec spec, CancellationToken _) =>
             {
@@ -168,7 +168,7 @@ public sealed class GitTests
     public async Task CommitAllLetsAnOperationCanceledExceptionFromAddReachTheCallerAndNeverRunsCommit()
     {
         var runs = new List<string>();
-        var mock = new Mock<CommandRunner>();
+        var mock = new Mock<CommandRunner>(MockBehavior.Strict);
         mock.Setup(runner => runner.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec spec, CancellationToken _) =>
             {
@@ -191,7 +191,7 @@ public sealed class GitTests
     [Fact]
     public async Task CheckoutBranchLetsAnOperationCanceledExceptionReachTheCallerUnwrapped()
     {
-        var mock = new Mock<CommandRunner>();
+        var mock = new Mock<CommandRunner>(MockBehavior.Strict);
         mock.Setup(runner => runner.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec _, CancellationToken _) => throw new OperationCanceledException());
         var git = new Git(mock.Object);
@@ -202,7 +202,7 @@ public sealed class GitTests
 
     private static Mock<CommandRunner> NewMock(params (string Subcommand, CommandResult Result)[] configured)
     {
-        var mock = new Mock<CommandRunner>();
+        var mock = new Mock<CommandRunner>(MockBehavior.Strict);
         mock.Setup(runner => runner.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec spec, CancellationToken _) =>
             {

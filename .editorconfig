@@ -30,3 +30,4 @@ dotnet_diagnostic.IDE0020.severity = warning
 dotnet_diagnostic.IDE0038.severity = warning
 csharp_style_pattern_matching_over_as_with_null_check = true
 dotnet_diagnostic.IDE0019.severity = warning
+dotnet_diagnostic.Moq1410.severity = warning
