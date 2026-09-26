@@ -8,7 +8,7 @@ using Xunit;
 namespace Specs.Steps;
 
 [Binding]
-public sealed class CommandRunnerSteps
+public sealed class CommandRunnerSteps(ExceptionState exceptionState)
 {
     private static readonly Regex QuotedSpan = new(@"""[^""]*""|'[^']*'", RegexOptions.Compiled);
 
@@ -21,7 +21,6 @@ public sealed class CommandRunnerSteps
     private string? _workingDirectory;
     private TimeSpan? _timeout;
     private CommandResult? _result;
-    private Exception? _exception;
     private CommandResult? _mockResult;
     private string? _mockedCommand;
 
@@ -78,12 +77,12 @@ public sealed class CommandRunnerSteps
         try
         {
             _result = await _runner.RunAsync(spec);
-            _exception = null;
+            exceptionState.Exception = null;
         }
         catch (Exception ex)
         {
             _result = null;
-            _exception = ex;
+            exceptionState.Exception = ex;
         }
     }
 
@@ -129,16 +128,16 @@ public sealed class CommandRunnerSteps
     public void ThenTheStandardErrorIsTheLetterRepeated(string letter, int count) => Assert.Equal(new string(letter[0], count), StandardError());
 
     [Then("RunAsync throws a TimeoutException")]
-    public void ThenRunAsyncThrowsATimeoutException() => Assert.IsType<System.TimeoutException>(_exception);
+    public void ThenRunAsyncThrowsATimeoutException() => Assert.IsType<System.TimeoutException>(exceptionState.Exception);
 
     [Then("RunAsync throws an exception")]
-    public void ThenRunAsyncThrowsAnException() => Assert.NotNull(_exception);
+    public void ThenRunAsyncThrowsAnException() => Assert.NotNull(exceptionState.Exception);
 
     [Then("the exception message contains {string}")]
     public void ThenTheExceptionMessageContains(string text)
     {
-        Assert.NotNull(_exception);
-        Assert.Contains(text, _exception.Message);
+        Assert.NotNull(exceptionState.Exception);
+        Assert.Contains(text, exceptionState.Exception.Message);
     }
 
     [Then("the {string} program is no longer running")]
