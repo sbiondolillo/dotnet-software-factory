@@ -4,7 +4,7 @@ namespace Core;
 public sealed class Git(CommandRunner runner)
 {
     /// <summary>Clones <paramref name="url"/> into <paramref name="directory"/>, authenticating with <paramref name="token"/>.</summary>
-    public async Task CloneAsync(string url, string token, string directory)
+    public async Task CloneAsync(string url, string token, string directory, CancellationToken cancellationToken = default)
     {
         var spec = new CommandSpec
         {
@@ -13,11 +13,11 @@ public sealed class Git(CommandRunner runner)
             EnvironmentVariables = CredentialEnvironment(token),
         };
 
-        await RunAsync(spec).ConfigureAwait(false);
+        await RunAsync(spec, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Checks out a new branch named <paramref name="branch"/> in <paramref name="directory"/>.</summary>
-    public async Task CheckoutBranchAsync(string branch, string directory)
+    public async Task CheckoutBranchAsync(string branch, string directory, CancellationToken cancellationToken = default)
     {
         var spec = new CommandSpec
         {
@@ -26,11 +26,11 @@ public sealed class Git(CommandRunner runner)
             WorkingDirectory = directory,
         };
 
-        await RunAsync(spec).ConfigureAwait(false);
+        await RunAsync(spec, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Stages and commits every change in the work tree at <paramref name="directory"/>.</summary>
-    public async Task CommitAllAsync(string directory, string message, string authorName, string authorEmail)
+    public async Task CommitAllAsync(string directory, string message, string authorName, string authorEmail, CancellationToken cancellationToken = default)
     {
         var addSpec = new CommandSpec
         {
@@ -39,7 +39,7 @@ public sealed class Git(CommandRunner runner)
             WorkingDirectory = directory,
         };
 
-        await RunAsync(addSpec).ConfigureAwait(false);
+        await RunAsync(addSpec, cancellationToken).ConfigureAwait(false);
 
         var commitSpec = new CommandSpec
         {
@@ -55,11 +55,11 @@ public sealed class Git(CommandRunner runner)
             },
         };
 
-        await RunAsync(commitSpec).ConfigureAwait(false);
+        await RunAsync(commitSpec, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Pushes <paramref name="branch"/> to origin from <paramref name="directory"/>, authenticating with <paramref name="token"/>.</summary>
-    public async Task PushAsync(string branch, string directory, string token)
+    public async Task PushAsync(string branch, string directory, string token, CancellationToken cancellationToken = default)
     {
         var spec = new CommandSpec
         {
@@ -69,11 +69,11 @@ public sealed class Git(CommandRunner runner)
             EnvironmentVariables = CredentialEnvironment(token),
         };
 
-        await RunAsync(spec).ConfigureAwait(false);
+        await RunAsync(spec, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Reads the 40-character SHA of HEAD in <paramref name="directory"/>.</summary>
-    public async Task<string> ReadHeadShaAsync(string directory)
+    public async Task<string> ReadHeadShaAsync(string directory, CancellationToken cancellationToken = default)
     {
         var spec = new CommandSpec
         {
@@ -82,12 +82,12 @@ public sealed class Git(CommandRunner runner)
             WorkingDirectory = directory,
         };
 
-        CommandResult result = await RunAsync(spec).ConfigureAwait(false);
+        CommandResult result = await RunAsync(spec, cancellationToken).ConfigureAwait(false);
         return result.StandardOutput.Trim();
     }
 
     /// <summary>Lists the files changed since <paramref name="baseCommit"/> in <paramref name="directory"/>.</summary>
-    public async Task<string[]> ListChangedFilesAsync(string baseCommit, string directory)
+    public async Task<string[]> ListChangedFilesAsync(string baseCommit, string directory, CancellationToken cancellationToken = default)
     {
         var spec = new CommandSpec
         {
@@ -96,13 +96,13 @@ public sealed class Git(CommandRunner runner)
             WorkingDirectory = directory,
         };
 
-        CommandResult result = await RunAsync(spec).ConfigureAwait(false);
+        CommandResult result = await RunAsync(spec, cancellationToken).ConfigureAwait(false);
         return result.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries);
     }
 
-    private async Task<CommandResult> RunAsync(CommandSpec spec)
+    private async Task<CommandResult> RunAsync(CommandSpec spec, CancellationToken cancellationToken)
     {
-        CommandResult result = await runner.RunAsync(spec).ConfigureAwait(false);
+        CommandResult result = await runner.RunAsync(spec, cancellationToken).ConfigureAwait(false);
         if (result.ExitCode is not 0)
         {
             throw new GitCommandException(spec.Arguments[0], result.StandardError);

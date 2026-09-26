@@ -19,6 +19,14 @@
     <ReqnrollFeatureFiles Include="../../specs/features/**/*.feature" Link="Features/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Serializes test collections: two scenarios in different features spawn a program
+         with the same argv ("sleep 10"), and ProcessScan matches any process with that
+         argv, so running them in parallel makes one scenario see the other's process. -->
+    <None Update="xunit.runner.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../src/Core/Core.csproj" />
   </ItemGroup>
 </Project>

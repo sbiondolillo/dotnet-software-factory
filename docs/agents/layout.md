@@ -22,7 +22,9 @@ Reqnroll compiles each linked feature into a test class under `obj/`, named afte
 
 `Directory.Build.props` turns on nullable reference types, the recommended analyzers and `EnforceCodeStyleInBuild`, and makes every warning an error. `.editorconfig` holds the style. `dotnet format` fixes what it can.
 
-The house style as prose, for the rules no analyzer expresses: a class that stores its constructor arguments uses a primary constructor, and a comparison with a constant is a pattern: `value is null`, `value is not null`, `result.ExitCode is not 0`, `value is string text`. `is not 0` over `!= 0` is the one rule no analyzer flags; the build will not catch it, so write it by hand. Every `await` in `src/` ends with `.ConfigureAwait(false)`.
+The house style as prose, for the rules no analyzer expresses: a class that stores its constructor arguments uses a primary constructor, and a comparison with a constant is a pattern: `value is null`, `value is not null`, `result.ExitCode is not 0`, `value is string text`. `is not 0` over `!= 0` is the one rule no analyzer flags; the build will not catch it, so write it by hand. Every `await` in `src/` ends with `.ConfigureAwait(false)`. A public async method
+takes `CancellationToken cancellationToken = default` as its last parameter, and
+passes it to every call that takes one.
 
 ## Git
 

@@ -59,7 +59,7 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState)
 
     [Given("the mock returns a CommandResult with exit code {int} and standard output {string}")]
     public void GivenTheMockReturns(int exitCode, string standardOutput)
-        => _mock!.Setup(mock => mock.RunAsync(It.IsAny<CommandSpec>()))
+        => _mock!.Setup(mock => mock.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CommandResult { ExitCode = exitCode, StandardOutput = standardOutput });
 
     [When("I run the command")]
@@ -77,6 +77,64 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState)
         try
         {
             _result = await _runner.RunAsync(spec);
+            exceptionState.Exception = null;
+        }
+        catch (Exception ex)
+        {
+            _result = null;
+            exceptionState.Exception = ex;
+        }
+    }
+
+    [When("I run the command and cancel the token {int} second after the call starts")]
+    public async Task WhenIRunTheCommandAndCancelTheTokenSecondAfterTheCallStarts(int seconds)
+    {
+        var spec = new CommandSpec
+        {
+            Command = _command ?? string.Empty,
+            Arguments = _arguments,
+            WorkingDirectory = _workingDirectory,
+            EnvironmentVariables = _extraEnvironment,
+            Timeout = _timeout,
+        };
+
+        using var cts = new CancellationTokenSource();
+        Task<CommandResult> task = _runner.RunAsync(spec, cts.Token);
+        await Task.Delay(TimeSpan.FromSeconds(seconds));
+        cts.Cancel();
+
+        try
+        {
+            _result = await task;
+            exceptionState.Exception = null;
+        }
+        catch (Exception ex)
+        {
+            _result = null;
+            exceptionState.Exception = ex;
+        }
+    }
+
+    [When("I run the command with a token that is already cancelled")]
+    public async Task WhenIRunTheCommandWithATokenThatIsAlreadyCancelled()
+    {
+        File.Delete("/tmp/factory-cancel-marker");
+
+        var spec = new CommandSpec
+        {
+            Command = _command ?? string.Empty,
+            Arguments = _arguments,
+            WorkingDirectory = _workingDirectory,
+            EnvironmentVariables = _extraEnvironment,
+            Timeout = _timeout,
+        };
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        try
+        {
+            _result = await _runner.RunAsync(spec, cts.Token);
             exceptionState.Exception = null;
         }
         catch (Exception ex)
@@ -129,6 +187,12 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState)
 
     [Then("RunAsync throws a TimeoutException")]
     public void ThenRunAsyncThrowsATimeoutException() => Assert.IsType<System.TimeoutException>(exceptionState.Exception);
+
+    [Then("RunAsync throws an OperationCanceledException")]
+    public void ThenRunAsyncThrowsAnOperationCanceledException() => Assert.IsType<OperationCanceledException>(exceptionState.Exception);
+
+    [Then("the file {string} does not exist")]
+    public static void ThenTheFileDoesNotExist(string path) => Assert.False(File.Exists(path));
 
     [Then("RunAsync throws an exception")]
     public void ThenRunAsyncThrowsAnException() => Assert.NotNull(exceptionState.Exception);

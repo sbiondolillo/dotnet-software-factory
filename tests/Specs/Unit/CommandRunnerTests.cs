@@ -16,7 +16,7 @@ public sealed class CommandRunnerTests
             Timeout = TimeSpan.FromSeconds(1),
         };
 
-        var exception = await Assert.ThrowsAsync<System.TimeoutException>(() => runner.RunAsync(spec));
+        var exception = await Assert.ThrowsAsync<System.TimeoutException>(() => runner.RunAsync(spec, TestContext.Current.CancellationToken));
 
         Assert.Contains("sh", exception.Message);
         Assert.Contains("1 second", exception.Message);
@@ -28,9 +28,47 @@ public sealed class CommandRunnerTests
     {
         var runner = new CommandRunner();
         var exception = await Assert.ThrowsAsync<CommandStartException>(
-            () => runner.RunAsync(new CommandSpec { Command = "factory-unit-missing-xyz" }));
+            () => runner.RunAsync(new CommandSpec { Command = "factory-unit-missing-xyz" }, TestContext.Current.CancellationToken));
 
         Assert.Contains("factory-unit-missing-xyz", exception.Message);
+    }
+
+    [Fact]
+    public async Task ATimeoutThatFiresFirstStillThrowsTimeoutException()
+    {
+        var runner = new CommandRunner();
+        using var cts = new CancellationTokenSource();
+        var spec = new CommandSpec
+        {
+            Command = "sh",
+            Arguments = ["-c", "sleep 30"],
+            Timeout = TimeSpan.FromSeconds(1),
+        };
+
+        await Assert.ThrowsAsync<TimeoutException>(() => runner.RunAsync(spec, cts.Token));
+
+        await AssertProgramGone(["sleep", "30"]);
+    }
+
+    [Fact]
+    public async Task AnAlreadyCancelledTokenWithATimeoutStartsNoProgramAndThrowsOperationCanceledException()
+    {
+        var runner = new CommandRunner();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var spec = new CommandSpec
+        {
+            Command = "sh",
+            Arguments = ["-c", "touch /tmp/factory-unit-cancel-marker"],
+            Timeout = TimeSpan.FromSeconds(10),
+        };
+
+        File.Delete("/tmp/factory-unit-cancel-marker");
+
+        var exception = await Record.ExceptionAsync(() => runner.RunAsync(spec, cts.Token));
+
+        Assert.IsType<OperationCanceledException>(exception);
+        Assert.False(File.Exists("/tmp/factory-unit-cancel-marker"));
     }
 
     private static async Task AssertProgramGone(string[] argv)

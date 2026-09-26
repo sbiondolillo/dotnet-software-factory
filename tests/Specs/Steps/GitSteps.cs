@@ -9,7 +9,10 @@ namespace Specs.Steps;
 public sealed class GitSteps(ExceptionState exceptionState)
 {
     private readonly List<CommandSpec> _recorded = [];
+    private readonly List<CancellationToken> _recordedTokens = [];
     private readonly Dictionary<string, CommandResult> _results = new();
+    private readonly Dictionary<string, CancellationTokenSource> _namedTokenSources = new();
+    private readonly HashSet<string> _throwingOperations = new();
 
     private Mock<CommandRunner>? _mock;
     private Git? _git;
@@ -20,11 +23,17 @@ public sealed class GitSteps(ExceptionState exceptionState)
     public void GivenACallerHasAGitBuiltOverAMockOfCommandRunner()
     {
         _mock = new Mock<CommandRunner>();
-        _mock.Setup(mock => mock.RunAsync(It.IsAny<CommandSpec>()))
-            .Returns((CommandSpec spec) =>
+        _mock.Setup(mock => mock.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
+            .Returns((CommandSpec spec, CancellationToken token) =>
             {
                 _recorded.Add(spec);
+                _recordedTokens.Add(token);
                 string operation = spec.Arguments.Count > 0 ? spec.Arguments[0] : "";
+                if (_throwingOperations.Contains(operation))
+                {
+                    throw new OperationCanceledException();
+                }
+
                 CommandResult result = _results.TryGetValue(operation, out CommandResult? configured)
                     ? configured
                     : new CommandResult { ExitCode = 0 };
@@ -45,21 +54,41 @@ public sealed class GitSteps(ExceptionState exceptionState)
     public void GivenGitAnswersTheCheckoutWith(int exitCode, string standardError)
         => _results["checkout"] = new CommandResult { ExitCode = exitCode, StandardError = standardError };
 
+    [Given("the mock CommandRunner throws OperationCanceledException for the {string} command")]
+    public void GivenTheMockCommandRunnerThrowsOperationCanceledExceptionForTheCommand(string operation)
+        => _throwingOperations.Add(operation);
+
     [When("Git clones {string} with the token {string} into {string}")]
     public Task WhenGitClones(string url, string token, string directory)
         => RunAsync(() => _git!.CloneAsync(url, token, directory));
+
+    [When("Git clones {string} with the token {string} into {string} and the cancellation token {string}")]
+    public Task WhenGitClones(string url, string token, string directory, string tokenName)
+        => RunAsync(() => _git!.CloneAsync(url, token, directory, NamedToken(tokenName)));
 
     [When("Git checks out the new branch {string} in {string}")]
     public Task WhenGitChecksOutTheNewBranch(string branch, string directory)
         => RunAsync(() => _git!.CheckoutBranchAsync(branch, directory));
 
+    [When("Git checks out the new branch {string} in {string} with the cancellation token {string}")]
+    public Task WhenGitChecksOutTheNewBranch(string branch, string directory, string tokenName)
+        => RunAsync(() => _git!.CheckoutBranchAsync(branch, directory, NamedToken(tokenName)));
+
     [When("Git commits all changes in {string} with the message {string} and the author name {string} and the author email {string}")]
     public Task WhenGitCommitsAllChanges(string directory, string message, string authorName, string authorEmail)
         => RunAsync(() => _git!.CommitAllAsync(directory, message, authorName, authorEmail));
 
+    [When("Git commits all changes in {string} with the message {string} and the author name {string} and the author email {string} and the cancellation token {string}")]
+    public Task WhenGitCommitsAllChanges(string directory, string message, string authorName, string authorEmail, string tokenName)
+        => RunAsync(() => _git!.CommitAllAsync(directory, message, authorName, authorEmail, NamedToken(tokenName)));
+
     [When("Git pushes the branch {string} from {string} with the token {string}")]
     public Task WhenGitPushesTheBranch(string branch, string directory, string token)
         => RunAsync(() => _git!.PushAsync(branch, directory, token));
+
+    [When("Git pushes the branch {string} from {string} with the token {string} and the cancellation token {string}")]
+    public Task WhenGitPushesTheBranch(string branch, string directory, string token, string tokenName)
+        => RunAsync(() => _git!.PushAsync(branch, directory, token, NamedToken(tokenName)));
 
     [When("Git reads the head SHA in {string}")]
     public async Task WhenGitReadsTheHeadSha(string directory)
@@ -75,12 +104,40 @@ public sealed class GitSteps(ExceptionState exceptionState)
         }
     }
 
+    [When("Git reads the head SHA in {string} with the cancellation token {string}")]
+    public async Task WhenGitReadsTheHeadSha(string directory, string tokenName)
+    {
+        try
+        {
+            _headSha = await _git!.ReadHeadShaAsync(directory, NamedToken(tokenName));
+            exceptionState.Exception = null;
+        }
+        catch (Exception ex)
+        {
+            exceptionState.Exception = ex;
+        }
+    }
+
     [When("Git lists the files changed since {string} in {string}")]
     public async Task WhenGitListsTheFilesChangedSince(string baseCommit, string directory)
     {
         try
         {
             _changedFiles = await _git!.ListChangedFilesAsync(baseCommit, directory);
+            exceptionState.Exception = null;
+        }
+        catch (Exception ex)
+        {
+            exceptionState.Exception = ex;
+        }
+    }
+
+    [When("Git lists the files changed since {string} in {string} with the cancellation token {string}")]
+    public async Task WhenGitListsTheFilesChangedSince(string baseCommit, string directory, string tokenName)
+    {
+        try
+        {
+            _changedFiles = await _git!.ListChangedFilesAsync(baseCommit, directory, NamedToken(tokenName));
             exceptionState.Exception = null;
         }
         catch (Exception ex)
@@ -177,6 +234,32 @@ public sealed class GitSteps(ExceptionState exceptionState)
     {
         Assert.IsType<GitCommandException>(exceptionState.Exception);
         Assert.Contains(text, exceptionState.Exception!.Message);
+    }
+
+    [Then("every call the mock CommandRunner recorded received the cancellation token {string}")]
+    public void ThenEveryCallTheMockCommandRunnerRecordedReceivedTheCancellationToken(string tokenName)
+    {
+        CancellationToken expected = NamedToken(tokenName);
+        Assert.NotEmpty(_recordedTokens);
+        Assert.All(_recordedTokens, token => Assert.Equal(expected, token));
+    }
+
+    [Then("the commit throws an OperationCanceledException")]
+    public void ThenTheCommitThrowsAnOperationCanceledException() => Assert.IsType<OperationCanceledException>(exceptionState.Exception);
+
+    [Then("the mock CommandRunner recorded no {string} CommandSpec")]
+    public void ThenTheMockCommandRunnerRecordedNoCommandSpec(string operation)
+        => Assert.DoesNotContain(_recorded, spec => spec.Arguments.Count > 0 && spec.Arguments[0] == operation);
+
+    private CancellationToken NamedToken(string tokenName)
+    {
+        if (!_namedTokenSources.TryGetValue(tokenName, out CancellationTokenSource? source))
+        {
+            source = new CancellationTokenSource();
+            _namedTokenSources[tokenName] = source;
+        }
+
+        return source.Token;
     }
 
     private async Task RunAsync(Func<Task> action)
