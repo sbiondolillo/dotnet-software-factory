@@ -17,7 +17,7 @@ Feature: A command runs with a timeout and returns its exit code and output
       | -c                                                    |
       | printf 'stdout-text' 1>&1; printf 'stderr-text' 1>&2  |
     When I run the command
-    # run: sh -c "printf 'stdout-text' 1>&1; printf 'stderr-text' 1>&2" 1>/tmp/rr2_out 2>/tmp/rr2_err; cat /tmp/rr2_out; cat /tmp/rr2_err
+    # run: sh -c "printf 'stdout-text' 1>&1; printf 'stderr-text' 1>&2" 1>/tmp/rr2_out 2>/tmp/rr2_err; printf '%s\n' "$(cat /tmp/rr2_out)" "$(cat /tmp/rr2_err)"
     Then the result's standard output is "stdout-text"
     And the result's standard error is "stderr-text"
 
@@ -42,7 +42,7 @@ Feature: A command runs with a timeout and returns its exit code and output
       | a "b" $c          |
     When I run the command
     # run: sh -c 'printf "%s" "$1"' sh 'a "b" $c'
-    Then the result's standard output is 'a "b" $c'
+    Then the standard output is 'a "b" $c'
 
   Scenario: The program runs in the given working directory
     Given a command "pwd"
@@ -101,6 +101,7 @@ Feature: A command runs with a timeout and returns its exit code and output
     # run: printf 'sh\n1 second\n'
     And the exception message contains "sh"
     And the exception message contains "1 second"
+    # run: printf 'sh'
     And the program "sh" is no longer running
 
   Scenario: A program that is on no PATH makes RunAsync throw
