@@ -22,7 +22,7 @@ public sealed class GitSteps(ExceptionState exceptionState)
     [Given("a caller has a Git built over a mock of CommandRunner that records every CommandSpec it runs")]
     public void GivenACallerHasAGitBuiltOverAMockOfCommandRunner()
     {
-        _mock = new Mock<CommandRunner>();
+        _mock = new Mock<CommandRunner>(MockBehavior.Strict);
         _mock.Setup(mock => mock.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec spec, CancellationToken _) =>
             {
@@ -44,7 +44,7 @@ public sealed class GitSteps(ExceptionState exceptionState)
     [Given("a caller has a Git built over a mock of CommandRunner that records the cancellation token each call receives")]
     public void GivenACallerHasAGitBuiltOverAMockOfCommandRunnerThatRecordsTheCancellationToken()
     {
-        _mock = new Mock<CommandRunner>();
+        _mock = new Mock<CommandRunner>(MockBehavior.Strict);
         _mock.Setup(mock => mock.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec spec, CancellationToken token) =>
             {

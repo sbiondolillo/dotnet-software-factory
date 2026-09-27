@@ -21,6 +21,12 @@
           "Castle.Core": "5.1.1"
         }
       },
+      "Moq.Analyzers": {
+        "type": "Direct",
+        "requested": "[0.3.0, )",
+        "resolved": "0.3.0",
+        "contentHash": "ZqPK1cEB/0G25EcBvxLJmMCMwI9wSIq6zTpHD7dUpHhbiTnYpDu3mnKJB5wvZw8hRR8/gfWbszkO5Z09XkOJvQ=="
+      },
       "Reqnroll.xunit.v3": {
         "type": "Direct",
         "requested": "[3.3.4, )",
