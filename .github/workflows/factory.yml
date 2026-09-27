@@ -51,4 +51,4 @@ jobs:
         env:
           REPO: ${{ github.repository }}
           ISSUE: ${{ github.event.issue.number }}
-        run: sudo -n -u sam /home/sam/dev/git/homelab-factory/scripts/action-run.sh "$REPO" "$ISSUE" "$RECIPE"
+        run: sudo -n -u sam /usr/local/bin/homelab-factory-run "$REPO" "$ISSUE" "$RECIPE"
