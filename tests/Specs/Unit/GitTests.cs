@@ -43,11 +43,16 @@ public sealed class GitTests
     [Fact]
     public async Task CommitAllThrowsNamingCommitWhenGitCommitFails()
     {
+        var runs = new List<string>();
         var mock = new Mock<CommandRunner>(MockBehavior.Strict);
         mock.Setup(runner => runner.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
-            .Returns((CommandSpec spec, CancellationToken _) => Task.FromResult(spec.Arguments[0] == "add"
-                ? new CommandResult { ExitCode = 0 }
-                : new CommandResult { ExitCode = 1, StandardError = "fatal: commit failed" }));
+            .Returns((CommandSpec spec, CancellationToken _) =>
+            {
+                runs.Add(spec.Arguments[0]);
+                return Task.FromResult(spec.Arguments[0] == "add"
+                    ? new CommandResult { ExitCode = 0 }
+                    : new CommandResult { ExitCode = 1, StandardError = "fatal: commit failed" });
+            });
         var git = new Git(mock.Object);
 
         var exception = await Assert.ThrowsAsync<GitCommandException>(
@@ -55,6 +60,7 @@ public sealed class GitTests
 
         Assert.Contains("commit", exception.Message);
         Assert.Contains("fatal: commit failed", exception.Message);
+        Assert.Equal(["add", "commit"], runs);
     }
 
     [Fact]
