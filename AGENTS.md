@@ -18,6 +18,8 @@ Where things are in this repo, for an agent about to read or write code here.
 
 Reqnroll compiles each linked feature into a test class under `obj/`, named after the feature title with `Feature` added, and one test method per scenario. A step class marked `[Binding]` answers the steps. It calls the library in process.
 
+Code that reads a feature file or names a test method goes in `FeatureFiles` in `src/Core/`. It reads the file with the `Gherkin` parser. It makes a test name with `ToIdentifier` in `Reqnroll.Tracing.CodeFormattingExtensions`, so each name agrees with the method that Reqnroll generates. Both come through the `Reqnroll` package. The package takes the version of `Reqnroll.xunit.v3`, because a name agrees only with the generator of that version. A unit test of this code runs both on real files.
+
 ## The rules that build and style enforce
 
 `Directory.Build.props` turns on nullable reference types, the recommended analyzers and `EnforceCodeStyleInBuild`, and makes every warning an error. `.editorconfig` holds the style. `dotnet format` fixes what it can.
