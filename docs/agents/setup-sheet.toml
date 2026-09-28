@@ -1,6 +1,6 @@
 # The factory's setup sheet for this repo (homelab-factory ADR-0011).
 # The keys are the factory's; the values are this repo's layout.
-# docs/agents/layout.md describes the directories and does not restate these values.
+# AGENTS.md describes the directories and does not restate these values.
 #
 # No [fixture] table: the test project calls the library in process, and
 # nothing starts a server.
