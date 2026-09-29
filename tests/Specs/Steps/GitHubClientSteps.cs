@@ -8,9 +8,9 @@ using Xunit;
 namespace Specs.Steps;
 
 [Binding]
-public sealed class GitHubClientSteps(ExceptionState exceptionState) : IDisposable
+public sealed class GitHubClientSteps(ExceptionState exceptionState, RecordingHandler handler) : IDisposable
 {
-    private readonly RecordingHandler _handler = new();
+    private readonly RecordingHandler _handler = handler;
     private GitHubClient? _client;
     private JsonElement _returned;
     private GitHubIssue? _issue;
