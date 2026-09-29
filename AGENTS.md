@@ -60,3 +60,31 @@ prevents.
   `null` for an email that no account owns.
 - Every request an integration test sends to GitHub's API carries a `User-Agent` header.
   GitHub answers a request with none with `403 (Forbidden)`.
+
+## Docker
+
+`AGENTS.md` states the rules every `docker` command follows, so a class that runs
+`docker` follows them too. The build suite mocks `docker` through `CommandRunner`, so
+only the integration job shows the failure each rule below prevents.
+
+- Every command is a `CommandSpec` whose program is `docker`, run through the
+  `CommandRunner` that the class is built over.
+- A container that runs commands on a work tree runs as the user id and the group id of
+  the process that starts it: `--user <uid>:<gid>`. The user of the image has one fixed
+  id. On a work tree that a different user id owns, each write of that user fails with
+  `Permission denied`.
+- That container has a home directory that its user can write, with the directory
+  `.config` in it, and `HOME` names that directory. For a user id that the image does not
+  hold, `HOME` reads `/`, and `dotnet` fails in its first-run setup. With no `.config` in
+  the home directory, `dotnet test` writes `Reqnroll/userid` into the test project.
+- That container starts with `--init`, and its first command runs until the removal.
+  `dotnet test` leaves defunct processes behind it, and the init process removes them. A
+  container with no first command exits at once, and each `docker exec` then exits with
+  the code 1.
+- An environment variable goes to `docker` by its name. The argument after `--env` is the
+  name alone, and `docker` reads the value from its own environment. So no argument holds
+  the value of a secret. A name on `docker run` gives the variable to every command in
+  the container, and a name on `docker exec` gives it to that one command.
+- The removal of a container is `docker rm --force`, and it ends every process in the
+  container. A `docker exec` that stops before its command ends leaves the command alive
+  in the container.
