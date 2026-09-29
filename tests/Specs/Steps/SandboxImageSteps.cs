@@ -6,7 +6,7 @@ using Xunit;
 namespace Specs.Steps;
 
 [Binding]
-public sealed class SandboxImageSteps(ExceptionState exceptionState) : IDisposable
+public sealed class SandboxImageSteps(ExceptionState exceptionState, ScenarioContext scenarioContext) : IDisposable
 {
     private readonly List<CommandSpec> _recorded = [];
     private readonly Dictionary<string, CommandResult> _results = new();
@@ -19,7 +19,11 @@ public sealed class SandboxImageSteps(ExceptionState exceptionState) : IDisposab
         File.WriteAllText(Path.Combine(_directory.FullName, "global.json"), $"{{\"sdk\":{{\"version\":\"{version}\"}}}}");
 
     [Given("docker image inspect exits with the code {int}")]
-    public void GivenInspectExits(int code) => _results["image"] = new CommandResult { ExitCode = code };
+    public void GivenInspectExits(int code)
+    {
+        _results["image"] = new CommandResult { ExitCode = code };
+        scenarioContext["inspectExit"] = code;
+    }
 
     [Given("docker build exits with the code {int}")]
     public void GivenBuildExits(int code) => _results["build"] = new CommandResult { ExitCode = code };
