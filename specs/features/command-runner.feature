@@ -29,20 +29,20 @@ Feature: CommandRunner
     And the standard error does not contain "to-stdout"
 
   Scenario: A program that writes 1 MB to both outputs completes with both outputs whole
-    Given the command is "sh" with arguments "-c" and 'head -c 1048576 /dev/zero | tr "\0" y; head -c 1048576 /dev/zero | tr "\0" e 1>&2'
+    Given the command is "sh" with arguments "-c" and 'i=0;while [ $i -lt 1048576 ];do i=$((i+1));printf y;done;i=0;while [ $i -lt 1048576 ];do i=$((i+1));printf e 1>&2;done'
     When I run the command
-    # sh -c 'head -c 1048576 /dev/zero | tr "\0" y; head -c 1048576 /dev/zero | tr "\0" e 1>&2' 2>/dev/null | wc -c
-    # 1048576
-    Then the standard output is 1048576 bytes
-    # sh -c 'head -c 1048576 /dev/zero | tr "\0" y; head -c 1048576 /dev/zero | tr "\0" e 1>&2' 2>/dev/null | tr -d y | wc -c
+    # sh -c 'i=0;while [ $i -lt 1048576 ];do i=$((i+1));printf y;done;i=0;while [ $i -lt 1048576 ];do i=$((i+1));printf e 1>&2;done' 2>/dev/null | tr -d y | wc -c
     # 0
-    And the standard output is the letter y repeated 1048576 times
-    # sh -c 'head -c 1048576 /dev/zero | tr "\0" y; head -c 1048576 /dev/zero | tr "\0" e 1>&2' 2>&1 1>/dev/null | wc -c
+    Then the standard output is the letter y repeated 1048576 times
+    # sh -c 'i=0;while [ $i -lt 1048576 ];do i=$((i+1));printf y;done;i=0;while [ $i -lt 1048576 ];do i=$((i+1));printf e 1>&2;done' 2>/dev/null | wc -c
     # 1048576
-    And the standard error is 1048576 bytes
-    # sh -c 'head -c 1048576 /dev/zero | tr "\0" y; head -c 1048576 /dev/zero | tr "\0" e 1>&2' 2>&1 1>/dev/null | tr -d e | wc -c
+    And the standard output is 1048576 bytes
+    # sh -c 'i=0;while [ $i -lt 1048576 ];do i=$((i+1));printf y;done;i=0;while [ $i -lt 1048576 ];do i=$((i+1));printf e 1>&2;done' 2>&1 1>/dev/null | tr -d e | wc -c
     # 0
     And the standard error is the letter e repeated 1048576 times
+    # sh -c 'i=0;while [ $i -lt 1048576 ];do i=$((i+1));printf y;done;i=0;while [ $i -lt 1048576 ];do i=$((i+1));printf e 1>&2;done' 2>&1 1>/dev/null | wc -c
+    # 1048576
+    And the standard error is 1048576 bytes
 
   Scenario: An argument with a space, a double quote and a dollar sign reaches the program unchanged
     Given the command is "sh" with arguments "-c" and 'printf %s "$1"' and "--" and 'it has a space, a "double quote" and a $ sign'
