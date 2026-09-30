@@ -141,3 +141,29 @@ prevents.
   and the exit code 1.
 - `dotnet format` formats code that does not compile and exits with the code 0, so only
   the build shows a compile error.
+- `dotnet restore` runs with `--locked-mode`. A project whose package references differ
+  from its `packages.lock.json` then fails with `error NU1004` on standard output and the
+  exit code 1, and each lock file stays as it was.
+- `dotnet build`, `dotnet test` and `dotnet run` run with `--no-restore` after that
+  restore. Without it, each one restores first, outside locked mode, and on the network
+  that restore rewrites every `packages.lock.json` and exits with the code 0.
+- `dotnet format --verify-no-changes` exits with the code 2 when a file needs a format,
+  and writes one line for each such file to standard error, in the form
+  `<path>(<line>,<column>): error WHITESPACE: Fix whitespace formatting.` With no such
+  file it exits with the code 0 and writes nothing.
+- `dotnet test --logger trx` writes one TRX file for each test project under
+  `TestResults/` in that project's directory, named from the host and the time, and
+  every earlier file there stays. `--logger "trx;LogFileName=<name>"` names the file,
+  and a later run rewrites it. `--results-directory <dir>` puts it under `<dir>`.
+- `dotnet test` exits with the code 1 when a test fails, and the TRX file holds that
+  test with the outcome `Failed` and its message. A scenario with an unbound step is
+  such a test, and its output holds `No matching step definition found`. A skipped test
+  has the outcome `NotExecuted`, and the exit code stays 0. When the test project does
+  not compile, `dotnet test` exits with the code 1 and writes no TRX file, so the file
+  of an earlier run stays where it was.
+- `dotnet run --project tests/Integration` exits with the code 0 when every test passes
+  and when the project holds no test, and with the code 1 when a test fails. The summary
+  goes to standard output, with terminal colour codes, and its last line of substance is
+  `Integration  Total: <n>, Errors: <n>, Failed: <n>, Skipped: <n>, Not Run: <n>, Time: <s>`.
+- The restore puts the packages in the NuGet cache under the home directory of the
+  container, so a command that needs them runs in the container that ran the restore.
