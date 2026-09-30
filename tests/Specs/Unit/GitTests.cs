@@ -220,4 +220,41 @@ public sealed class GitTests
 
         return mock;
     }
+
+    [Theory]
+    [InlineData("?? Other.cs\n", true)]
+    [InlineData(" M A.cs\n?? B.cs\n", true)]
+    [InlineData("", false)]
+    public async Task HasChangesReadsTheStatusPorcelainOutput(string output, bool expected)
+    {
+        var specs = new List<CommandSpec>();
+        var mock = new Mock<CommandRunner>(MockBehavior.Strict);
+        mock.Setup(runner => runner.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
+            .Returns((CommandSpec spec, CancellationToken _) =>
+            {
+                specs.Add(spec);
+                return Task.FromResult(new CommandResult { StandardOutput = output });
+            });
+
+        bool result = await new Git(mock.Object).HasChangesAsync("/tmp/dir", TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, result);
+        CommandSpec single = Assert.Single(specs);
+        Assert.Equal("git", single.Command);
+        Assert.Equal(["status", "--porcelain"], single.Arguments);
+        Assert.Equal("/tmp/dir", single.WorkingDirectory);
+    }
+
+    [Fact]
+    public async Task HasChangesThrowsWhenStatusFails()
+    {
+        var mock = new Mock<CommandRunner>(MockBehavior.Strict);
+        mock.Setup(runner => runner.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CommandResult { ExitCode = 128, StandardError = "fatal: not a repo" });
+
+        var exception = await Assert.ThrowsAsync<GitCommandException>(
+            () => new Git(mock.Object).HasChangesAsync("/tmp/dir", TestContext.Current.CancellationToken));
+
+        Assert.Contains("status", exception.Message);
+    }
 }

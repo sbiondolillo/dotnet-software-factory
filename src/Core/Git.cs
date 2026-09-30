@@ -100,6 +100,20 @@ public sealed class Git(CommandRunner runner)
         return result.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries);
     }
 
+    /// <summary>Tells whether the work tree at <paramref name="directory"/> holds a change, a new file included.</summary>
+    public async Task<bool> HasChangesAsync(string directory, CancellationToken cancellationToken = default)
+    {
+        var spec = new CommandSpec
+        {
+            Command = "git",
+            Arguments = ["status", "--porcelain"],
+            WorkingDirectory = directory,
+        };
+
+        CommandResult result = await RunAsync(spec, cancellationToken).ConfigureAwait(false);
+        return result.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length is not 0;
+    }
+
     private async Task<CommandResult> RunAsync(CommandSpec spec, CancellationToken cancellationToken)
     {
         CommandResult result = await runner.RunAsync(spec, cancellationToken).ConfigureAwait(false);
