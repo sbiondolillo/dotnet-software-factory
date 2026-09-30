@@ -88,3 +88,28 @@ only the integration job shows the failure each rule below prevents.
 - The removal of a container is `docker rm --force`, and it ends every process in the
   container. A `docker exec` that stops before its command ends leaves the command alive
   in the container.
+
+## Claude Code
+
+`AGENTS.md` states the rules every `claude` command follows, so a class that runs
+`claude` follows them too. The build suite mocks `claude` through `CommandRunner`, so
+only the integration job shows the failure each rule below prevents.
+
+- Every command runs through a `Sandbox`, with an empty list of names. The container
+  holds `ANTHROPIC_API_KEY` from its start, and `claude` reads the key from its
+  environment.
+- `claude` runs with `-p`, `--output-format json` and `--dangerously-skip-permissions`.
+  Without the bypass, `claude` denies itself each tool call, lists it under
+  `permission_denials`, asks for permission in `result` and exits with the code 0.
+  `claude` refuses the bypass as root with the exit code 1 and no JSON object, so the
+  container runs as the caller's user, which `## Docker` states.
+- The prompt is one argument of 131071 bytes or fewer. An argument of 131072 bytes or
+  more fails the start of `docker` on the host with `Argument list too long`, before
+  `docker` runs. Standard input is no route: `docker exec` attaches none without
+  `--interactive`, and `CommandRunner` redirects none.
+- The answer is one JSON object and a line feed on standard output. `is_error` true
+  with the exit code 1 is an answer: `result` is a sentence on an API error, and it is
+  absent on `error_max_turns`. An exit code other than 0 with no JSON object on
+  standard output is a failure of the start, and standard error holds the reason.
+- `num_turns` reads one over `--max-turns` when the limit ends the run, and a file the
+  agent was writing lands all the same.
