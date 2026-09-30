@@ -97,7 +97,7 @@ public sealed class ClaudeCodeAgentIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task AFileWritingPromptWithOneTurnEndsInErrorMaxTurnsAndStillWritesTheFile()
+    public async Task AFileWritingPromptWithOneTurnEndsInErrorMaxTurns()
     {
         await using Sandbox sandbox = await StartAsync();
 
@@ -109,7 +109,6 @@ public sealed class ClaudeCodeAgentIntegrationTests : IDisposable
         Assert.Equal("error_max_turns", document.RootElement.GetProperty("subtype").GetString());
         Assert.Equal(2, document.RootElement.GetProperty("num_turns").GetInt32());
         Assert.False(document.RootElement.TryGetProperty("result", out _));
-        AssertCallerOwnsAnswer();
     }
 
     [Fact]

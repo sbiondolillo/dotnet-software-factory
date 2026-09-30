@@ -115,8 +115,7 @@ only the integration job shows the failure each rule below prevents.
   with the exit code 1 is an answer: `result` is a sentence on an API error, and it is
   absent on `error_max_turns`. An exit code other than 0 with no JSON object on
   standard output is a failure of the start, and standard error holds the reason.
-- `num_turns` reads one over `--max-turns` when the limit ends the run, and a file the
-  agent was writing lands all the same.
+- `num_turns` reads one over `--max-turns` when the limit ends the run.
 
 ## GitHub
 
