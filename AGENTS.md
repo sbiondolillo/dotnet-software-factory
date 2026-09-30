@@ -50,6 +50,10 @@ prevents.
 - A commit carries `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and
   `GIT_COMMITTER_EMAIL` in its environment. The clone and a CI runner have no git
   identity, and a commit with no committer identity fails.
+- Whether a work tree holds a change is `status --porcelain`: each line of its standard
+  output is one file that is changed, removed or new. `commit` with no change exits with
+  the code 1 and an empty standard error, so a caller that commits a work tree asks
+  first.
 - The files changed since a base are `diff --name-only <base>`, with the base as one
   argument. The range form `<base>..HEAD` names the range in its error, so the error for
   an unknown base does not hold the base's name as given.
@@ -120,3 +124,20 @@ only the integration job shows the failure each rule below prevents.
 through it. A request that `GitHubClient` sends again goes through the
 `Microsoft.Extensions.Http.Resilience` package, which holds the retry, the wait
 between requests and the reading of `Retry-After`.
+
+## dotnet
+
+`AGENTS.md` states the rules every `dotnet` command in a sandbox follows, so a class
+that runs `dotnet` through a `Sandbox` follows them too. The build suite mocks `docker`
+through `CommandRunner`, so only the integration job shows the failure each rule below
+prevents.
+
+- The exit code alone says whether a command passed. The first `dotnet build` or
+  `dotnet format` of a container exits with the code 0 and writes a line to standard
+  error that starts `An issue was encountered verifying workloads`.
+- `dotnet format` runs with `--no-restore`. Without it, `dotnet format` restores first,
+  outside locked mode. That restore rewrites a `packages.lock.json` that the project
+  files no longer match, and off the network it fails with `Restore operation failed`
+  and the exit code 1.
+- `dotnet format` formats code that does not compile and exits with the code 0, so only
+  the build shows a compile error.
