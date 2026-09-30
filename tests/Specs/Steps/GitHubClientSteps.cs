@@ -8,10 +8,9 @@ using Xunit;
 namespace Specs.Steps;
 
 [Binding]
-public sealed class GitHubClientSteps(ExceptionState exceptionState, RecordingHandler handler) : IDisposable
+public sealed class GitHubClientSteps(ExceptionState exceptionState, RecordingHandler handler, ClientState state) : IDisposable
 {
     private readonly RecordingHandler _handler = handler;
-    private GitHubClient? _client;
     private JsonElement _returned;
     private GitHubIssue? _issue;
 
@@ -19,7 +18,7 @@ public sealed class GitHubClientSteps(ExceptionState exceptionState, RecordingHa
 
     [Given("a GitHub client built with the token {string}")]
     public void GivenAGitHubClientBuiltWithTheToken(string token) =>
-        _client = new GitHubClient(new HttpClient(_handler), token);
+        state.Client = new GitHubClient(new HttpClient(_handler), token, TimeSpan.Zero);
 
     [Given("GitHub answers with the status code {int} and JSON whose {string} is {string}")]
     public void GivenGitHubAnswersWithJson(int status, string name, string value) =>
@@ -53,7 +52,7 @@ public sealed class GitHubClientSteps(ExceptionState exceptionState, RecordingHa
     {
         try
         {
-            _issue = await _client!.ReadIssueAsync(owner, repo, number);
+            _issue = await state.Client!.ReadIssueAsync(owner, repo, number);
         }
         catch (GitHubRequestException ex)
         {
@@ -63,7 +62,7 @@ public sealed class GitHubClientSteps(ExceptionState exceptionState, RecordingHa
 
     [When("I post the comment {string} on issue {int} of the repo {string} of the owner {string}")]
     public async Task WhenIPost(string text, int number, string repo, string owner) =>
-        await _client!.PostCommentAsync(owner, repo, number, text);
+        await state.Client!.PostCommentAsync(owner, repo, number, text);
 
     [Then("the stand-in received one request")]
     public void ThenOneRequest() => Assert.Single(_handler.Requests);
@@ -133,7 +132,8 @@ public sealed class GitHubClientSteps(ExceptionState exceptionState, RecordingHa
     {
         try
         {
-            _returned = await _client!.SendAsync(new HttpMethod(method), path, body);
+            _returned = await state.Client!.SendAsync(new HttpMethod(method), path, body);
+            state.Returned = _returned;
         }
         catch (GitHubRequestException ex)
         {
@@ -148,26 +148,53 @@ public sealed class GitHubClientSteps(ExceptionState exceptionState, RecordingHa
     }
 }
 
+public sealed class ClientState
+{
+    public GitHubClient? Client { get; set; }
+
+    public JsonElement Returned { get; set; }
+}
+
 public sealed record RecordedRequest(string Method, string Uri, Dictionary<string, string> Headers, string? Content);
 
 public sealed class RecordingHandler : HttpMessageHandler
 {
+    private readonly Queue<(int Status, string Body, int? RetryAfter)> _queue = new();
     private int _status = 200;
     private string _body = "{\"title\":\"t\",\"body\":\"b\",\"user\":{\"login\":\"u\"},\"labels\":[]}";
+    private int? _retryAfter;
 
     public List<RecordedRequest> Requests { get; } = [];
 
-    public void Answer(int status, string body)
+    public Exception? Throw { get; set; }
+
+    public void Answer(int status, string body, int? retryAfterSeconds = null)
     {
         _status = status;
         _body = body;
+        _retryAfter = retryAfterSeconds;
     }
+
+    /// <summary>Queues an answer that goes out before the fixed answer.</summary>
+    public void Enqueue(int status, string body, int? retryAfterSeconds = null) => _queue.Enqueue((status, body, retryAfterSeconds));
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var headers = request.Headers.ToDictionary(h => h.Key, h => string.Join(" ", h.Value));
         string? content = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
         Requests.Add(new RecordedRequest(request.Method.Method, request.RequestUri!.AbsoluteUri, headers, content));
-        return new HttpResponseMessage((HttpStatusCode)_status) { Content = new StringContent(_body, Encoding.UTF8, "application/json") };
+        if (Throw is not null)
+        {
+            throw Throw;
+        }
+
+        (int status, string body, int? retryAfter) = _queue.Count > 0 ? _queue.Dequeue() : (_status, _body, _retryAfter);
+        var response = new HttpResponseMessage((HttpStatusCode)status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+        if (retryAfter is { } seconds)
+        {
+            response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(seconds));
+        }
+
+        return response;
     }
 }

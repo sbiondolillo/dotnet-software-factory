@@ -2,16 +2,50 @@ using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Polly;
+using Polly.Retry;
 
 namespace Core;
 
 /// <summary>Sends requests to GitHub's REST API through an <see cref="HttpClient"/>.</summary>
-public sealed class GitHubClient(HttpClient httpClient, string token)
+public sealed class GitHubClient(HttpClient httpClient, string token, TimeSpan? baseWait = null)
 {
     private const string Root = "https://api.github.com";
 
-    /// <summary>Sends a request and gives back the JSON of the answer.</summary>
+    private readonly ResiliencePipeline<Answer> _pipeline = BuildPipeline(baseWait ?? TimeSpan.FromSeconds(2));
+
+    /// <summary>Sends a request and gives back the JSON of the answer. A transient failure is sent again, up to 3 more times.</summary>
     public async Task<JsonElement> SendAsync(HttpMethod method, string path, string? jsonBody = null, CancellationToken cancellationToken = default)
+    {
+        Answer answer = await _pipeline.ExecuteAsync(
+            async token => await SendOnceAsync(method, path, jsonBody, token).ConfigureAwait(false),
+            cancellationToken).ConfigureAwait(false);
+        if (answer.Status is < 200 or > 299)
+        {
+            throw new GitHubRequestException(method.Method, path, answer.Status, answer.Text);
+        }
+
+        using JsonDocument document = JsonDocument.Parse(string.IsNullOrWhiteSpace(answer.Text) ? "null" : answer.Text);
+        return document.RootElement.Clone();
+    }
+
+    private static bool IsTransient(Answer answer) =>
+        answer.Status >= 500 || answer.Status is 429 or 409 || (answer.Status is 403 && answer.RetryAfter is not null);
+
+    private static ResiliencePipeline<Answer> BuildPipeline(TimeSpan baseWait) =>
+        new ResiliencePipelineBuilder<Answer>()
+            .AddRetry(new RetryStrategyOptions<Answer>
+            {
+                MaxRetryAttempts = 3,
+                BackoffType = DelayBackoffType.Exponential,
+                UseJitter = true,
+                Delay = baseWait,
+                ShouldHandle = args => new ValueTask<bool>(args.Outcome.Result is { } answer && IsTransient(answer)),
+                DelayGenerator = args => new ValueTask<TimeSpan?>(args.Outcome.Result?.RetryAfter),
+            })
+            .Build();
+
+    private async Task<Answer> SendOnceAsync(HttpMethod method, string path, string? jsonBody, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(method, new Uri(Root + path, UriKind.Absolute));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -23,15 +57,12 @@ public sealed class GitHubClient(HttpClient httpClient, string token)
 
         using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         string text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        int status = (int)response.StatusCode;
-        if (status is < 200 or > 299)
-        {
-            throw new GitHubRequestException(method.Method, path, status, text);
-        }
-
-        using JsonDocument document = JsonDocument.Parse(string.IsNullOrWhiteSpace(text) ? "null" : text);
-        return document.RootElement.Clone();
+        RetryConditionHeaderValue? header = response.Headers.RetryAfter;
+        TimeSpan? retryAfter = header?.Delta ?? (header?.Date is { } date ? TimeSpan.FromTicks(Math.Max(0, (date - DateTimeOffset.UtcNow).Ticks)) : null);
+        return new Answer((int)response.StatusCode, text, retryAfter);
     }
+
+    private sealed record Answer(int Status, string Text, TimeSpan? RetryAfter);
 
     /// <summary>Reads an issue: title, body, author and labels.</summary>
     public async Task<GitHubIssue> ReadIssueAsync(string owner, string repo, int number, CancellationToken cancellationToken = default)

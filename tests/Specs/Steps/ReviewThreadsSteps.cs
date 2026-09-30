@@ -13,7 +13,7 @@ public sealed class ReviewThreadsSteps(ExceptionState exceptionState, RecordingH
     private IReadOnlyList<ReviewThread>? _threads;
 
     [Given("a ReviewThreads built over a GitHub client")]
-    public void GivenBuilt() => _sut = new ReviewThreads(new GitHubClient(new HttpClient(handler), "token"));
+    public void GivenBuilt() => _sut = new ReviewThreads(new GitHubClient(new HttpClient(handler), "token", TimeSpan.Zero));
 
     [Given("GitHub answers the read of reviews with an empty list of reviews")]
     public void GivenNoReviews() => handler.Answer(200, ReviewsJson([]));
