@@ -9,6 +9,8 @@ namespace Specs.Steps;
 [Binding]
 public sealed class PlanPhaseSteps : IDisposable
 {
+    public PlanPhaseSteps(ResultState state) => state.Outcome = () => (Result.Passed, string.Join("; ", Result.Failures));
+
     private readonly PlanPhaseHarness _h = new();
     private string _title = "";
     private string _body = "";
@@ -127,12 +129,6 @@ public sealed class PlanPhaseSteps : IDisposable
 
     [Then("the plan phase ran two prompts")]
     public void ThenTwoPrompts() => Assert.Equal(2, _h.Prompts.Count);
-
-    [Then("the result is passed")]
-    public void ThenPassed() => Assert.True(Result.Passed, string.Join("; ", Result.Failures));
-
-    [Then("the result is failed")]
-    public void ThenFailed() => Assert.False(Result.Passed);
 
     [Then("the pin holds {string} with the hash of its bytes")]
     public void ThenPinHash(string path)
