@@ -113,3 +113,10 @@ only the integration job shows the failure each rule below prevents.
   standard output is a failure of the start, and standard error holds the reason.
 - `num_turns` reads one over `--max-turns` when the limit ends the run, and a file the
   agent was writing lands all the same.
+
+## GitHub
+
+`GitHubClient` sends every request to GitHub, so a class that talks to GitHub sends
+through it. A request that `GitHubClient` sends again goes through the
+`Microsoft.Extensions.Http.Resilience` package, which holds the retry, the wait
+between requests and the reading of `Retry-After`.
