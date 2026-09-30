@@ -18,7 +18,7 @@ public sealed class PullRequestsSteps(ExceptionState exceptionState) : IDisposab
     public void Dispose() => _handler.Dispose();
 
     [Given("a PullRequests built over a GitHub client")]
-    public void GivenBuilt() => _pullRequests = new PullRequests(new GitHubClient(new HttpClient(_handler), "token"));
+    public void GivenBuilt() => _pullRequests = new PullRequests(new GitHubClient(new HttpClient(_handler), "token", TimeSpan.Zero));
 
     [Given("no pull request from the branch {string} is open")]
     public void GivenNoneOpen(string branch) => _handler.LookupBody = "[]";

@@ -10,7 +10,7 @@ public sealed class PullRequestsTests
     private static (PullRequests Sut, RoutingHandler Handler) Make()
     {
         var handler = new RoutingHandler();
-        return (new PullRequests(new GitHubClient(new HttpClient(handler), "t")), handler);
+        return (new PullRequests(new GitHubClient(new HttpClient(handler), "t", TimeSpan.Zero)), handler);
     }
 
     [Theory]
@@ -87,5 +87,17 @@ public sealed class PullRequestsTests
         handler.PostBody = "{\"number\":1,\"html_url\":\"u\"}";
         await sut.OpenAsync("o", "r", "factory/run-1", "main", "t", "x", TestContext.Current.CancellationToken);
         Assert.Equal("https://api.github.com/repos/o/r/pulls?head=o%3Afactory%2Frun-1&state=open", handler.Requests[0].Uri);
+    }
+
+    [Fact]
+    public async Task ACheckRunReadAnswered500Then200SucceedsAfterTwoRequests()
+    {
+        var handler = new RecordingHandler();
+        handler.Enqueue(500, "x");
+        handler.Answer(200, "{\"check_runs\":[]}");
+        var sut = new PullRequests(new GitHubClient(new HttpClient(handler), "t", TimeSpan.Zero));
+        IReadOnlyList<CheckRun> runs = await sut.ReadCheckRunsAsync("o", "r", "abc", TestContext.Current.CancellationToken);
+        Assert.Empty(runs);
+        Assert.Equal(2, handler.Requests.Count);
     }
 }

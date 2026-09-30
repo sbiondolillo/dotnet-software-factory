@@ -13,7 +13,7 @@ public sealed class ReviewThreadsTests
     {
         var handler = new RecordingHandler();
         handler.Answer(status, body);
-        return (new ReviewThreads(new GitHubClient(new HttpClient(handler), "t")), handler);
+        return (new ReviewThreads(new GitHubClient(new HttpClient(handler), "t", TimeSpan.Zero)), handler);
     }
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
@@ -93,5 +93,14 @@ public sealed class ReviewThreadsTests
         (ReviewThreads sut, _) = Make(200, "{\"data\":{\"repository\":{\"pullRequest\":{\"reviews\":{\"nodes\":[]},\"reviewThreads\":{\"nodes\":[]}}}}}");
         Assert.Empty(await sut.ReadReviewsAsync("o", "r", 1, Token));
         Assert.Empty(await sut.ReadThreadsAsync("o", "r", 1, Token));
+    }
+
+    [Fact]
+    public async Task AReplyAnswered500Then200SucceedsAfterTwoRequests()
+    {
+        (ReviewThreads sut, RecordingHandler handler) = Make(200, "{\"data\":{}}");
+        handler.Enqueue(500, "x");
+        await sut.ReplyAsync("t", "b", Token);
+        Assert.Equal(2, handler.Requests.Count);
     }
 }

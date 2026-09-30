@@ -4,6 +4,7 @@
          test method names with Reqnroll's own identifier logic, so the two stay in lock-step
          with what Reqnroll.xunit.v3 (pinned in tests/Specs/Specs.csproj) actually generates. -->
     <PackageReference Include="Gherkin" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
     <PackageReference Include="Reqnroll" />
   </ItemGroup>
 </Project>
