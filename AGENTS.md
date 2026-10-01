@@ -47,6 +47,9 @@ prevents.
 - A new branch is `checkout -b <branch>`. `checkout <branch>` creates a branch only when a
   remote branch of that name exists, and fails in a fresh clone with
   `did not match any file(s) known to git`.
+- A push of a branch is `push origin <branch>`, and it sends the local branch of that
+  name. A branch that origin lacks is created there. With no local branch of that name,
+  git exits with the code 1 and `error: src refspec <branch> does not match any`.
 - A commit carries `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and
   `GIT_COMMITTER_EMAIL` in its environment. The clone and a CI runner have no git
   identity, and a commit with no committer identity fails.
@@ -135,6 +138,17 @@ only the integration job shows the failure each rule below prevents.
 through it. A request that `GitHubClient` sends again goes through the
 `Microsoft.Extensions.Http.Resilience` package, which holds the retry, the wait
 between requests and the reading of `Retry-After`.
+
+The build suite answers GitHub from a stub `HttpMessageHandler`, so only the
+integration job shows each answer below.
+
+- GitHub opens a pull request from a head branch that it holds, with a commit that the
+  base lacks. Any other head gets the status code 422. A head with no such commit
+  gives `No commits between <base> and <head>` in `errors[].message`, and a head that
+  GitHub lacks gives `head` in `errors[].field` and `invalid` in `errors[].code`.
+- A line `Closes #<n>` in the body of a pull request links issue `<n>` to it. GitHub's
+  GraphQL lists the issue under the pull request's `closingIssuesReferences`, and
+  GitHub closes the issue when the pull request merges into the default branch.
 
 ## dotnet
 
