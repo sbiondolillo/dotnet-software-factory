@@ -7,11 +7,9 @@ using Xunit;
 namespace Specs.Steps;
 
 [Binding]
-public sealed class PlanPhaseSteps : IDisposable
+public sealed class PlanPhaseSteps(IssueState issue) : IDisposable
 {
     private readonly PlanPhaseHarness _h = new();
-    private string _title = "";
-    private string _body = "";
     private string _model = "";
     private int _turns;
     private PlanPhaseResult? _result;
@@ -28,8 +26,8 @@ public sealed class PlanPhaseSteps : IDisposable
     [Given("the issue has the title {string} and the body {string}")]
     public void GivenTheIssue(string title, string body)
     {
-        _title = title;
-        _body = body;
+        issue.Title = title;
+        issue.Body = body;
     }
 
     [Given("the model is {string} and the turn limit is {int}")]
@@ -106,7 +104,7 @@ public sealed class PlanPhaseSteps : IDisposable
 
     [When("I run the plan phase")]
     public async Task WhenIRun() =>
-        _result = await _h.RunAsync(_title, _body, _model, _turns);
+        _result = await _h.RunAsync(issue.Title, issue.Body, _model, _turns);
 
     [Then("the first prompt ran with the model {string} and the turn limit {int}")]
     public void ThenFirstModel(string model, int turns)
