@@ -27,6 +27,10 @@ public sealed class Pin
 
     private readonly Dictionary<string, string> _hashes;
 
+    /// <summary>The file names that <see cref="Pin"/> reads as build settings files.</summary>
+    public static IReadOnlyCollection<string> SettingsFileNames => SettingsNames;
+
+
     private Pin(Dictionary<string, string> hashes) => _hashes = hashes;
 
     /// <summary>The pinned relative path (with '/') mapped to the lowercase hex SHA-256 of its bytes.</summary>
