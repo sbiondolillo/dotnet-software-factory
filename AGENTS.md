@@ -57,6 +57,11 @@ prevents.
 - The files changed since a base are `diff --name-only <base>`, with the base as one
   argument. The range form `<base>..HEAD` names the range in its error, so the error for
   an unknown base does not hold the base's name as given.
+- The diff of a work tree against a base is `diff <base>`, with the base as one
+  argument. It compares the work tree, so a tracked change that is not committed is in
+  it. Its standard output holds one section for each changed file, starting
+  `diff --git a/<path> b/<path>`, and no section for a file that git does not track. A
+  work tree with no change since the base gives an empty output and the exit code 0.
 - A git command that exits with a code other than 0 throws `GitCommandException`, whose
   message names the subcommand and holds the standard error.
 - An integration test reads the git author of a branch from GitHub's branch API at
