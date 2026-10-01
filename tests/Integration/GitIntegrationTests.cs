@@ -90,6 +90,63 @@ public sealed class GitIntegrationTests
         Assert.Contains("unknown revision", exception.Message);
     }
 
+    [Fact]
+    public async Task ADiffAgainstABaseHoldsOneSectionPerTrackedFileAndNoneForAnUntrackedFile()
+    {
+        (DirectoryInfo directory, string baseSha, Git git) = await NewLocalRepoAsync();
+        await File.AppendAllTextAsync(Path.Combine(directory.FullName, "a.txt"), "two\n", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(directory.FullName, "b.txt"), "new\n", TestContext.Current.CancellationToken);
+        await git.CommitAllAsync(directory.FullName, "second", "Factory Integration Test", "factory-integration@example.com", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(directory.FullName, "c.txt"), "untracked\n", TestContext.Current.CancellationToken);
+
+        string diff = await git.ReadDiffAsync(baseSha, directory.FullName, TestContext.Current.CancellationToken);
+
+        Assert.Contains("diff --git a/a.txt b/a.txt", diff);
+        Assert.Contains("+two", diff);
+        int bSection = diff.IndexOf("diff --git a/b.txt b/b.txt", StringComparison.Ordinal);
+        Assert.True(bSection >= 0);
+        Assert.Contains("new file mode 100644", diff[bSection..]);
+        Assert.DoesNotContain("c.txt", diff);
+    }
+
+    [Fact]
+    public async Task ADiffWithHeadAtTheBaseIsEmpty()
+    {
+        (DirectoryInfo directory, string baseSha, Git git) = await NewLocalRepoAsync();
+
+        string diff = await git.ReadDiffAsync(baseSha, directory.FullName, TestContext.Current.CancellationToken);
+
+        Assert.Equal("", diff);
+    }
+
+    [Fact]
+    public async Task ADiffAgainstAnUnknownBaseGetsGitsBadObjectAnswer()
+    {
+        (DirectoryInfo directory, _, Git git) = await NewLocalRepoAsync();
+        string unknown = new('0', 40);
+
+        GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
+            () => git.ReadDiffAsync(unknown, directory.FullName, TestContext.Current.CancellationToken));
+
+        Assert.Contains("diff", exception.Message);
+        Assert.Contains($"fatal: bad object {unknown}", exception.Message);
+    }
+
+    private static async Task<(DirectoryInfo Directory, string BaseSha, Git Git)> NewLocalRepoAsync()
+    {
+        DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-git-diff-");
+        var runner = new CommandRunner();
+        var git = new Git(runner);
+        CommandResult init = await runner.RunAsync(
+            new CommandSpec { Command = "git", Arguments = ["init"], WorkingDirectory = directory.FullName },
+            TestContext.Current.CancellationToken);
+        Assert.Equal(0, init.ExitCode);
+        await File.WriteAllTextAsync(Path.Combine(directory.FullName, "a.txt"), "one\n", TestContext.Current.CancellationToken);
+        await git.CommitAllAsync(directory.FullName, "first", "Factory Integration Test", "factory-integration@example.com", TestContext.Current.CancellationToken);
+        string baseSha = await git.ReadHeadShaAsync(directory.FullName, TestContext.Current.CancellationToken);
+        return (directory, baseSha, git);
+    }
+
     private static HttpClient NewGitHubClient(string token)
     {
         var http = new HttpClient { BaseAddress = new Uri("https://api.github.com/") };
