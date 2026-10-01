@@ -100,6 +100,20 @@ public sealed class Git(CommandRunner runner)
         return result.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries);
     }
 
+    /// <summary>Gives the diff of the work tree at <paramref name="directory"/> against <paramref name="baseCommit"/>, as git prints it.</summary>
+    public async Task<string> ReadDiffAsync(string baseCommit, string directory, CancellationToken cancellationToken = default)
+    {
+        var spec = new CommandSpec
+        {
+            Command = "git",
+            Arguments = ["diff", baseCommit],
+            WorkingDirectory = directory,
+        };
+
+        CommandResult result = await RunAsync(spec, cancellationToken).ConfigureAwait(false);
+        return result.StandardOutput;
+    }
+
     /// <summary>Tells whether the work tree at <paramref name="directory"/> holds a change, a new file included.</summary>
     public async Task<bool> HasChangesAsync(string directory, CancellationToken cancellationToken = default)
     {
