@@ -71,6 +71,13 @@ prevents.
 `docker` follows them too. The build suite mocks `docker` through `CommandRunner`, so
 only the integration job shows the failure each rule below prevents.
 
+A `Sandbox` sends every `docker` command through the one `CommandRunner` it is built
+over. `Sandbox.StartAsync` runs `docker image inspect` first, then `docker build` when the
+inspect exits with a code other than 0, then `docker run`. Each command runs as
+`docker exec`, and the disposal runs `docker rm --force`. So a mock `CommandRunner` under
+a `Sandbox` answers `run` and `exec` by name and every other `docker` command with the
+code 0, as `tests/Specs/Steps/LintGateSteps.cs` does.
+
 - Every command is a `CommandSpec` whose program is `docker`, run through the
   `CommandRunner` that the class is built over.
 - A container that runs commands on a work tree runs as the user id and the group id of
