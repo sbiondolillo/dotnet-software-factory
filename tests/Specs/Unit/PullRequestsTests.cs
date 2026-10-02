@@ -100,4 +100,13 @@ public sealed class PullRequestsTests
         Assert.Empty(runs);
         Assert.Equal(2, handler.Requests.Count);
     }
+
+    [Fact]
+    public async Task AHeadShaReadThatFailsThrowsWith404()
+    {
+        (PullRequests sut, RoutingHandler handler) = Make();
+        handler.LookupStatus = 404;
+        var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadHeadShaAsync("o", "r", 1, TestContext.Current.CancellationToken));
+        Assert.Equal(404, ex.StatusCode);
+    }
 }
