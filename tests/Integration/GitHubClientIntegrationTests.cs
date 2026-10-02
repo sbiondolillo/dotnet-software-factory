@@ -79,6 +79,24 @@ public sealed class GitHubClientIntegrationTests
     }
 
     [Fact]
+    public async Task ACommentBodyOverTheByteLimitThrowsWith422()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        GitHubClient client = Client();
+        (int number, _) = await CreateAsync(client, JsonSerializer.Serialize(new { title = "client-test " + Guid.NewGuid() }), ct);
+        try
+        {
+            await client.PostCommentAsync(Owner, Repo, number, new string('a', 262144), ct);
+            var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => client.PostCommentAsync(Owner, Repo, number, new string('é', 131073), ct));
+            Assert.Equal(422, ex.StatusCode);
+        }
+        finally
+        {
+            await CloseAsync(client, number);
+        }
+    }
+
+    [Fact]
     public async Task AnInvalidTokenGives401()
     {
         var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Client("invalid").ReadIssueAsync(Owner, Repo, 1, TestContext.Current.CancellationToken));

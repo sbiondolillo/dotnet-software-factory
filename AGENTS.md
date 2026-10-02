@@ -142,6 +142,11 @@ between requests and the reading of `Retry-After`.
 - A line `Closes #<n>` in the body of a pull request links issue `<n>` to it. GitHub's
   GraphQL lists the issue under the pull request's `closingIssuesReferences`, and
   GitHub closes the issue when the pull request merges into the default branch.
+- GitHub stores a comment on an issue when its body is 262144 bytes or fewer in UTF-8.
+  A longer body gets the status code 422, and `errors[].message` is
+  `Body is too long (maximum is 65536 characters)`. The limit counts bytes: GitHub
+  stores the letter `a` 262144 times and refuses the letter `é` 131073 times. So a
+  class that posts a comment cuts the body to 262144 bytes or fewer.
 
 ## dotnet
 
