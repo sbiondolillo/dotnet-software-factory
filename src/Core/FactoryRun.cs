@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace Core;
 
 /// <summary>What a <see cref="FactoryRun"/> needs: the issue, the clone, the models and the author.</summary>
@@ -30,8 +28,6 @@ public sealed record FactoryRunResult(PullRequest? PullRequest, int Redos);
 public sealed class FactoryRun(CommandRunner runner, GitHubClient client)
 {
     private const int RedoBudget = 3;
-    private const int CommentLimit = 262144;
-    private const string CutMarker = "[cut]";
 
     private static readonly string[] LayoutFiles = ["Solution.slnx"];
     private static readonly string[] LayoutDirectories = ["specs/features/", "tests/Specs/", "tests/Integration/"];
@@ -107,66 +103,6 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client)
         }
     }
 
-    private static int Bytes(string text) => Encoding.UTF8.GetByteCount(text);
-
-    private static string Compose(string lead, IEnumerable<string> texts)
-    {
-        var builder = new StringBuilder(lead);
-        foreach (string text in texts)
-        {
-            builder.Append("\n\n").Append(text);
-        }
-
-        return builder.ToString();
-    }
-
-    private static string Cut(string text, int limit)
-    {
-        if (Bytes(text) <= limit)
-        {
-            return text;
-        }
-
-        int budget = limit - Bytes(CutMarker);
-        var builder = new StringBuilder();
-        int used = 0;
-        foreach (Rune rune in text.EnumerateRunes())
-        {
-            used += rune.Utf8SequenceLength;
-            if (used > budget)
-            {
-                break;
-            }
-
-            builder.Append(rune.ToString());
-        }
-
-        return builder.Append(CutMarker).ToString();
-    }
-
-    private async Task CommentAsync(FactoryRunRequest request, string lead, IReadOnlyList<string> texts, CancellationToken cancellationToken)
-    {
-        string body = Compose(lead, texts);
-        if (Bytes(body) > CommentLimit)
-        {
-            int low = Bytes(CutMarker);
-            int high = texts.Count is 0 ? 0 : texts.Max(Bytes);
-            while (low < high)
-            {
-                int middle = low + ((high - low + 1) / 2);
-                if (Bytes(Compose(lead, texts.Select(text => Cut(text, middle)))) <= CommentLimit)
-                {
-                    low = middle;
-                }
-                else
-                {
-                    high = middle - 1;
-                }
-            }
-
-            body = Compose(lead, texts.Select(text => Cut(text, low)));
-        }
-
-        await client.PostCommentAsync(request.Owner, request.Repo, request.IssueNumber, body, cancellationToken).ConfigureAwait(false);
-    }
+    private async Task CommentAsync(FactoryRunRequest request, string lead, IReadOnlyList<string> texts, CancellationToken cancellationToken) =>
+        await client.PostCommentAsync(request.Owner, request.Repo, request.IssueNumber, CommentText.Fit(lead, texts), cancellationToken).ConfigureAwait(false);
 }

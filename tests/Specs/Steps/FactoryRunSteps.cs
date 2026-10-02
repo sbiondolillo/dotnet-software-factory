@@ -12,7 +12,15 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     private FactoryRunResult? _result;
     private Exception? _exception;
 
+    /// <summary>The harness whose gate, review and standard output settings the shared steps of this class fill.</summary>
+    public Specs.Unit.FactoryRunHarness Harness => _h;
+
+    /// <summary>The commands of another run, so a feature of that run shares the git steps of this class.</summary>
+    public List<CommandSpec>? OtherCommands { get; set; }
+
     public void Dispose() => _h.Dispose();
+
+    private List<CommandSpec> Commands => OtherCommands ?? _h.Commands;
 
     private FactoryRunResult Result => _result ?? throw new InvalidOperationException("the run gave no result");
 
@@ -210,7 +218,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     [Then("git commits the change of the build with the message {string}, the author name {string} and the author email {string}")]
     public void ThenCommit(string message, string name, string email)
     {
-        CommandSpec commit = Assert.Single(_h.Commands, c => c.Command is "git" && c.Arguments[0] is "commit");
+        CommandSpec commit = Assert.Single(Commands, c => c.Command is "git" && c.Arguments[0] is "commit");
         Assert.Equal(message, commit.Arguments[2]);
         Assert.Equal(name, commit.EnvironmentVariables["GIT_AUTHOR_NAME"]);
         Assert.Equal(email, commit.EnvironmentVariables["GIT_AUTHOR_EMAIL"]);
@@ -219,7 +227,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     [Then("git pushes the branch {string}")]
     public void ThenPush(string branch)
     {
-        CommandSpec push = Assert.Single(_h.Commands, c => c.Command is "git" && c.Arguments[0] is "push");
+        CommandSpec push = Assert.Single(Commands, c => c.Command is "git" && c.Arguments[0] is "push");
         Assert.Equal(["push", "origin", branch], push.Arguments);
     }
 
@@ -286,7 +294,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     public void ThenBuildCount(int count) => Assert.Equal(count, Builds.Count());
 
     [Then("git pushes no branch")]
-    public void ThenNoPush() => Assert.DoesNotContain(_h.Commands, c => c.Command is "git" && c.Arguments[0] is "push");
+    public void ThenNoPush() => Assert.DoesNotContain(Commands, c => c.Command is "git" && c.Arguments[0] is "push");
 
     [Then("FactoryRun posts one comment on the issue that holds {string} and gives back a result with no pull request and {int} Redo(s)")]
     public void ThenCommentAndResult(string text, int redos)

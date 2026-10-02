@@ -15,6 +15,9 @@ public sealed class BuildPhaseSteps(IssueState issue) : IDisposable
     private int _turns;
     private BuildPhaseResult? _result;
 
+    /// <summary>Gives the first build prompt of another run, so a feature of that run shares the steps of this class.</summary>
+    public Func<string>? FirstPrompt { get; set; }
+
     public void Dispose() => _h.Dispose();
 
     private BuildPhaseResult Result => _result ?? throw new InvalidOperationException("the build phase did not run");
@@ -109,7 +112,7 @@ public sealed class BuildPhaseSteps(IssueState issue) : IDisposable
     {
         foreach (string text in texts)
         {
-            Assert.Contains(text, _h.Prompts[0]);
+            Assert.Contains(text, FirstPrompt is null ? _h.Prompts[0] : FirstPrompt());
         }
     }
 }

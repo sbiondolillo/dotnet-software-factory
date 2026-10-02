@@ -1,0 +1,326 @@
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using Core;
+using Moq;
+
+namespace Specs.Unit;
+
+/// <summary>A real clone directory, a mock <see cref="CommandRunner"/> that answers git and docker, and a stub GitHub, for a <see cref="FeedbackRun"/>.</summary>
+public sealed class FeedbackRunHarness : IDisposable
+{
+    public const string ContainerId = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    public const string ThreadA = "PRRT_kwDOUpm1Qc6ofWu5";
+    public const string ThreadB = "PRRT_kwDOUpm1Qc6ofWvu";
+    public const string ThreadC = "PRRT_kwDOUpm1Qc6ofWxx";
+    public const string ReplyA = "The total now adds every item of the cart.";
+    public const string ReplyB = "The title of the test names the unit.";
+    public const string Blocking = "The total of an empty cart is unset.";
+    public const string RedText = "Assert.Equal() Failure: Values differ";
+
+    private readonly DirectoryInfo _clone = Directory.CreateTempSubdirectory("feedback-run-clone-");
+    private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("feedback-run-root-");
+    private int _builds;
+
+    public FeedbackRunHarness()
+    {
+        File.WriteAllText(Path.Combine(_root.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
+        Threads = [ThreadA, ThreadB];
+    }
+
+    public string Owner { get; set; } = "sbiondolillo";
+
+    public string Repo { get; set; } = "factory-scratch";
+
+    public int Pull { get; set; } = 10;
+
+    public string Token { get; set; } = "token";
+
+    public List<string> SecretNames { get; set; } = [];
+
+    public string BuildModel { get; set; } = "build-model";
+
+    public int BuildTurns { get; set; } = 60;
+
+    public string ReviewModel { get; set; } = "review-model";
+
+    public int ReviewTurns { get; set; } = 30;
+
+    public string AuthorName { get; set; } = "Factory";
+
+    public string AuthorEmail { get; set; } = "factory@example.com";
+
+    public string HeadRef { get; set; } = "factory/a1b2c3d4";
+
+    public string HeadSha { get; set; } = "c7d1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293";
+
+    /// <summary>The ids of the threads GitHub lists, in order: A, B and C (resolved) are known.</summary>
+    public List<string> Threads { get; set; }
+
+    public bool NullLine { get; set; }
+
+    public bool ChangeAfterBuild { get; set; } = true;
+
+    public bool BuildIsError { get; set; }
+
+    public HashSet<int> ErrorBuilds { get; } = [];
+
+    public HashSet<int> RedBuilds { get; } = [];
+
+    public HashSet<int> RejectedBuilds { get; } = [];
+
+    public string? TestStdout { get; set; }
+
+    public int HeadStatus { get; set; } = 200;
+
+    public string? ReplyErrorThread { get; set; }
+
+    public string? CheckoutFailure { get; set; }
+
+    public string? PushFailure { get; set; }
+
+    public bool CloneFails { get; set; }
+
+    /// <summary>Gives the report text a build writes, or null for no file. The default marks every thread fixed.</summary>
+    public Func<int, string?> Report { get; set; } = _ => FixedReport(ThreadA, ThreadB);
+
+    public string CloneDirectory => _clone.FullName;
+
+    public List<CommandSpec> Commands { get; } = [];
+
+    public List<SeenPrompt> Prompts { get; } = [];
+
+    public List<SeenRequest> Requests { get; } = [];
+
+    public List<string> Events { get; } = [];
+
+    public int Builds => _builds;
+
+    public IEnumerable<SeenPrompt> BuildPrompts => Prompts.Where(p => p.Kind is "build");
+
+    public IEnumerable<string> CommentBodies =>
+        Requests.Where(r => r.Method is "POST" && r.Uri.EndsWith("/comments", StringComparison.Ordinal))
+            .Select(c => JsonDocument.Parse(c.Content!).RootElement.GetProperty("body").GetString() ?? "");
+
+    public static string FixedReport(params string[] ids) => Items(ids.Select(id => (id, "fixed", id == ThreadA ? ReplyA : ReplyB)));
+
+    public static string Items(IEnumerable<(string Id, string Status, string Reply)> items) =>
+        JsonSerializer.Serialize(new { threads = items.Select(i => new { id = i.Id, status = i.Status, reply = i.Reply }) });
+
+    public Task<FeedbackRunResult> RunAsync(CancellationToken cancellationToken = default)
+    {
+        var mock = new Mock<CommandRunner>(MockBehavior.Strict);
+        mock.Setup(r => r.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
+            .Returns((CommandSpec spec, CancellationToken _) => Task.FromResult(Answer(spec)));
+        var client = new GitHubClient(new HttpClient(new Handler(this)), Token, TimeSpan.Zero);
+        var request = new FeedbackRunRequest(
+            Owner, Repo, Pull, Token, _clone.FullName, "factory-sandbox:test", _root.FullName,
+            BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames);
+        return new FeedbackRun(mock.Object, client).RunAsync(request, cancellationToken);
+    }
+
+    public void Dispose()
+    {
+        _clone.Delete(recursive: true);
+        _root.Delete(recursive: true);
+    }
+
+    private static string Json(bool isError, string text) =>
+        JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["is_error"] = isError,
+            ["result"] = text,
+            ["num_turns"] = 1,
+            ["total_cost_usd"] = 0.0,
+        });
+
+    private CommandResult Answer(CommandSpec spec)
+    {
+        Commands.Add(spec);
+        if (spec.Command is "git")
+        {
+            return AnswerGit(spec);
+        }
+
+        switch (spec.Arguments[0])
+        {
+            case "run":
+                return new CommandResult { StandardOutput = ContainerId + "\n" };
+            case "exec":
+                return Exec(spec);
+            case "rm":
+                Events.Add("rm");
+                return new CommandResult();
+            default:
+                return new CommandResult();
+        }
+    }
+
+    private CommandResult AnswerGit(CommandSpec spec)
+    {
+        switch (spec.Arguments[0])
+        {
+            case "clone":
+                if (CloneFails)
+                {
+                    return new CommandResult { ExitCode = 128, StandardError = "fatal: clone failed" };
+                }
+
+                Directory.CreateDirectory(Path.Combine(spec.Arguments[2], "specs", "features"));
+                return new CommandResult();
+            case "checkout":
+                return CheckoutFailure is null ? new CommandResult() : new CommandResult { ExitCode = 1, StandardError = CheckoutFailure };
+            case "rev-parse":
+                return new CommandResult { StandardOutput = HeadSha + "\n" };
+            case "status":
+                return new CommandResult { StandardOutput = ChangeAfterBuild ? " M src/Checkout.cs\n" : "" };
+            case "diff":
+                return new CommandResult { StandardOutput = "diff --git a/src/Checkout.cs b/src/Checkout.cs\n" };
+            case "push":
+                Events.Add("push");
+                return PushFailure is null ? new CommandResult() : new CommandResult { ExitCode = 1, StandardError = PushFailure };
+            default:
+                return new CommandResult();
+        }
+    }
+
+    private CommandResult Exec(CommandSpec spec)
+    {
+        List<string> arguments = [.. spec.Arguments];
+        int id = arguments.IndexOf(ContainerId);
+        string program = arguments[id + 1];
+        if (program is "claude")
+        {
+            return Claude(arguments);
+        }
+
+        if (arguments[id + 2] is not "test")
+        {
+            return new CommandResult();
+        }
+
+        Events.Add("dotnet");
+        bool red = RedBuilds.Contains(_builds);
+        List<(string Class, string Method, string Outcome, string? Message)> tests =
+            [("Specs.Features.CheckoutFeature", "TheTotalIsTheSumOfThePrices", "Passed", null)];
+        if (red)
+        {
+            tests.Add(("Specs.Unit.CheckoutTests", "AddsTwoPrices", "Failed", RedText));
+        }
+
+        int at = arguments.IndexOf("--results-directory");
+        string directory = Path.Combine(_clone.FullName, arguments[at + 1]["/work/".Length..]);
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "this-run.trx"), Steps.TrxBuilder.Build(tests));
+        return new CommandResult { ExitCode = red ? 1 : 0, StandardOutput = TestStdout ?? (red ? RedText : "") };
+    }
+
+    private CommandResult Claude(List<string> arguments)
+    {
+        string text = arguments[arguments.IndexOf("-p") + 1];
+        string model = arguments[arguments.IndexOf("--model") + 1];
+        string turns = arguments[arguments.IndexOf("--max-turns") + 1];
+        string kind = text.StartsWith("Review the build", StringComparison.Ordinal) ? "review" : "build";
+        if (kind is "build")
+        {
+            _builds++;
+        }
+
+        Prompts.Add(new SeenPrompt(kind, model, turns, text, _builds));
+        Events.Add(kind);
+        if (kind is "build")
+        {
+            string? report = Report(_builds);
+            if (report is not null)
+            {
+                Write(".factory/threads.json", report);
+            }
+        }
+        else
+        {
+            Write(".factory/review.json", RejectedBuilds.Contains(_builds)
+                ? JsonSerializer.Serialize(new { approved = false, blocking = new[] { Blocking } })
+                : """{"approved":true,"blocking":[]}""");
+        }
+
+        bool error = kind is "build" && (BuildIsError || ErrorBuilds.Contains(_builds));
+        return new CommandResult { StandardOutput = Json(error, error ? "build error" : "done") };
+    }
+
+    private void Write(string relative, string text)
+    {
+        string full = Path.Combine(_clone.FullName, relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        File.WriteAllText(full, text);
+    }
+
+    private string ThreadsJson()
+    {
+        var nodes = Threads.Select(id => id is ThreadA
+            ? Node(id, false, "src/Core/Checkout.cs", NullLine ? null : 14, "sbiondolillo", "The total ignores the second item of the cart.")
+            : id is ThreadB
+                ? Node(id, false, "tests/Specs/Unit/CheckoutTests.cs", 9, "ada", "Name the unit of the total.")
+                : Node(id, true, "README.md", 1, "ada", "Fixed already."));
+        return JsonSerializer.Serialize(new { data = new { repository = new { pullRequest = new { reviewThreads = new { nodes } } } } });
+    }
+
+    private static object Node(string id, bool resolved, string path, int? line, string login, string body) => new
+    {
+        id,
+        isResolved = resolved,
+        path,
+        line,
+        comments = new { nodes = new[] { new { author = new { login }, body } } },
+    };
+
+    private sealed class Handler(FeedbackRunHarness harness) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            string? content = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            harness.Requests.Add(new SeenRequest(request.Method.Method, request.RequestUri!.AbsoluteUri, content));
+            string path = request.RequestUri.AbsolutePath;
+            (int status, string body) = (200, "{}");
+            if (request.Method.Method is "GET")
+            {
+                (status, body) = harness.HeadStatus is 200
+                    ? (200, JsonSerializer.Serialize(new { head = new { @ref = harness.HeadRef, sha = harness.HeadSha } }))
+                    : (harness.HeadStatus, "{\"message\":\"Not Found\"}");
+            }
+            else if (path.EndsWith("/graphql", StringComparison.Ordinal))
+            {
+                (status, body) = GraphQl(content ?? "");
+            }
+            else if (path.EndsWith("/comments", StringComparison.Ordinal))
+            {
+                harness.Events.Add("comment");
+                (status, body) = (201, "{}");
+            }
+
+            return new HttpResponseMessage((HttpStatusCode)status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+        }
+
+        private (int Status, string Body) GraphQl(string content)
+        {
+            using JsonDocument json = JsonDocument.Parse(content);
+            string query = json.RootElement.GetProperty("query").GetString() ?? "";
+            JsonElement variables = json.RootElement.GetProperty("variables");
+            if (query.Contains("reviewThreads", StringComparison.Ordinal))
+            {
+                return (200, harness.ThreadsJson());
+            }
+
+            string threadId = variables.GetProperty("threadId").GetString() ?? "";
+            if (query.Contains("addPullRequestReviewThreadReply", StringComparison.Ordinal))
+            {
+                harness.Events.Add("reply:" + threadId);
+                return threadId == harness.ReplyErrorThread
+                    ? (200, "{\"errors\":[{\"message\":\"Could not resolve\"}],\"data\":null}")
+                    : (200, "{\"data\":{\"addPullRequestReviewThreadReply\":{\"comment\":{\"id\":\"c\"}}}}");
+            }
+
+            harness.Events.Add("resolve:" + threadId);
+            return (200, "{\"data\":{\"resolveReviewThread\":{\"thread\":{\"isResolved\":true}}}}");
+        }
+    }
+}
