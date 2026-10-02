@@ -114,4 +114,18 @@ public sealed class PullRequestsIntegrationTests
             new PullRequests(Client()).ReadCheckRunsAsync(Owner, Repo, new string('0', 40), ct));
         Assert.Equal(422, ex.StatusCode);
     }
+
+    [Fact]
+    public async Task AnOpenFromAHeadGitHubLacksThrowsWith422()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        GitHubClient client = Client();
+        string head = "pr-test/" + Guid.NewGuid().ToString("N");
+        var ex = await Assert.ThrowsAsync<GitHubRequestException>(() =>
+            new PullRequests(client).OpenAsync(Owner, Repo, head, "main", "test " + head, "body", ct));
+        Assert.Equal(422, ex.StatusCode);
+        var gone = await Assert.ThrowsAsync<GitHubRequestException>(() =>
+            client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/git/ref/heads/{head}", null, ct));
+        Assert.Equal(404, gone.StatusCode);
+    }
 }
