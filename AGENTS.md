@@ -29,9 +29,7 @@ The house style as prose, for the rules no analyzer expresses: a class that stor
 ## Git
 
 `AGENTS.md` states the rules every git command follows, so a change that
-adds a git operation to `src/Core/Git.cs` follows them too. The build suite mocks `git`
-through `CommandRunner`, so only the integration job shows the failure each rule below
-prevents.
+adds a git operation to `src/Core/Git.cs` follows them too.
 
 - `Git` is the one class that runs `git`. Every command is a `CommandSpec` whose program
   is `git`, run through the `CommandRunner` that `Git` is built over. Every command after
@@ -76,8 +74,7 @@ prevents.
 ## Docker
 
 `AGENTS.md` states the rules every `docker` command follows, so a class that runs
-`docker` follows them too. The build suite mocks `docker` through `CommandRunner`, so
-only the integration job shows the failure each rule below prevents.
+`docker` follows them too.
 
 A `Sandbox` sends every `docker` command through the one `CommandRunner` it is built
 over. `Sandbox.StartAsync` runs `docker image inspect` first, then `docker build` when the
@@ -111,8 +108,7 @@ code 0, as `tests/Specs/Steps/LintGateSteps.cs` does.
 ## Claude Code
 
 `AGENTS.md` states the rules every `claude` command follows, so a class that runs
-`claude` follows them too. The build suite mocks `claude` through `CommandRunner`, so
-only the integration job shows the failure each rule below prevents.
+`claude` follows them too.
 
 - Every command runs through a `Sandbox`, with an empty list of names. The container
   holds `ANTHROPIC_API_KEY` from its start, and `claude` reads the key from its
@@ -139,9 +135,6 @@ through it. A request that `GitHubClient` sends again goes through the
 `Microsoft.Extensions.Http.Resilience` package, which holds the retry, the wait
 between requests and the reading of `Retry-After`.
 
-The build suite answers GitHub from a stub `HttpMessageHandler`, so only the
-integration job shows each answer below.
-
 - GitHub opens a pull request from a head branch that it holds, with a commit that the
   base lacks. Any other head gets the status code 422. A head with no such commit
   gives `No commits between <base> and <head>` in `errors[].message`, and a head that
@@ -153,9 +146,7 @@ integration job shows each answer below.
 ## dotnet
 
 `AGENTS.md` states the rules every `dotnet` command in a sandbox follows, so a class
-that runs `dotnet` through a `Sandbox` follows them too. The build suite mocks `docker`
-through `CommandRunner`, so only the integration job shows the failure each rule below
-prevents.
+that runs `dotnet` through a `Sandbox` follows them too.
 
 - The exit code alone says whether a command passed. The first `dotnet build` or
   `dotnet format` of a container exits with the code 0 and writes a line to standard
