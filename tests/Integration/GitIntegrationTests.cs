@@ -31,27 +31,37 @@ public sealed class GitIntegrationTests
         DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-git-integration-");
         var git = new Git(new CommandRunner());
 
-        await git.CloneAsync($"https://github.com/{Owner}/{Repo}.git", token, directory.FullName, TestContext.Current.CancellationToken);
-        await git.CheckoutBranchAsync(branch, directory.FullName, TestContext.Current.CancellationToken);
+        try
+        {
+            await git.CloneAsync($"https://github.com/{Owner}/{Repo}.git", token, directory.FullName, TestContext.Current.CancellationToken);
+            await git.CheckoutBranchAsync(branch, directory.FullName, TestContext.Current.CancellationToken);
 
-        await File.AppendAllTextAsync(Path.Combine(directory.FullName, "README.md"), $"\nfactory integration {branch}\n", TestContext.Current.CancellationToken);
-        await File.WriteAllTextAsync(Path.Combine(directory.FullName, newFile), "factory integration test file\n", TestContext.Current.CancellationToken);
+            await File.AppendAllTextAsync(Path.Combine(directory.FullName, "README.md"), $"\nfactory integration {branch}\n", TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(Path.Combine(directory.FullName, newFile), "factory integration test file\n", TestContext.Current.CancellationToken);
 
-        await git.CommitAllAsync(directory.FullName, $"Factory integration test {branch}", authorName, authorEmail, TestContext.Current.CancellationToken);
-        string headSha = await git.ReadHeadShaAsync(directory.FullName, TestContext.Current.CancellationToken);
-        await git.PushAsync(branch, directory.FullName, token, TestContext.Current.CancellationToken);
+            await git.CommitAllAsync(directory.FullName, $"Factory integration test {branch}", authorName, authorEmail, TestContext.Current.CancellationToken);
+            string headSha = await git.ReadHeadShaAsync(directory.FullName, TestContext.Current.CancellationToken);
+            await git.PushAsync(branch, directory.FullName, token, TestContext.Current.CancellationToken);
 
-        BranchInfo branchInfo = await ReadBranchAsync(http, branch);
-        Assert.Equal(headSha, branchInfo.Commit.Sha);
-        Assert.Equal(authorName, branchInfo.Commit.Commit.Author.Name);
-        Assert.Equal(authorEmail, branchInfo.Commit.Commit.Author.Email);
+            BranchInfo branchInfo = await ReadBranchAsync(http, branch);
+            Assert.Equal(headSha, branchInfo.Commit.Sha);
+            Assert.Equal(authorName, branchInfo.Commit.Commit.Author.Name);
+            Assert.Equal(authorEmail, branchInfo.Commit.Commit.Author.Email);
 
-        string mainShaAfter = await ReadBranchShaAsync(http, "main");
-        Assert.Equal(mainShaBefore, mainShaAfter);
+            string mainShaAfter = await ReadBranchShaAsync(http, "main");
+            Assert.Equal(mainShaBefore, mainShaAfter);
 
-        string[] changedFiles = await git.ListChangedFilesAsync("main", directory.FullName, TestContext.Current.CancellationToken);
-        Assert.Contains("README.md", changedFiles);
-        Assert.Contains(newFile, changedFiles);
+            string[] changedFiles = await git.ListChangedFilesAsync("main", directory.FullName, TestContext.Current.CancellationToken);
+            Assert.Contains("README.md", changedFiles);
+            Assert.Contains(newFile, changedFiles);
+        }
+        finally
+        {
+            // Remove the branch the push created, so a run leaves the repo with the branches it held before.
+            // No branch means a 422, which DeleteAsync does not throw, so a test that failed before
+            // its push reports that first failure.
+            await http.DeleteAsync($"repos/{Owner}/{Repo}/git/refs/heads/{branch}", TestContext.Current.CancellationToken);
+        }
     }
 
     [Fact]
