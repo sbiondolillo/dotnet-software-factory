@@ -7,7 +7,7 @@ using Xunit;
 namespace Specs.Steps;
 
 [Binding]
-public sealed class DeliverSteps : IDisposable
+public sealed class DeliverSteps(PullRequestAnswer answer) : IDisposable
 {
     private readonly RoutingHandler _handler = new();
     private readonly List<CommandSpec> _commands = [];
@@ -48,12 +48,17 @@ public sealed class DeliverSteps : IDisposable
     public void GivenPushAnswers(int code) => _pushExit = code;
 
     [Given("GitHub answers the open of the pull request with the number {int} and the web address {string}")]
-    public void GivenOpen(int number, string url) =>
+    public void GivenOpen(int number, string url)
+    {
+        answer.Number = number;
+        answer.Url = url;
         _handler.PostBody = JsonSerializer.Serialize(new { number, html_url = url });
+    }
 
     [Given("GitHub answers the open of the pull request with the status code {int}")]
     public void GivenOpenStatus(int status)
     {
+        answer.Status = status;
         _handler.PostStatus = status;
         _handler.PostBody = "{\"message\":\"Validation Failed\"}";
     }
