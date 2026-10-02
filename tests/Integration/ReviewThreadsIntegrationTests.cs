@@ -135,6 +135,29 @@ public sealed class ReviewThreadsIntegrationTests
     }
 
     [Fact]
+    public async Task AnEmptyReplyGivesNoErrorAndAddsNoComment()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        GitHubClient client = Client();
+        Scratch? s = null;
+        try
+        {
+            s = await CreatePullAsync(client, ct);
+            await CommentAsync(client, s, 2, ct);
+            var sut = new ReviewThreads(client);
+            ReviewThread thread = Assert.Single(await sut.ReadThreadsAsync(Owner, Repo, s.Number, ct));
+            await sut.ReplyAsync(thread.Id, "", ct);
+            await sut.ReplyAsync(thread.Id, "  ", ct);
+            ReviewThread after = (await sut.ReadThreadsAsync(Owner, Repo, s.Number, ct)).Single(t => t.Id == thread.Id);
+            Assert.Single(after.Comments);
+        }
+        finally
+        {
+            await CleanUpAsync(client, s);
+        }
+    }
+
+    [Fact]
     public async Task AChangedLineReadsAsNull()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
