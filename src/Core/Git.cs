@@ -29,6 +29,19 @@ public sealed class Git(CommandRunner runner)
         await RunAsync(spec, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Checks out the branch <paramref name="branch"/> that origin holds, in <paramref name="directory"/>.</summary>
+    public async Task CheckoutExistingBranchAsync(string branch, string directory, CancellationToken cancellationToken = default)
+    {
+        var spec = new CommandSpec
+        {
+            Command = "git",
+            Arguments = ["checkout", branch],
+            WorkingDirectory = directory,
+        };
+
+        await RunAsync(spec, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Stages and commits every change in the work tree at <paramref name="directory"/>.</summary>
     public async Task CommitAllAsync(string directory, string message, string authorName, string authorEmail, CancellationToken cancellationToken = default)
     {

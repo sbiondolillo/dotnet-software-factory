@@ -53,6 +53,13 @@ public sealed class PullRequests(GitHubClient client)
         return json.GetProperty("head").GetProperty("sha").GetString() ?? "";
     }
 
+    /// <summary>Reads the name of the head branch of a pull request.</summary>
+    public async Task<string> ReadHeadBranchAsync(string owner, string repo, int number, CancellationToken cancellationToken = default)
+    {
+        JsonElement json = await client.SendAsync(HttpMethod.Get, $"/repos/{owner}/{repo}/pulls/{number}", null, cancellationToken).ConfigureAwait(false);
+        return json.GetProperty("head").GetProperty("ref").GetString() ?? "";
+    }
+
     private static PullRequest Read(JsonElement json) =>
         new(json.GetProperty("number").GetInt32(), json.GetProperty("html_url").GetString() ?? "");
 }
