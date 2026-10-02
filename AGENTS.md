@@ -48,6 +48,8 @@ adds a git operation to `src/Core/Git.cs` follows them too.
 - A push of a branch is `push origin <branch>`, and it sends the local branch of that
   name. A branch that origin lacks is created there. With no local branch of that name,
   git exits with the code 1 and `error: src refspec <branch> does not match any`.
+  A push with no commit that origin lacks exits with the code 0, and its standard error
+  is `Everything up-to-date`.
 - A commit carries `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and
   `GIT_COMMITTER_EMAIL` in its environment. The clone and a CI runner have no git
   identity, and a commit with no committer identity fails.
@@ -147,6 +149,13 @@ between requests and the reading of `Retry-After`.
   `Body is too long (maximum is 65536 characters)`. The limit counts bytes: GitHub
   stores the letter `a` 262144 times and refuses the letter `é` 131073 times. So a
   class that posts a comment cuts the body to 262144 bytes or fewer.
+- GitHub stores a reply to a review thread when its body holds a character other than
+  whitespace. For a body that is empty or holds only whitespace, GitHub answers with the
+  status code 200, no `errors` and `comment` `null`, and the thread gains no comment. So
+  a class that replies to a thread sends a body with a character other than whitespace.
+- `head.sha` in the answer to `GET /repos/<owner>/<repo>/pulls/<n>` reads the commit
+  that a `git push` put on the branch about 4 seconds after the push, and the commit
+  before it until then. A class that reads the head after a push polls for it.
 
 ## dotnet
 
