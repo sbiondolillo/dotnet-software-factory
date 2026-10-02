@@ -46,6 +46,13 @@ public sealed class PullRequests(GitHubClient client)
         return runs;
     }
 
+    /// <summary>Reads the sha of the head commit of a pull request.</summary>
+    public async Task<string> ReadHeadShaAsync(string owner, string repo, int number, CancellationToken cancellationToken = default)
+    {
+        JsonElement json = await client.SendAsync(HttpMethod.Get, $"/repos/{owner}/{repo}/pulls/{number}", null, cancellationToken).ConfigureAwait(false);
+        return json.GetProperty("head").GetProperty("sha").GetString() ?? "";
+    }
+
     private static PullRequest Read(JsonElement json) =>
         new(json.GetProperty("number").GetInt32(), json.GetProperty("html_url").GetString() ?? "");
 }
