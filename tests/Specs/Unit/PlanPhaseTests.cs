@@ -181,4 +181,95 @@ public sealed class PlanPhaseTests : IDisposable
         _h.RawOutput = "no json";
         await Assert.ThrowsAsync<ClaudeCodeException>(() => _h.RunAsync());
     }
+
+    private const string Greeting = "specs/features/greeting.feature";
+
+    [Fact]
+    public async Task RemovingTheOnlyFeatureFileFailsOnBothRunsNamingTheDirectory()
+    {
+        _h.Write(Greeting, PlanPhaseHarness.SoundFeature);
+        _h.AgentRemoves(null, Greeting);
+        _h.AgentWrites(null, ".factory/plan.md", "p");
+        PlanPhaseResult result = await _h.RunAsync();
+        Assert.False(result.Passed);
+        Assert.Equal(2, _h.Prompts.Count);
+        Assert.Contains(result.Failures, f => f.Contains("specs/features/"));
+    }
+
+    [Fact]
+    public async Task RemovalAloneWithAnotherFileRemainingPasses()
+    {
+        _h.Write(Greeting, PlanPhaseHarness.SoundFeature);
+        _h.Write("specs/features/checkout.feature", PlanPhaseHarness.SoundFeature);
+        _h.AgentRemoves(null, Greeting);
+        _h.AgentWrites(null, ".factory/plan.md", "p");
+        Assert.True((await _h.RunAsync()).Passed);
+    }
+
+    [Fact]
+    public async Task RemovalLeavingAFeatureFileWithoutScenarioFailsNamingIt()
+    {
+        _h.Write(Greeting, PlanPhaseHarness.SoundFeature);
+        _h.Write("specs/features/old.feature", "Feature: Old\n");
+        _h.AgentRemoves(null, Greeting);
+        _h.AgentWrites(null, ".factory/plan.md", "p");
+        AssertOneFailureNaming(await _h.RunAsync(), "specs/features/old.feature");
+    }
+
+    [Fact]
+    public async Task RemovalLeavingAFeatureFileThatDoesNotParseFailsNamingIt()
+    {
+        _h.Write(Greeting, PlanPhaseHarness.SoundFeature);
+        _h.Write("specs/features/bad.feature", "This is not a feature file.");
+        _h.AgentRemoves(null, Greeting);
+        _h.AgentWrites(null, ".factory/plan.md", "p");
+        AssertOneFailureNaming(await _h.RunAsync(), "specs/features/bad.feature");
+    }
+
+    [Fact]
+    public async Task RemovalWithNoPlanFailsNamingThePlan()
+    {
+        _h.Write(Greeting, PlanPhaseHarness.SoundFeature);
+        _h.Write("specs/features/checkout.feature", PlanPhaseHarness.SoundFeature);
+        _h.AgentRemoves(null, Greeting);
+        AssertOneFailureNaming(await _h.RunAsync(), ".factory/plan.md");
+    }
+
+    [Fact]
+    public async Task RemovalWithAChangedFileOutsideFailsNamingIt()
+    {
+        _h.Write(Greeting, PlanPhaseHarness.SoundFeature);
+        _h.Write("specs/features/checkout.feature", PlanPhaseHarness.SoundFeature);
+        _h.AgentRemoves(null, Greeting);
+        _h.AgentWrites(null, ".factory/plan.md", "p");
+        _h.AgentWrites(null, "src/New.cs", "x");
+        AssertOneFailureNaming(await _h.RunAsync(), "src/New.cs");
+    }
+
+    [Fact]
+    public async Task RemovingANonFeatureFileUnderTheDirectoryIsNoFeatureChange()
+    {
+        _h.Write("specs/features/notes.md", "x");
+        _h.Write("specs/features/checkout.feature", PlanPhaseHarness.SoundFeature);
+        _h.AgentRemoves(null, "specs/features/notes.md");
+        _h.AgentWrites(null, ".factory/plan.md", "p");
+        AssertOneFailureNaming(await _h.RunAsync(), "specs/features/");
+    }
+
+    [Fact]
+    public async Task TheCorrectionPromptStillHoldsTheRemovalSentenceOnce()
+    {
+        const string Sentence = "Remove each feature file whose behaviour the issue removes or replaces.";
+        _h.Write(Greeting, PlanPhaseHarness.SoundFeature);
+        _h.Write("specs/features/checkout.feature", PlanPhaseHarness.SoundFeature);
+        _h.AgentRemoves(1, Greeting);
+        _h.AgentWrites(1, ".factory/plan.md", "p");
+        _h.AgentWrites(1, "src/New.cs", "x");
+        _h.AgentRemoves(2, "src/New.cs");
+        PlanPhaseResult result = await _h.RunAsync();
+        Assert.True(result.Passed);
+        Assert.Equal(2, _h.Prompts.Count);
+        Assert.Equal(1, _h.Prompts[0].Split(Sentence).Length - 1);
+        Assert.Contains(Sentence, _h.Prompts[1]);
+    }
 }

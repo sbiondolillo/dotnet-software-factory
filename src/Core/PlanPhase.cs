@@ -48,6 +48,7 @@ public sealed class PlanPhase(ClaudeCodeAgent agent)
         + $"Issue title:\n{title}\n\nIssue body:\n{body}\n\n"
         + $"Write Gherkin scenarios for the behaviour in feature files under {FeatureDirectory} "
         + $"and write the plan to {PlanPath}, stating each result the build owes. "
+        + "Remove each feature file whose behaviour the issue removes or replaces. "
         + "Leave every other file as it is.";
 
     private async Task<List<string>> RunOnceAsync(
@@ -72,7 +73,13 @@ public sealed class PlanPhase(ClaudeCodeAgent agent)
         var failures = new List<string>();
         Dictionary<string, string> now = Snapshot(workTree);
 
-        bool featureChanged = now.Any(pair => IsFeature(pair.Key) && (!baseline.TryGetValue(pair.Key, out string? old) || old != pair.Value));
+        bool featureChanged = now.Any(pair => IsFeature(pair.Key) && (!baseline.TryGetValue(pair.Key, out string? old) || old != pair.Value))
+            || baseline.Keys.Any(path => IsFeature(path) && !now.ContainsKey(path));
+        if (featureChanged && !now.Keys.Any(IsFeature))
+        {
+            featureChanged = false;
+        }
+
         if (!featureChanged)
         {
             failures.Add($"No feature file under {FeatureDirectory} is new or changed.");
