@@ -199,3 +199,5 @@ that runs `dotnet` through a `Sandbox` follows them too.
   `Integration  Total: <n>, Errors: <n>, Failed: <n>, Skipped: <n>, Not Run: <n>, Time: <s>`.
 - The restore puts the packages in the NuGet cache under the home directory of the
   container, so a command that needs them runs in the container that ran the restore.
+- Before work on a `dotnet new` template, such as one under `templates/`, read
+  `docs/agents/dotnet-templates.md`.
