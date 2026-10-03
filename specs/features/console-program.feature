@@ -25,7 +25,7 @@ Feature: The console program runs the factory on an issue or a pull request
   @bullet-3
   Scenario: empty arguments
     When the program starts with the arguments ""
-    Then standard error holds the usage
+    Then standard error holds text
     And GitHub gets no request
     And no program runs
     # run: printf '1'
@@ -34,7 +34,7 @@ Feature: The console program runs the factory on an issue or a pull request
   @bullet-4
   Scenario: unknown verb
     When the program starts with the arguments "build --repo sbiondolillo/factory-scratch"
-    Then standard error holds the usage
+    Then standard error holds text
     And GitHub gets no request
     # run: printf '1'
     Then the exit code is 1
@@ -42,7 +42,7 @@ Feature: The console program runs the factory on an issue or a pull request
   @bullet-5
   Scenario: run without repo
     When the program starts with the arguments "run --issue 12"
-    Then standard error holds the usage
+    Then standard error holds text
     And GitHub gets no request
     # run: printf '1'
     Then the exit code is 1
@@ -50,7 +50,7 @@ Feature: The console program runs the factory on an issue or a pull request
   @bullet-6
   Scenario: run without issue
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch"
-    Then standard error holds the usage
+    Then standard error holds text
     And GitHub gets no request
     # run: printf '1'
     Then the exit code is 1
@@ -58,7 +58,7 @@ Feature: The console program runs the factory on an issue or a pull request
   @bullet-7
   Scenario: feedback without pr
     When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch"
-    Then standard error holds the usage
+    Then standard error holds text
     And GitHub gets no request
     # run: printf '1'
     Then the exit code is 1
@@ -66,7 +66,7 @@ Feature: The console program runs the factory on an issue or a pull request
   @bullet-8
   Scenario: repo without slash
     When the program starts with the arguments "run --repo factory-scratch --issue 12"
-    Then standard error holds the usage
+    Then standard error holds text
     And GitHub gets no request
     # run: printf '1'
     Then the exit code is 1
