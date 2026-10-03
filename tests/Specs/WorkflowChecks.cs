@@ -27,26 +27,55 @@ public static partial class WorkflowChecks
         }
     }
 
-    /// <summary>Fails when the workflow's one trigger is not the event with the type.</summary>
-    public static void OneTrigger(string file, string eventName, string type)
+    /// <summary>Fails when the workflow has no trigger for the event, with the type when one is given.</summary>
+    public static void Trigger(string file, string eventName, string? type = null)
     {
         Dictionary<string, object?> on = Map(Root(file), "on", file);
-        if (!on.TryGetValue(eventName, out object? body) || body is not Dictionary<string, object?> map
-            || !List(map.GetValueOrDefault("types")).SequenceEqual([type]))
+        bool ok = on.TryGetValue(eventName, out object? body)
+            && (type is null || (body is Dictionary<string, object?> map && List(map.GetValueOrDefault("types")).SequenceEqual([type])));
+        if (!ok)
         {
-            throw new InvalidOperationException($"{file} has no trigger {eventName} with the type {type}");
+            throw new InvalidOperationException($"{file} has no trigger {eventName}" + (type is null ? "" : $" with the type {type}"));
         }
     }
 
-    /// <summary>Fails when the workflow has more than one trigger.</summary>
+    /// <summary>Fails when the workflow's triggers are not exactly issues and workflow_dispatch.</summary>
     public static void NoOtherTrigger(string file)
     {
-        int count = Map(Root(file), "on", file).Count;
-        if (count is not 1)
+        Dictionary<string, object?> on = Map(Root(file), "on", file);
+        if (on.Count is not 2 || !on.ContainsKey("issues") || !on.ContainsKey("workflow_dispatch"))
         {
-            throw new InvalidOperationException($"{file} has {count} triggers");
+            throw new InvalidOperationException($"{file} does not have exactly the triggers issues and workflow_dispatch");
         }
     }
+
+    /// <summary>Fails when the trigger has no input that is required with the type.</summary>
+    public static void RequiredInput(string file, string eventName, string input, string type)
+    {
+        Dictionary<string, object?>? map = Input(file, eventName, input);
+        if (map is null || map.GetValueOrDefault("required") as string != "true" || map.GetValueOrDefault("type") as string != type)
+        {
+            throw new InvalidOperationException($"the trigger {eventName} of {file} has no required input {input} with the type {type}");
+        }
+    }
+
+    /// <summary>Fails when the trigger has no input with the default.</summary>
+    public static void InputDefault(string file, string eventName, string input, string value)
+    {
+        if (Input(file, eventName, input)?.GetValueOrDefault("default") as string != value)
+        {
+            throw new InvalidOperationException($"the trigger {eventName} of {file} has no input {input} with the default {value}");
+        }
+    }
+
+    private static Dictionary<string, object?>? Input(string file, string eventName, string input)
+        => (Map(Root(file), "on", file).GetValueOrDefault(eventName) as Dictionary<string, object?>)?.GetValueOrDefault("inputs") is Dictionary<string, object?> inputs
+            ? inputs.GetValueOrDefault(input) as Dictionary<string, object?>
+            : null;
+
+    /// <summary>Fails when no paragraph of the section says the owner starts a trial run at another ref and holds the command in backticks.</summary>
+    public static void SaysTrialRun(string section, string command)
+        => SaysAll(section, "owner starts a trial run of the factory at another ref", $"`{command}`");
 
     /// <summary>Fails when the workflow's triggers are not the first event and the second event on the branch.</summary>
     public static void TwoTriggers(string file, string first, string second, string branch)

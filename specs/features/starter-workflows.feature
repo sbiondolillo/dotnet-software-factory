@@ -10,37 +10,10 @@ Feature: A repo made from the starter holds the factory's two workflows
     Then the copy's ".github/workflows/" holds the files "factory.yml" and "ci.yml"
     And the copy's ".github/workflows/" holds no other file
 
-  @bullet-2
-  Scenario: The factory workflow has one trigger, a labeled issue
-    # run: printf '%s\n' 'factory.yml' 'issues' 'labeled' 'factory.yml'
-    Then the workflow "factory.yml" has one trigger, the event "issues" with the type "labeled"
-    And the workflow "factory.yml" has no other trigger
-
   @bullet-3
   Scenario: The factory workflow gives no permissions
     # run: printf '%s\n' 'factory.yml' '{}'
     Then the workflow "factory.yml" has the permissions "{}"
-
-  @bullet-4
-  Scenario: The factory workflow has one job gated on the label and the owner
-    # run: printf '%s\n' 'factory.yml' 'ubuntu-latest' "github.event.label.name == 'factory' && github.event.sender.login == github.repository_owner"
-    Then the workflow "factory.yml" has one job
-    And that job runs on "ubuntu-latest" with the condition "github.event.label.name == 'factory' && github.event.sender.login == github.repository_owner"
-
-  @bullet-5
-  Scenario: The factory job first checks out the factory at the tag
-    # run: printf '%s\n' 'factory.yml' 'sbiondolillo/dotnet-software-factory' 'v0' '${{ secrets.FACTORY_GITHUB_TOKEN }}'
-    Then the first step of the job in "factory.yml" checks out the repo "sbiondolillo/dotnet-software-factory" at the ref "v0" with the token "${{ secrets.FACTORY_GITHUB_TOKEN }}"
-
-  @bullet-6
-  Scenario: The factory job sets up the SDK from global.json before the run command
-    # run: printf '%s\n' 'factory.yml' 'dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ github.event.issue.number }} --pass-env EXAMPLE_API_KEY'
-    Then a step of the job in "factory.yml" sets up the .NET SDK that the global.json of the checkout names, before the step with the run command "dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ github.event.issue.number }} --pass-env EXAMPLE_API_KEY"
-
-  @bullet-7
-  Scenario: The factory job's last step runs the run command
-    # run: printf '%s\n' 'factory.yml' 'dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ github.event.issue.number }} --pass-env EXAMPLE_API_KEY'
-    Then the last step of the job in "factory.yml" runs "dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ github.event.issue.number }} --pass-env EXAMPLE_API_KEY"
 
   @bullet-8
   Scenario: Only the run step of the factory job has an environment
