@@ -13,30 +13,109 @@ public sealed class ConsoleProgramTests : IDisposable
     private Task<int> StartAsync(string arguments) =>
         _h.RunAsync(arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries), TestContext.Current.CancellationToken);
 
-    [Theory]
-    [InlineData("")]
-    [InlineData("build --repo a/b")]
-    [InlineData("run --issue 1")]
-    [InlineData("run --repo a/b")]
-    [InlineData("feedback --repo a/b")]
-    [InlineData("run --repo ab --issue 1")]
-    [InlineData("run --repo /b --issue 1")]
-    [InlineData("run --repo a/ --issue 1")]
-    [InlineData("run --repo a/b/c --issue 1")]
-    [InlineData("run --repo a/b --issue x")]
-    [InlineData("run --repo a/b --issue 0")]
-    [InlineData("feedback --repo a/b --pr x")]
-    [InlineData("run --repo a/b --issue 1 --timeout x")]
-    [InlineData("run --repo a/b --issue 1 --timeout -1")]
-    [InlineData("run --repo a/b --issue 1 --timeout")]
-    [InlineData("run --repo a/b --issue 1 --bogus 2")]
-    [InlineData("run --repo a/b --pr 1")]
-    public async Task AnUsageErrorWritesTheUsageAndExits1WithNoRequestAndNoProgram(string arguments)
+    private async Task<List<string>> RefusedAsync(string arguments)
     {
         Assert.Equal(1, await StartAsync(arguments));
-        Assert.Equal(ConsoleProgram.Usage, _h.Error.ToString());
         Assert.Empty(_h.Requests);
         Assert.Empty(_h.Commands);
+        return [.. ConsoleHarness.Lines(_h.Error)];
+    }
+
+    [Fact]
+    public async Task NoArgumentsGiveTheAbsentVerbLineAndTheProgramHelp()
+    {
+        Assert.Equal(["Required command was not provided."], await RefusedAsync(""));
+        Assert.Contains("run", _h.Out.ToString(), StringComparison.Ordinal);
+        Assert.Contains("feedback", _h.Out.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnUnknownVerbGivesOneLineForEachFault()
+    {
+        Assert.Equal(
+            [
+                "Required command was not provided.",
+                "Unrecognized command or argument 'build'.",
+                "Unrecognized command or argument '--repo'.",
+                "Unrecognized command or argument 'a/b'.",
+            ],
+            await RefusedAsync("build --repo a/b"));
+    }
+
+    [Theory]
+    [InlineData("run --issue 1", "Option '--repo' is required.", "--issue <issue> (REQUIRED)")]
+    [InlineData("run --repo a/b", "Option '--issue' is required.", "--repo <repo> (REQUIRED)")]
+    [InlineData("feedback --repo a/b", "Option '--pr' is required.", "--pr <pr> (REQUIRED)")]
+    public async Task AnAbsentRequiredOptionGivesTheParsersLineAndTheHelpOfTheVerb(string arguments, string line, string help)
+    {
+        Assert.Equal([line], await RefusedAsync(arguments));
+        Assert.Contains(help, _h.Out.ToString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("run --repo ab --issue 1", "--repo")]
+    [InlineData("run --repo /b --issue 1", "--repo")]
+    [InlineData("run --repo a/ --issue 1", "--repo")]
+    [InlineData("run --repo a/b/c --issue 1", "--repo")]
+    [InlineData("run --repo a/b --issue 0", "--issue")]
+    [InlineData("run --repo a/b --issue -1", "--issue")]
+    [InlineData("feedback --repo a/b --pr 0", "--pr")]
+    [InlineData("run --repo a/b --issue 1 --timeout -1", "--timeout")]
+    public async Task AFaultOfTheProgramGivesOneLineNamingTheOption(string arguments, string option)
+    {
+        string line = Assert.Single(await RefusedAsync(arguments));
+        Assert.Contains(option, line, StringComparison.Ordinal);
+        Assert.DoesNotContain("Unrecognized", line, StringComparison.Ordinal);
+        Assert.Contains("--timeout", _h.Out.ToString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("run --repo a/b --issue x", "Cannot parse argument 'x' for option '--issue' as expected type 'System.Int32'.")]
+    [InlineData("feedback --repo a/b --pr x", "Cannot parse argument 'x' for option '--pr' as expected type 'System.Int32'.")]
+    [InlineData("run --repo a/b --issue 1 --timeout x", "Cannot parse argument 'x' for option '--timeout' as expected type 'System.Int32'.")]
+    [InlineData("run --repo a/b --issue 1 --timeout", "Required argument missing for option: '--timeout'.")]
+    public async Task AValueTheParserRefusesGivesItsOneLine(string arguments, string line) =>
+        Assert.Equal([line], await RefusedAsync(arguments));
+
+    [Fact]
+    public async Task ABogusOptionWithAValueGivesTwoUnrecognizedLinesInOrder()
+    {
+        Assert.Equal(
+            ["Unrecognized command or argument '--bogus'.", "Unrecognized command or argument '2'."],
+            await RefusedAsync("run --repo a/b --issue 1 --bogus 2"));
+    }
+
+    [Theory]
+    [InlineData("run --repo a/b --issue 1 --bogus 2", "--bogus")]
+    [InlineData("run --repo a/b --pr 1", "--pr")]
+    [InlineData("feedback --repo a/b --issue 1", "--issue")]
+    public async Task AnUnknownOptionGivesAnUnrecognizedLine(string arguments, string option)
+    {
+        List<string> lines = await RefusedAsync(arguments);
+        Assert.Contains($"Unrecognized command or argument '{option}'.", lines);
+    }
+
+    [Fact]
+    public async Task TwoFaultsGiveOneLineForEach()
+    {
+        Assert.Equal(2, (await RefusedAsync("run --repo ab --issue 0")).Count);
+    }
+
+    [Theory]
+    [InlineData("--help", new[] { "run", "feedback" })]
+    [InlineData("run --help", new[] { "--repo <repo> (REQUIRED)", "--issue <issue> (REQUIRED)", "--pass-env <pass-env>", "[default: 60]" })]
+    [InlineData("feedback --help", new[] { "--pr <pr> (REQUIRED)", "[default: 60]" })]
+    public async Task HelpExits0WithNoErrorAndNeedsNoVariable(string arguments, string[] holds)
+    {
+        _h.Environment.Clear();
+        Assert.Equal(0, await StartAsync(arguments));
+        Assert.Empty(_h.Error.ToString());
+        Assert.Empty(_h.Requests);
+        Assert.Empty(_h.Commands);
+        foreach (string text in holds)
+        {
+            Assert.Contains(text, _h.Out.ToString(), StringComparison.Ordinal);
+        }
     }
 
     [Theory]
