@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- The integration suite: tests against real GitHub, docker and Claude Code.
+  <!-- The integration suite: tests against the real services that the program calls.
        An xUnit v3 project is an executable, so `dotnet run` on this project
        runs it, in ci.yml's integration job. IsTestProject
        false keeps it out of `dotnet test`, so the build suite stays hermetic.
