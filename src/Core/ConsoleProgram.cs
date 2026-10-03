@@ -1,3 +1,5 @@
+using System.CommandLine;
+using System.CommandLine.Parsing;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -7,13 +9,6 @@ namespace Core;
 /// <summary>The console program: the verbs <c>run</c> and <c>feedback</c>, over a <see cref="ConsoleHost"/>.</summary>
 public static class ConsoleProgram
 {
-    /// <summary>The usage of each verb.</summary>
-    public const string Usage =
-        "usage:\n" +
-        "  dotnet-software-factory run --repo <owner>/<name> --issue <number> [--pass-env <NAME>]... [--timeout <minutes>]\n" +
-        "  dotnet-software-factory feedback --repo <owner>/<name> --pr <number> [--pass-env <NAME>]... [--timeout <minutes>]\n" +
-        "--pass-env gives the variable NAME to the integration tests, and may repeat. --timeout is the minutes each watch waits, 60 when absent.\n";
-
     private const string TokenName = "FACTORY_GITHUB_TOKEN";
     private const string KeyName = "ANTHROPIC_API_KEY";
     private const string Model = "claude-sonnet-5-5";
@@ -28,19 +23,72 @@ public static class ConsoleProgram
     /// <summary>Runs the program with <paramref name="args"/> and gives back its exit code.</summary>
     public static async Task<int> RunAsync(string[] args, ConsoleHost host, CancellationToken cancellationToken = default)
     {
-        if (args.Contains("--help"))
-        {
-            await host.Out.WriteAsync(Usage).ConfigureAwait(false);
-            return 0;
-        }
+        var root = new RootCommand("Runs the software factory on an issue, or on the feedback of a pull request.");
+        root.Subcommands.Add(Verb("run", "Builds a pull request for an issue.", "--issue", "The number of the issue.", host));
+        root.Subcommands.Add(Verb("feedback", "Answers the review threads of a pull request.", "--pr", "The number of the pull request.", host));
+        var configuration = new InvocationConfiguration { Output = host.Out, Error = host.Error };
+        return await root.Parse(args).InvokeAsync(configuration, cancellationToken).ConfigureAwait(false);
+    }
 
-        Options? options = Parse(args);
-        if (options is null)
+    private static Command Verb(string verb, string description, string numberName, string numberDescription, ConsoleHost host)
+    {
+        var repo = new Option<string>("--repo") { Description = "The repo, as <owner>/<name>.", Required = true };
+        repo.Validators.Add(result =>
         {
-            await host.Error.WriteAsync(Usage).ConfigureAwait(false);
-            return 1;
-        }
+            if (result.Tokens.Count is 0)
+            {
+                return;
+            }
 
+            string[] parts = result.Tokens[0].Value.Split('/');
+            if (parts is not [{ Length: > 0 }, { Length: > 0 }])
+            {
+                result.AddError("Option '--repo' must have the form <owner>/<name>.");
+            }
+        });
+        var number = new Option<int>(numberName) { Description = numberDescription, Required = true };
+        number.Validators.Add(result =>
+        {
+            if (Value(result) < 1)
+            {
+                result.AddError($"Option '{numberName}' must be 1 or more.");
+            }
+        });
+        var passEnv = new Option<string[]>("--pass-env")
+        {
+            Description = "The name of a variable to give to the integration tests. May repeat.",
+            AllowMultipleArgumentsPerToken = false,
+        };
+        var timeout = new Option<int>("--timeout")
+        {
+            Description = "The minutes each watch waits.",
+            DefaultValueFactory = _ => 60,
+        };
+        timeout.Validators.Add(result =>
+        {
+            if (Value(result) < 0)
+            {
+                result.AddError("Option '--timeout' must be 0 or more.");
+            }
+        });
+
+        var command = new Command(verb, description) { repo, number, passEnv, timeout };
+        command.SetAction(async (parse, token) =>
+        {
+            string[] names = parse.GetValue(passEnv) ?? [];
+            string[] repoParts = parse.GetValue(repo)!.Split('/');
+            var options = new Options(verb, new RepoName(repoParts[0], repoParts[1]), parse.GetValue(number), names, TimeSpan.FromMinutes(parse.GetValue(timeout)));
+            return await RunVerbAsync(options, host, token).ConfigureAwait(false);
+        });
+        return command;
+    }
+
+    /// <summary>The whole number the option's token holds, or <see cref="int.MaxValue"/> when it holds none, for the parser's own line to report.</summary>
+    private static int Value(OptionResult result) =>
+        result.Tokens is [{ } token] && int.TryParse(token.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) ? value : int.MaxValue;
+
+    private static async Task<int> RunVerbAsync(Options options, ConsoleHost host, CancellationToken cancellationToken)
+    {
         foreach (string name in new[] { TokenName, KeyName })
         {
             if (string.IsNullOrEmpty(host.Environment(name)))
@@ -186,66 +234,6 @@ public static class ConsoleProgram
         {
             directory.Delete(recursive: true);
         }
-    }
-
-    private static Options? Parse(string[] args)
-    {
-        if (args.Length is 0 || args[0] is not ("run" or "feedback"))
-        {
-            return null;
-        }
-
-        string verb = args[0];
-        string numberOption = verb is "run" ? "--issue" : "--pr";
-        string? repoText = null;
-        int? number = null;
-        int minutes = 60;
-        List<string> names = [];
-        for (int i = 1; i < args.Length; i += 2)
-        {
-            if (i + 1 >= args.Length)
-            {
-                return null;
-            }
-
-            string value = args[i + 1];
-            if (args[i] is "--repo")
-            {
-                repoText = value;
-            }
-            else if (args[i] == numberOption)
-            {
-                if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int parsed) || parsed < 1)
-                {
-                    return null;
-                }
-
-                number = parsed;
-            }
-            else if (args[i] is "--pass-env")
-            {
-                names.Add(value);
-            }
-            else if (args[i] is "--timeout")
-            {
-                if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out minutes))
-                {
-                    return null;
-                }
-            }
-            else
-            {
-                return null;
-            }
-        }
-
-        string[]? parts = repoText?.Split('/');
-        if (parts is not [{ Length: > 0 } owner, { Length: > 0 } name] || number is not int issue)
-        {
-            return null;
-        }
-
-        return new Options(verb, new RepoName(owner, name), issue, names, TimeSpan.FromMinutes(minutes));
     }
 
     private sealed record RepoName(string Owner, string Name)

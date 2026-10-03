@@ -106,6 +106,29 @@ public sealed partial class ConsoleProgramSteps : IDisposable
     [Then("standard output holds the line {string}")]
     public void ThenOutputLine(string line) => Assert.Contains(line, ConsoleHarness.Lines(_h.Out));
 
+    [Then("standard output holds {string}")]
+    public void ThenOutputOne(string a) => OutputHolds(a);
+
+    [Then("standard output holds {string} and {string}")]
+    public void ThenOutputTwo(string a, string b) => OutputHolds(a, b);
+
+    [Then("standard error holds the line {string}")]
+    public void ThenErrorHoldsLine(string line) => Assert.Contains(line, ConsoleHarness.Lines(_h.Error));
+
+    [Then("standard error is the one line {string}")]
+    public void ThenErrorIsLine(string line) => Assert.Equal(line, Assert.Single(ConsoleHarness.Lines(_h.Error)));
+
+    [Then("standard error is one line that holds {string}")]
+    public void ThenErrorIsOneLineHolding(string text) => Assert.Contains(text, Assert.Single(ConsoleHarness.Lines(_h.Error)));
+
+    [Then("standard error is one line that holds {string} and {string}")]
+    public void ThenErrorIsOneLineHoldingTwo(string a, string b)
+    {
+        string line = Assert.Single(ConsoleHarness.Lines(_h.Error));
+        Assert.Contains(a, line);
+        Assert.Contains(b, line);
+    }
+
     [Then("standard error holds text")]
     public void ThenErrorText() => Assert.NotEmpty(_h.Error.ToString());
 

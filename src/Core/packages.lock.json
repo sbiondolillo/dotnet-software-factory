@@ -36,6 +36,12 @@
           "Microsoft.Extensions.DependencyModel": "8.0.2"
         }
       },
+      "System.CommandLine": {
+        "type": "Direct",
+        "requested": "[2.0.12, )",
+        "resolved": "2.0.12",
+        "contentHash": "FpW672e6qqrTd1EfKqsvUtFZaJWlTlszUR1o8tdakXhkzKbnEZVndtpfd4K3fUPCFcIs9UmcswMyYGJP1zp/rg=="
+      },
       "Cucumber.CucumberExpressions": {
         "type": "Transitive",
         "resolved": "17.1.0",

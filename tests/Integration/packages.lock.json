@@ -415,7 +415,8 @@
         "dependencies": {
           "Gherkin": "[35.0.0, )",
           "Microsoft.Extensions.Http.Resilience": "[10.10.0, )",
-          "Reqnroll": "[3.3.4, )"
+          "Reqnroll": "[3.3.4, )",
+          "System.CommandLine": "[2.0.12, )"
         }
       },
       "Gherkin": {
@@ -451,6 +452,12 @@
           "Microsoft.Bcl.AsyncInterfaces": "9.0.6",
           "Microsoft.Extensions.DependencyModel": "8.0.2"
         }
+      },
+      "System.CommandLine": {
+        "type": "CentralTransitive",
+        "requested": "[2.0.12, )",
+        "resolved": "2.0.12",
+        "contentHash": "FpW672e6qqrTd1EfKqsvUtFZaJWlTlszUR1o8tdakXhkzKbnEZVndtpfd4K3fUPCFcIs9UmcswMyYGJP1zp/rg=="
       }
     }
   }
