@@ -51,6 +51,65 @@ public static partial class StarterChecks
     private static bool ListsShortName(string line, string shortName)
         => line.Split(' ', StringSplitOptions.RemoveEmptyEntries).Any(word => word.Split(',').Contains(shortName));
 
+    /// <summary>Fails when the file is missing or its text differs from the expected one. Trailing line feeds are trimmed on both sides before the compare.</summary>
+    public static void TextEquals(string path, string expected)
+    {
+        if (!File.Exists(path))
+        {
+            throw new InvalidOperationException($"the copy lacks {Path.GetFileName(path)}");
+        }
+
+        string[] actual = File.ReadAllText(path).TrimEnd('\n').Split('\n');
+        string[] want = expected.TrimEnd('\n').Split('\n');
+        for (int i = 0; i < Math.Max(actual.Length, want.Length); i++)
+        {
+            string a = i < actual.Length ? actual[i] : "<end of file>";
+            string w = i < want.Length ? want[i] : "<end of text>";
+            if (a != w)
+            {
+                throw new InvalidOperationException($"{Path.GetFileName(path)} differs at line {i + 1}: expected '{w}' but found '{a}'");
+            }
+        }
+    }
+
+    /// <summary>The lines of the first XML comment of a file, trimmed.</summary>
+    private static string[] CommentLines(string path)
+    {
+        if (!File.Exists(path))
+        {
+            throw new InvalidOperationException($"{path} does not exist");
+        }
+
+        string text = File.ReadAllText(path);
+        int start = text.IndexOf("<!--", StringComparison.Ordinal);
+        int end = start < 0 ? -1 : text.IndexOf("-->", start, StringComparison.Ordinal);
+        if (end < 0)
+        {
+            throw new InvalidOperationException($"{Path.GetFileName(path)} holds no comment");
+        }
+
+        return [.. text[(start + 4)..end].Split('\n').Select(line => line.Trim())];
+    }
+
+    /// <summary>Fails when the first line of the file's first comment is not the line.</summary>
+    public static void CommentStarts(string path, string line)
+    {
+        string first = CommentLines(path)[0];
+        if (first != line)
+        {
+            throw new InvalidOperationException($"{Path.GetFileName(path)}: the comment starts with '{first}', not '{line}'");
+        }
+    }
+
+    /// <summary>Fails when a line of the file's first comment is the line.</summary>
+    public static void CommentLacks(string path, string line)
+    {
+        if (CommentLines(path).Contains(line))
+        {
+            throw new InvalidOperationException($"{Path.GetFileName(path)}: the comment holds the line '{line}'");
+        }
+    }
+
     /// <summary>Fails when a file of the starter is missing from the copy or differs in a byte.</summary>
     public static void EveryFileEqual(string starter, string copy)
     {

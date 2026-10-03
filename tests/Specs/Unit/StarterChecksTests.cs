@@ -196,4 +196,63 @@ public sealed class StarterChecksTests : IDisposable
         Assert.NotEqual(0, exit);
         Assert.NotEqual("", error.ToString());
     }
+
+    [Fact]
+    public void TextEqualsFailsOnMissingFile()
+    {
+        var e = Assert.Throws<InvalidOperationException>(() => StarterChecks.TextEquals(Path.Combine(_root, "AGENTS.md"), "a"));
+        Assert.Contains("AGENTS.md", e.Message);
+    }
+
+    [Fact]
+    public void TextEqualsShowsFirstDifferingLine()
+    {
+        string path = Write("t.md", "one\ntwx\nthree\n");
+        var e = Assert.Throws<InvalidOperationException>(() => StarterChecks.TextEquals(path, "one\ntwo\nthree"));
+        Assert.Contains("line 2", e.Message);
+        Assert.Contains("twx", e.Message);
+    }
+
+    [Fact]
+    public void TextEqualsFailsOnExtraLine()
+        => Assert.Throws<InvalidOperationException>(() => StarterChecks.TextEquals(Write("t.md", "one\ntwo\nextra\n"), "one\ntwo"));
+
+    [Theory]
+    [InlineData("one\ntwo")]
+    [InlineData("one\ntwo\n")]
+    public void TextEqualsPassesWithOrWithoutFinalLineFeed(string content)
+        => StarterChecks.TextEquals(Write("t.md", content), "one\ntwo\n");
+
+    private string Project(string line, string more = "") => Write("p.csproj", $"<Project>\n  <!-- {line}\n       {more}\n  -->\n</Project>\n");
+
+    [Fact]
+    public void CommentStartsFailsOnOtherLineAndShowsBoth()
+    {
+        var e = Assert.Throws<InvalidOperationException>(() => StarterChecks.CommentStarts(Project("old"), "new"));
+        Assert.Contains("old", e.Message);
+        Assert.Contains("new", e.Message);
+    }
+
+    [Fact]
+    public void CommentStartsFailsOnNoCommentOrMissingFile()
+    {
+        string plain = Write("q.csproj", "<Project />");
+        Assert.Contains("q.csproj", Assert.Throws<InvalidOperationException>(() => StarterChecks.CommentStarts(plain, "x")).Message);
+        Assert.Contains("nope.csproj", Assert.Throws<InvalidOperationException>(() => StarterChecks.CommentStarts(Path.Combine(_root, "nope.csproj"), "x")).Message);
+    }
+
+    [Fact]
+    public void CommentStartsPasses() => StarterChecks.CommentStarts(Project("new"), "new");
+
+    [Theory]
+    [InlineData("target", "")]
+    [InlineData("first", "target")]
+    public void CommentLacksFailsWhenAnyLineIsTheLine(string first, string second)
+    {
+        var e = Assert.Throws<InvalidOperationException>(() => StarterChecks.CommentLacks(Project(first, second), "target"));
+        Assert.Contains("target", e.Message);
+    }
+
+    [Fact]
+    public void CommentLacksPassesForALongerLine() => StarterChecks.CommentLacks(Project("a target here"), "target");
 }
