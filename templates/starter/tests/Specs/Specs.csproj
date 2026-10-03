@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- Reqnroll writes each feature's code-behind under obj/, so no
+         generated file lands in the tree, and a feature file outside this
+         project can be linked in. -->
+    <ReqnrollUseIntermediateOutputPathForCodeBehind>true</ReqnrollUseIntermediateOutputPathForCodeBehind>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Moq" />
+    <PackageReference Include="Moq.Analyzers" />
+    <PackageReference Include="Reqnroll.xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The pinned feature files, at the repo root. Every one of them is compiled here. -->
+    <ReqnrollFeatureFiles Include="../../specs/features/**/*.feature" Link="Features/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Core/Core.csproj" />
+  </ItemGroup>
+</Project>

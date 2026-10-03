@@ -1,0 +1,33 @@
+# The code style the build enforces (EnforceCodeStyleInBuild). The factory
+# compares this file whole against the pin: it configures the gates.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{csproj,props,targets,slnx,json}]
+indent_size = 2
+
+[*.cs]
+csharp_style_namespace_declarations = file_scoped:warning
+dotnet_diagnostic.IDE0055.severity = warning
+dotnet_diagnostic.IDE0161.severity = warning
+csharp_style_prefer_primary_constructors = true
+dotnet_diagnostic.IDE0290.severity = warning
+dotnet_style_prefer_is_null_check_over_reference_equality_method = true
+dotnet_diagnostic.IDE0041.severity = warning
+csharp_style_prefer_not_pattern = true
+dotnet_diagnostic.IDE0083.severity = warning
+csharp_style_prefer_pattern_matching = true
+dotnet_diagnostic.IDE0078.severity = warning
+csharp_style_pattern_matching_over_is_with_cast_check = true
+dotnet_diagnostic.IDE0020.severity = warning
+dotnet_diagnostic.IDE0038.severity = warning
+csharp_style_pattern_matching_over_as_with_null_check = true
+dotnet_diagnostic.IDE0019.severity = warning
+dotnet_diagnostic.Moq1410.severity = warning
