@@ -1,0 +1,42 @@
+# The checks on every pull request and on main.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Restore
+        run: dotnet restore --locked-mode
+      - name: Build
+        run: dotnet build --no-restore
+      - name: Format
+        run: dotnet format --verify-no-changes --no-restore
+      - name: Test
+        run: dotnet test --no-restore
+
+  integration:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Restore
+        run: dotnet restore --locked-mode
+      - name: Integration suite
+        env:
+          EXAMPLE_API_KEY: ${{ secrets.EXAMPLE_API_KEY }}
+        run: dotnet run --no-restore --project tests/Integration
