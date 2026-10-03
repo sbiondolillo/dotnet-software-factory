@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The integration suite: tests against real GitHub, docker and Claude Code.
+       An xUnit v3 project is an executable, so `dotnet run` on this project
+       runs it, in ci.yml's integration job. IsTestProject
+       false keeps it out of `dotnet test`, so the build suite stays hermetic.
+       The project stays in Solution.slnx, so build and format cover its code. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Core/Core.csproj" />
+  </ItemGroup>
+</Project>
