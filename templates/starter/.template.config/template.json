@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "dotnet-software-factory",
+  "classifications": [ "Solution" ],
+  "identity": "DotnetSoftwareFactory.Starter",
+  "name": "dotnet-software-factory starter",
+  "shortName": "factory-starter",
+  "preferNameDirectory": false,
+  "sources": [
+    {
+      "exclude": [ ".template.config/**", "**/bin/**", "**/obj/**", "**/TestResults/**" ]
+    }
+  ]
+}

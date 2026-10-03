@@ -20,6 +20,10 @@
     <ReqnrollFeatureFiles Include="../../specs/features/**/*.feature" Link="Features/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
+    <!-- The starter template's command tree, compiled here so a unit test runs it. -->
+    <Compile Include="../../templates/starter/src/Core/GreetCommand.cs" Link="Starter/GreetCommand.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../src/Core/Core.csproj" />
   </ItemGroup>
 </Project>
