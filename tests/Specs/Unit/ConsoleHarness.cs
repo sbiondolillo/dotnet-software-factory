@@ -41,6 +41,7 @@ public sealed class ConsoleHarness : IDisposable
     private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("console-root-");
     private string _clone = "";
     private int _builds;
+    private int _reviews;
     private int _headReads;
     private int _checkReads;
     private bool _resolved;
@@ -78,6 +79,9 @@ public sealed class ConsoleHarness : IDisposable
 
     public bool Disputed { get; set; }
 
+    /// <summary>The message of the failed test of a red build.</summary>
+    public string FailureText { get; set; } = RedText;
+
     public HashSet<int> RedBuilds { get; } = [];
 
     public int PullNumber { get; set; } = 10;
@@ -85,6 +89,18 @@ public sealed class ConsoleHarness : IDisposable
     public string PullUrl { get; set; } = "https://github.com/sbiondolillo/factory-scratch/pull/10";
 
     public bool AgentWritesPlan { get; set; } = true;
+
+    /// <summary>True when the agent writes the plan file and no feature file on the plan prompt.</summary>
+    public bool AgentWritesOnlyPlan { get; set; }
+
+    /// <summary>The number of review prompts that get a blocked verdict, from the first.</summary>
+    public int BlockedReviews { get; set; }
+
+    /// <summary>What standard output held when each program of <see cref="Commands"/> ran, by index.</summary>
+    public List<string> OutAtCommand { get; } = [];
+
+    /// <summary>What standard output held when each prompt of <see cref="Prompts"/> ran, by index.</summary>
+    public List<string> OutAtPrompt { get; } = [];
 
     public FakeTime Time { get; } = new();
 
@@ -144,6 +160,7 @@ public sealed class ConsoleHarness : IDisposable
     private CommandResult Answer(CommandSpec spec)
     {
         Commands.Add(spec);
+        OutAtCommand.Add(Out.ToString());
         if (spec.Command is "git")
         {
             return AnswerGit(spec);
@@ -216,13 +233,13 @@ public sealed class ConsoleHarness : IDisposable
             [("Specs.Features.CheckoutFeature", "TheTotalIsTheSumOfThePrices", "Passed", null)];
         if (red)
         {
-            tests.Add(("Specs.Unit.CheckoutTests", "AddsTwoPrices", "Failed", RedText));
+            tests.Add(("Specs.Unit.CheckoutTests", "AddsTwoPrices", "Failed", FailureText));
         }
 
         string directory = Path.Combine(_clone, arguments[arguments.IndexOf("--results-directory") + 1]["/work/".Length..]);
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, "this-run.trx"), Steps.TrxBuilder.Build(tests));
-        return new CommandResult { ExitCode = red ? 1 : 0, StandardOutput = red ? RedText : "" };
+        return new CommandResult { ExitCode = red ? 1 : 0, StandardOutput = red ? FailureText : "" };
     }
 
     private CommandResult Claude(List<string> arguments)
@@ -238,9 +255,14 @@ public sealed class ConsoleHarness : IDisposable
         }
 
         Prompts.Add((kind, model, turns, text));
+        OutAtPrompt.Add(Out.ToString());
         if (kind is "plan" && AgentWritesPlan)
         {
-            Write("specs/features/checkout.feature", PlanPhaseHarness.SoundFeature);
+            if (!AgentWritesOnlyPlan)
+            {
+                Write("specs/features/checkout.feature", PlanPhaseHarness.SoundFeature);
+            }
+
             Write(".factory/plan.md", PlanPhaseHarness.PlanText);
         }
 
@@ -254,7 +276,12 @@ public sealed class ConsoleHarness : IDisposable
 
         if (kind is "review")
         {
-            Write(".factory/review.json", """{"approved":true,"blocking":[]}""");
+            _reviews++;
+            Write(
+                ".factory/review.json",
+                _reviews <= BlockedReviews
+                    ? JsonSerializer.Serialize(new { approved = false, blocking = new[] { ThreadABody } })
+                    : """{"approved":true,"blocking":[]}""");
         }
 
         return new CommandResult { StandardOutput = Json("done") };

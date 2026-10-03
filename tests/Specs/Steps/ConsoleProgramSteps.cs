@@ -23,6 +23,8 @@ public sealed partial class ConsoleProgramSteps : IDisposable
         factory.OtherCommands = _h.Commands;
     }
 
+    public ConsoleHarness Harness => _h;
+
     public void Dispose() => _h.Dispose();
 
     private IEnumerable<CommandSpec> Clones => _h.Commands.Where(c => c.Command is "git" && c.Arguments[0] is "clone");
