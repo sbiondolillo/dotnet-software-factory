@@ -4,8 +4,9 @@ namespace Specs.Unit;
 
 public sealed class WorkflowChecksTests : IDisposable
 {
-    private const string Run = "dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ github.event.issue.number }} --pass-env EXAMPLE_API_KEY";
-    private const string Condition = "github.event.label.name == 'factory' && github.event.sender.login == github.repository_owner";
+    private const string Run = "dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --pass-env EXAMPLE_API_KEY";
+    private const string Condition = "github.event_name == 'workflow_dispatch' || (github.event.label.name == 'factory' && github.event.sender.login == github.repository_owner)";
+    private const string Dispatch = "workflow_dispatch:\n    inputs:\n      issue:\n        required: true\n        type: number\n      ref:\n        default: v0";
     private const string Heading = "## Start a new repo";
     private const string Second = "dotnet new factory-starter -o <directory>";
 
@@ -20,8 +21,8 @@ public sealed class WorkflowChecksTests : IDisposable
         return path;
     }
 
-    private static string Factory(string on = "issues:\n    types: [labeled]", string permissions = "permissions: {}", string runsOn = "ubuntu-latest",
-        string condition = Condition, string checkout = "repository: sbiondolillo/dotnet-software-factory\n          ref: v0\n          token: ${{ secrets.FACTORY_GITHUB_TOKEN }}",
+    private static string Factory(string on = "issues:\n    types: [labeled]\n  " + Dispatch, string permissions = "permissions: {}", string runsOn = "ubuntu-latest",
+        string condition = Condition, string checkout = "repository: sbiondolillo/dotnet-software-factory\n          ref: ${{ inputs.ref || 'v0' }}\n          token: ${{ secrets.FACTORY_GITHUB_TOKEN }}",
         string setup = "- uses: actions/setup-dotnet@v6\n        with:\n          global-json-file: global.json\n      ",
         string env = "FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_GITHUB_TOKEN }}\n          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}\n          EXAMPLE_API_KEY: ${{ secrets.EXAMPLE_API_KEY }}",
         string run = Run, string extra = "", string secondJob = "")
@@ -72,12 +73,15 @@ public sealed class WorkflowChecksTests : IDisposable
     public void TheShippedShapePassesEveryCheck()
     {
         string f = Wf(Factory());
-        WorkflowChecks.OneTrigger(f, "issues", "labeled");
+        WorkflowChecks.Trigger(f, "issues", "labeled");
+        WorkflowChecks.Trigger(f, "workflow_dispatch");
+        WorkflowChecks.RequiredInput(f, "workflow_dispatch", "issue", "number");
+        WorkflowChecks.InputDefault(f, "workflow_dispatch", "ref", "v0");
         WorkflowChecks.NoOtherTrigger(f);
         WorkflowChecks.Permissions(f, "{}");
         WorkflowChecks.OneJob(f);
         WorkflowChecks.JobRuns(f, "ubuntu-latest", Condition);
-        WorkflowChecks.FirstStepChecksOut(f, "sbiondolillo/dotnet-software-factory", "v0", "${{ secrets.FACTORY_GITHUB_TOKEN }}");
+        WorkflowChecks.FirstStepChecksOut(f, "sbiondolillo/dotnet-software-factory", "${{ inputs.ref || 'v0' }}", "${{ secrets.FACTORY_GITHUB_TOKEN }}");
         WorkflowChecks.SetupBeforeRun(f, Run);
         WorkflowChecks.LastStepRuns(f, Run);
         WorkflowChecks.RunStepEnvironment(f, Run, "FACTORY_GITHUB_TOKEN", "ANTHROPIC_API_KEY", "EXAMPLE_API_KEY");
@@ -107,10 +111,42 @@ public sealed class WorkflowChecksTests : IDisposable
     }
 
     [Fact]
-    public void ASecondTriggerOrAnotherTypeFailsTheTriggerChecks()
+    public void AMissingTriggerOrAnotherTypeFailsTheTriggerChecks()
     {
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.NoOtherTrigger(Wf(Factory(on: "issues:\n    types: [labeled]\n  push:"))));
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.OneTrigger(Wf(Factory(on: "issues:\n    types: [opened]")), "issues", "labeled"));
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.Trigger(Wf(Factory(on: "issues:\n    types: [labeled]")), "workflow_dispatch"));
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.Trigger(Wf(Factory(on: "issues:\n    types: [opened]\n  " + Dispatch)), "issues", "labeled"));
+    }
+
+    [Fact]
+    public void AThirdTriggerOrAMissingOneFailsTheNoOtherTriggerCheck()
+    {
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.NoOtherTrigger(Wf(Factory(on: "issues:\n    types: [labeled]\n  " + Dispatch + "\n  push:"))));
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.NoOtherTrigger(Wf(Factory(on: "issues:\n    types: [labeled]"))));
+    }
+
+    [Theory]
+    [InlineData("workflow_dispatch:\n    inputs:\n      issue:\n        type: number")]
+    [InlineData("workflow_dispatch:\n    inputs:\n      issue:\n        required: true\n        type: string")]
+    [InlineData("workflow_dispatch:\n    inputs:\n      other:\n        required: true\n        type: number")]
+    [InlineData("workflow_dispatch:")]
+    public void AnotherIssueInputFailsTheRequiredInputCheck(string dispatch)
+        => Assert.Throws<InvalidOperationException>(() => WorkflowChecks.RequiredInput(Wf(Factory(on: "issues:\n    types: [labeled]\n  " + dispatch)), "workflow_dispatch", "issue", "number"));
+
+    [Theory]
+    [InlineData("workflow_dispatch:\n    inputs:\n      ref:\n        default: main")]
+    [InlineData("workflow_dispatch:\n    inputs:\n      ref:\n        required: false")]
+    [InlineData("workflow_dispatch:\n    inputs:\n      other:\n        default: v0")]
+    [InlineData("workflow_dispatch:")]
+    public void AnotherRefInputFailsTheDefaultCheck(string dispatch)
+        => Assert.Throws<InvalidOperationException>(() => WorkflowChecks.InputDefault(Wf(Factory(on: "issues:\n    types: [labeled]\n  " + dispatch)), "workflow_dispatch", "ref", "v0"));
+
+    [Fact]
+    public void AReadmeWithoutTheTrialRunSentenceOrCommandFailsTheCheck()
+    {
+        const string command = "gh workflow run factory -f issue=<number> -f ref=<ref>";
+        WorkflowChecks.SaysTrialRun($"The repo's owner starts a trial run of the factory at another ref with the command `{command}`.", command);
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.SaysTrialRun("The repo's owner starts a trial run of the factory at another ref.", command));
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.SaysTrialRun($"Run `{command}`.\n\nThe repo's owner starts a trial run of the factory at another ref.", command));
     }
 
     [Fact]
@@ -130,14 +166,15 @@ public sealed class WorkflowChecksTests : IDisposable
     {
         Assert.Throws<InvalidOperationException>(() => WorkflowChecks.JobRuns(Wf(Factory(runsOn: "macos-latest")), "ubuntu-latest", Condition));
         Assert.Throws<InvalidOperationException>(() => WorkflowChecks.JobRuns(Wf(Factory(condition: "true")), "ubuntu-latest", Condition));
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.JobRuns(Wf(Factory(condition: "github.event.label.name == 'factory' && github.event.sender.login == github.repository_owner")), "ubuntu-latest", Condition));
     }
 
     [Theory]
-    [InlineData("repository: other/repo\n          ref: v0\n          token: ${{ secrets.FACTORY_GITHUB_TOKEN }}")]
-    [InlineData("repository: sbiondolillo/dotnet-software-factory\n          ref: main\n          token: ${{ secrets.FACTORY_GITHUB_TOKEN }}")]
-    [InlineData("repository: sbiondolillo/dotnet-software-factory\n          ref: v0\n          token: ${{ secrets.OTHER }}")]
+    [InlineData("repository: other/repo\n          ref: ${{ inputs.ref || 'v0' }}\n          token: ${{ secrets.FACTORY_GITHUB_TOKEN }}")]
+    [InlineData("repository: sbiondolillo/dotnet-software-factory\n          ref: v0\n          token: ${{ secrets.FACTORY_GITHUB_TOKEN }}")]
+    [InlineData("repository: sbiondolillo/dotnet-software-factory\n          ref: ${{ inputs.ref || 'v0' }}\n          token: ${{ secrets.OTHER }}")]
     public void AnotherCheckoutFailsTheCheckoutCheck(string checkout)
-        => Assert.Throws<InvalidOperationException>(() => WorkflowChecks.FirstStepChecksOut(Wf(Factory(checkout: checkout)), "sbiondolillo/dotnet-software-factory", "v0", "${{ secrets.FACTORY_GITHUB_TOKEN }}"));
+        => Assert.Throws<InvalidOperationException>(() => WorkflowChecks.FirstStepChecksOut(Wf(Factory(checkout: checkout)), "sbiondolillo/dotnet-software-factory", "${{ inputs.ref || 'v0' }}", "${{ secrets.FACTORY_GITHUB_TOKEN }}"));
 
     [Fact]
     public void AFirstStepThatIsNotACheckoutFailsTheCheckoutCheck()

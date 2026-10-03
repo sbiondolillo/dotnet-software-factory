@@ -5,7 +5,7 @@ namespace Specs.Steps;
 [Binding]
 public sealed class StarterWorkflowsSteps(StarterState state)
 {
-    private const string FactoryRun = "dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ github.event.issue.number }} --pass-env EXAMPLE_API_KEY";
+    private const string FactoryRun = "dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --pass-env EXAMPLE_API_KEY";
     private const string IntegrationRun = "dotnet run --no-restore --project tests/Integration";
 
     private string Workflow(string name) => Path.Combine(state.Copy, ".github", "workflows", name);
@@ -21,9 +21,6 @@ public sealed class StarterWorkflowsSteps(StarterState state)
     [Then("the copy's {string} holds no other file")]
     public void ThenTheCopyHoldsNoOtherFileIn(string directory)
         => WorkflowChecks.HoldsNoOther(Path.Combine(state.Copy, directory), "factory.yml", "ci.yml");
-
-    [Then("the workflow {string} has one trigger, the event {string} with the type {string}")]
-    public void ThenOneTrigger(string file, string eventName, string type) => WorkflowChecks.OneTrigger(Workflow(file), eventName, type);
 
     [Then("the workflow {string} has no other trigger")]
     public void ThenNoOtherTrigger(string file) => WorkflowChecks.NoOtherTrigger(Workflow(file));
