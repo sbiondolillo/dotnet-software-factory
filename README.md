@@ -20,6 +20,29 @@ first commit. What each file is:
 | `tests/Specs/` | the test project: Reqnroll under xUnit v3, with the step class for that feature |
 | `tests/Integration/` | the integration suite: xUnit v3 tests against the real GitHub, `docker` and Claude Code. `dotnet test` skips it |
 
+## Start a new repo
+
+Make a new repo from the starter template:
+
+```
+dotnet new install <checkout>/templates/starter
+dotnet new factory-starter -o <directory>
+```
+
+Push the copy to the branch `main` of a new GitHub repo.
+
+Add two Actions secrets to the new repo: `FACTORY_GITHUB_TOKEN` and `ANTHROPIC_API_KEY`.
+
+`FACTORY_GITHUB_TOKEN` is a fine-grained token with read and write access to Contents, Issues and Pull requests on the new repo, and read access to Contents on `sbiondolillo/dotnet-software-factory`.
+
+Replace `EXAMPLE_API_KEY` in `factory.yml` and in `ci.yml` with the name of each secret the integration tests of the new repo read.
+
+Protect the branch `main`, with the checks `build` and `integration` required.
+
+Copilot code review is requested on every pull request.
+
+The repo's owner starts a run with the label `factory` on an issue. `factory.yml` names the tag `v0` of the factory.
+
 ## Commands
 
 ```

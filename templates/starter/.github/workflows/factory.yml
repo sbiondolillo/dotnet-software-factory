@@ -1,0 +1,28 @@
+# Starts a factory run when the repo's owner labels an issue `factory`.
+name: factory
+
+on:
+  issues:
+    types: [labeled]
+
+permissions: {}
+
+jobs:
+  factory:
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'factory' && github.event.sender.login == github.repository_owner
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: sbiondolillo/dotnet-software-factory
+          ref: v0
+          token: ${{ secrets.FACTORY_GITHUB_TOKEN }}
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Run the factory
+        env:
+          FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EXAMPLE_API_KEY: ${{ secrets.EXAMPLE_API_KEY }}
+        run: dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ github.event.issue.number }} --pass-env EXAMPLE_API_KEY
