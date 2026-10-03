@@ -5,7 +5,7 @@ using Xunit;
 namespace Specs.Steps;
 
 [Binding]
-public sealed class PullRequestWatchSteps(ExceptionState exceptionState) : IDisposable
+public sealed class PullRequestWatchSteps(ExceptionState exceptionState, ConsoleState consoleState) : IDisposable
 {
     private readonly WatchHandler _handler = new();
     private string _owner = "";
@@ -57,11 +57,18 @@ public sealed class PullRequestWatchSteps(ExceptionState exceptionState) : IDisp
         _handler.CheckRunsBody = WatchHandler.RunsJson([(name, status, null)]);
 
     [Given("GitHub answers each read of the check runs with no check run")]
-    public void GivenNoRun() => _handler.CheckRunsBody = WatchHandler.RunsJson([]);
+    public void GivenNoRun()
+    {
+        consoleState.NoCheckRuns = true;
+        _handler.CheckRunsBody = WatchHandler.RunsJson([]);
+    }
 
     [Given("GitHub answers the first read of the check runs with the check run {string} with the status {string} and no conclusion")]
-    public void GivenFirstRun(string name, string status) =>
+    public void GivenFirstRun(string name, string status)
+    {
+        consoleState.FirstCheckRun = (name, status);
         _handler.CheckRunsAt(1, WatchHandler.RunsJson([(name, status, null)]));
+    }
 
     [Given("GitHub answers the first read of the check runs with no check run")]
     public void GivenFirstNoRun() => _handler.CheckRunsAt(1, WatchHandler.RunsJson([]));

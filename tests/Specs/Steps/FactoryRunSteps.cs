@@ -259,7 +259,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     [Then("docker gives the names {string} and {string} to the command {string}")]
     public void ThenNames(string first, string second, string command)
     {
-        foreach (CommandSpec spec in _h.Commands.Where(c => c.Command is "docker" && c.Arguments[0] is "exec"))
+        foreach (CommandSpec spec in Commands.Where(c => c.Command is "docker" && c.Arguments[0] is "exec"))
         {
             List<string> arguments = [.. spec.Arguments];
             int id = arguments.IndexOf(Specs.Unit.FactoryRunHarness.ContainerId);
@@ -275,7 +275,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
             }
         }
 
-        Assert.Contains(_h.Commands, c => c.Arguments.Contains("--project") && c.Arguments.Contains("tests/Integration"));
+        Assert.Contains(Commands, c => c.Arguments.Contains("--project") && c.Arguments.Contains("tests/Integration"));
     }
 
     [Then("FactoryRun runs a second build prompt that holds {string}")]

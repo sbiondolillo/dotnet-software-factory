@@ -8,7 +8,7 @@ using Xunit;
 namespace Specs.Steps;
 
 [Binding]
-public sealed class CommandRunnerSteps(ExceptionState exceptionState)
+public sealed class CommandRunnerSteps(ExceptionState exceptionState, ConsoleState consoleState)
 {
     private static readonly Regex QuotedSpan = new(@"""[^""]*""|'[^']*'", RegexOptions.Compiled);
 
@@ -134,6 +134,12 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState)
     [Then("the exit code is {int}")]
     public void ThenTheExitCodeIs(int expected)
     {
+        if (consoleState.ExitCode is int consoleCode)
+        {
+            Assert.Equal(expected, consoleCode);
+            return;
+        }
+
         Assert.NotNull(_result);
         Assert.Equal(expected, _result.ExitCode);
     }

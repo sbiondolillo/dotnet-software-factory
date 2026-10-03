@@ -137,6 +137,8 @@ through it. A request that `GitHubClient` sends again goes through the
 `Microsoft.Extensions.Http.Resilience` package, which holds the retry, the wait
 between requests and the reading of `Retry-After`.
 
+- `GET /repos/<owner>/<repo>` answers 200 with `default_branch`, the name of the repo's
+  default branch, and the status code 404 for a repo that GitHub lacks.
 - GitHub opens a pull request from a head branch that it holds, with a commit that the
   base lacks. Any other head gets the status code 422. A head with no such commit
   gives `No commits between <base> and <head>` in `errors[].message`, and a head that
