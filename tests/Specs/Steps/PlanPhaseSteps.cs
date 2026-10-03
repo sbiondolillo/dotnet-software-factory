@@ -53,6 +53,18 @@ public sealed class PlanPhaseSteps(IssueState issue) : IDisposable
     [Given("the agent on the first run writes the file {string}")]
     public void GivenFirstWritesFile(string path) => _h.AgentWrites(1, path, "x");
 
+    [Given("the work tree holds the greeting file before the first prompt")]
+    public void GivenTreeHoldsGreeting() => _h.Write("specs/features/greeting.feature", PlanPhaseHarness.SoundFeature);
+
+    [Given("the agent on the first run removes the greeting file")]
+    public void GivenFirstRemovesGreeting() => _h.AgentRemoves(1, "specs/features/greeting.feature");
+
+    [Given("the agent on every run removes the greeting file")]
+    public void GivenEveryRemovesGreeting() => _h.AgentRemoves(null, "specs/features/greeting.feature");
+
+    [Given("the agent on the first run writes the plan")]
+    public void GivenFirstWritesPlan() => _h.AgentWrites(1, ".factory/plan.md", PlanPhaseHarness.PlanText);
+
     [Given("the agent on every run writes the plan")]
     public void GivenEveryWritesPlan() => _h.AgentWrites(null, ".factory/plan.md", PlanPhaseHarness.PlanText);
 
@@ -116,6 +128,12 @@ public sealed class PlanPhaseSteps(IssueState issue) : IDisposable
 
     [Then("the first prompt holds {string}, {string}, {string} and {string}")]
     public void ThenFirstHolds(string a, string b, string c, string d) => AssertHolds(_h.Prompts[0], a, b, c, d);
+
+    [Then("the first prompt holds {string}")]
+    public void ThenFirstHoldsOne(string a) => AssertHolds(_h.Prompts[0], a);
+
+    [Then("the pin holds only {string}")]
+    public void ThenPinHoldsOnly(string path) => Assert.Equal([path], Result.Pin!.Hashes.Keys.Order(StringComparer.Ordinal));
 
     [Then("the second prompt holds {string}, {string} and {string}")]
     public void ThenSecondHolds(string a, string b, string c) => AssertHolds(_h.Prompts[1], a, b, c);
