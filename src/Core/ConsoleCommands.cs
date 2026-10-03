@@ -134,7 +134,7 @@ public static class ConsoleCommands
                 var request = new FactoryRunRequest(
                     owner, repo, options.Number, token, runId, directory.FullName, baseBranch, ImageTag, host.RootDirectory,
                     Model, 50, Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames);
-                result = await new FactoryRun(host.Runner, client).RunAsync(request, cancellationToken).ConfigureAwait(false);
+                result = await new FactoryRun(host.Runner, client, host.Out).RunAsync(request, cancellationToken).ConfigureAwait(false);
                 localHead = result.PullRequest is null ? null : await git.ReadHeadShaAsync(directory.FullName, cancellationToken).ConfigureAwait(false);
             }
             finally
@@ -175,13 +175,14 @@ public static class ConsoleCommands
     /// <summary>Runs one feedback run in a new work tree, and gives back the head commit of that work tree, or null when it cloned nothing.</summary>
     private static async Task<string?> FeedbackAsync(Options options, ConsoleHost host, GitHubClient client, string token, int number, CancellationToken cancellationToken)
     {
+        await host.Out.WriteLineAsync("feedback: start").ConfigureAwait(false);
         DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-feedback-");
         try
         {
             var request = new FeedbackRunRequest(
                 options.Repo.Owner, options.Repo.Name, number, token, directory.FullName, ImageTag, host.RootDirectory,
                 Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames);
-            FeedbackRunResult result = await new FeedbackRun(host.Runner, client).RunAsync(request, cancellationToken).ConfigureAwait(false);
+            FeedbackRunResult result = await new FeedbackRun(host.Runner, client, host.Out).RunAsync(request, cancellationToken).ConfigureAwait(false);
             return result.Resolved + result.Unresolved is 0
                 ? null
                 : await new Git(host.Runner).ReadHeadShaAsync(directory.FullName, cancellationToken).ConfigureAwait(false);
@@ -203,6 +204,7 @@ public static class ConsoleCommands
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
+        await host.Out.WriteLineAsync("watch: start").ConfigureAwait(false);
         if (localHead is not null)
         {
             long? firstDifferent = null;

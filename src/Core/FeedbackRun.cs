@@ -25,7 +25,7 @@ public sealed record FeedbackRunRequest(
 public sealed record FeedbackRunResult(int Resolved, int Unresolved, int Redos);
 
 /// <summary>Answers every unresolved review thread of a pull request within three Redos.</summary>
-public sealed class FeedbackRun(CommandRunner runner, GitHubClient client)
+public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextWriter? progress = null)
 {
     private const int RedoBudget = 3;
     private const string ReportPath = ".factory/threads.json";
@@ -43,6 +43,7 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client)
 
         string branch = await new PullRequests(client).ReadHeadBranchAsync(request.Owner, request.Repo, request.PullNumber, cancellationToken).ConfigureAwait(false);
         var git = new Git(runner);
+        await Say("clone: start").ConfigureAwait(false);
         await git.CloneAsync($"https://github.com/{request.Owner}/{request.Repo}.git", request.Token, request.Directory, cancellationToken).ConfigureAwait(false);
         await git.CheckoutExistingBranchAsync(branch, request.Directory, cancellationToken).ConfigureAwait(false);
         string baseCommit = await git.ReadHeadShaAsync(request.Directory, cancellationToken).ConfigureAwait(false);
@@ -52,6 +53,7 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client)
         string body = Describe(threads);
         string reportFile = Path.Combine(request.Directory, ".factory", "threads.json");
 
+        await Say("sandbox: start").ConfigureAwait(false);
         Sandbox sandbox = await Sandbox.StartAsync(runner, request.ImageTag, request.RootDirectory, request.Directory, cancellationToken).ConfigureAwait(false);
         await using (sandbox.ConfigureAwait(false))
         {
@@ -71,6 +73,7 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client)
                     File.Delete(reportFile);
                 }
 
+                await Say("build: start").ConfigureAwait(false);
                 await buildPhase.RunAsync(title, body, request.BuildModel, request.BuildTurns, redoTexts, cancellationToken).ConfigureAwait(false);
                 (items, IReadOnlyList<string> faults) = ReadReport(reportFile, threads);
                 if (faults.Count > 0)
@@ -79,12 +82,17 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client)
                 }
                 else
                 {
+                    await Say("lint: start").ConfigureAwait(false);
                     await lintGate.RunAsync(request.Directory, title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
+                    await Say("test: start").ConfigureAwait(false);
                     TestGateResult gate = await testGate.RunAsync(request.Directory, pin, request.SecretNames, cancellationToken).ConfigureAwait(false);
+                    await Say(gate.Passed ? "test: passed" : "test: failed").ConfigureAwait(false);
                     if (gate.Passed)
                     {
+                        await Say("review: start").ConfigureAwait(false);
                         ReviewPhaseResult review = await reviewPhase
                             .RunAsync(title, body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, cancellationToken).ConfigureAwait(false);
+                        await Say(review.Approved ? "review: approved" : "review: blocked").ConfigureAwait(false);
                         if (review.Approved)
                         {
                             break;
@@ -101,11 +109,13 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client)
                 if (redos >= RedoBudget)
                 {
                     string comment = CommentText.Fit($"The budget of {RedoBudget} Redos is spent. The last build still fails:", redoTexts);
+                    await Say(comment).ConfigureAwait(false);
                     await client.PostCommentAsync(request.Owner, request.Repo, request.PullNumber, comment, cancellationToken).ConfigureAwait(false);
                     return new FeedbackRunResult(0, threads.Count, redos);
                 }
 
                 redos++;
+                await Say($"redo: {redos}").ConfigureAwait(false);
             }
 
             await git.PushAsync(branch, request.Directory, request.Token, cancellationToken).ConfigureAwait(false);
@@ -124,6 +134,8 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client)
             return new FeedbackRunResult(resolved, threads.Count - resolved, redos);
         }
     }
+
+    private Task Say(string line) => ProgressLine.WriteAsync(progress, line);
 
     private static string Describe(IReadOnlyList<ReviewThread> threads)
     {
