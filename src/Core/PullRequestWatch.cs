@@ -26,7 +26,7 @@ public sealed class PullRequestWatch(
             IReadOnlyList<Review> reviews = await reviewThreads.ReadReviewsAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
             bool settled = runs.Count is not 0
                 && runs.All(r => r.Status is "completed")
-                && reviews.Any(r => r.Author == reviewerLogin);
+                && reviews.Any(r => r.Author == reviewerLogin && r.CommitSha.Length is not 0 && r.CommitSha == sha);
             if (settled)
             {
                 green = runs.All(r => r.Conclusion is "success" or "skipped");

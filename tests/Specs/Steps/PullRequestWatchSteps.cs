@@ -38,6 +38,13 @@ public sealed class PullRequestWatchSteps(ExceptionState exceptionState, Console
         _reviewer = reviewer;
     }
 
+    [Given("the watch is for the repo {string} of the owner {string}, the pull request {int}, the reviewer login {string}, a wait of zero between two polls and a timeout of zero")]
+    public void GivenWatchForZero(string repo, string owner, int number, string reviewer)
+    {
+        GivenWatchFor(repo, owner, number, reviewer);
+        _timeout = TimeSpan.Zero;
+    }
+
     [Given("GitHub answers the read of the pull request with the head sha {string}")]
     public void GivenSha(string sha) => _handler.Sha = sha;
 
@@ -81,17 +88,21 @@ public sealed class PullRequestWatchSteps(ExceptionState exceptionState, Console
     public void GivenSecondTwoRuns(string n1, string s1, string c1, string n2, string s2, string c2) =>
         _handler.CheckRunsAt(2, WatchHandler.RunsJson([(n1, s1, c1), (n2, s2, c2)]));
 
-    [Given("GitHub answers each read of the reviews with one review by {string} with the state {string}")]
-    public void GivenReview(string login, string state) => _handler.ReviewsBody = WatchHandler.ReviewsJson([(login, state)]);
+    [Given("GitHub answers each read of the reviews with one review by {string} with the state {string} of the commit {string}")]
+    public void GivenReview(string login, string state, string commit) => _handler.ReviewsBody = WatchHandler.ReviewsJson([(login, state, commit)]);
 
     [Given("GitHub answers each read of the reviews with no review")]
-    public void GivenNoReview() => _handler.ReviewsBody = WatchHandler.ReviewsJson([]);
+    public void GivenNoReview()
+    {
+        consoleState.NoReviews = true;
+        _handler.ReviewsBody = WatchHandler.ReviewsJson([]);
+    }
 
     [Given("GitHub answers the first read of the reviews with no review")]
     public void GivenFirstNoReview() => _handler.ReviewsAt(1, WatchHandler.ReviewsJson([]));
 
-    [Given("GitHub answers the second read of the reviews with one review by {string} with the state {string}")]
-    public void GivenSecondReview(string login, string state) => _handler.ReviewsAt(2, WatchHandler.ReviewsJson([(login, state)]));
+    [Given("GitHub answers the second read of the reviews with one review by {string} with the state {string} of the commit {string}")]
+    public void GivenSecondReview(string login, string state, string commit) => _handler.ReviewsAt(2, WatchHandler.ReviewsJson([(login, state, commit)]));
 
     [Given("GitHub answers the read of the review threads with an empty list of threads")]
     public void GivenNoThreads() => _handler.ThreadsBody = WatchHandler.ThreadsJson([]);

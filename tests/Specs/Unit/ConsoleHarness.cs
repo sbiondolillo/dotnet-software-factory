@@ -79,6 +79,9 @@ public sealed class ConsoleHarness : IDisposable
 
     public bool Disputed { get; set; }
 
+    /// <summary>The message of a GraphQL error that answers the review request, or null for success.</summary>
+    public string? ReviewRequestError { get; set; }
+
     /// <summary>The message of the failed test of a red build.</summary>
     public string FailureText { get; set; } = RedText;
 
@@ -129,8 +132,11 @@ public sealed class ConsoleHarness : IDisposable
     public static string RunsJson(string name, string status, string? conclusion) =>
         JsonSerializer.Serialize(new { check_runs = new[] { new { name, status, conclusion } } });
 
-    public static string ReviewsJson(string login) =>
-        JsonSerializer.Serialize(new { data = new { repository = new { pullRequest = new { reviews = new { nodes = new[] { new { state = "COMMENTED", author = new { login } } } } } } } });
+    public static string ReviewsJson(string login, string commit = DefaultSha) =>
+        JsonSerializer.Serialize(new { data = new { repository = new { pullRequest = new { reviews = new { nodes = new[] { new { state = "COMMENTED", author = new { login }, commit = new { oid = commit } } } } } } } });
+
+    public static string NoReviewsJson() =>
+        JsonSerializer.Serialize(new { data = new { repository = new { pullRequest = new { reviews = new { nodes = Array.Empty<object>() } } } } });
 
     public Task<int> RunAsync(string[] args, CancellationToken cancellationToken = default)
     {
@@ -325,7 +331,7 @@ public sealed class ConsoleHarness : IDisposable
 
         if (path.Contains("/pulls/", StringComparison.Ordinal))
         {
-            return (200, JsonSerializer.Serialize(new { head = new { sha = HeadSha(++_headReads), @ref = HeadRef } }));
+            return (200, JsonSerializer.Serialize(new { node_id = "PR_kwDOUpm1Qc6abc", head = new { sha = HeadSha(++_headReads), @ref = HeadRef } }));
         }
 
         if (path.Contains("/issues/", StringComparison.Ordinal))
@@ -360,6 +366,13 @@ public sealed class ConsoleHarness : IDisposable
         {
             _resolved = true;
             return (200, "{\"data\":{\"resolveReviewThread\":{\"thread\":{\"isResolved\":true}}}}");
+        }
+
+        if (query.Contains("requestReviewsByLogin", StringComparison.Ordinal))
+        {
+            return ReviewRequestError is { } message
+                ? (200, JsonSerializer.Serialize(new { data = (object?)null, errors = new[] { new { message } } }))
+                : (200, "{\"data\":{\"requestReviewsByLogin\":{\"pullRequest\":{\"id\":\"PR_kwDOUpm1Qc6abc\"}}}}");
         }
 
         return (200, Reviews);

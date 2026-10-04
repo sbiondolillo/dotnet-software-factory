@@ -53,6 +53,13 @@ public sealed class PullRequests(GitHubClient client)
         return json.GetProperty("head").GetProperty("sha").GetString() ?? "";
     }
 
+    /// <summary>Reads the node id of a pull request, which GraphQL mutations take.</summary>
+    public async Task<string> ReadNodeIdAsync(string owner, string repo, int number, CancellationToken cancellationToken = default)
+    {
+        JsonElement json = await client.SendAsync(HttpMethod.Get, $"/repos/{owner}/{repo}/pulls/{number}", null, cancellationToken).ConfigureAwait(false);
+        return json.TryGetProperty("node_id", out JsonElement id) ? id.GetString() ?? "" : "";
+    }
+
     /// <summary>Reads the name of the head branch of a pull request.</summary>
     public async Task<string> ReadHeadBranchAsync(string owner, string repo, int number, CancellationToken cancellationToken = default)
     {

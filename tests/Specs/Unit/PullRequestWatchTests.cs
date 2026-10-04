@@ -13,7 +13,7 @@ public sealed class PullRequestWatchTests
         var handler = new WatchHandler
         {
             CheckRunsBody = WatchHandler.RunsJson(Done),
-            ReviewsBody = WatchHandler.ReviewsJson([("me", "COMMENTED")]),
+            ReviewsBody = WatchHandler.ReviewsJson([("me", "COMMENTED", new WatchHandler().Sha)]),
         };
         var client = new GitHubClient(new HttpClient(handler), "t", TimeSpan.Zero);
         return (new PullRequestWatch(new PullRequests(client), new ReviewThreads(client)), handler);
@@ -95,7 +95,7 @@ public sealed class PullRequestWatchTests
     public async Task AReviewByAnotherLoginOrNoAuthorDoesNotSettle()
     {
         (PullRequestWatch sut, WatchHandler handler) = Make();
-        handler.ReviewsBody = WatchHandler.ReviewsJson([("other", "COMMENTED"), (null, "COMMENTED")]);
+        handler.ReviewsBody = WatchHandler.ReviewsJson([("other", "COMMENTED", handler.Sha), (null, "COMMENTED", handler.Sha)]);
         PullRequestWatchResult result = await Watch(sut, TimeSpan.Zero, null, TestContext.Current.CancellationToken);
         Assert.False(result.IsGreen);
     }
@@ -190,5 +190,21 @@ public sealed class PullRequestWatchTests
         PullRequestWatchResult result = await Watch(sut, TimeSpan.FromHours(1), null, TestContext.Current.CancellationToken);
         Assert.False(result.IsGreen);
         Assert.Equal("B", Assert.Single(result.Threads).Id);
+    }
+
+    [Fact]
+    public async Task AReviewOfAnEarlierCommitDoesNotSettle()
+    {
+        (PullRequestWatch sut, WatchHandler handler) = Make();
+        handler.ReviewsBody = WatchHandler.ReviewsJson([("me", "COMMENTED", "d7d0afd495cc64aa2ac153de8d001ad8d86fe074")]);
+        Assert.False((await Watch(sut, TimeSpan.Zero, null, TestContext.Current.CancellationToken)).IsGreen);
+    }
+
+    [Fact]
+    public async Task AReviewWithNoCommitDoesNotSettle()
+    {
+        (PullRequestWatch sut, WatchHandler handler) = Make();
+        handler.ReviewsBody = WatchHandler.ReviewsJson([("me", "PENDING", "")]);
+        Assert.False((await Watch(sut, TimeSpan.Zero, null, TestContext.Current.CancellationToken)).IsGreen);
     }
 }

@@ -5,7 +5,7 @@ Feature: The factory waits for a pull request's checks and its Copilot review
     And the watch is for the repo "factory-scratch" of the owner "sbiondolillo", the pull request 565, the reviewer login "sbiondolillo", a wait of zero between two polls and a timeout of 1 hour
     And GitHub answers the read of the pull request with the head sha "2878cae3e3bab7f3b1dcdfa14206f2c361021085"
     And GitHub answers each read of the check runs with the check run "build" with the status "completed" and the conclusion "success", and the check run "skipped" with the status "completed" and the conclusion "skipped"
-    And GitHub answers each read of the reviews with one review by "sbiondolillo" with the state "COMMENTED"
+    And GitHub answers each read of the reviews with one review by "sbiondolillo" with the state "COMMENTED" of the commit "2878cae3e3bab7f3b1dcdfa14206f2c361021085"
     And GitHub answers the read of the review threads with an empty list of threads
 
   @bullet-1
@@ -103,7 +103,7 @@ Feature: The factory waits for a pull request's checks and its Copilot review
   @bullet-15
   Scenario: No review at the first poll and a review at the second gives green
     Given GitHub answers the first read of the reviews with no review
-    And GitHub answers the second read of the reviews with one review by "sbiondolillo" with the state "COMMENTED"
+    And GitHub answers the second read of the reviews with one review by "sbiondolillo" with the state "COMMENTED" of the commit "2878cae3e3bab7f3b1dcdfa14206f2c361021085"
     When a caller starts the watch
     Then the watch gives back a green result
 

@@ -174,6 +174,7 @@ public sealed class ConsoleProgramTests : IDisposable
     public async Task AHeadThatStaysOldStartsTheWatchOnItOnlyAfter10Seconds()
     {
         _h.HeadSha = _ => "9e107d9d372bb6826bd81d3542a419d6f0a3c1b2";
+        _h.Reviews = ConsoleHarness.ReviewsJson("copilot-pull-request-reviewer", "9e107d9d372bb6826bd81d3542a419d6f0a3c1b2");
         Assert.Equal(0, await StartAsync($"run {Repo} --issue 1"));
         TimedRequest read = _h.Requests.First(r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal));
         Assert.True(read.At - _h.PushTimes[0] >= TimeSpan.FromSeconds(10));
@@ -273,5 +274,62 @@ public sealed class ConsoleProgramTests : IDisposable
         _h.CheckRuns = _ => """{"check_runs":[]}""";
         Assert.Equal(1, await StartAsync($"feedback {Repo} --pr 10"));
         Assert.InRange(_h.Time.Now, TimeSpan.FromMinutes(60), TimeSpan.FromMinutes(61));
+    }
+
+    private IEnumerable<TimedRequest> ReviewRequests =>
+        _h.Requests.Where(r => r.Path.EndsWith("/graphql", StringComparison.Ordinal) && r.Content!.Contains("requestReviewsByLogin", StringComparison.Ordinal));
+
+    [Fact]
+    public async Task AReviewOfTheHeadCommitByTheReviewerSendsNoRequest()
+    {
+        Assert.Equal(0, await StartAsync($"run {Repo} --issue 1"));
+        Assert.Empty(ReviewRequests);
+    }
+
+    [Fact]
+    public async Task AReviewOfAnEarlierCommitSendsOneRequest()
+    {
+        _h.Reviews = ConsoleHarness.ReviewsJson("copilot-pull-request-reviewer", "9e107d9d372bb6826bd81d3542a419d6f0a3c1b2");
+        await StartAsync($"run {Repo} --issue 1 --timeout 0");
+        Assert.Single(ReviewRequests);
+    }
+
+    [Fact]
+    public async Task AReviewOfTheHeadCommitByAnotherLoginSendsOneRequest()
+    {
+        _h.Reviews = ConsoleHarness.ReviewsJson("someone");
+        await StartAsync($"run {Repo} --issue 1 --timeout 0");
+        Assert.Single(ReviewRequests);
+    }
+
+    [Fact]
+    public async Task AFailedReviewRequestGivesTheMessageAndTheExitCode1AndNoCheckRunRead()
+    {
+        _h.Reviews = ConsoleHarness.NoReviewsJson();
+        _h.ReviewRequestError = "not available";
+        Assert.Equal(1, await StartAsync($"run {Repo} --issue 1"));
+        Assert.Contains(ConsoleHarness.Lines(_h.Error), l => l.Contains("not available", StringComparison.Ordinal));
+        Assert.DoesNotContain(_h.Requests, r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AFeedbackWatchWithNoReviewSendsTheRequestBeforeTheCheckRuns()
+    {
+        _h.Reviews = ConsoleHarness.NoReviewsJson();
+        _h.Threads = "none";
+        await StartAsync($"feedback {Repo} --pr 10 --timeout 0");
+        int request = _h.Requests.FindIndex(r => r.Path.EndsWith("/graphql", StringComparison.Ordinal) && r.Content!.Contains("requestReviewsByLogin", StringComparison.Ordinal));
+        Assert.True(request >= 0);
+        Assert.True(request < _h.Requests.FindIndex(r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task TheSecondWatchAfterAFeedbackPassRequestsTheReviewAgain()
+    {
+        _h.Reviews = ConsoleHarness.NoReviewsJson();
+        _h.Threads = "always";
+        await StartAsync($"run {Repo} --issue 1 --timeout 0");
+        Assert.Equal(2, ReviewRequests.Count());
+        Assert.Equal(2, _h.Requests.Count(r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal)));
     }
 }

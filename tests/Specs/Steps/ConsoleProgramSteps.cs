@@ -31,6 +31,14 @@ public sealed partial class ConsoleProgramSteps : IDisposable
 
     private IEnumerable<TimedRequest> CheckReads => _h.Requests.Where(r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal));
 
+    private IEnumerable<TimedRequest> ReviewRequests => _h.Requests.Where(IsReviewRequest);
+
+    private static bool IsReviewRequest(TimedRequest r) =>
+        r.Path.EndsWith("/graphql", StringComparison.Ordinal) && r.Content!.Contains("requestReviewsByLogin", StringComparison.Ordinal);
+
+    private static bool IsHeadRead(TimedRequest r) =>
+        r.Method is "GET" && r.Path.Contains("/pulls/", StringComparison.Ordinal);
+
     [GeneratedRegex("^factory/[0-9a-f]{8}$")]
     private static partial Regex BranchName();
 
@@ -74,9 +82,12 @@ public sealed partial class ConsoleProgramSteps : IDisposable
             : later;
     }
 
-    [Given("GitHub answers each read of the reviews with one review with the author login {string} and the state {string}")]
-    public void GivenReviews(string login, string state) =>
-        _h.Reviews = ConsoleHarness.ReviewsJson(login).Replace("COMMENTED", state, StringComparison.Ordinal);
+    [Given("GitHub answers each read of the reviews with one review with the author login {string}, the state {string} and the commit {string}")]
+    public void GivenReviews(string login, string state, string commit) =>
+        _h.Reviews = ConsoleHarness.ReviewsJson(login, commit).Replace("COMMENTED", state, StringComparison.Ordinal);
+
+    [Given("GitHub answers the review request with a GraphQL error")]
+    public void GivenRequestError() => _h.ReviewRequestError = "Copilot code review is not available for this repo.";
 
     [Given("GitHub answers each read of the check runs with a red check")]
     public void GivenRed() => _h.CheckRuns = _ => ConsoleHarness.RunsJson("build", "completed", "failure");
@@ -136,6 +147,50 @@ public sealed partial class ConsoleProgramSteps : IDisposable
 
     [Then("standard error holds one line that holds {string}")]
     public void ThenErrorLine(string text) => Assert.Contains(text, Assert.Single(ConsoleHarness.Lines(_h.Error)));
+
+    [Then("GitHub gets no review request")]
+    public void ThenNoReviewRequest() => Assert.Empty(ReviewRequests);
+
+    [Then("GitHub gets one GraphQL request that names {string} with the bot login {string}")]
+    public void ThenReviewRequest(string name, string login)
+    {
+        TimedRequest request = Assert.Single(_h.Requests, r => r.Path.EndsWith("/graphql", StringComparison.Ordinal) && r.Content!.Contains(name, StringComparison.Ordinal));
+        using JsonDocument json = JsonDocument.Parse(request.Content!);
+        Assert.Equal([login], json.RootElement.GetProperty("variables").GetProperty("botLogins").EnumerateArray().Select(e => e.GetString()));
+    }
+
+    [Then("the review request comes after the read of the head commit that gives the head of the work tree")]
+    public void ThenAfterHeadRead()
+    {
+        int reads = 0;
+        int gives = -1;
+        for (int i = 0; i < _h.Requests.Count && gives < 0; i++)
+        {
+            if (IsHeadRead(_h.Requests[i]) && _h.HeadSha(++reads) == ConsoleHarness.DefaultSha)
+            {
+                gives = i;
+            }
+        }
+
+        Assert.True(gives >= 0);
+        Assert.True(_h.Requests.FindIndex(IsReviewRequest) > gives);
+    }
+
+    [Then("the review request comes before the first read of the check runs")]
+    public void ThenBeforeCheckRuns()
+    {
+        int request = _h.Requests.FindIndex(IsReviewRequest);
+        Assert.True(request >= 0);
+        Assert.True(request < _h.Requests.FindIndex(r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal)));
+    }
+
+    [Then("the review request comes 10 seconds or more after the push")]
+    public void ThenRequestAfterPush() =>
+        Assert.True(Assert.Single(ReviewRequests).At - _h.PushTimes.Last() >= TimeSpan.FromSeconds(10));
+
+    [Then("standard error holds a line with the message of the GraphQL error")]
+    public void ThenErrorGraphQl() =>
+        Assert.Contains(ConsoleHarness.Lines(_h.Error), l => l.Contains(_h.ReviewRequestError!, StringComparison.Ordinal));
 
     [Then("GitHub gets no request")]
     public void ThenNoRequest() => Assert.Empty(_h.Requests);
@@ -329,6 +384,11 @@ public sealed partial class ConsoleProgramSteps : IDisposable
         foreach (int build in _factory.Harness.RedBuilds)
         {
             _h.RedBuilds.Add(build);
+        }
+
+        if (_state.NoReviews)
+        {
+            _h.Reviews = ConsoleHarness.NoReviewsJson();
         }
 
         if (_state.NoCheckRuns)

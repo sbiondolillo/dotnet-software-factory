@@ -18,9 +18,9 @@ public sealed class ReviewThreadsSteps(ExceptionState exceptionState, RecordingH
     [Given("GitHub answers the read of reviews with an empty list of reviews")]
     public void GivenNoReviews() => handler.Answer(200, ReviewsJson([]));
 
-    [Given("GitHub answers the read of reviews with one review with the author login {string} and the state {string}")]
-    public void GivenOneReview(string login, string state) =>
-        handler.Answer(200, ReviewsJson([$"{{\"state\":{Q(state)},\"author\":{{\"login\":{Q(login)}}}}}"]));
+    [Given("GitHub answers the read of reviews with one review with the author login {string}, the state {string} and the commit {string}")]
+    public void GivenOneReview(string login, string state, string commit) =>
+        handler.Answer(200, ReviewsJson([$"{{\"state\":{Q(state)},\"author\":{{\"login\":{Q(login)}}},\"commit\":{{\"oid\":{Q(commit)}}}}}"]));
 
     [Given("GitHub answers the read of review threads with an empty list of threads")]
     public void GivenNoThreads() => handler.Answer(200, ThreadsJson([]));
@@ -105,9 +105,9 @@ public sealed class ReviewThreadsSteps(ExceptionState exceptionState, RecordingH
         Assert.Equal(threadId, document.RootElement.GetProperty("variables").GetProperty("threadId").GetString());
     }
 
-    [Then("ReviewThreads returns one review with the author {string} and the state {string}")]
-    public void ThenOneReview(string author, string state) =>
-        Assert.Equal(new Review(author, state), Assert.Single(_reviews!));
+    [Then("ReviewThreads returns one review with the author {string}, the state {string} and the commit {string}")]
+    public void ThenOneReview(string author, string state, string commit) =>
+        Assert.Equal(new Review(author, state, commit), Assert.Single(_reviews!));
 
     [Then("ReviewThreads returns an empty list of reviews")]
     public void ThenNoReviews() => Assert.Empty(_reviews!);

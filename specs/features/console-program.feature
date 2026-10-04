@@ -233,7 +233,7 @@ Feature: The console program runs the factory on an issue or a pull request
 
   @bullet-30
   Scenario: foreign review timeout 0
-    Given GitHub answers each read of the reviews with one review with the author login "sbiondolillo" and the state "COMMENTED"
+    Given GitHub answers each read of the reviews with one review with the author login "sbiondolillo", the state "COMMENTED" and the commit "d7d0afd495cc64aa2ac153de8d001ad8d86fe074"
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --timeout 0"
     # run: printf '1'
     Then the exit code is 1
