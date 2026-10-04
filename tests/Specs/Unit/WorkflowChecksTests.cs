@@ -102,12 +102,32 @@ public sealed class WorkflowChecksTests : IDisposable
     public void AMissingFileFailsTheHoldsCheckAndAThirdFileFailsTheNoOtherCheck()
     {
         Write("factory.yml", "");
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsFiles(_root, "factory.yml", "ci.yml"));
         Write("ci.yml", "");
-        WorkflowChecks.HoldsFiles(_root, "factory.yml", "ci.yml");
-        WorkflowChecks.HoldsNoOther(_root, "factory.yml", "ci.yml");
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsFiles(_root, "factory.yml", "ci.yml", "review-feedback.yml"));
+        Write("review-feedback.yml", "");
+        WorkflowChecks.HoldsFiles(_root, "factory.yml", "ci.yml", "review-feedback.yml");
+        WorkflowChecks.HoldsNoOther(_root, "factory.yml", "ci.yml", "review-feedback.yml");
         Write("x.yml", "");
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsNoOther(_root, "factory.yml", "ci.yml"));
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsNoOther(_root, "factory.yml", "ci.yml", "review-feedback.yml"));
+    }
+
+    [Fact]
+    public void ALineCheckNeedsAWholeLine()
+    {
+        const string Section = "a\nuse `x` here\nb";
+        WorkflowChecks.HoldsLine(Section, "b");
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsLine(Section, "use `x`"));
+        WorkflowChecks.HoldsNoLine(Section, "use `x`");
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsNoLine(Section, "a"));
+    }
+
+    [Fact]
+    public void TheAfterTheLabelCheckFailsOnAWrongOrderOrAMissingLabelLine()
+    {
+        WorkflowChecks.HoldsLineAfterLabel("about `x`\nnew", "new", "x");
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsLineAfterLabel("new\nabout `x`", "new", "x"));
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsLineAfterLabel("new", "new", "x"));
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsLineAfterLabel("about `x`", "new", "x"));
     }
 
     [Fact]

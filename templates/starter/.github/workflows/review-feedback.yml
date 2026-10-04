@@ -1,0 +1,35 @@
+# Answers the review threads of a pull request when the repo's owner labels it `review-feedback`.
+name: review-feedback
+
+on:
+  pull_request_target:
+    types: [labeled]
+
+permissions: {}
+
+concurrency:
+  group: review-feedback-${{ github.event.pull_request.number }}
+
+jobs:
+  feedback:
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'review-feedback' && github.event.sender.login == github.repository_owner
+    steps:
+      - name: Remove the label
+        env:
+          GH_TOKEN: ${{ secrets.FACTORY_GITHUB_TOKEN }}
+        run: gh api -X DELETE repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/labels/review-feedback
+      - uses: actions/checkout@v7
+        with:
+          repository: sbiondolillo/dotnet-software-factory
+          ref: v0
+          token: ${{ secrets.FACTORY_GITHUB_TOKEN }}
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Answer the review threads
+        env:
+          FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EXAMPLE_API_KEY: ${{ secrets.EXAMPLE_API_KEY }}
+        run: dotnet run --project src/App -c Release -- feedback --repo ${{ github.repository }} --pr ${{ github.event.pull_request.number }} --pass-env EXAMPLE_API_KEY
