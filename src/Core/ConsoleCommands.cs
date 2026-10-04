@@ -72,11 +72,28 @@ public static class ConsoleCommands
         });
 
         var command = new Command(verb, description) { repo, number, passEnv, timeout };
+        var rounds = new Option<int>("--review-rounds")
+        {
+            Description = "The most feedback runs one run makes.",
+            DefaultValueFactory = _ => 3,
+        };
+        rounds.Validators.Add(result =>
+        {
+            if (Value(result) < 0)
+            {
+                result.AddError("Option '--review-rounds' must be 0 or more.");
+            }
+        });
+        if (verb is "run")
+        {
+            command.Options.Add(rounds);
+        }
+
         command.SetAction(async (parse, token) =>
         {
             string[] names = parse.GetValue(passEnv) ?? [];
             string[] repoParts = parse.GetValue(repo)!.Split('/');
-            var options = new Options(verb, new RepoName(repoParts[0], repoParts[1]), parse.GetValue(number), names, TimeSpan.FromMinutes(parse.GetValue(timeout)));
+            var options = new Options(verb, new RepoName(repoParts[0], repoParts[1]), parse.GetValue(number), names, TimeSpan.FromMinutes(parse.GetValue(timeout)), verb is "run" ? parse.GetValue(rounds) : 0);
             return await RunVerbAsync(options, host, token).ConfigureAwait(false);
         });
         return command;
@@ -166,11 +183,19 @@ public static class ConsoleCommands
             localHead = await FeedbackAsync(options, host, client, token, number, cancellationToken).ConfigureAwait(false);
         }
 
-        PullRequestWatchResult last = await WatchAsync(host, pullRequests, reviewThreads, watch, owner, repo, number, localHead, options.Timeout, cancellationToken).ConfigureAwait(false);
-        if (options.Verb is "run" && last.Threads.Count > 0)
+        (PullRequestWatchResult last, string head) = await WatchAsync(host, pullRequests, reviewThreads, watch, owner, repo, number, localHead, options.Timeout, cancellationToken).ConfigureAwait(false);
+        if (options.Verb is "run")
         {
-            localHead = await FeedbackAsync(options, host, client, token, number, cancellationToken).ConfigureAwait(false);
-            last = await WatchAsync(host, pullRequests, reviewThreads, watch, owner, repo, number, localHead, options.Timeout, cancellationToken).ConfigureAwait(false);
+            int rounds = 0;
+            bool changed = true;
+            while (last.Threads.Count > 0 && rounds < options.ReviewRounds && changed)
+            {
+                localHead = await FeedbackAsync(options, host, client, token, number, cancellationToken).ConfigureAwait(false);
+                rounds++;
+                string before = head;
+                (last, head) = await WatchAsync(host, pullRequests, reviewThreads, watch, owner, repo, number, localHead, options.Timeout, cancellationToken).ConfigureAwait(false);
+                changed = head != before;
+            }
         }
 
         await host.Out.WriteLineAsync($"checks: {(last.IsGreen ? "green" : "red")}, unresolved threads: {last.Threads.Count.ToString(CultureInfo.InvariantCulture)}").ConfigureAwait(false);
@@ -198,7 +223,7 @@ public static class ConsoleCommands
         }
     }
 
-    private static async Task<PullRequestWatchResult> WatchAsync(
+    private static async Task<(PullRequestWatchResult Result, string Head)> WatchAsync(
         ConsoleHost host,
         PullRequests pullRequests,
         ReviewThreads reviewThreads,
@@ -240,7 +265,8 @@ public static class ConsoleCommands
             await reviewThreads.RequestReviewAsync(nodeId, Reviewer, cancellationToken).ConfigureAwait(false);
         }
 
-        return await watch.WatchAsync(owner, repo, number, Reviewer, PollWait, timeout, cancellationToken).ConfigureAwait(false);
+        PullRequestWatchResult result = await watch.WatchAsync(owner, repo, number, Reviewer, PollWait, timeout, cancellationToken).ConfigureAwait(false);
+        return (result, head);
     }
 
     private static void Remove(DirectoryInfo directory)
@@ -256,5 +282,5 @@ public static class ConsoleCommands
         public void Deconstruct(out string owner, out string name) => (owner, name) = (Owner, Name);
     }
 
-    private sealed record Options(string Verb, RepoName Repo, int Number, IReadOnlyList<string> SecretNames, TimeSpan Timeout);
+    private sealed record Options(string Verb, RepoName Repo, int Number, IReadOnlyList<string> SecretNames, TimeSpan Timeout, int ReviewRounds);
 }
