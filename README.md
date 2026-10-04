@@ -37,13 +37,15 @@ Add two Actions secrets to the new repo: `FACTORY_GITHUB_TOKEN` and `ANTHROPIC_A
 
 `FACTORY_GITHUB_TOKEN` is a fine-grained token with read and write access to Contents, Issues and Pull requests on the new repo, and read access to Contents on `sbiondolillo/dotnet-software-factory`.
 
-Replace `EXAMPLE_API_KEY` in `factory.yml` and in `ci.yml` with the name of each secret the integration tests of the new repo read.
+Replace `EXAMPLE_API_KEY` in `factory.yml`, in `review-feedback.yml` and in `ci.yml` with the name of each secret the integration tests of the new repo read.
 
 Protect the branch `main`, with the checks `build` and `integration` required.
 
 The factory requests a Copilot code review of each pull request it watches. The repo's owner needs a Copilot plan that includes Copilot code review.
 
 The repo's owner starts a run with the label `factory` on an issue. `factory.yml` names the tag `v0` of the factory.
+
+Create the label `review-feedback` in the new repo. The repo's owner starts a feedback run with the label `review-feedback` on a pull request. The run removes the label, so the owner applies it again for the next round.
 
 ## Commands
 

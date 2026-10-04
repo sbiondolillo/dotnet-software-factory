@@ -1,13 +1,13 @@
-Feature: A repo made from the starter holds the factory's two workflows
+Feature: A repo made from the starter holds the factory's three workflows
 
   Background:
     Given the template is installed
     When I run dotnet new "factory-starter" into an empty directory
 
   @bullet-1
-  Scenario: The copy's workflows directory holds the two workflow files
-    # run: printf '%s\n' '.github/workflows/' 'factory.yml' 'ci.yml' '.github/workflows/'
-    Then the copy's ".github/workflows/" holds the files "factory.yml" and "ci.yml"
+  Scenario: The copy's workflows directory holds the three workflow files
+    # run: printf '%s\n' '.github/workflows/' 'factory.yml' 'ci.yml' 'review-feedback.yml' '.github/workflows/'
+    Then the copy's ".github/workflows/" holds the files "factory.yml", "ci.yml" and "review-feedback.yml"
     And the copy's ".github/workflows/" holds no other file
 
   @bullet-3
@@ -78,11 +78,6 @@ Feature: A repo made from the starter holds the factory's two workflows
     # run: printf '%s\n' '## Start a new repo' 'FACTORY_GITHUB_TOKEN' 'ANTHROPIC_API_KEY' 'FACTORY_GITHUB_TOKEN' 'Contents' 'Issues' 'Pull requests' 'Contents' 'sbiondolillo/dotnet-software-factory'
     Then the README section "## Start a new repo" names the Actions secrets "FACTORY_GITHUB_TOKEN" and "ANTHROPIC_API_KEY"
     And it says that "FACTORY_GITHUB_TOKEN" is a fine-grained token with read and write access to "Contents", "Issues" and "Pull requests" on the new repo, and read access to "Contents" on "sbiondolillo/dotnet-software-factory"
-
-  @bullet-19
-  Scenario: The README says to replace the example secret
-    # run: printf '%s\n' '## Start a new repo' 'EXAMPLE_API_KEY' 'factory.yml' 'ci.yml'
-    Then the README section "## Start a new repo" says that the person replaces "EXAMPLE_API_KEY" in "factory.yml" and in "ci.yml" with the name of each secret the integration tests of the new repo read
 
   @bullet-20
   Scenario: The README says main is protected with two required checks

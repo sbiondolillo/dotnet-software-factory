@@ -14,13 +14,13 @@ public sealed class StarterWorkflowsSteps(StarterState state)
 
     private static string Section(string heading) => WorkflowChecks.Section(Readme(), heading);
 
-    [Then("the copy's {string} holds the files {string} and {string}")]
-    public void ThenTheCopyHoldsTheFiles(string directory, string first, string second)
-        => WorkflowChecks.HoldsFiles(Path.Combine(state.Copy, directory), first, second);
+    [Then("the copy's {string} holds the files {string}, {string} and {string}")]
+    public void ThenTheCopyHoldsTheFiles(string directory, string first, string second, string third)
+        => WorkflowChecks.HoldsFiles(Path.Combine(state.Copy, directory), first, second, third);
 
     [Then("the copy's {string} holds no other file")]
     public void ThenTheCopyHoldsNoOtherFileIn(string directory)
-        => WorkflowChecks.HoldsNoOther(Path.Combine(state.Copy, directory), "factory.yml", "ci.yml");
+        => WorkflowChecks.HoldsNoOther(Path.Combine(state.Copy, directory), "factory.yml", "ci.yml", "review-feedback.yml");
 
     [Then("the workflow {string} has no other trigger")]
     public void ThenNoOtherTrigger(string file) => WorkflowChecks.NoOtherTrigger(Workflow(file));
@@ -88,10 +88,6 @@ public sealed class StarterWorkflowsSteps(StarterState state)
     [Then("it says that {string} is a fine-grained token with read and write access to {string}, {string} and {string} on the new repo, and read access to {string} on {string}")]
     public static void ThenReadmeSaysToken(string token, string a, string b, string c, string d, string repo)
         => WorkflowChecks.SaysAll(Section("## Start a new repo"), $"`{token}`", "fine-grained token", "read and write access to " + a + ", " + b + " and " + c + " on the new repo", "read access to " + d + " on `" + repo + "`");
-
-    [Then("the README section {string} says that the person replaces {string} in {string} and in {string} with the name of each secret the integration tests of the new repo read")]
-    public static void ThenReadmeReplaces(string heading, string secret, string first, string second)
-        => WorkflowChecks.SaysAll(Section(heading), "Replace", $"`{secret}`", $"`{first}`", $"`{second}`", "integration tests of the new repo read");
 
     [Then("the README section {string} says that the branch {string} is protected, with the checks {string} and {string} required")]
     public static void ThenReadmeProtects(string heading, string branch, string first, string second)

@@ -27,6 +27,36 @@ public static partial class WorkflowChecks
         }
     }
 
+    /// <summary>Fails when no line of the section equals the text.</summary>
+    public static void HoldsLine(string section, string line)
+    {
+        if (!section.Split('\n').Contains(line))
+        {
+            throw new InvalidOperationException($"the section lacks the line {line}");
+        }
+    }
+
+    /// <summary>Fails when a line of the section equals the text.</summary>
+    public static void HoldsNoLine(string section, string line)
+    {
+        if (section.Split('\n').Contains(line))
+        {
+            throw new InvalidOperationException($"the section holds the line {line}");
+        }
+    }
+
+    /// <summary>Fails when the line does not come after the line that names the label in backticks.</summary>
+    public static void HoldsLineAfterLabel(string section, string line, string label)
+    {
+        string[] lines = section.Split('\n');
+        int labelLine = Array.FindIndex(lines, l => l.Contains($"`{label}`", StringComparison.Ordinal) && l != line);
+        int at = Array.IndexOf(lines, line);
+        if (labelLine < 0 || at < 0 || at < labelLine)
+        {
+            throw new InvalidOperationException($"the section lacks the line {line} after the line about the label {label}");
+        }
+    }
+
     /// <summary>Fails when the workflow has no trigger for the event, with the type when one is given.</summary>
     public static void Trigger(string file, string eventName, string? type = null)
     {
