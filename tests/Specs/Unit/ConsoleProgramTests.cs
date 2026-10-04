@@ -332,4 +332,66 @@ public sealed class ConsoleProgramTests : IDisposable
         Assert.Equal(2, ReviewRequests.Count());
         Assert.Equal(2, _h.Requests.Count(r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal)));
     }
+
+    private int FeedbackRuns => _h.Commands.Count(c => c.Command is "git" && c.Arguments[0] is "clone") - 1;
+
+    private void HeadChangesEachRun() => _h.HeadSha = _ => $"{FeedbackRuns:x8}{ConsoleHarness.DefaultSha[8..]}";
+
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("abc")]
+    [InlineData("")]
+    public async Task ABadReviewRoundsValueIsRefusedWithOneLine(string value)
+    {
+        List<string> lines = await RefusedAsync($"run {Repo} --issue 1 --review-rounds {value}");
+        Assert.Contains("--review-rounds", Assert.Single(lines), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("--review-rounds 0", 0)]
+    [InlineData("--review-rounds 1", 1)]
+    [InlineData("", 3)]
+    public async Task TheRoundBudgetBoundsTheFeedbackRuns(string option, int expected)
+    {
+        _h.Threads = "always";
+        HeadChangesEachRun();
+        Assert.Equal(1, await StartAsync($"run {Repo} --issue 1 {option}"));
+        Assert.Equal(expected, FeedbackRuns);
+        Assert.Contains("unresolved threads: 1", _h.Out.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnUnchangedHeadStopsAfterOneFeedbackRun()
+    {
+        _h.Threads = "always";
+        Assert.Equal(1, await StartAsync($"run {Repo} --issue 1"));
+        Assert.Equal(1, FeedbackRuns);
+    }
+
+    [Fact]
+    public async Task AResolvingRoundEndsTheRunWithExitCode0()
+    {
+        _h.Threads = "until-resolved";
+        Assert.Equal(0, await StartAsync($"run {Repo} --issue 1"));
+        Assert.Equal(1, FeedbackRuns);
+        Assert.Contains("checks: green, unresolved threads: 0", ConsoleHarness.Lines(_h.Out));
+    }
+
+    [Fact]
+    public async Task ACleanFirstWatchStartsNoFeedbackRun()
+    {
+        Assert.Equal(0, await StartAsync($"run {Repo} --issue 1"));
+        Assert.Equal(0, FeedbackRuns);
+    }
+
+    [Fact]
+    public async Task FeedbackHasNoReviewRoundsOptionAndMakesOneRun()
+    {
+        Assert.Equal(0, await StartAsync("feedback --help"));
+        Assert.DoesNotContain("--review-rounds", _h.Out.ToString(), StringComparison.Ordinal);
+        _h.Threads = "always";
+        HeadChangesEachRun();
+        Assert.Equal(1, await StartAsync($"feedback {Repo} --pr 10"));
+        Assert.Single(_h.Commands, c => c.Command is "git" && c.Arguments[0] is "clone");
+    }
 }
