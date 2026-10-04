@@ -109,6 +109,11 @@ public static class ConsoleCommands
             await host.Error.WriteLineAsync($"GitHub refused a request with the status code {ex.StatusCode.ToString(CultureInfo.InvariantCulture)}.").ConfigureAwait(false);
             return 1;
         }
+        catch (GitHubGraphQLException ex)
+        {
+            await host.Error.WriteLineAsync(ex.Message).ConfigureAwait(false);
+            return 1;
+        }
     }
 
     private static async Task<int> ExecuteAsync(Options options, ConsoleHost host, GitHubClient client, string token, CancellationToken cancellationToken)
@@ -161,11 +166,11 @@ public static class ConsoleCommands
             localHead = await FeedbackAsync(options, host, client, token, number, cancellationToken).ConfigureAwait(false);
         }
 
-        PullRequestWatchResult last = await WatchAsync(host, pullRequests, watch, owner, repo, number, localHead, options.Timeout, cancellationToken).ConfigureAwait(false);
+        PullRequestWatchResult last = await WatchAsync(host, pullRequests, reviewThreads, watch, owner, repo, number, localHead, options.Timeout, cancellationToken).ConfigureAwait(false);
         if (options.Verb is "run" && last.Threads.Count > 0)
         {
             localHead = await FeedbackAsync(options, host, client, token, number, cancellationToken).ConfigureAwait(false);
-            last = await WatchAsync(host, pullRequests, watch, owner, repo, number, localHead, options.Timeout, cancellationToken).ConfigureAwait(false);
+            last = await WatchAsync(host, pullRequests, reviewThreads, watch, owner, repo, number, localHead, options.Timeout, cancellationToken).ConfigureAwait(false);
         }
 
         await host.Out.WriteLineAsync($"checks: {(last.IsGreen ? "green" : "red")}, unresolved threads: {last.Threads.Count.ToString(CultureInfo.InvariantCulture)}").ConfigureAwait(false);
@@ -196,6 +201,7 @@ public static class ConsoleCommands
     private static async Task<PullRequestWatchResult> WatchAsync(
         ConsoleHost host,
         PullRequests pullRequests,
+        ReviewThreads reviewThreads,
         PullRequestWatch watch,
         string owner,
         string repo,
@@ -224,6 +230,14 @@ public static class ConsoleCommands
 
                 await host.Delay(HeadPoll, cancellationToken).ConfigureAwait(false);
             }
+        }
+
+        string head = await pullRequests.ReadHeadShaAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<Review> reviews = await reviewThreads.ReadReviewsAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
+        if (!reviews.Any(r => r.Author == Reviewer && r.CommitSha.Length is not 0 && r.CommitSha == head))
+        {
+            string nodeId = await pullRequests.ReadNodeIdAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
+            await reviewThreads.RequestReviewAsync(nodeId, Reviewer, cancellationToken).ConfigureAwait(false);
         }
 
         return await watch.WatchAsync(owner, repo, number, Reviewer, PollWait, timeout, cancellationToken).ConfigureAwait(false);

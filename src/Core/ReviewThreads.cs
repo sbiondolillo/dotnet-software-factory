@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace Core;
 
 /// <summary>A review of a pull request.</summary>
-public sealed record Review(string Author, string State);
+public sealed record Review(string Author, string State, string CommitSha);
 
 /// <summary>A comment in a review thread.</summary>
 public sealed record ReviewThreadComment(string Author, string Body);
@@ -14,9 +14,10 @@ public sealed record ReviewThread(string Id, bool IsResolved, string Path, int? 
 /// <summary>Reads, replies to and resolves review threads through GitHub's GraphQL API.</summary>
 public sealed class ReviewThreads(GitHubClient client)
 {
-    private const string ReviewsQuery = "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviews(first: 100) { nodes { state author { login } } } } } }";
+    private const string ReviewsQuery = "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviews(first: 100) { nodes { state author { login } commit { oid } } } } } }";
     private const string ThreadsQuery = "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewThreads(first: 100) { nodes { id isResolved path line comments(first: 100) { nodes { author { login } body } } } } } } }";
     private const string ReplyQuery = "mutation($threadId: ID!, $body: String!) { addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $threadId, body: $body}) { comment { id } } }";
+    private const string RequestQuery = "mutation($pullRequestId: ID!, $botLogins: [String!]) { requestReviewsByLogin(input: {pullRequestId: $pullRequestId, botLogins: $botLogins}) { pullRequest { id } } }";
     private const string ResolveQuery = "mutation($threadId: ID!) { resolveReviewThread(input: {threadId: $threadId}) { thread { isResolved } } }";
 
     /// <summary>Reads every review of a pull request.</summary>
@@ -26,11 +27,15 @@ public sealed class ReviewThreads(GitHubClient client)
         var reviews = new List<Review>();
         foreach (JsonElement node in Nodes(data.GetProperty("repository").GetProperty("pullRequest").GetProperty("reviews")))
         {
-            reviews.Add(new Review(Login(node), node.GetProperty("state").GetString() ?? ""));
+            reviews.Add(new Review(Login(node), node.GetProperty("state").GetString() ?? "", CommitOid(node)));
         }
 
         return reviews;
     }
+
+    /// <summary>Requests a review by a bot of a pull request, given the node id of the pull request.</summary>
+    public async Task RequestReviewAsync(string pullRequestId, string botLogin, CancellationToken cancellationToken = default) =>
+        await SendAsync(RequestQuery, new { pullRequestId, botLogins = new[] { botLogin } }, cancellationToken).ConfigureAwait(false);
 
     /// <summary>Reads every review thread of a pull request.</summary>
     public async Task<IReadOnlyList<ReviewThread>> ReadThreadsAsync(string owner, string repo, int number, CancellationToken cancellationToken = default)
@@ -66,6 +71,12 @@ public sealed class ReviewThreads(GitHubClient client)
         await SendAsync(ResolveQuery, new { threadId }, cancellationToken).ConfigureAwait(false);
 
     private static JsonElement.ArrayEnumerator Nodes(JsonElement connection) => connection.GetProperty("nodes").EnumerateArray();
+
+    private static string CommitOid(JsonElement node) =>
+        node.TryGetProperty("commit", out JsonElement commit) && commit.ValueKind is JsonValueKind.Object
+            && commit.TryGetProperty("oid", out JsonElement oid) && oid.ValueKind is JsonValueKind.String
+            ? oid.GetString() ?? ""
+            : "";
 
     private static string Login(JsonElement node) =>
         node.TryGetProperty("author", out JsonElement author) && author.ValueKind is JsonValueKind.Object

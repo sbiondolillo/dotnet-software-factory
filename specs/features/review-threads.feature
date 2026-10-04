@@ -15,10 +15,10 @@ Feature: Review threads
   @bullet-2
   Scenario: A review is returned with its author and state
     Given a ReviewThreads built over a GitHub client
-    And GitHub answers the read of reviews with one review with the author login "sbiondolillo" and the state "COMMENTED"
+    And GitHub answers the read of reviews with one review with the author login "sbiondolillo", the state "COMMENTED" and the commit "d7d0afd495cc64aa2ac153de8d001ad8d86fe074"
     When a caller reads the reviews of pull request 30 of the repo "factory-scratch" of the owner "sbiondolillo"
-    # run: printf 'sbiondolillo\nCOMMENTED'
-    Then ReviewThreads returns one review with the author "sbiondolillo" and the state "COMMENTED"
+    # run: printf 'sbiondolillo\nCOMMENTED\nd7d0afd495cc64aa2ac153de8d001ad8d86fe074'
+    Then ReviewThreads returns one review with the author "sbiondolillo", the state "COMMENTED" and the commit "d7d0afd495cc64aa2ac153de8d001ad8d86fe074"
 
   @bullet-3
   Scenario: A pull request with no review gives an empty list of reviews

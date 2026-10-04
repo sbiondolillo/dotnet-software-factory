@@ -92,7 +92,7 @@ public sealed class ReviewThreadsIntegrationTests
             Assert.Equal(s.Path, thread.Path);
             Assert.Equal(2, thread.Line);
             Assert.Equal(new ReviewThreadComment(login, "comment on 2"), Assert.Single(thread.Comments));
-            Assert.Equal(new Review(login, "COMMENTED"), Assert.Single(await sut.ReadReviewsAsync(Owner, Repo, s.Number, ct)));
+            Assert.Equal(new Review(login, "COMMENTED", s.CommitSha), Assert.Single(await sut.ReadReviewsAsync(Owner, Repo, s.Number, ct)));
         }
         finally
         {
@@ -202,5 +202,29 @@ public sealed class ReviewThreadsIntegrationTests
         var sut = new ReviewThreads(Client("invalid"));
         var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadThreadsAsync(Owner, Repo, 1, TestContext.Current.CancellationToken));
         Assert.Equal(401, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task AReviewRequestByLoginPutsTheCopilotBotInTheReviewRequests()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        GitHubClient client = Client();
+        Scratch? s = null;
+        try
+        {
+            s = await CreatePullAsync(client, ct);
+            string id = await new PullRequests(client).ReadNodeIdAsync(Owner, Repo, s.Number, ct);
+            await new ReviewThreads(client).RequestReviewAsync(id, "copilot-pull-request-reviewer", ct);
+            const string query = "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewRequests(first: 10) { nodes { requestedReviewer { __typename ... on Bot { login } } } } } } }";
+            JsonElement answer = await client.SendAsync(HttpMethod.Post, "/graphql", JsonSerializer.Serialize(new { query, variables = new { owner = Owner, name = Repo, number = s.Number } }), ct);
+            JsonElement nodes = answer.GetProperty("data").GetProperty("repository").GetProperty("pullRequest").GetProperty("reviewRequests").GetProperty("nodes");
+            Assert.Contains(
+                nodes.EnumerateArray().Select(n => n.GetProperty("requestedReviewer")),
+                r => r.GetProperty("__typename").GetString() is "Bot" && r.GetProperty("login").GetString() is "copilot-pull-request-reviewer");
+        }
+        finally
+        {
+            await CleanUpAsync(client, s);
+        }
     }
 }

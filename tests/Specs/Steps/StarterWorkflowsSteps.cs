@@ -98,7 +98,7 @@ public sealed class StarterWorkflowsSteps(StarterState state)
         => WorkflowChecks.SaysAll(Section(heading), "Protect the branch", $"`{branch}`", $"`{first}`", $"`{second}`", "required");
 
     [Then("the README section {string} says that Copilot code review is requested on every pull request")]
-    public static void ThenReadmeCopilot(string heading) => WorkflowChecks.SaysAll(Section(heading), "Copilot code review is requested on every pull request");
+    public static void ThenReadmeCopilot(string heading) => WorkflowChecks.SaysAll(Section(heading), "requests a Copilot code review of each pull request it watches");
 
     [Then("the README section {string} says that the repo's owner starts a run with the label {string} on an issue, and that {string} names the tag {string} of the factory")]
     public static void ThenReadmeRunStart(string heading, string label, string file, string tag)

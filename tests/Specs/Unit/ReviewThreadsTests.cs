@@ -103,4 +103,31 @@ public sealed class ReviewThreadsTests
         await sut.ReplyAsync("t", "b", Token);
         Assert.Equal(2, handler.Requests.Count);
     }
+
+    [Fact]
+    public async Task APendingReviewWithNoCommitReadsWithAnEmptyCommitSha()
+    {
+        (ReviewThreads sut, _) = Make(200, "{\"data\":{\"repository\":{\"pullRequest\":{\"reviews\":{\"nodes\":[{\"state\":\"PENDING\",\"author\":{\"login\":\"a\"},\"commit\":null}]}}}}}");
+        Assert.Equal(new Review("a", "PENDING", ""), Assert.Single(await sut.ReadReviewsAsync("o", "r", 1, Token)));
+    }
+
+    [Fact]
+    public async Task AReviewRequestWithErrorsThrowsGraphQlWithTheMessage()
+    {
+        (ReviewThreads sut, _) = Make(200, Errors);
+        var ex = await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.RequestReviewAsync("PR_1", "copilot-pull-request-reviewer", Token));
+        Assert.Contains("first bad", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AReviewRequestSendsTheMutationAndTheBotLogin()
+    {
+        (ReviewThreads sut, RecordingHandler handler) = Make(200, "{\"data\":{\"requestReviewsByLogin\":{\"pullRequest\":{\"id\":\"PR_1\"}}}}");
+        await sut.RequestReviewAsync("PR_1", "copilot-pull-request-reviewer", Token);
+        using JsonDocument json = JsonDocument.Parse(Assert.Single(handler.Requests).Content!);
+        Assert.Contains("requestReviewsByLogin", json.RootElement.GetProperty("query").GetString(), StringComparison.Ordinal);
+        JsonElement variables = json.RootElement.GetProperty("variables");
+        Assert.Equal("PR_1", variables.GetProperty("pullRequestId").GetString());
+        Assert.Equal(["copilot-pull-request-reviewer"], variables.GetProperty("botLogins").EnumerateArray().Select(e => e.GetString()));
+    }
 }
