@@ -210,10 +210,11 @@ public sealed class ReviewThreadsIntegrationTests
         CancellationToken ct = TestContext.Current.CancellationToken;
         GitHubClient client = Client();
         Scratch? s = null;
+        string? id = null;
         try
         {
             s = await CreatePullAsync(client, ct);
-            string id = await new PullRequests(client).ReadNodeIdAsync(Owner, Repo, s.Number, ct);
+            id = await new PullRequests(client).ReadNodeIdAsync(Owner, Repo, s.Number, ct);
             await new ReviewThreads(client).RequestReviewAsync(id, "copilot-pull-request-reviewer", ct);
             const string query = "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewRequests(first: 10) { nodes { requestedReviewer { __typename ... on Bot { login } } } } } } }";
             JsonElement answer = await client.SendAsync(HttpMethod.Post, "/graphql", JsonSerializer.Serialize(new { query, variables = new { owner = Owner, name = Repo, number = s.Number } }), ct);
@@ -224,6 +225,11 @@ public sealed class ReviewThreadsIntegrationTests
         }
         finally
         {
+            if (s is not null && id is not null)
+            {
+                const string remove = "mutation($pullRequestId: ID!, $botLogins: [String!], $union: Boolean!) { requestReviewsByLogin(input: {pullRequestId: $pullRequestId, botLogins: $botLogins, union: $union}) { pullRequest { id } } }";
+                await client.SendAsync(HttpMethod.Post, "/graphql", JsonSerializer.Serialize(new { query = remove, variables = new { pullRequestId = id, botLogins = Array.Empty<string>(), union = false } }), ct);
+            }
             await CleanUpAsync(client, s);
         }
     }
