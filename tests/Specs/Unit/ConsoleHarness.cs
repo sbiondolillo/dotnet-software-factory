@@ -66,6 +66,15 @@ public sealed class ConsoleHarness : IDisposable
 
     public int InspectExit { get; set; }
 
+    /// <summary>The labels of the issue.</summary>
+    public List<string> Labels { get; } = [];
+
+    /// <summary>The body of the issue, or null for the default.</summary>
+    public string? IssueBody { get; set; }
+
+    /// <summary>What the check command answers after the build of that number (0 is before the first build); a number with no entry answers red before the first build and green after one.</summary>
+    public Dictionary<int, (int Code, string Out, string Err)> CheckResults { get; } = [];
+
     public HashSet<string> Lacks { get; } = [];
 
     public Func<int, string> HeadSha { get; set; }
@@ -194,6 +203,8 @@ public sealed class ConsoleHarness : IDisposable
                 return new CommandResult { StandardOutput = DefaultSha + "\n" };
             case "status":
                 return new CommandResult { StandardOutput = " M src/Checkout.cs\n" };
+            case "diff" when spec.Arguments.Contains("--name-only"):
+                return new CommandResult();
             case "diff":
                 return new CommandResult { StandardOutput = "diff --git a/src/Checkout.cs b/src/Checkout.cs\n" };
             case "push":
@@ -227,6 +238,12 @@ public sealed class ConsoleHarness : IDisposable
         if (arguments[id + 1] is "claude")
         {
             return Claude(arguments);
+        }
+
+        if (arguments[id + 1] is "sh" && arguments[id + 2] is "-c")
+        {
+            (int code, string output, string error) = CheckResults.TryGetValue(_builds, out var given) ? given : _builds is 0 ? (1, "", "check failed") : (0, "", "");
+            return new CommandResult { ExitCode = code, StandardOutput = output, StandardError = error };
         }
 
         if (arguments[id + 2] is not "test")
@@ -336,7 +353,7 @@ public sealed class ConsoleHarness : IDisposable
 
         if (path.Contains("/issues/", StringComparison.Ordinal))
         {
-            return (200, JsonSerializer.Serialize(new { title = "Add a checkout total", body = "The checkout shows the total of the cart.", user = new { login = "ada" }, labels = Array.Empty<object>() }));
+            return (200, JsonSerializer.Serialize(new { title = "Add a checkout total", body = IssueBody ?? "The checkout shows the total of the cart.", user = new { login = "ada" }, labels = Labels.Select(name => new { name }).ToArray() }));
         }
 
         return RepoStatus is 200

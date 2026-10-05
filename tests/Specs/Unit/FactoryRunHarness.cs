@@ -90,6 +90,21 @@ public sealed class FactoryRunHarness : IDisposable
 
     public Action<string>? AfterClone { get; set; }
 
+    /// <summary>The labels of the issue.</summary>
+    public List<string> Labels { get; } = [];
+
+    /// <summary>What the check command answers after the build of that number (0 is before the first build); a number with no entry answers red before the first build and green after one.</summary>
+    public Dictionary<int, (int Code, string Out, string Err)> CheckResults { get; } = [];
+
+    /// <summary>The files that git reports changed since the base after the first build.</summary>
+    public List<string> FirstBuildChanges { get; } = [];
+
+    /// <summary>Tests that the TRX file holds before the first build only, as class and method.</summary>
+    public List<(string Class, string Method)> BaseOnlyTests { get; } = [];
+
+    /// <summary>Tests that the TRX file holds after a build only, as class and method.</summary>
+    public List<(string Class, string Method)> AfterOnlyTests { get; } = [];
+
     public string CloneDirectory => _clone.FullName;
 
     public List<CommandSpec> Commands { get; } = [];
@@ -176,6 +191,8 @@ public sealed class FactoryRunHarness : IDisposable
                 return new CommandResult { StandardOutput = HeadSha + "\n" };
             case "status":
                 return new CommandResult { StandardOutput = ChangeAfterBuild ? " M src/Checkout.cs\n" : "" };
+            case "diff" when spec.Arguments.Contains("--name-only"):
+                return new CommandResult { StandardOutput = _builds is 1 ? string.Join('\n', FirstBuildChanges) + "\n" : "" };
             case "diff":
                 return new CommandResult { StandardOutput = "diff --git a/src/Checkout.cs b/src/Checkout.cs\n" };
             case "push":
@@ -213,6 +230,12 @@ public sealed class FactoryRunHarness : IDisposable
         }
 
         string subcommand = arguments[id + 2];
+        if (program is "sh" && subcommand is "-c")
+        {
+            (int code, string output, string error) = CheckResults.TryGetValue(_builds, out var given) ? given : _builds is 0 ? (1, "", "check failed") : (0, "", "");
+            return new CommandResult { ExitCode = code, StandardOutput = output, StandardError = error };
+        }
+
         if (subcommand is not "test")
         {
             return new CommandResult();
@@ -229,6 +252,11 @@ public sealed class FactoryRunHarness : IDisposable
         if (red)
         {
             tests.Add(("Specs.Unit.CheckoutTests", "AddsTwoPrices", "Failed", RedText));
+        }
+
+        foreach ((string testClass, string testMethod) in _builds is 0 ? BaseOnlyTests : AfterOnlyTests)
+        {
+            tests.Add((testClass, testMethod, "Passed", null));
         }
 
         int at = arguments.IndexOf("--results-directory");
@@ -291,7 +319,7 @@ public sealed class FactoryRunHarness : IDisposable
                     title = harness.Title,
                     body = harness.Body,
                     user = new { login = "ada" },
-                    labels = Array.Empty<object>(),
+                    labels = harness.Labels.Select(name => new { name }).ToArray(),
                 })),
                 ("POST", _) when path.EndsWith("/pulls", StringComparison.Ordinal) =>
                     (harness.PullStatus, harness.PullStatus is 201

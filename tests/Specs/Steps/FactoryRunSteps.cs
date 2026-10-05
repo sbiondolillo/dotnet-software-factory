@@ -22,6 +22,9 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
 
     private List<CommandSpec> Commands => OtherCommands ?? _h.Commands;
 
+    /// <summary>The result of the run, for a step class of another feature of the same run.</summary>
+    public FactoryRunResult LastResult => Result;
+
     private FactoryRunResult Result => _result ?? throw new InvalidOperationException("the run gave no result");
 
     private IEnumerable<Specs.Unit.SeenPrompt> Builds => _h.Prompts.Where(p => p.Kind is "build");

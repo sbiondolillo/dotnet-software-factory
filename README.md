@@ -47,6 +47,10 @@ The repo's owner starts a run with the label `factory` on an issue. `factory.yml
 
 Create the label `review-feedback` in the new repo. The repo's owner starts a feedback run with the label `review-feedback` on a pull request. The run removes the label, so the owner applies it again for the next round.
 
+Create the label `cleanup` in the new repo. The repo's owner starts a cleanup run, a run with no plan, with the label `cleanup` on an issue that fixes a test, a config file or a document. The label `cleanup` and the label `behavior` on one issue get a comment and no run.
+
+The body of a `cleanup` issue names the paths the build can change under the heading `## Scope`, one for each line: a directory ends in `/`, a path with `*` is a glob, and any other line is that one path. It holds under the heading `## Check` one fenced `sh` block, the check command, that fails before the change and exits with the code 0 after it. The factory runs the command with `sh -c` in a copy of the work tree, and a command that runs `dotnet` restores its packages itself first.
+
 ## Commands
 
 ```

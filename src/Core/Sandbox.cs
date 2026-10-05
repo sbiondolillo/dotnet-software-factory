@@ -60,9 +60,24 @@ public sealed class Sandbox : IAsyncDisposable
         string program,
         IReadOnlyList<string> arguments,
         IReadOnlyList<string> names,
+        CancellationToken cancellationToken = default) =>
+        RunAsync(program, arguments, names, null, cancellationToken);
+
+    /// <summary>Runs <paramref name="program"/> in the container, in <paramref name="workingDirectory"/> when it is not null.</summary>
+    public Task<CommandResult> RunAsync(
+        string program,
+        IReadOnlyList<string> arguments,
+        IReadOnlyList<string> names,
+        string? workingDirectory,
         CancellationToken cancellationToken = default)
     {
         List<string> dockerArguments = ["exec"];
+        if (workingDirectory is not null)
+        {
+            dockerArguments.Add("--workdir");
+            dockerArguments.Add(workingDirectory);
+        }
+
         foreach (string name in names)
         {
             dockerArguments.Add("--env");
