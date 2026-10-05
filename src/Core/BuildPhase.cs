@@ -6,7 +6,7 @@ namespace Core;
 public sealed record BuildPhaseResult(bool Passed, string Failure);
 
 /// <summary>Asks the agent to implement the plan and bind every pinned scenario.</summary>
-public sealed class BuildPhase(ClaudeCodeAgent agent)
+public sealed class BuildPhase(ClaudeCodeAgent agent, bool cleanup = false)
 {
     private const int PromptLimit = 131071;
     private const string CutMarker = "[cut]";
@@ -27,7 +27,7 @@ public sealed class BuildPhase(ClaudeCodeAgent agent)
 
     private static int Bytes(string text) => Encoding.UTF8.GetByteCount(text);
 
-    private static string BuildPrompt(string title, string body, IReadOnlyList<string> redoTexts)
+    private string BuildPrompt(string title, string body, IReadOnlyList<string> redoTexts)
     {
         string whole = Compose(title, body, redoTexts);
         if (Bytes(whole) <= PromptLimit)
@@ -83,10 +83,22 @@ public sealed class BuildPhase(ClaudeCodeAgent agent)
         return builder.Append(CutMarker).ToString();
     }
 
-    private static string Compose(string title, string body, IReadOnlyList<string> redoTexts)
+    private string Compose(string title, string body, IReadOnlyList<string> redoTexts)
     {
-        var prompt = new StringBuilder()
-            .Append("Build the work of the issue below.\n\n")
+        var prompt = new StringBuilder();
+        if (cleanup)
+        {
+            prompt.Append("Do the cleanup of the issue below.\n\n")
+                .Append("Issue title:\n").Append(title).Append("\n\n")
+                .Append("Issue body:\n").Append(body).Append("\n\n")
+                .Append("Change only the paths that the issue names under the heading ## Scope. ")
+                .Append("Make the command in the first fenced block under the heading ## Check exit with the code 0, and keep every test that passes now passing. ")
+                .Append("Leave each feature file under specs/features/ as it is. Run dotnet build and dotnet test, and work until both pass.");
+            AppendRedos(prompt, redoTexts);
+            return prompt.ToString();
+        }
+
+        prompt.Append("Build the work of the issue below.\n\n")
             .Append("Issue title:\n").Append(title).Append("\n\n")
             .Append("Issue body:\n").Append(body).Append("\n\n")
             .Append("Read the plan, .factory/plan.md, and each feature file under specs/features/. ")
@@ -97,6 +109,12 @@ public sealed class BuildPhase(ClaudeCodeAgent agent)
             .Append(string.Join(", ", Pin.SettingsFileNames.Order(StringComparer.Ordinal)))
             .Append(". Run dotnet build and dotnet test, and work until both pass.");
 
+        AppendRedos(prompt, redoTexts);
+        return prompt.ToString();
+    }
+
+    private static void AppendRedos(StringBuilder prompt, IReadOnlyList<string> redoTexts)
+    {
         if (redoTexts.Count > 0)
         {
             prompt.Append("\n\nThe work tree holds the earlier build. Each text below is a fault to correct in that build.\n");
@@ -105,7 +123,5 @@ public sealed class BuildPhase(ClaudeCodeAgent agent)
                 prompt.Append("\nRedo text:\n").Append(text).Append('\n');
             }
         }
-
-        return prompt.ToString();
     }
 }

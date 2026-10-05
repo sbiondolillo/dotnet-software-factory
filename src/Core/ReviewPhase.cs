@@ -7,7 +7,7 @@ namespace Core;
 public sealed record ReviewPhaseResult(bool Approved, IReadOnlyList<string> Blocking);
 
 /// <summary>Asks the agent to review the build against the issue, the scenarios and the plan, and reads its verdict.</summary>
-public sealed class ReviewPhase(ClaudeCodeAgent agent, Git git)
+public sealed class ReviewPhase(ClaudeCodeAgent agent, Git git, bool cleanup = false)
 {
     private const string VerdictPath = ".factory/review.json";
     private const string CutMarker = "[cut]";
@@ -95,7 +95,7 @@ public sealed class ReviewPhase(ClaudeCodeAgent agent, Git git)
         }
     }
 
-    private static string BuildPrompt(string title, string body, string baseCommit, string diff)
+    private string BuildPrompt(string title, string body, string baseCommit, string diff)
     {
         string Make(string shownDiff) =>
             "Review the build of the issue below.\n\n"
@@ -103,9 +103,13 @@ public sealed class ReviewPhase(ClaudeCodeAgent agent, Git git)
             + $"Base commit: {baseCommit}\n"
             + "Read every change since the base commit in the work tree.\n\n"
             + "Your job:\n"
-            + "1. Read every feature file under specs/features/ and the plan, .factory/plan.md.\n"
-            + "2. Judge the build against every scenario, every result the plan states and every sentence of the issue, "
-            + "and judge whether the tests cover what each scenario names.\n"
+            + (cleanup
+                ? "1. Read every feature file under specs/features/.\n"
+                    + "2. Judge the build against every sentence of the issue: it changes only the paths under ## Scope and makes the command under ## Check pass, "
+                    + "and it keeps every test.\n"
+                : "1. Read every feature file under specs/features/ and the plan, .factory/plan.md.\n"
+                    + "2. Judge the build against every scenario, every result the plan states and every sentence of the issue, "
+                    + "and judge whether the tests cover what each scenario names.\n")
             + $"3. Write the verdict to {VerdictPath}, as one JSON object with approved and blocking. "
             + "approved is true or false; blocking is a list of texts. Approve only a build with no blocking item. "
             + "Write each blocking item as one fault, in words that a builder can act on with the item alone.\n"

@@ -5,20 +5,35 @@ namespace Core;
 /// <summary>What <see cref="TestGate"/> found.</summary>
 /// <param name="Passed">True when every check held.</param>
 /// <param name="Evidence">One text for each fact that failed the gate; empty when it passed.</param>
-public sealed record TestGateResult(bool Passed, IReadOnlyList<string> Evidence);
+/// <param name="Tests">The tests of the TRX file, or null when the gate stopped before it read one.</param>
+public sealed record TestGateResult(bool Passed, IReadOnlyList<string> Evidence, IReadOnlyList<ReportedTest>? Tests = null);
 
 /// <summary>Judges a work tree the way CI does: the pin, the four build commands, the TRX file and the integration suite.</summary>
 public sealed class TestGate(Sandbox sandbox)
 {
     /// <summary>Runs the gate over <paramref name="workTree"/>; the integration command alone gets <paramref name="secretNames"/>.</summary>
+    public Task<TestGateResult> RunAsync(
+        string workTree,
+        Pin pin,
+        IReadOnlyList<string> secretNames,
+        CancellationToken cancellationToken = default) =>
+        RunAsync(workTree, pin, secretNames, null, cancellationToken);
+
+    /// <summary>Runs the gate; a changed pinned path for which <paramref name="pinExempt"/> is true is no pin evidence.</summary>
     public async Task<TestGateResult> RunAsync(
         string workTree,
         Pin pin,
         IReadOnlyList<string> secretNames,
+        Func<string, bool>? pinExempt,
         CancellationToken cancellationToken = default)
     {
         PinComparison comparison = pin.Compare(workTree);
         List<string> pinEvidence = [.. comparison.Changed, .. comparison.Added, .. comparison.Removed];
+        if (pinExempt is not null)
+        {
+            pinEvidence.RemoveAll(path => pinExempt(path));
+        }
+
         if (pinEvidence.Count > 0)
         {
             return new TestGateResult(false, pinEvidence.ConvertAll(path => $"pin: {path}"));
@@ -41,6 +56,7 @@ public sealed class TestGate(Sandbox sandbox)
         string resultsName = ".test-gate-" + Guid.NewGuid().ToString("N");
         string hostResults = Path.Combine(workTree, resultsName);
         List<string> evidence = [];
+        List<ReportedTest> tests = [];
         try
         {
             CommandResult test = await sandbox.RunAsync(
@@ -53,7 +69,6 @@ public sealed class TestGate(Sandbox sandbox)
                 evidence.Add(Describe("test", test));
             }
 
-            List<ReportedTest> tests = [];
             if (Directory.Exists(hostResults))
             {
                 foreach (string file in Directory.EnumerateFiles(hostResults, "*.trx").Order(StringComparer.Ordinal))
@@ -64,7 +79,7 @@ public sealed class TestGate(Sandbox sandbox)
 
             if (test.ExitCode is not 0 && tests.Count is 0)
             {
-                return new TestGateResult(false, evidence);
+                return new TestGateResult(false, evidence, tests);
             }
 
             foreach (ReportedTest reported in tests)
@@ -101,7 +116,7 @@ public sealed class TestGate(Sandbox sandbox)
 
         if (evidence.Count > 0)
         {
-            return new TestGateResult(false, evidence);
+            return new TestGateResult(false, evidence, tests);
         }
 
         CommandResult integration = await sandbox.RunAsync(
@@ -110,8 +125,44 @@ public sealed class TestGate(Sandbox sandbox)
             secretNames,
             cancellationToken).ConfigureAwait(false);
         return integration.ExitCode is 0
-            ? new TestGateResult(true, [])
-            : new TestGateResult(false, [Describe("run", integration)]);
+            ? new TestGateResult(true, [], tests)
+            : new TestGateResult(false, [Describe("run", integration)], tests);
+    }
+
+    /// <summary>Runs the tests of <paramref name="workTree"/> and gives the tests that passed, as <c>class.method</c>.</summary>
+    public async Task<IReadOnlySet<string>> ReadPassedTestsAsync(string workTree, CancellationToken cancellationToken = default)
+    {
+        await sandbox.RunAsync("dotnet", ["restore", "--locked-mode"], [], cancellationToken).ConfigureAwait(false);
+        string resultsName = ".test-base-" + Guid.NewGuid().ToString("N");
+        string hostResults = Path.Combine(workTree, resultsName);
+        HashSet<string> passed = new(StringComparer.Ordinal);
+        try
+        {
+            await sandbox.RunAsync(
+                "dotnet",
+                ["test", "--no-restore", "--logger", "trx", "--results-directory", $"/work/{resultsName}"],
+                [],
+                cancellationToken).ConfigureAwait(false);
+            if (Directory.Exists(hostResults))
+            {
+                foreach (string file in Directory.EnumerateFiles(hostResults, "*.trx").Order(StringComparer.Ordinal))
+                {
+                    foreach (ReportedTest test in TestReport.Read(file).Where(test => test.Outcome is TestOutcome.Passed))
+                    {
+                        passed.Add($"{test.ClassName}.{test.Method}");
+                    }
+                }
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(hostResults))
+            {
+                Directory.Delete(hostResults, recursive: true);
+            }
+        }
+
+        return passed;
     }
 
     private static string Describe(string subcommand, CommandResult result) =>
