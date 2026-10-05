@@ -22,7 +22,7 @@ public static partial class CleanupBody
             }
 
             Match bulleted = BulletedPath().Match(trimmed);
-            entries.Add(bulleted.Success ? bulleted.Groups[1].Value : trimmed);
+            entries.Add(!bulleted.Success ? trimmed : bulleted.Groups[1].Success ? bulleted.Groups[1].Value : bulleted.Groups[2].Value);
         }
 
         return entries;
@@ -138,6 +138,6 @@ public static partial class CleanupBody
     [GeneratedRegex(@"^#{1,6}\s")]
     private static partial Regex Heading();
 
-    [GeneratedRegex(@"^[-*]\s+`([^`]+)`$")]
+    [GeneratedRegex(@"^(?:[-*+]\s+)?`([^`]+)`$|^[-*+]\s+(\S.*)$")]
     private static partial Regex BulletedPath();
 }
