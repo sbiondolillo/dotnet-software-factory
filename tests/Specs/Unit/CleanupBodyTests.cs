@@ -48,4 +48,35 @@ public sealed class CleanupBodyTests
     [InlineData("README.md", "docs/README.md", false)]
     public void AnEntryCoversWhatItNames(string entry, string path, bool covered) =>
         Assert.Equal(covered, CleanupBody.InScope([entry], path));
+
+    [Theory]
+    [InlineData("- README.md")]
+    [InlineData("* README.md")]
+    [InlineData("+ README.md")]
+    [InlineData("+ `README.md`")]
+    [InlineData("`README.md`")]
+    public void AListMarkerAndBackticksAreStripped(string line) =>
+        Assert.Equal(["README.md"], CleanupBody.ReadScope($"## Scope\n{line}\n"));
+
+    [Theory]
+    [InlineData("*.md")]
+    [InlineData("**/x.cs")]
+    public void AStarWithNoWhitespaceAfterItStaysAGlob(string line) =>
+        Assert.Equal([line], CleanupBody.ReadScope($"## Scope\n{line}\n"));
+
+    [Theory]
+    [InlineData("-")]
+    [InlineData("- ")]
+    [InlineData("+")]
+    public void AMarkerWithNoTextGivesNoEntry(string line) =>
+        Assert.Empty(CleanupBody.ReadScope($"## Scope\n{line}\n"));
+
+    [Fact]
+    public void AListItemWithAGlobOrDirectoryCoversMatchingPaths()
+    {
+        IReadOnlyList<string> scope = CleanupBody.ReadScope("## Scope\n- docs/*.md\n- tests/\n");
+        Assert.Equal(["docs/*.md", "tests/"], scope);
+        Assert.True(CleanupBody.InScope(scope, "docs/a.md"));
+        Assert.True(CleanupBody.InScope(scope, "tests/x/y.cs"));
+    }
 }

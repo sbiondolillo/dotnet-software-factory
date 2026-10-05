@@ -21,8 +21,16 @@ public static partial class CleanupBody
                 continue;
             }
 
-            Match bulleted = BulletedPath().Match(trimmed);
-            entries.Add(bulleted.Success ? bulleted.Groups[1].Value : trimmed);
+            string entry = ListMarker().Replace(trimmed, "", 1).Trim();
+            if (entry.Length > 1 && entry[0] is '`' && entry[^1] is '`')
+            {
+                entry = entry[1..^1];
+            }
+
+            if (entry.Length > 0)
+            {
+                entries.Add(entry);
+            }
         }
 
         return entries;
@@ -138,6 +146,6 @@ public static partial class CleanupBody
     [GeneratedRegex(@"^#{1,6}\s")]
     private static partial Regex Heading();
 
-    [GeneratedRegex(@"^[-*]\s+`([^`]+)`$")]
-    private static partial Regex BulletedPath();
+    [GeneratedRegex(@"^(?:[-*+]\s+|[-*+]$)")]
+    private static partial Regex ListMarker();
 }

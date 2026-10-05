@@ -49,7 +49,7 @@ Create the label `review-feedback` in the new repo. The repo's owner starts a fe
 
 Create the label `cleanup` in the new repo. The repo's owner starts a cleanup run, a run with no plan, with the label `cleanup` on an issue that fixes a test, a config file or a document. The label `cleanup` and the label `behavior` on one issue get a comment and no run.
 
-The body of a `cleanup` issue names the paths the build can change under the heading `## Scope`, one for each line: a directory ends in `/`, a path with `*` is a glob, and any other line is that one path. It holds under the heading `## Check` one fenced `sh` block, the check command, that fails before the change and exits with the code 0 after it. The factory runs the command with `sh -c` in a copy of the work tree, and a command that runs `dotnet` restores its packages itself first.
+The body of a `cleanup` issue names the paths the build can change under the heading `## Scope`, one for each line: a directory ends in `/`, a path with `*` is a glob, and any other line is that one path. A line under `## Scope` is a path, bare or as a Markdown list item with the marker `-`, `*` or `+`, and the path can sit in backticks (`` ` ``). It holds under the heading `## Check` one fenced `sh` block, the check command, that fails before the change and exits with the code 0 after it. The factory runs the command with `sh -c` in a copy of the work tree, and a command that runs `dotnet` restores its packages itself first.
 
 ## Commands
 
