@@ -10,6 +10,7 @@ public sealed class HeadBranchIntegrationTests
 {
     private const string Owner = "sbiondolillo";
     private const string Repo = "factory-scratch";
+    private static readonly string[] CleanupLabel = ["cleanup"];
 
     private static string Token
     {
@@ -63,6 +64,52 @@ public sealed class HeadBranchIntegrationTests
         finally
         {
             await CleanUpAsync(client, pull, branch);
+        }
+    }
+
+    [Fact]
+    public async Task TheBodyOfAnOpenPullRequestHoldsItsClosingLine()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        var client = new GitHubClient(new HttpClient(), Token);
+        int? pull = null;
+        string? branch = null;
+        try
+        {
+            branch = await CreateBranchAsync(client, ct);
+            var sut = new PullRequests(client);
+            PullRequest opened = await sut.OpenAsync(Owner, Repo, branch, "main", "test " + branch, "Closes #11", ct);
+            pull = opened.Number;
+            string body = await sut.ReadBodyAsync(Owner, Repo, opened.Number, ct);
+            Assert.Equal(11, PullRequests.ParseClosingIssue(body));
+        }
+        finally
+        {
+            await CleanUpAsync(client, pull, branch);
+        }
+    }
+
+    [Fact]
+    public async Task TheReadOfAnIssueGivesItsLabelCleanupAndItsBody()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        var client = new GitHubClient(new HttpClient(), Token);
+        int? number = null;
+        try
+        {
+            string json = JsonSerializer.Serialize(new { title = "cleanup " + Guid.NewGuid().ToString("N"), body = "## Scope\nREADME.md\n", labels = CleanupLabel });
+            JsonElement created = await client.SendAsync(HttpMethod.Post, $"/repos/{Owner}/{Repo}/issues", json, ct);
+            number = created.GetProperty("number").GetInt32();
+            GitHubIssue issue = await client.ReadIssueAsync(Owner, Repo, number.Value, ct);
+            Assert.Contains("cleanup", issue.Labels);
+            Assert.Equal(["README.md"], CleanupBody.ReadScope(issue.Body));
+        }
+        finally
+        {
+            if (number is int n)
+            {
+                await client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/issues/{n}", "{\"state\":\"closed\"}", CancellationToken.None);
+            }
         }
     }
 

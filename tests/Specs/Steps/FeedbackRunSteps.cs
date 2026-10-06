@@ -24,8 +24,12 @@ public sealed class FeedbackRunSteps : IDisposable
     {
         _shared = shared;
         shared.OtherCommands = _h.Commands;
+        shared.OtherPrompts = _h.Prompts;
         buildPhase.FirstPrompt = () => Build(1).Text;
     }
+
+    /// <summary>The harness of the run, for the step class of a feature of the same run.</summary>
+    public Specs.Unit.FeedbackRunHarness Harness => _h;
 
     public void Dispose() => _h.Dispose();
 
@@ -164,6 +168,15 @@ public sealed class FeedbackRunSteps : IDisposable
         _h.RedBuilds.UnionWith(f.RedBuilds);
         _h.RejectedBuilds.UnionWith(f.RejectedBuilds);
         _h.TestStdout = f.TestStdout;
+        _h.Labels.AddRange(f.Labels);
+        _h.IssueBody = f.Body;
+        _h.FirstBuildChanges.AddRange(f.FirstBuildChanges);
+        _h.BaseOnlyTests.AddRange(f.BaseOnlyTests);
+        foreach ((int build, (int Code, string Out, string Err) result) in f.CheckResults)
+        {
+            _h.CheckResults[build] = result;
+        }
+
         _h.BuildIsError = f.BuildIsError;
         _h.Report = build => _reports.TryGetValue(build, out string? report) ? report : _defaultReport;
         try
