@@ -32,41 +32,25 @@ public sealed class FeatureFilesSteps(ExceptionState exceptionState) : IDisposab
     [Given("the scenario title {string}")]
     public void GivenTheScenarioTitle(string title) => _scenarioTitle = title;
 
-    // Reqnroll may run scenarios from different feature classes on different threads, and
-    // Directory.SetCurrentDirectory is process-wide, so only one FeatureFilesSteps scenario at a
-    // time may rely on it: the scenario names a file by a path relative to "the directory" it
-    // wrote to, and FeatureFiles must throw naming that same relative path, so the call below runs
-    // with the current directory set to this scenario's own root.
-    private static readonly object CurrentDirectoryLock = new();
-
     [When("FeatureFiles reads the scenario titles of {string}")]
-    public void WhenFeatureFilesReadsTheScenarioTitlesOf(string fileName)
+    public void WhenFeatureFilesReadsTheScenarioTitlesOf(string relativePath)
     {
         try
         {
-            _titles = ReadScenarioTitlesRelativeToRoot(fileName);
+            _titles = FeatureFiles.ReadScenarioTitles(Path.Combine(_root, relativePath));
             exceptionState.Exception = null;
+        }
+        catch (FeatureFileException ex)
+        {
+            // The scenario holds that an unparsable file throws naming the path FeatureFiles was
+            // given, so the scenario fails if the library stops naming that path; the Then step
+            // then sees the path relative to the scenario's folder, as the scenario gave it.
+            Assert.Equal(Path.Combine(_root, relativePath), ex.Path);
+            exceptionState.Exception = new FeatureFileException(relativePath, ex.Message);
         }
         catch (Exception ex)
         {
             exceptionState.Exception = ex;
-        }
-    }
-
-    private IReadOnlyList<string> ReadScenarioTitlesRelativeToRoot(string relativePath)
-    {
-        lock (CurrentDirectoryLock)
-        {
-            string previous = Directory.GetCurrentDirectory();
-            Directory.SetCurrentDirectory(_root);
-            try
-            {
-                return FeatureFiles.ReadScenarioTitles(relativePath);
-            }
-            finally
-            {
-                Directory.SetCurrentDirectory(previous);
-            }
         }
     }
 
