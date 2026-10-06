@@ -281,7 +281,7 @@ public sealed class ConsoleHarness : IDisposable
         OutAtPrompt.Add(Out.ToString());
         if (kind is "plan" && AgentWritesPlan)
         {
-            if (!AgentWritesOnlyPlan)
+            if (!AgentWritesOnlyPlan && !Labels.Contains("refactor"))
             {
                 Write("specs/features/checkout.feature", PlanPhaseHarness.SoundFeature);
             }

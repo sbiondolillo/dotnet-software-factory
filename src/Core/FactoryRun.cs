@@ -31,6 +31,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
 {
     private const int RedoBudget = 3;
     private const string CleanupLabel = "cleanup";
+    private const string RefactorLabel = "refactor";
 
     private static readonly string[] LayoutFiles = ["Solution.slnx"];
     private static readonly string[] LayoutDirectories = ["specs/features/", "tests/Specs/", "tests/Integration/"];
@@ -41,6 +42,14 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         GitHubIssue issue = await client.ReadIssueAsync(request.Owner, request.Repo, request.IssueNumber, cancellationToken).ConfigureAwait(false);
         IReadOnlyList<string> scope = [];
         string check = "";
+        bool refactor = issue.Labels.Contains(RefactorLabel);
+        if (refactor && (issue.Labels.Contains("behavior") || issue.Labels.Contains(CleanupLabel)))
+        {
+            string other = issue.Labels.Contains("behavior") ? "behavior" : CleanupLabel;
+            await CommentAsync(request, $"The labels refactor and {other} exclude each other: a refactor run leaves every test as it is, and a {other} run does not. Keep one of the two labels.", [], cancellationToken).ConfigureAwait(false);
+            return new FactoryRunResult(null, 0);
+        }
+
         bool cleanup = issue.Labels.Contains(CleanupLabel);
         if (cleanup)
         {
@@ -89,6 +98,11 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         await using (sandbox.ConfigureAwait(false))
         {
             var agent = new ClaudeCodeAgent(sandbox);
+            if (refactor)
+            {
+                return await RunRefactorAsync(request, issue, sandbox, agent, git, baseCommit, cancellationToken).ConfigureAwait(false);
+            }
+
             if (cleanup)
             {
                 return await RunCleanupAsync(request, issue, scope, check, sandbox, agent, git, baseCommit, cancellationToken).ConfigureAwait(false);
@@ -152,6 +166,108 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
                 redos++;
                 await Say($"redo: {redos}").ConfigureAwait(false);
             }
+        }
+    }
+
+    private async Task<FactoryRunResult> RunRefactorAsync(
+        FactoryRunRequest request,
+        GitHubIssue issue,
+        Sandbox sandbox,
+        ClaudeCodeAgent agent,
+        Git git,
+        string baseCommit,
+        CancellationToken cancellationToken)
+    {
+        string? check = CleanupBody.ReadCheck(issue.Body);
+        if (check is not null)
+        {
+            CommandResult first = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
+            await Say(first.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
+            if (first.ExitCode is 0)
+            {
+                await CommentAsync(request, "The check passes before the plan, so there is nothing to refactor.", [], cancellationToken).ConfigureAwait(false);
+                return new FactoryRunResult(null, 0);
+            }
+
+            if (first.ExitCode is 126 or 127)
+            {
+                await CommentAsync(request, $"The check command exited with the code {first.ExitCode} before the plan, so it did not run. Its standard error:", [first.StandardError], cancellationToken).ConfigureAwait(false);
+                return new FactoryRunResult(null, 0);
+            }
+        }
+
+        await Say("plan: start").ConfigureAwait(false);
+        PlanPhaseResult plan = await new PlanPhase(agent, refactor: true)
+            .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, request.Directory, cancellationToken).ConfigureAwait(false);
+        if (!plan.Passed)
+        {
+            await Say("plan: failed").ConfigureAwait(false);
+            await CommentAsync(request, "The plan phase failed:", plan.Failures, cancellationToken).ConfigureAwait(false);
+            return new FactoryRunResult(null, 0);
+        }
+
+        await Say("plan: passed").ConfigureAwait(false);
+        Pin pin = Pin.TakeRefactor(request.Directory);
+        var buildPhase = new BuildPhase(agent, refactor: true);
+        var lintGate = new LintGate(sandbox, git);
+        var testGate = new TestGate(sandbox);
+        var reviewPhase = new ReviewPhase(agent, git, refactor: true);
+
+        int redos = 0;
+        IReadOnlyList<string> redoTexts = [];
+        while (true)
+        {
+            await Say("build: start").ConfigureAwait(false);
+            await buildPhase.RunAsync(issue.Title, issue.Body, request.BuildModel, request.BuildTurns, redoTexts, cancellationToken).ConfigureAwait(false);
+            await Say("lint: start").ConfigureAwait(false);
+            await lintGate.RunAsync(request.Directory, issue.Title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
+            await Say("test: start").ConfigureAwait(false);
+            TestGateResult gate = await testGate.RunAsync(request.Directory, pin, request.SecretNames, cancellationToken).ConfigureAwait(false);
+            await Say(gate.Passed ? "test: passed" : "test: failed").ConfigureAwait(false);
+            if (!gate.Passed)
+            {
+                redoTexts = gate.Evidence;
+            }
+            else
+            {
+                CommandResult? after = null;
+                if (check is not null)
+                {
+                    after = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
+                    await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
+                }
+
+                if (after is not null && after.ExitCode is not 0)
+                {
+                    redoTexts = [CleanupGate.CheckRedo(after)];
+                }
+                else
+                {
+                    await Say("review: start").ConfigureAwait(false);
+                    ReviewPhaseResult review = await reviewPhase
+                        .RunAsync(issue.Title, issue.Body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, cancellationToken).ConfigureAwait(false);
+                    await Say(review.Approved ? "review: approved" : "review: blocked").ConfigureAwait(false);
+                    if (review.Approved)
+                    {
+                        await Say("deliver: start").ConfigureAwait(false);
+                        var deliver = new Deliver(git, new PullRequests(client), client);
+                        PullRequest pullRequest = await deliver
+                            .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
+                        return new FactoryRunResult(pullRequest, redos);
+                    }
+
+                    redoTexts = review.Blocking;
+                }
+            }
+
+            if (redos >= RedoBudget)
+            {
+                await CommentAsync(request, $"The budget of {RedoBudget} Redos is spent. The last build still fails:", redoTexts, cancellationToken).ConfigureAwait(false);
+                return new FactoryRunResult(null, redos);
+            }
+
+            redos++;
+            await Say($"redo: {redos}").ConfigureAwait(false);
         }
     }
 
