@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Core;
 using Xunit;
+using System.Linq;
 
 namespace Integration;
 
@@ -47,6 +48,22 @@ public sealed class PullRequestWatchIntegrationTests
         await client.SendAsync(HttpMethod.Post, $"/repos/{Owner}/{Repo}/pulls/{number}/comments", comment, ct);
     }
 
+    /// <summary>Waits up to 15 minutes for the watch-fixture workflow to put a check run named build on the head commit.</summary>
+    private static async Task WaitUntilBuildCheckRunArrivesAsync(PullRequests pulls, int number, CancellationToken ct)
+    {
+        DateTime deadline = DateTime.UtcNow.AddMinutes(15);
+        while (true)
+        {
+            string sha = await pulls.ReadHeadShaAsync(Owner, Repo, number, ct);
+            IReadOnlyList<CheckRun> runs = await pulls.ReadCheckRunsAsync(Owner, Repo, sha, ct);
+            if (runs.Any(r => r.Name is "build"))
+                return;
+            if (DateTime.UtcNow >= deadline)
+                Assert.Fail("GitHub started no watch-fixture workflow run within 15 minutes");
+            await Task.Delay(TimeSpan.FromSeconds(10), ct);
+        }
+    }
+
     [Theory]
     [InlineData("watch-green/", true, "success")]
     [InlineData("watch-red/", false, "failure")]
@@ -61,6 +78,7 @@ public sealed class PullRequestWatchIntegrationTests
             (branch, number) = await OpenAsync(client, ct, prefix, "watch-fixture/");
             await CommentAsync(client, number, "watch-fixture/" + branch + ".txt", ct);
             var pulls = new PullRequests(client);
+            await WaitUntilBuildCheckRunArrivesAsync(pulls, number, ct);
             var watch = new PullRequestWatch(pulls, new ReviewThreads(client));
             PullRequestWatchResult result = await watch.WatchAsync(Owner, Repo, number, Owner, TimeSpan.FromSeconds(5), TimeSpan.FromMinutes(5), ct);
             Assert.Equal(green, result.IsGreen);
