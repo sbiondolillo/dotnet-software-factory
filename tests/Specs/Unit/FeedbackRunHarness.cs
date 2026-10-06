@@ -84,6 +84,9 @@ public sealed class FeedbackRunHarness : IDisposable
 
     public List<string> FirstBuildChanges { get; } = [];
 
+    /// <summary>The files the build writes into the clone, as relative path and content.</summary>
+    public Dictionary<string, string> BuildFiles { get; set; } = [];
+
     public Dictionary<int, (int Code, string Out, string Err)> CheckResults { get; } = [];
 
     public List<(string Class, string Method)> BaseOnlyTests { get; } = [];
@@ -264,6 +267,10 @@ public sealed class FeedbackRunHarness : IDisposable
             if (report is not null)
             {
                 Write(".factory/threads.json", report);
+            }
+            foreach (KeyValuePair<string, string> file in BuildFiles)
+            {
+                Write(file.Key, file.Value);
             }
         }
         else

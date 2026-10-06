@@ -68,6 +68,18 @@ public sealed class FeedbackCleanupScopeTests
     }
 
     [Fact]
+    public async Task AChangeToASettingsFileNamedByTheScopePassesTheTestGate()
+    {
+        using FeedbackRunHarness h = Cleanup("## Scope\n.editorconfig\n\n## Check\n\n```sh\ngrep -q Feedback README.md\n```\n");
+        h.FirstBuildChanges.Add(".editorconfig");
+        h.BuildFiles[".editorconfig"] = "root = true\n";
+        FeedbackRunResult result = await h.RunAsync(Ct);
+        Assert.Single(h.BuildPrompts);
+        Assert.Contains(h.Prompts, p => p.Kind is "review");
+        Assert.Equal(new FeedbackRunResult(2, 0, 0), result);
+    }
+
+    [Fact]
     public async Task AChangeToThePinnedFeaturesGivesAPinRedo()
     {
         using FeedbackRunHarness h = Cleanup();

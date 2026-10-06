@@ -99,6 +99,9 @@ public sealed class FactoryRunHarness : IDisposable
     /// <summary>The files that git reports changed since the base after the first build.</summary>
     public List<string> FirstBuildChanges { get; } = [];
 
+    /// <summary>The files the build writes into the clone, as relative path and content.</summary>
+    public Dictionary<string, string> BuildFiles { get; set; } = [];
+
     /// <summary>Tests that the TRX file holds before the first build only, as class and method.</summary>
     public List<(string Class, string Method)> BaseOnlyTests { get; } = [];
 
@@ -283,6 +286,14 @@ public sealed class FactoryRunHarness : IDisposable
         {
             Write("specs/features/checkout.feature", PlanPhaseHarness.SoundFeature);
             Write(".factory/plan.md", PlanPhaseHarness.PlanText);
+        }
+
+        if (kind is "build")
+        {
+            foreach (KeyValuePair<string, string> file in BuildFiles)
+            {
+                Write(file.Key, file.Value);
+            }
         }
 
         if (kind is "review")
