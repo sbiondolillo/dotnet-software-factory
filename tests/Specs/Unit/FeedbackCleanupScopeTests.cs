@@ -77,6 +77,19 @@ public sealed class FeedbackCleanupScopeTests
     }
 
     [Fact]
+    public async Task AChangeToASettingsFileTheScopeNamesPassesTheTestGate()
+    {
+        using FeedbackRunHarness h = Cleanup("## Scope\n.editorconfig\n");
+        h.FirstBuildChanges.Add(".editorconfig");
+        h.FirstBuildWrites.Add(".editorconfig");
+        FeedbackRunResult result = await h.RunAsync(Ct);
+        string[] lines = h.Out.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Contains("test: passed", lines);
+        Assert.DoesNotContain("test: failed", lines);
+        Assert.Equal(new FeedbackRunResult(2, 0, 0), result);
+    }
+
+    [Fact]
     public async Task ALostTestGivesARedoAndNoCheck()
     {
         using FeedbackRunHarness h = Cleanup();

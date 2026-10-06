@@ -83,7 +83,14 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     public void GivenBeforeError(int code) => H.CheckResults[0] = (code, "", "sh: 1: cannot run the check");
 
     [Given("the build changes only {string}")]
-    public void GivenChanges(string path) => H.FirstBuildChanges.Add(path);
+    public void GivenChanges(string path)
+    {
+        H.FirstBuildChanges.Add(path);
+        if (Pin.SettingsFileNames.Contains(Path.GetFileName(path)))
+        {
+            H.FirstBuildWrites.Add(path);
+        }
+    }
 
     [Given("the check command then exits with the code {int}")]
     public void GivenThen(int code) => H.CheckResults[1] = (code, "", "");

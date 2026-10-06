@@ -119,6 +119,9 @@ public sealed class FactoryRunHarness : IDisposable
     /// <summary>The files that the first build of a refactor run removes.</summary>
     public List<string> FirstBuildRemoves { get; } = [];
 
+    /// <summary>The files the first build writes into the clone, for a run that is no refactor.</summary>
+    public List<string> FirstBuildWrites { get; } = [];
+
     /// <summary>True when <c>git worktree add</c> in the container exits with the code 128.</summary>
     public bool WorktreeAddFails { get; set; }
 
@@ -330,6 +333,14 @@ public sealed class FactoryRunHarness : IDisposable
             foreach (string path in PlanRemoves)
             {
                 File.Delete(Path.Combine(_clone.FullName, path));
+            }
+        }
+
+        if (kind is "build" && _builds is 1)
+        {
+            foreach (string path in FirstBuildWrites)
+            {
+                Write(path, "written by the build");
             }
         }
 

@@ -86,6 +86,20 @@ public sealed class CleanupRunTests
     }
 
     [Fact]
+    public async Task AChangeToASettingsFileTheScopeNamesPassesTheTestGate()
+    {
+        using FactoryRunHarness h = Make("cleanup");
+        h.Body = "## Scope\n.editorconfig\n\n## Check\n\n```sh\ntrue\n```\n";
+        h.FirstBuildChanges.Add(".editorconfig");
+        h.FirstBuildWrites.Add(".editorconfig");
+        FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
+        Assert.DoesNotContain(h.Prompts, p => p.Text.Contains("pin: .editorconfig"));
+        Assert.Contains(h.Prompts, p => p.Kind is "review");
+        Assert.NotNull(result.PullRequest);
+        Assert.Equal(0, result.Redos);
+    }
+
+    [Fact]
     public async Task ALostTestGetsARedo()
     {
         using FactoryRunHarness h = Make("cleanup");
