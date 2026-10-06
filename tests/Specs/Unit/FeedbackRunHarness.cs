@@ -84,6 +84,9 @@ public sealed class FeedbackRunHarness : IDisposable
 
     public List<string> FirstBuildChanges { get; } = [];
 
+    /// <summary>The files the first build writes into the clone.</summary>
+    public List<string> FirstBuildWrites { get; } = [];
+
     public Dictionary<int, (int Code, string Out, string Err)> CheckResults { get; } = [];
 
     public List<(string Class, string Method)> BaseOnlyTests { get; } = [];
@@ -264,6 +267,14 @@ public sealed class FeedbackRunHarness : IDisposable
             if (report is not null)
             {
                 Write(".factory/threads.json", report);
+            }
+
+            if (_builds is 1)
+            {
+                foreach (string path in FirstBuildWrites)
+                {
+                    Write(path, "written by the build");
+                }
             }
         }
         else

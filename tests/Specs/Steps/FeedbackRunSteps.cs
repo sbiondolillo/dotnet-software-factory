@@ -171,6 +171,7 @@ public sealed class FeedbackRunSteps : IDisposable
         _h.Labels.AddRange(f.Labels);
         _h.IssueBody = f.Body;
         _h.FirstBuildChanges.AddRange(f.FirstBuildChanges);
+        _h.FirstBuildWrites.AddRange(f.FirstBuildWrites);
         _h.BaseOnlyTests.AddRange(f.BaseOnlyTests);
         foreach ((int build, (int Code, string Out, string Err) result) in f.CheckResults)
         {
