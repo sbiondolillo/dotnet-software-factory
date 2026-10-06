@@ -195,12 +195,12 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
             await buildPhase.RunAsync(issue.Title, issue.Body, request.BuildModel, request.BuildTurns, redoTexts, cancellationToken).ConfigureAwait(false);
             await Say("lint: start").ConfigureAwait(false);
             await lintGate.RunAsync(request.Directory, issue.Title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
-            redoTexts = await ScopeFaultsAsync(git, baseCommit, request.Directory, scope, cancellationToken).ConfigureAwait(false);
+            redoTexts = await CleanupGate.ScopeFaultsAsync(git, baseCommit, request.Directory, scope, cancellationToken).ConfigureAwait(false);
             if (redoTexts.Count is 0)
             {
                 await Say("test: start").ConfigureAwait(false);
                 TestGateResult gate = await testGate
-                    .RunAsync(request.Directory, pin, request.SecretNames, path => CleanupBody.InScope(scope, path) && !path.StartsWith("specs/features/", StringComparison.Ordinal), cancellationToken)
+                    .RunAsync(request.Directory, pin, request.SecretNames, path => CleanupGate.PinExempt(scope, path), cancellationToken)
                     .ConfigureAwait(false);
                 await Say(gate.Passed ? "test: passed" : "test: failed").ConfigureAwait(false);
                 if (!gate.Passed)
@@ -209,8 +209,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
                 }
                 else
                 {
-                    HashSet<string> nowPassed = [.. (gate.Tests ?? []).Where(test => test.Outcome is TestOutcome.Passed).Select(test => $"{test.ClassName}.{test.Method}")];
-                    redoTexts = [.. basePassed.Where(name => !nowPassed.Contains(name)).Order(StringComparer.Ordinal).Select(name => $"lost test: {name}")];
+                    redoTexts = CleanupGate.LostTests(basePassed, gate);
                 }
 
                 if (redoTexts.Count is 0)
@@ -236,12 +235,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
                     }
                     else
                     {
-                        redoTexts =
-                        [
-                            string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"The check command exited with the code {after.ExitCode}\nstandard output: {after.StandardOutput}\nstandard error: {after.StandardError}"),
-                        ];
+                        redoTexts = [CleanupGate.CheckRedo(after)];
                     }
                 }
             }
@@ -257,49 +251,8 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         }
     }
 
-    private static async Task<IReadOnlyList<string>> ScopeFaultsAsync(
-        Git git,
-        string baseCommit,
-        string directory,
-        IReadOnlyList<string> scope,
-        CancellationToken cancellationToken)
-    {
-        string[] changed = await git.ListChangedFilesAsync(baseCommit, directory, cancellationToken).ConfigureAwait(false);
-        List<string> faults = [];
-        foreach (string path in changed.Where(path => !path.StartsWith(".factory/", StringComparison.Ordinal)))
-        {
-            if (path.StartsWith("specs/features/", StringComparison.Ordinal))
-            {
-                faults.Add($"pin: {path}");
-            }
-            else if (!CleanupBody.InScope(scope, path))
-            {
-                faults.Add($"outside the scope: {path}");
-            }
-        }
-
-        return faults;
-    }
-
-    private async Task<CommandResult> RunCheckAsync(Sandbox sandbox, string command, CancellationToken cancellationToken)
-    {
-        await Say("check: start").ConfigureAwait(false);
-        string copy = $"/tmp/check-{Guid.NewGuid():N}";
-        CommandResult add = await sandbox.RunAsync("git", ["worktree", "add", "--detach", copy, "HEAD"], [], cancellationToken).ConfigureAwait(false);
-        if (add.ExitCode is not 0)
-        {
-            throw new SandboxException(add.StandardError);
-        }
-
-        try
-        {
-            return await sandbox.RunAsync("sh", ["-c", command], [], copy, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            await sandbox.RunAsync("git", ["worktree", "remove", "--force", copy], [], CancellationToken.None).ConfigureAwait(false);
-        }
-    }
+    private Task<CommandResult> RunCheckAsync(Sandbox sandbox, string command, CancellationToken cancellationToken) =>
+        CleanupGate.RunCheckAsync(sandbox, command, progress, cancellationToken);
 
     private Task Say(string line) => ProgressLine.WriteAsync(progress, line);
 

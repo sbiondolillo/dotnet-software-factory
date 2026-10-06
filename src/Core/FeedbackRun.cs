@@ -42,6 +42,21 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
         }
 
         string branch = await new PullRequests(client).ReadHeadBranchAsync(request.Owner, request.Repo, request.PullNumber, cancellationToken).ConfigureAwait(false);
+        var pullRequests = new PullRequests(client);
+        IReadOnlyList<string> scope = [];
+        string? check = null;
+        bool cleanup = false;
+        if (PullRequests.ParseClosingIssue(await pullRequests.ReadBodyAsync(request.Owner, request.Repo, request.PullNumber, cancellationToken).ConfigureAwait(false)) is int issueNumber)
+        {
+            GitHubIssue issue = await client.ReadIssueAsync(request.Owner, request.Repo, issueNumber, cancellationToken).ConfigureAwait(false);
+            if (issue.Labels.Contains("cleanup"))
+            {
+                cleanup = true;
+                scope = CleanupBody.ReadScope(issue.Body);
+                check = CleanupBody.ReadCheck(issue.Body);
+            }
+        }
+
         var git = new Git(runner);
         await Say("clone: start").ConfigureAwait(false);
         await git.CloneAsync($"https://github.com/{request.Owner}/{request.Repo}.git", request.Token, request.Directory, cancellationToken).ConfigureAwait(false);
@@ -58,11 +73,14 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
         await using (sandbox.ConfigureAwait(false))
         {
             var agent = new ClaudeCodeAgent(sandbox);
-            var buildPhase = new BuildPhase(agent);
+            var buildPhase = new BuildPhase(agent, cleanup);
             var lintGate = new LintGate(sandbox, git);
             var testGate = new TestGate(sandbox);
-            var reviewPhase = new ReviewPhase(agent, git);
+            var reviewPhase = new ReviewPhase(agent, git, cleanup);
 
+            IReadOnlySet<string> basePassed = cleanup
+                ? await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false)
+                : new HashSet<string>();
             int redos = 0;
             IReadOnlyList<string> redoTexts = [];
             IReadOnlyList<ReportItem> items = [];
@@ -84,25 +102,49 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
                 {
                     await Say("lint: start").ConfigureAwait(false);
                     await lintGate.RunAsync(request.Directory, title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
-                    await Say("test: start").ConfigureAwait(false);
-                    TestGateResult gate = await testGate.RunAsync(request.Directory, pin, request.SecretNames, cancellationToken).ConfigureAwait(false);
-                    await Say(gate.Passed ? "test: passed" : "test: failed").ConfigureAwait(false);
-                    if (gate.Passed)
+                    IReadOnlyList<string> scopeFaults = cleanup
+                        ? await CleanupGate.ScopeFaultsAsync(git, baseCommit, request.Directory, scope, cancellationToken).ConfigureAwait(false)
+                        : [];
+                    if (scopeFaults.Count > 0)
                     {
-                        await Say("review: start").ConfigureAwait(false);
-                        ReviewPhaseResult review = await reviewPhase
-                            .RunAsync(title, body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, cancellationToken).ConfigureAwait(false);
-                        await Say(review.Approved ? "review: approved" : "review: blocked").ConfigureAwait(false);
-                        if (review.Approved)
-                        {
-                            break;
-                        }
-
-                        redoTexts = review.Blocking;
+                        redoTexts = scopeFaults;
                     }
                     else
                     {
-                        redoTexts = gate.Evidence;
+                        await Say("test: start").ConfigureAwait(false);
+                        TestGateResult gate = cleanup
+                            ? await testGate.RunAsync(request.Directory, pin, request.SecretNames, path => CleanupGate.PinExempt(scope, path), cancellationToken).ConfigureAwait(false)
+                            : await testGate.RunAsync(request.Directory, pin, request.SecretNames, cancellationToken).ConfigureAwait(false);
+                        await Say(gate.Passed ? "test: passed" : "test: failed").ConfigureAwait(false);
+                        IReadOnlyList<string> gateFaults = gate.Passed ? [] : gate.Evidence;
+                        if (gate.Passed && cleanup)
+                        {
+                            gateFaults = CleanupGate.LostTests(basePassed, gate);
+                            if (gateFaults.Count is 0 && check is not null)
+                            {
+                                CommandResult after = await CleanupGate.RunCheckAsync(sandbox, check, progress, cancellationToken).ConfigureAwait(false);
+                                await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
+                                gateFaults = after.ExitCode is 0 ? [] : [CleanupGate.CheckRedo(after)];
+                            }
+                        }
+
+                        if (gateFaults.Count > 0)
+                        {
+                            redoTexts = gateFaults;
+                        }
+                        else
+                        {
+                            await Say("review: start").ConfigureAwait(false);
+                            ReviewPhaseResult review = await reviewPhase
+                                .RunAsync(title, body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, cancellationToken).ConfigureAwait(false);
+                            await Say(review.Approved ? "review: approved" : "review: blocked").ConfigureAwait(false);
+                            if (review.Approved)
+                            {
+                                break;
+                            }
+
+                            redoTexts = review.Blocking;
+                        }
                     }
                 }
 

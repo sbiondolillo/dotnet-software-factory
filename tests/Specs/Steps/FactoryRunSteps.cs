@@ -18,6 +18,9 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     /// <summary>The commands of another run, so a feature of that run shares the git steps of this class.</summary>
     public List<CommandSpec>? OtherCommands { get; set; }
 
+    /// <summary>The prompts of another run, so a feature of that run shares the prompt steps of this class.</summary>
+    public List<Specs.Unit.SeenPrompt>? OtherPrompts { get; set; }
+
     public void Dispose() => _h.Dispose();
 
     private List<CommandSpec> Commands => OtherCommands ?? _h.Commands;

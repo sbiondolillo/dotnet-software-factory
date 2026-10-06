@@ -41,7 +41,7 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
         H.Body = body;
     }
 
-    private SeenPrompt NextBuild() => H.Prompts.Where(p => p.Kind is "build").ElementAt(1);
+    private SeenPrompt NextBuild() => (factory.OtherPrompts ?? H.Prompts).Where(p => p.Kind is "build").ElementAt(1);
 
     [Given("the issue has the label {string}, the title {string} and a body with the scope {string} and the first fenced block under {string} holding the line {string}")]
     public void GivenIssue(string label, string title, string scope, string heading, string line)
@@ -126,6 +126,12 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     [Given("the issue {int} has the label {string}")]
     public void GivenConsoleLabel(int number, string label)
     {
+        if (number is 11)
+        {
+            H.Labels.Add(label);
+            return;
+        }
+
         Assert.Equal(12, number);
         SetConsoleIssue(label);
     }

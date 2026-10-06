@@ -73,6 +73,23 @@ public sealed class FeedbackRunHarness : IDisposable
 
     public int HeadStatus { get; set; } = 200;
 
+    /// <summary>The body of the pull request, or null for an answer with no body.</summary>
+    public string? PullBody { get; set; }
+
+    public int IssueStatus { get; set; } = 200;
+
+    public List<string> Labels { get; } = [];
+
+    public string IssueBody { get; set; } = "";
+
+    public List<string> FirstBuildChanges { get; } = [];
+
+    public Dictionary<int, (int Code, string Out, string Err)> CheckResults { get; } = [];
+
+    public List<(string Class, string Method)> BaseOnlyTests { get; } = [];
+
+    public StringWriter Out { get; } = new();
+
     public string? ReplyErrorThread { get; set; }
 
     public string? CheckoutFailure { get; set; }
@@ -116,7 +133,7 @@ public sealed class FeedbackRunHarness : IDisposable
         var request = new FeedbackRunRequest(
             Owner, Repo, Pull, Token, _clone.FullName, "factory-sandbox:test", _root.FullName,
             BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames);
-        return new FeedbackRun(mock.Object, client).RunAsync(request, cancellationToken);
+        return new FeedbackRun(mock.Object, client, Out).RunAsync(request, cancellationToken);
     }
 
     public void Dispose()
@@ -174,6 +191,8 @@ public sealed class FeedbackRunHarness : IDisposable
                 return new CommandResult { StandardOutput = HeadSha + "\n" };
             case "status":
                 return new CommandResult { StandardOutput = ChangeAfterBuild ? " M src/Checkout.cs\n" : "" };
+            case "diff" when spec.Arguments.Contains("--name-only"):
+                return new CommandResult { StandardOutput = _builds is 1 ? string.Join('\n', FirstBuildChanges) + "\n" : "" };
             case "diff":
                 return new CommandResult { StandardOutput = "diff --git a/src/Checkout.cs b/src/Checkout.cs\n" };
             case "push":
@@ -194,6 +213,12 @@ public sealed class FeedbackRunHarness : IDisposable
             return Claude(arguments);
         }
 
+        if (program is "sh" && arguments[id + 2] is "-c")
+        {
+            (int code, string output, string error) = CheckResults.TryGetValue(_builds, out var given) ? given : (0, "", "");
+            return new CommandResult { ExitCode = code, StandardOutput = output, StandardError = error };
+        }
+
         if (arguments[id + 2] is not "test")
         {
             return new CommandResult();
@@ -206,6 +231,11 @@ public sealed class FeedbackRunHarness : IDisposable
         if (red)
         {
             tests.Add(("Specs.Unit.CheckoutTests", "AddsTwoPrices", "Failed", RedText));
+        }
+
+        if (_builds is 0)
+        {
+            tests.AddRange(BaseOnlyTests.Select(t => (t.Class, t.Method, "Passed", (string?)null)));
         }
 
         int at = arguments.IndexOf("--results-directory");
@@ -254,6 +284,10 @@ public sealed class FeedbackRunHarness : IDisposable
         File.WriteAllText(full, text);
     }
 
+    private string PullJson() => PullBody is null
+        ? JsonSerializer.Serialize(new { head = new { @ref = HeadRef, sha = HeadSha } })
+        : JsonSerializer.Serialize(new { body = PullBody, head = new { @ref = HeadRef, sha = HeadSha } });
+
     private string ThreadsJson()
     {
         var nodes = Threads.Select(id => id is ThreadA
@@ -283,9 +317,18 @@ public sealed class FeedbackRunHarness : IDisposable
             (int status, string body) = (200, "{}");
             if (request.Method.Method is "GET")
             {
-                (status, body) = harness.HeadStatus is 200
-                    ? (200, JsonSerializer.Serialize(new { head = new { @ref = harness.HeadRef, sha = harness.HeadSha } }))
-                    : (harness.HeadStatus, "{\"message\":\"Not Found\"}");
+                if (path.Contains("/issues/", StringComparison.Ordinal))
+                {
+                    (status, body) = harness.IssueStatus is 200
+                        ? (200, JsonSerializer.Serialize(new { title = "Clean up", body = harness.IssueBody, user = new { login = "owner" }, labels = harness.Labels.Select(l => new { name = l }) }))
+                        : (harness.IssueStatus, "{\"message\":\"Not Found\"}");
+                }
+                else
+                {
+                    (status, body) = harness.HeadStatus is 200
+                        ? (200, harness.PullJson())
+                        : (harness.HeadStatus, "{\"message\":\"Not Found\"}");
+                }
             }
             else if (path.EndsWith("/graphql", StringComparison.Ordinal))
             {

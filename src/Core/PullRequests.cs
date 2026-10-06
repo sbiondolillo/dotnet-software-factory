@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace Core;
@@ -65,6 +66,28 @@ public sealed class PullRequests(GitHubClient client)
     {
         JsonElement json = await client.SendAsync(HttpMethod.Get, $"/repos/{owner}/{repo}/pulls/{number}", null, cancellationToken).ConfigureAwait(false);
         return json.GetProperty("head").GetProperty("ref").GetString() ?? "";
+    }
+
+    /// <summary>Reads the body of a pull request; empty when it has none.</summary>
+    public async Task<string> ReadBodyAsync(string owner, string repo, int number, CancellationToken cancellationToken = default)
+    {
+        JsonElement json = await client.SendAsync(HttpMethod.Get, $"/repos/{owner}/{repo}/pulls/{number}", null, cancellationToken).ConfigureAwait(false);
+        return json.ValueKind is JsonValueKind.Object && json.TryGetProperty("body", out JsonElement body) && body.ValueKind is JsonValueKind.String ? body.GetString() ?? "" : "";
+    }
+
+    /// <summary>The number of the issue that a line <c>Closes #&lt;n&gt;</c> of a pull request body names, or null when there is none.</summary>
+    public static int? ParseClosingIssue(string? body)
+    {
+        if (body is null)
+        {
+            return null;
+        }
+
+        System.Text.RegularExpressions.Match match = System.Text.RegularExpressions.Regex.Match(
+            body,
+            @"^\s*Closes #(\d+)\s*$",
+            System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        return match.Success && int.TryParse(match.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out int number) ? number : null;
     }
 
     private static PullRequest Read(JsonElement json) =>
