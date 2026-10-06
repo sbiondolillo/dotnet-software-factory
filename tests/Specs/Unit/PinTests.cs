@@ -99,4 +99,35 @@ public sealed class PinTests : IDisposable
         Write("specs/features/b/notes", "n");
         Assert.Equal(["specs/features/b/notes"], pin.Compare(_root).Added);
     }
+
+    [Fact]
+    public void ARefactorPinReportsEachChangeUnderTheThreeDirectoriesAndIgnoresBinAndObj()
+    {
+        string[] roots = ["specs/features", "tests/Specs", "tests/Integration"];
+        foreach (string root in roots)
+        {
+            Write($"{root}/kept.txt", "a");
+            Write($"{root}/changed.cs", "a");
+            Write($"{root}/removed.cs", "a");
+            Write($"{root}/bin/ignored.dll", "a");
+            Write($"{root}/obj/ignored.dll", "a");
+        }
+
+        Write("src/Core/Greeter.cs", "a");
+        var pin = Pin.TakeRefactor(_root);
+        foreach (string root in roots)
+        {
+            Write($"{root}/changed.cs", "b");
+            File.Delete(Path.Combine(_root, $"{root}/removed.cs"));
+            Write($"{root}/added.cs", "b");
+            Write($"{root}/bin/ignored.dll", "b");
+            Write($"{root}/obj/new.dll", "b");
+        }
+
+        Write("src/Core/Greeter.cs", "b");
+        var diff = pin.Compare(_root);
+        Assert.Equal([.. roots.Order(StringComparer.Ordinal).Select(r => $"{r}/changed.cs")], diff.Changed);
+        Assert.Equal([.. roots.Order(StringComparer.Ordinal).Select(r => $"{r}/added.cs")], diff.Added);
+        Assert.Equal([.. roots.Order(StringComparer.Ordinal).Select(r => $"{r}/removed.cs")], diff.Removed);
+    }
 }

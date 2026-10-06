@@ -7,7 +7,7 @@ namespace Core;
 public sealed record PlanPhaseResult(bool Passed, Pin? Pin, IReadOnlyList<string> Failures);
 
 /// <summary>Asks the agent for feature files and a plan, checks the work tree, and pins the scenarios.</summary>
-public sealed class PlanPhase(ClaudeCodeAgent agent)
+public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false)
 {
     private const string FeatureDirectory = "specs/features/";
     private const string PlanPath = ".factory/plan.md";
@@ -21,7 +21,7 @@ public sealed class PlanPhase(ClaudeCodeAgent agent)
         string workTree,
         CancellationToken cancellationToken = default)
     {
-        Dictionary<string, string> baseline = Snapshot(workTree);
+        Dictionary<string, string> baseline = Snapshot(workTree, refactor);
         string prompt = BuildPrompt(title, body);
 
         List<string> failures = await RunOnceAsync(prompt, model, maxTurns, workTree, baseline, cancellationToken).ConfigureAwait(false);
@@ -43,8 +43,14 @@ public sealed class PlanPhase(ClaudeCodeAgent agent)
             : new PlanPhaseResult(false, null, failures);
     }
 
-    private static string BuildPrompt(string title, string body) =>
-        "Plan the work of the issue below.\n\n"
+    private string BuildPrompt(string title, string body) =>
+        refactor
+        ? "Plan the work of the refactor issue below.\n\n"
+            + $"Issue title:\n{title}\n\nIssue body:\n{body}\n\n"
+            + $"Write the plan to {PlanPath}, stating the structure the build gives the code and the steps to get there. "
+            + $"Write no other file: {PlanPath} is the only file the plan phase writes. "
+            + "Leave every other file as it is."
+        : "Plan the work of the issue below.\n\n"
         + $"Issue title:\n{title}\n\nIssue body:\n{body}\n\n"
         + $"Write Gherkin scenarios for the behaviour in feature files under {FeatureDirectory} "
         + $"and write the plan to {PlanPath}, stating each result the build owes. "
@@ -65,13 +71,36 @@ public sealed class PlanPhase(ClaudeCodeAgent agent)
             return [string.IsNullOrWhiteSpace(answer.Result) ? "claude answered with an error and no text." : answer.Result];
         }
 
-        return Gate(workTree, baseline);
+        return refactor ? RefactorGate(workTree, baseline) : Gate(workTree, baseline);
+    }
+
+    private static List<string> RefactorGate(string workTree, Dictionary<string, string> baseline)
+    {
+        var failures = new List<string>();
+        Dictionary<string, string> now = Snapshot(workTree, all: true);
+        if (!File.Exists(Path.Combine(workTree, PlanPath)))
+        {
+            failures.Add($"The plan {PlanPath} is missing.");
+        }
+
+        foreach (string path in now.Keys.Union(baseline.Keys).Order(StringComparer.Ordinal))
+        {
+            bool before = baseline.TryGetValue(path, out string? old);
+            bool after = now.TryGetValue(path, out string? current);
+            string what = !before ? "new" : !after ? "gone" : old != current ? "changed" : "";
+            if (what.Length > 0)
+            {
+                failures.Add($"The file {path} is {what}; write no file outside .factory/ in the plan phase.");
+            }
+        }
+
+        return failures;
     }
 
     private static List<string> Gate(string workTree, Dictionary<string, string> baseline)
     {
         var failures = new List<string>();
-        Dictionary<string, string> now = Snapshot(workTree);
+        Dictionary<string, string> now = Snapshot(workTree, all: false);
 
         bool featureChanged = now.Any(pair => IsFeature(pair.Key) && (!baseline.TryGetValue(pair.Key, out string? old) || old != pair.Value))
             || baseline.Keys.Any(path => IsFeature(path) && !now.ContainsKey(path));
@@ -129,7 +158,7 @@ public sealed class PlanPhase(ClaudeCodeAgent agent)
     private static bool IsFeature(string path) =>
         path.StartsWith(FeatureDirectory, StringComparison.Ordinal) && path.EndsWith(".feature", StringComparison.Ordinal);
 
-    private static Dictionary<string, string> Snapshot(string workTree)
+    private static Dictionary<string, string> Snapshot(string workTree, bool all)
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (string file in Directory.EnumerateFiles(workTree, "*", SearchOption.AllDirectories))
@@ -142,7 +171,7 @@ public sealed class PlanPhase(ClaudeCodeAgent agent)
             }
 
             bool inFeatures = relative.StartsWith(FeatureDirectory, StringComparison.Ordinal);
-            if (relative.StartsWith(".factory/", StringComparison.Ordinal) || (inFeatures && !IsFeature(relative)))
+            if (relative.StartsWith(".factory/", StringComparison.Ordinal) || (!all && inFeatures && !IsFeature(relative)))
             {
                 continue;
             }

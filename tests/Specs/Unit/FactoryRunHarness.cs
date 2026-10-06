@@ -70,6 +70,8 @@ public sealed class FactoryRunHarness : IDisposable
 
     public bool BuildIsError { get; set; }
 
+    public bool PlanIsError { get; set; }
+
     public HashSet<int> RedBuilds { get; } = [];
 
     public HashSet<int> RejectedBuilds { get; } = [];
@@ -104,6 +106,21 @@ public sealed class FactoryRunHarness : IDisposable
 
     /// <summary>Tests that the TRX file holds after a build only, as class and method.</summary>
     public List<(string Class, string Method)> AfterOnlyTests { get; } = [];
+
+    /// <summary>The files, other than the plan, that the agent writes on its first plan prompt of a refactor run.</summary>
+    public List<string> PlanExtraFiles { get; } = [];
+
+    /// <summary>The files that the agent removes on its first plan prompt of a refactor run.</summary>
+    public List<string> PlanRemoves { get; } = [];
+
+    /// <summary>The files that the first build of a refactor run adds.</summary>
+    public List<string> FirstBuildAdds { get; } = [];
+
+    /// <summary>The files that the first build of a refactor run removes.</summary>
+    public List<string> FirstBuildRemoves { get; } = [];
+
+    /// <summary>True when <c>git worktree add</c> in the container exits with the code 128.</summary>
+    public bool WorktreeAddFails { get; set; }
 
     public string CloneDirectory => _clone.FullName;
 
@@ -217,6 +234,14 @@ public sealed class FactoryRunHarness : IDisposable
                 Directory.CreateDirectory(Path.Combine(directory, path));
             }
         }
+
+        if (Labels.Contains("refactor"))
+        {
+            foreach (string path in FirstBuildChanges.Concat(FirstBuildRemoves))
+            {
+                WriteIn(directory, path, "as on the base commit");
+            }
+        }
     }
 
     private CommandResult Exec(CommandSpec spec)
@@ -234,6 +259,11 @@ public sealed class FactoryRunHarness : IDisposable
         {
             (int code, string output, string error) = CheckResults.TryGetValue(_builds, out var given) ? given : _builds is 0 ? (1, "", "check failed") : (0, "", "");
             return new CommandResult { ExitCode = code, StandardOutput = output, StandardError = error };
+        }
+
+        if (program is "git" && subcommand is "worktree" && arguments[id + 3] is "add" && WorktreeAddFails)
+        {
+            return new CommandResult { ExitCode = 128, StandardError = "fatal: cannot add the worktree" };
         }
 
         if (subcommand is not "test")
@@ -279,10 +309,46 @@ public sealed class FactoryRunHarness : IDisposable
         }
 
         Prompts.Add(new SeenPrompt(kind, model, turns, text, _builds));
+        bool refactor = Labels.Contains("refactor");
         if (kind is "plan" && AgentWritesPlan)
         {
-            Write("specs/features/checkout.feature", PlanPhaseHarness.SoundFeature);
+            if (!refactor)
+            {
+                Write("specs/features/checkout.feature", PlanPhaseHarness.SoundFeature);
+            }
+
             Write(".factory/plan.md", PlanPhaseHarness.PlanText);
+        }
+
+        if (kind is "plan" && refactor && Prompts.Count(p => p.Kind is "plan") is 1)
+        {
+            foreach (string path in PlanExtraFiles)
+            {
+                Write(path, PlanPhaseHarness.SoundFeature);
+            }
+
+            foreach (string path in PlanRemoves)
+            {
+                File.Delete(Path.Combine(_clone.FullName, path));
+            }
+        }
+
+        if (kind is "build" && refactor && _builds is 1)
+        {
+            foreach (string path in FirstBuildChanges)
+            {
+                File.AppendAllText(Path.Combine(_clone.FullName, path), "\nchanged by the build");
+            }
+
+            foreach (string path in FirstBuildAdds)
+            {
+                Write(path, "added by the build");
+            }
+
+            foreach (string path in FirstBuildRemoves)
+            {
+                File.Delete(Path.Combine(_clone.FullName, path));
+            }
         }
 
         if (kind is "review")
@@ -293,15 +359,17 @@ public sealed class FactoryRunHarness : IDisposable
                 : """{"approved":true,"blocking":[]}""");
         }
 
-        return new CommandResult { StandardOutput = Json(kind is "build" && BuildIsError, kind is "build" && BuildIsError ? "build error" : "done") };
+        return new CommandResult { StandardOutput = Json(kind is "build" && BuildIsError || kind is "plan" && PlanIsError, kind is "build" && BuildIsError ? "build error" : kind is "plan" && PlanIsError ? "plan went wrong" : "done") };
     }
 
-    private void Write(string relative, string text)
+    private static void WriteIn(string directory, string relative, string text)
     {
-        string full = Path.Combine(_clone.FullName, relative);
+        string full = Path.Combine(directory, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
         File.WriteAllText(full, text);
     }
+
+    private void Write(string relative, string text) => WriteIn(_clone.FullName, relative, text);
 
     private sealed class Handler(FactoryRunHarness harness) : HttpMessageHandler
     {
