@@ -21,7 +21,7 @@ public sealed class BuildPhase(ClaudeCodeAgent agent, bool cleanup = false, bool
         CancellationToken cancellationToken = default)
     {
         string prompt = BuildPrompt(title, body, redoTexts);
-        ClaudeCodeResult answer = await agent.RunAsync(prompt, model, maxTurns, cancellationToken).ConfigureAwait(false);
+        ClaudeCodeResult answer = await agent.RunAsync(prompt, model, maxTurns, "build", cancellationToken).ConfigureAwait(false);
         return answer.IsError ? new BuildPhaseResult(false, answer.Result) : new BuildPhaseResult(true, "");
     }
 

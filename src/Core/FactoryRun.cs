@@ -27,7 +27,7 @@ public sealed record FactoryRunRequest(
 public sealed record FactoryRunResult(PullRequest? PullRequest, int Redos);
 
 /// <summary>Takes one issue of a target repo to a pull request within three Redos.</summary>
-public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWriter? progress = null)
+public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWriter? progress = null, TextWriter? log = null, TimeProvider? time = null)
 {
     private const int RedoBudget = 3;
     private const string CleanupLabel = "cleanup";
@@ -97,7 +97,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         Sandbox sandbox = await Sandbox.StartAsync(runner, request.ImageTag, request.RootDirectory, request.Directory, cancellationToken).ConfigureAwait(false);
         await using (sandbox.ConfigureAwait(false))
         {
-            var agent = new ClaudeCodeAgent(sandbox);
+            var agent = new ClaudeCodeAgent(sandbox, log, time);
             if (refactor)
             {
                 return await RunRefactorAsync(request, issue, sandbox, agent, git, baseCommit, cancellationToken).ConfigureAwait(false);
@@ -120,8 +120,8 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
 
             await Say("plan: passed").ConfigureAwait(false);
             var buildPhase = new BuildPhase(agent);
-            var lintGate = new LintGate(sandbox, git);
-            var testGate = new TestGate(sandbox);
+            var lintGate = new LintGate(sandbox, git, log);
+            var testGate = new TestGate(sandbox, log);
             var reviewPhase = new ReviewPhase(agent, git);
 
             int redos = 0;
@@ -220,8 +220,8 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         await Say("plan: passed").ConfigureAwait(false);
         Pin pin = Pin.TakeRefactor(request.Directory);
         var buildPhase = new BuildPhase(agent, refactor: true);
-        var lintGate = new LintGate(sandbox, git);
-        var testGate = new TestGate(sandbox);
+        var lintGate = new LintGate(sandbox, git, log);
+        var testGate = new TestGate(sandbox, log);
         var reviewPhase = new ReviewPhase(agent, git, refactor: true);
 
         int redos = 0;
@@ -319,8 +319,8 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         }
 
         var buildPhase = new BuildPhase(agent, cleanup: true);
-        var lintGate = new LintGate(sandbox, git);
-        var testGate = new TestGate(sandbox);
+        var lintGate = new LintGate(sandbox, git, log);
+        var testGate = new TestGate(sandbox, log);
         var reviewPhase = new ReviewPhase(agent, git, cleanup: true);
         Pin pin = Pin.Take(request.Directory);
         IReadOnlySet<string> basePassed = await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false);
@@ -408,7 +408,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
     }
 
     private Task<CommandResult> RunCheckAsync(Sandbox sandbox, string command, CancellationToken cancellationToken) =>
-        CleanupGate.RunCheckAsync(sandbox, command, progress, cancellationToken);
+        CleanupGate.RunCheckAsync(sandbox, command, progress, cancellationToken, log);
 
     private Task Say(string line) => ProgressLine.WriteAsync(progress, line);
 

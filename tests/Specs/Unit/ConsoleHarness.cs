@@ -116,6 +116,18 @@ public sealed class ConsoleHarness : IDisposable
 
     public FakeTime Time { get; } = new();
 
+    /// <summary>The exit code of <c>git worktree add</c> in the container.</summary>
+    public int WorktreeAddExit { get; set; }
+
+    /// <summary>The answer of claude to a prompt kind: turns, the cost as written, and the seconds the answer takes.</summary>
+    public Dictionary<string, (int Turns, string Cost, TimeSpan Elapsed)> Answers { get; } = [];
+
+    /// <summary>The exit code of a dotnet command in the container, by its program and words joined by one space.</summary>
+    public Dictionary<string, int> DotnetExits { get; } = [];
+
+    /// <summary>What standard error held when each prompt of <see cref="Prompts"/> ran, by index.</summary>
+    public List<string> ErrorAtPrompt { get; } = [];
+
     public string Root => _root.FullName;
 
     public List<CommandSpec> Commands { get; } = [];
@@ -246,6 +258,16 @@ public sealed class ConsoleHarness : IDisposable
             return new CommandResult { ExitCode = code, StandardOutput = output, StandardError = error };
         }
 
+        if (arguments[id + 1] is "git" && arguments[id + 2] is "worktree" && arguments[id + 3] is "add")
+        {
+            return new CommandResult { ExitCode = WorktreeAddExit, StandardError = "no worktree" };
+        }
+
+        if (arguments[id + 1] is "dotnet" && DotnetExits.TryGetValue(string.Join(' ', arguments.Skip(id + 1)), out int exit))
+        {
+            return new CommandResult { ExitCode = exit };
+        }
+
         if (arguments[id + 2] is not "test")
         {
             return new CommandResult();
@@ -279,6 +301,7 @@ public sealed class ConsoleHarness : IDisposable
 
         Prompts.Add((kind, model, turns, text));
         OutAtPrompt.Add(Out.ToString());
+        ErrorAtPrompt.Add(Error.ToString());
         if (kind is "plan" && AgentWritesPlan)
         {
             if (!AgentWritesOnlyPlan && !Labels.Contains("refactor"))
@@ -307,7 +330,16 @@ public sealed class ConsoleHarness : IDisposable
                     : """{"approved":true,"blocking":[]}""");
         }
 
-        return new CommandResult { StandardOutput = Json("done") };
+        if (!Answers.TryGetValue(kind, out var answer))
+        {
+            return new CommandResult { StandardOutput = Json("done") };
+        }
+
+        Time.WaitAsync(answer.Elapsed, CancellationToken.None).GetAwaiter().GetResult();
+        return new CommandResult
+        {
+            StandardOutput = $"{{\"is_error\":false,\"result\":\"done\",\"num_turns\":{answer.Turns},\"total_cost_usd\":{answer.Cost}}}",
+        };
     }
 
     private void Write(string relative, string text)

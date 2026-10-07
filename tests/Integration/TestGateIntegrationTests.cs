@@ -93,6 +93,21 @@ public sealed class TestGateIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task BuildWithNoRestoreOnACodeThatDoesNotCompileExitsWithOneAndNamesTheErrorOnStandardOutput()
+    {
+        await WriteAsync("Probe.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>\n");
+        await WriteAsync("Broken.cs", "public class Broken\n{\n    public int Value => missing;\n}\n");
+        await using Sandbox sandbox = await StartAsync();
+        CommandResult restore = await DotnetAsync(sandbox, ["restore"]);
+        Assert.Equal(0, restore.ExitCode);
+
+        CommandResult result = await DotnetAsync(sandbox, ["build", "--no-restore"]);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("error CS0103", result.StandardOutput);
+    }
+
+    [Fact]
     public async Task TheFormatCheckOnAnIndentedMethodExitsWithTwoAndWritesErrorWhitespace()
     {
         await WriteAsync("Probe.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>\n");
