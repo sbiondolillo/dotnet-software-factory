@@ -26,7 +26,7 @@ public sealed class FakeTime : TimeProvider
 }
 
 /// <summary>One request GitHub got, with the time on the fake clock.</summary>
-public sealed record TimedRequest(string Method, string Path, string? Content, TimeSpan At);
+public sealed record TimedRequest(string Method, string Path, string? Content, TimeSpan At, string? Authorization = null);
 
 /// <summary>The console program over a mock <see cref="CommandRunner"/> that answers git, docker and claude, and a stub GitHub.</summary>
 public sealed class ConsoleHarness : IDisposable
@@ -433,7 +433,7 @@ public sealed class ConsoleHarness : IDisposable
         {
             string? content = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             string path = request.RequestUri!.AbsolutePath;
-            harness.Requests.Add(new TimedRequest(request.Method.Method, path, content, harness.Time.Now));
+            harness.Requests.Add(new TimedRequest(request.Method.Method, path, content, harness.Time.Now, request.Headers.Authorization?.ToString()));
             (int status, string body) = harness.Route(request.Method.Method, path, content);
             return new HttpResponseMessage((HttpStatusCode)status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
         }

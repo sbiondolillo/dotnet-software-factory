@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Specs.Unit;
 
 namespace Specs;
 
@@ -54,6 +55,39 @@ public static partial class WorkflowChecks
         if (labelLine < 0 || at < 0 || at < labelLine)
         {
             throw new InvalidOperationException($"the section lacks the line {line} after the line about the label {label}");
+        }
+    }
+
+    /// <summary>Fails when the line is absent, or does not come after a line that starts with the prefix.</summary>
+    public static void HoldsLineAfterStart(string section, string line, string prefix)
+    {
+        string[] lines = section.Split('\n');
+        int start = Array.FindIndex(lines, l => l.StartsWith(prefix, StringComparison.Ordinal));
+        int at = Array.IndexOf(lines, line);
+        if (start < 0 || at < 0 || at < start)
+        {
+            throw new InvalidOperationException($"the section lacks the line {line} after the line that starts {prefix}");
+        }
+    }
+
+    /// <summary>Fails when there is no request, or when a request does not carry the value in the Authorization header.</summary>
+    public static void HoldsHeader(IEnumerable<TimedRequest> requests, string header, string value)
+    {
+        if (header is not "Authorization")
+        {
+            throw new InvalidOperationException($"the header {header} is not recorded");
+        }
+
+        List<TimedRequest> list = [.. requests];
+        if (list.Count is 0)
+        {
+            throw new InvalidOperationException("no request was made");
+        }
+
+        TimedRequest? other = list.Find(r => r.Authorization != value);
+        if (other is not null)
+        {
+            throw new InvalidOperationException($"the request {other.Path} carries {other.Authorization}, not {value}");
         }
     }
 
