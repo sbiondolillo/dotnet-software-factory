@@ -7,7 +7,7 @@ using Xunit;
 namespace Specs.Steps;
 
 [Binding]
-public sealed class DeliverSteps(PullRequestAnswer answer) : IDisposable
+public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body) : IDisposable
 {
     private readonly RoutingHandler _handler = new();
     private readonly List<CommandSpec> _commands = [];
@@ -66,6 +66,14 @@ public sealed class DeliverSteps(PullRequestAnswer answer) : IDisposable
     [When("a caller delivers the run with the token {string}")]
     public async Task WhenDelivers(string token)
     {
+        if (body.InUse)
+        {
+            body.Result = await body.Harness.RunAsync();
+            Assert.Equal(body.ExpectedRedos, body.Result.Redos);
+            body.Body = body.Harness.PullBody ?? "";
+            return;
+        }
+
         var mock = new Mock<CommandRunner>(MockBehavior.Strict);
         mock.Setup(r => r.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec spec, CancellationToken _) =>

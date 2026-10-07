@@ -36,22 +36,28 @@ public static class FeatureFiles
         return results;
     }
 
+    /// <summary>Reads each scenario of <paramref name="content"/>, a feature file's text, as its title and a signature of its steps:
+    /// each step's keyword, text and table or doc string. Two scenarios with one title and one signature have the same steps.
+    /// Throws <see cref="FeatureFileException"/> when the parser rejects the content.</summary>
+    public static IReadOnlyList<(string Title, string Steps)> ReadScenarioSteps(string path, string content)
+    {
+        GherkinDocument document = Parse(path, content);
+        var scenarios = new List<(string Title, string Steps)>();
+        if (document.Feature is not null)
+        {
+            CollectScenarioSteps(document.Feature.Children, scenarios);
+        }
+
+        return scenarios;
+    }
+
     /// <summary>Computes the name Reqnroll generates for the test method of a scenario titled
     /// <paramref name="scenarioTitle"/>.</summary>
     public static string ComputeTestName(string scenarioTitle) => CodeFormattingExtensions.ToIdentifier(scenarioTitle);
 
     private static List<string> ReadScenarioTitles(string path, string content)
     {
-        GherkinDocument document;
-        try
-        {
-            document = new Parser().Parse(new StringReader(content));
-        }
-        catch (ParserException ex)
-        {
-            throw new FeatureFileException(path, ex.Message);
-        }
-
+        GherkinDocument document = Parse(path, content);
         var titles = new List<string>();
         if (document.Feature is not null)
         {
@@ -60,6 +66,41 @@ public static class FeatureFiles
 
         return titles;
     }
+
+    private static GherkinDocument Parse(string path, string content)
+    {
+        try
+        {
+            return new Parser().Parse(new StringReader(content));
+        }
+        catch (ParserException ex)
+        {
+            throw new FeatureFileException(path, ex.Message);
+        }
+    }
+
+    private static void CollectScenarioSteps(IEnumerable<IHasLocation> children, List<(string Title, string Steps)> scenarios)
+    {
+        foreach (IHasLocation child in children)
+        {
+            switch (child)
+            {
+                case Rule rule:
+                    CollectScenarioSteps(rule.Children, scenarios);
+                    break;
+                case Scenario scenario:
+                    scenarios.Add((scenario.Name, string.Join('\n', scenario.Steps.Select(StepSignature))));
+                    break;
+            }
+        }
+    }
+
+    private static string StepSignature(Step step) => step.Argument switch
+    {
+        DataTable table => $"{step.Keyword}{step.Text}\n{string.Join('\n', table.Rows.Select(row => string.Join('|', row.Cells.Select(cell => cell.Value))))}",
+        DocString doc => $"{step.Keyword}{step.Text}\n{doc.Content}",
+        _ => step.Keyword + step.Text,
+    };
 
     private static void CollectScenarioTitles(IEnumerable<IHasLocation> children, List<string> titles)
     {

@@ -27,11 +27,13 @@ public sealed record FactoryRunRequest(
 public sealed record FactoryRunResult(PullRequest? PullRequest, int Redos);
 
 /// <summary>Takes one issue of a target repo to a pull request within three Redos.</summary>
-public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWriter? progress = null, TextWriter? log = null, TimeProvider? time = null, string? summaryPath = null)
+public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWriter? progress = null, TextWriter? log = null, TimeProvider? time = null, string? summaryPath = null, string? version = null)
 {
     private const int RedoBudget = 3;
     private readonly TimeProvider _clock = time ?? TimeProvider.System;
     private JobSummary _summary = new();
+    private decimal _spend;
+    private long _started;
     private const string CleanupLabel = "cleanup";
     private const string RefactorLabel = "refactor";
 
@@ -42,6 +44,8 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
     public async Task<FactoryRunResult> RunAsync(FactoryRunRequest request, CancellationToken cancellationToken = default)
     {
         _summary = new JobSummary();
+        _spend = 0m;
+        _started = _clock.GetTimestamp();
         try
         {
             return await RunCoreAsync(request, cancellationToken).ConfigureAwait(false);
@@ -112,7 +116,11 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         Sandbox sandbox = await Sandbox.StartAsync(runner, request.ImageTag, request.RootDirectory, request.Directory, cancellationToken).ConfigureAwait(false);
         await using (sandbox.ConfigureAwait(false))
         {
-            var agent = new ClaudeCodeAgent(sandbox, log, time, (elapsed, answer) => _summary.Prompt(elapsed, answer.NumTurns, answer.CostUsd));
+            var agent = new ClaudeCodeAgent(sandbox, log, time, (elapsed, answer) =>
+            {
+                _spend += answer.CostUsd;
+                _summary.Prompt(elapsed, answer.NumTurns, answer.CostUsd);
+            });
             if (refactor)
             {
                 return await RunRefactorAsync(request, issue, sandbox, agent, git, baseCommit, cancellationToken).ConfigureAwait(false);
@@ -179,7 +187,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
                     if (review.Approved)
                     {
                         await Say("deliver: start").ConfigureAwait(false);
-                        var deliver = new Deliver(git, new PullRequests(client), client);
+                        var deliver = new Deliver(git, new PullRequests(client), client, Facts(baseCommit, gate, false, redos));
                         PullRequest pullRequest = await deliver
                             .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
                         return new FactoryRunResult(pullRequest, redos);
@@ -309,7 +317,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
                     if (review.Approved)
                     {
                         await Say("deliver: start").ConfigureAwait(false);
-                        var deliver = new Deliver(git, new PullRequests(client), client);
+                        var deliver = new Deliver(git, new PullRequests(client), client, Facts(baseCommit, gate, check is not null, redos));
                         PullRequest pullRequest = await deliver
                             .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
                         return new FactoryRunResult(pullRequest, redos);
@@ -422,7 +430,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
                         if (review.Approved)
                         {
                             await Say("deliver: start").ConfigureAwait(false);
-                            var deliver = new Deliver(git, new PullRequests(client), client);
+                            var deliver = new Deliver(git, new PullRequests(client), client, Facts(baseCommit, gate, true, redos));
                             PullRequest pullRequest = await deliver
                                 .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
                             return new FactoryRunResult(pullRequest, redos);
@@ -449,6 +457,15 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
             await Say($"redo: {redos}").ConfigureAwait(false);
         }
     }
+
+    private DeliveryFacts Facts(string baseCommit, TestGateResult gate, bool checkGreen, int redos) => new(
+        baseCommit,
+        gate.Tests?.Count(test => test.Outcome is TestOutcome.Passed) ?? 0,
+        checkGreen,
+        redos,
+        _spend,
+        (int)(_clock.GetElapsedTime(_started).Ticks / TimeSpan.TicksPerSecond),
+        version);
 
     private async Task<FactoryRunResult> StopAsync(FactoryRunRequest request, string text, int redos, CancellationToken cancellationToken)
     {

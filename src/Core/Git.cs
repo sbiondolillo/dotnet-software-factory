@@ -127,6 +127,26 @@ public sealed class Git(CommandRunner runner)
         return result.StandardOutput;
     }
 
+    /// <summary>Reads the file <paramref name="path"/> as <paramref name="baseCommit"/> holds it, or null when git cannot show it.</summary>
+    public async Task<string?> ReadFileAtAsync(string baseCommit, string path, string directory, CancellationToken cancellationToken = default)
+    {
+        var spec = new CommandSpec
+        {
+            Command = "git",
+            Arguments = ["show", $"{baseCommit}:{path}"],
+            WorkingDirectory = directory,
+        };
+
+        try
+        {
+            return (await RunAsync(spec, cancellationToken).ConfigureAwait(false)).StandardOutput;
+        }
+        catch (GitCommandException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Tells whether the work tree at <paramref name="directory"/> holds a change, a new file included.</summary>
     public async Task<bool> HasChangesAsync(string directory, CancellationToken cancellationToken = default)
     {

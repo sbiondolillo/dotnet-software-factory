@@ -133,6 +133,13 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     [Given("the issue {int} has the label {string}")]
     public void GivenConsoleLabel(int number, string label)
     {
+        var body = container.Resolve<DeliverBodyState>();
+        if (body.InUse)
+        {
+            DeliverBodySteps.AddLabel(body, label);
+            return;
+        }
+
         if (number is 11 or 15)
         {
             H.Labels.Add(label);
