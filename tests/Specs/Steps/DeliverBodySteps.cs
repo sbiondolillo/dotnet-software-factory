@@ -8,8 +8,6 @@ namespace Specs.Steps;
 [Binding]
 public sealed class DeliverBodySteps(DeliverBodyState state)
 {
-    private const string Cart = "specs/features/checkout.feature";
-
     private static string Feature(params (string Title, string Then)[] scenarios) =>
         "Feature: A feature\n" + string.Concat(scenarios.Select(s => $"\n  Scenario: {s.Title}\n    Given a cart\n    Then {s.Then}\n"));
 
