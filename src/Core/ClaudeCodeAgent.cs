@@ -5,15 +5,24 @@ using System.Text.Json;
 namespace Core;
 
 /// <summary>Runs one prompt through <c>claude</c> in a <see cref="Sandbox"/> and reads JSON files the agent wrote.</summary>
-public sealed class ClaudeCodeAgent(Sandbox sandbox)
+public sealed class ClaudeCodeAgent(Sandbox sandbox, TextWriter? log = null, TimeProvider? time = null)
 {
     private const int PromptLimit = 131072;
 
     /// <summary>Runs <paramref name="prompt"/> with <paramref name="model"/> and <paramref name="maxTurns"/>.</summary>
+    public Task<ClaudeCodeResult> RunAsync(
+        string prompt,
+        string model,
+        int maxTurns,
+        CancellationToken cancellationToken = default) =>
+        RunAsync(prompt, model, maxTurns, "agent", cancellationToken);
+
+    /// <summary>Runs <paramref name="prompt"/> and logs its start and end lines under the name <paramref name="phase"/>.</summary>
     public async Task<ClaudeCodeResult> RunAsync(
         string prompt,
         string model,
         int maxTurns,
+        string phase,
         CancellationToken cancellationToken = default)
     {
         if (Encoding.UTF8.GetByteCount(prompt) >= PromptLimit)
@@ -21,6 +30,9 @@ public sealed class ClaudeCodeAgent(Sandbox sandbox)
             throw new ClaudeCodeException($"The prompt holds {PromptLimit} bytes or more in UTF-8, the limit of one argument.");
         }
 
+        TimeProvider clock = time ?? TimeProvider.System;
+        await ProgressLine.WriteAsync(log, $"agent: {phase} start").ConfigureAwait(false);
+        long started = clock.GetTimestamp();
         CommandResult result = await sandbox.RunAsync(
             "claude",
             [
@@ -41,11 +53,16 @@ public sealed class ClaudeCodeAgent(Sandbox sandbox)
         }
 
         JsonElement root = document.RootElement;
-        return new ClaudeCodeResult(
+        var answer = new ClaudeCodeResult(
             root.TryGetProperty("result", out JsonElement text) && text.ValueKind is JsonValueKind.String ? text.GetString() ?? "" : "",
             root.TryGetProperty("num_turns", out JsonElement turns) && turns.ValueKind is JsonValueKind.Number ? turns.GetInt32() : 0,
             root.TryGetProperty("total_cost_usd", out JsonElement cost) && cost.ValueKind is JsonValueKind.Number ? cost.GetDecimal() : 0m,
             root.TryGetProperty("is_error", out JsonElement error) && error.ValueKind is JsonValueKind.True);
+        long seconds = (long)clock.GetElapsedTime(started).TotalSeconds;
+        await ProgressLine.WriteAsync(
+            log,
+            string.Create(CultureInfo.InvariantCulture, $"agent: {phase} end, {answer.NumTurns} turns, ${answer.CostUsd}, {seconds} s")).ConfigureAwait(false);
+        return answer;
     }
 
     /// <summary>Reads the JSON object in the file at <paramref name="path"/>.</summary>

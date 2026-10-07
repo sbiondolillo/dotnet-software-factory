@@ -70,7 +70,7 @@ public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false)
         Dictionary<string, string> baseline,
         CancellationToken cancellationToken)
     {
-        ClaudeCodeResult answer = await agent.RunAsync(prompt, model, maxTurns, cancellationToken).ConfigureAwait(false);
+        ClaudeCodeResult answer = await agent.RunAsync(prompt, model, maxTurns, "plan", cancellationToken).ConfigureAwait(false);
         if (answer.IsError)
         {
             return ([string.IsNullOrWhiteSpace(answer.Result) ? "claude answered with an error and no text." : answer.Result], true);

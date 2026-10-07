@@ -156,7 +156,8 @@ public sealed class ConsoleProgramTests : IDisposable
     {
         _h.Refusal = (suffix, status);
         Assert.Equal(1, await StartAsync($"run {Repo} --issue 1 --timeout 0"));
-        Assert.Contains(status.ToString(System.Globalization.CultureInfo.InvariantCulture), Assert.Single(ConsoleHarness.Lines(_h.Error)));
+        string[] others = [.. ConsoleHarness.Lines(_h.Error).Where(l => !l.StartsWith("agent: ", StringComparison.Ordinal) && !l.StartsWith("command: ", StringComparison.Ordinal))];
+        Assert.Contains(status.ToString(System.Globalization.CultureInfo.InvariantCulture), Assert.Single(others));
         Assert.All(_h.CloneDirectories, directory => Assert.False(Directory.Exists(directory)));
     }
 
@@ -241,6 +242,40 @@ public sealed class ConsoleProgramTests : IDisposable
 
         Assert.Equal(1, await StartAsync($"feedback {Repo} --pr 10"));
         Assert.Single(_h.Posts("/issues/10/comments"));
+    }
+
+    private const string CleanupBody = "Tidy.\n\n## Scope\n\nsrc/\n\n## Check\n\n```\ntrue\n```\n";
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task AFailedCheckWritesItsExitCode(int code)
+    {
+        _h.Labels.Add("cleanup");
+        _h.IssueBody = CleanupBody;
+        _h.CheckResults[0] = (code, "", "");
+        await StartAsync($"run {Repo} --issue 1 --timeout 0");
+        Assert.Contains($"command: check exited {code}", ConsoleHarness.Lines(_h.Error));
+    }
+
+    [Fact]
+    public async Task AFailedWorktreeAddWritesNoCheckLine()
+    {
+        _h.Labels.Add("cleanup");
+        _h.IssueBody = CleanupBody;
+        _h.WorktreeAddExit = 128;
+        Assert.Equal(1, await StartAsync($"run {Repo} --issue 1 --timeout 0"));
+        Assert.DoesNotContain(ConsoleHarness.Lines(_h.Error), l => l.StartsWith("command: check", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task TheFeedbackVerbWritesNoAgentAndNoCommandLines()
+    {
+        _h.Threads = "always";
+        _h.RedBuilds.Add(1);
+        await StartAsync($"feedback {Repo} --pr 10 --timeout 0");
+        Assert.NotEmpty(_h.Prompts);
+        Assert.DoesNotContain(ConsoleHarness.Lines(_h.Error), l => l.StartsWith("agent: ", StringComparison.Ordinal) || l.StartsWith("command: ", StringComparison.Ordinal));
     }
 
     [Fact]

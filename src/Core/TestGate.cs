@@ -9,7 +9,7 @@ namespace Core;
 public sealed record TestGateResult(bool Passed, IReadOnlyList<string> Evidence, IReadOnlyList<ReportedTest>? Tests = null);
 
 /// <summary>Judges a work tree the way CI does: the pin, the four build commands, the TRX file and the integration suite.</summary>
-public sealed class TestGate(Sandbox sandbox)
+public sealed class TestGate(Sandbox sandbox, TextWriter? log = null)
 {
     /// <summary>Runs the gate over <paramref name="workTree"/>; the integration command alone gets <paramref name="secretNames"/>.</summary>
     public Task<TestGateResult> RunAsync(
@@ -46,7 +46,7 @@ public sealed class TestGate(Sandbox sandbox)
             ["format", "--verify-no-changes", "--no-restore"],
         })
         {
-            CommandResult result = await sandbox.RunAsync("dotnet", arguments, [], cancellationToken).ConfigureAwait(false);
+            CommandResult result = await RunDotnetAsync(arguments, [], cancellationToken).ConfigureAwait(false);
             if (result.ExitCode is not 0)
             {
                 return new TestGateResult(false, [Describe(arguments[0], result)]);
@@ -59,8 +59,7 @@ public sealed class TestGate(Sandbox sandbox)
         List<ReportedTest> tests = [];
         try
         {
-            CommandResult test = await sandbox.RunAsync(
-                "dotnet",
+            CommandResult test = await RunDotnetAsync(
                 ["test", "--no-restore", "--logger", "trx", "--results-directory", $"/work/{resultsName}"],
                 [],
                 cancellationToken).ConfigureAwait(false);
@@ -119,8 +118,7 @@ public sealed class TestGate(Sandbox sandbox)
             return new TestGateResult(false, evidence, tests);
         }
 
-        CommandResult integration = await sandbox.RunAsync(
-            "dotnet",
+        CommandResult integration = await RunDotnetAsync(
             ["run", "--no-restore", "--project", "tests/Integration"],
             secretNames,
             cancellationToken).ConfigureAwait(false);
@@ -132,14 +130,13 @@ public sealed class TestGate(Sandbox sandbox)
     /// <summary>Runs the tests of <paramref name="workTree"/> and gives the tests that passed, as <c>class.method</c>.</summary>
     public async Task<IReadOnlySet<string>> ReadPassedTestsAsync(string workTree, CancellationToken cancellationToken = default)
     {
-        await sandbox.RunAsync("dotnet", ["restore", "--locked-mode"], [], cancellationToken).ConfigureAwait(false);
+        await RunDotnetAsync(["restore", "--locked-mode"], [], cancellationToken).ConfigureAwait(false);
         string resultsName = ".test-base-" + Guid.NewGuid().ToString("N");
         string hostResults = Path.Combine(workTree, resultsName);
         HashSet<string> passed = new(StringComparer.Ordinal);
         try
         {
-            await sandbox.RunAsync(
-                "dotnet",
+            await RunDotnetAsync(
                 ["test", "--no-restore", "--logger", "trx", "--results-directory", $"/work/{resultsName}"],
                 [],
                 cancellationToken).ConfigureAwait(false);
@@ -163,6 +160,15 @@ public sealed class TestGate(Sandbox sandbox)
         }
 
         return passed;
+    }
+
+    private async Task<CommandResult> RunDotnetAsync(string[] arguments, IReadOnlyList<string> secretNames, CancellationToken cancellationToken)
+    {
+        CommandResult result = await sandbox.RunAsync("dotnet", arguments, secretNames, cancellationToken).ConfigureAwait(false);
+        await ProgressLine.WriteAsync(
+            log,
+            string.Create(CultureInfo.InvariantCulture, $"command: dotnet {string.Join(' ', arguments)} exited {result.ExitCode}")).ConfigureAwait(false);
+        return result;
     }
 
     private static string Describe(string subcommand, CommandResult result) =>

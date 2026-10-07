@@ -32,7 +32,7 @@ public sealed class ReviewPhase(ClaudeCodeAgent agent, Git git, bool cleanup = f
             File.Delete(verdictFile);
         }
 
-        ClaudeCodeResult answer = await agent.RunAsync(prompt, model, maxTurns, cancellationToken).ConfigureAwait(false);
+        ClaudeCodeResult answer = await agent.RunAsync(prompt, model, maxTurns, "review", cancellationToken).ConfigureAwait(false);
         if (answer.IsError)
         {
             return new ReviewPhaseResult(false, [string.IsNullOrWhiteSpace(answer.Result) ? "claude answered with an error and no text." : answer.Result], true);

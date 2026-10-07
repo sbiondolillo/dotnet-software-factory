@@ -43,7 +43,7 @@ internal static class CleanupGate
             CultureInfo.InvariantCulture,
             $"The check command exited with the code {result.ExitCode}\nstandard output: {result.StandardOutput}\nstandard error: {result.StandardError}");
 
-    public static async Task<CommandResult> RunCheckAsync(Sandbox sandbox, string command, TextWriter? progress, CancellationToken cancellationToken)
+    public static async Task<CommandResult> RunCheckAsync(Sandbox sandbox, string command, TextWriter? progress, CancellationToken cancellationToken, TextWriter? log = null)
     {
         await ProgressLine.WriteAsync(progress, "check: start").ConfigureAwait(false);
         string copy = $"/tmp/check-{Guid.NewGuid():N}";
@@ -55,7 +55,9 @@ internal static class CleanupGate
 
         try
         {
-            return await sandbox.RunAsync("sh", ["-c", command], [], copy, cancellationToken).ConfigureAwait(false);
+            CommandResult ran = await sandbox.RunAsync("sh", ["-c", command], [], copy, cancellationToken).ConfigureAwait(false);
+            await ProgressLine.WriteAsync(log, string.Create(CultureInfo.InvariantCulture, $"command: check exited {ran.ExitCode}")).ConfigureAwait(false);
+            return ran;
         }
         finally
         {
