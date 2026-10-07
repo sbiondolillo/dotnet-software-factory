@@ -129,7 +129,13 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
             while (true)
             {
                 await Say("build: start").ConfigureAwait(false);
-                await buildPhase.RunAsync(issue.Title, issue.Body, request.BuildModel, request.BuildTurns, redoTexts, cancellationToken).ConfigureAwait(false);
+                BuildPhaseResult built = await buildPhase.RunAsync(issue.Title, issue.Body, request.BuildModel, request.BuildTurns, redoTexts, cancellationToken).ConfigureAwait(false);
+                if (!built.Passed)
+                {
+                    return await StopAsync(request, built.Failure, redos, cancellationToken).ConfigureAwait(false);
+                }
+
+
                 await Say("lint: start").ConfigureAwait(false);
                 await lintGate.RunAsync(request.Directory, issue.Title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
                 await Say("test: start").ConfigureAwait(false);
@@ -140,6 +146,11 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
                     await Say("review: start").ConfigureAwait(false);
                     ReviewPhaseResult review = await reviewPhase
                         .RunAsync(issue.Title, issue.Body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, cancellationToken).ConfigureAwait(false);
+                    if (review.IsError)
+                    {
+                        return await StopAsync(request, review.Blocking[0], redos, cancellationToken).ConfigureAwait(false);
+                    }
+
                     await Say(review.Approved ? "review: approved" : "review: blocked").ConfigureAwait(false);
                     if (review.Approved)
                     {
@@ -218,7 +229,13 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         while (true)
         {
             await Say("build: start").ConfigureAwait(false);
-            await buildPhase.RunAsync(issue.Title, issue.Body, request.BuildModel, request.BuildTurns, redoTexts, cancellationToken).ConfigureAwait(false);
+            BuildPhaseResult built = await buildPhase.RunAsync(issue.Title, issue.Body, request.BuildModel, request.BuildTurns, redoTexts, cancellationToken).ConfigureAwait(false);
+            if (!built.Passed)
+            {
+                return await StopAsync(request, built.Failure, redos, cancellationToken).ConfigureAwait(false);
+            }
+
+
             await Say("lint: start").ConfigureAwait(false);
             await lintGate.RunAsync(request.Directory, issue.Title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
             await Say("test: start").ConfigureAwait(false);
@@ -246,6 +263,11 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
                     await Say("review: start").ConfigureAwait(false);
                     ReviewPhaseResult review = await reviewPhase
                         .RunAsync(issue.Title, issue.Body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, cancellationToken).ConfigureAwait(false);
+                    if (review.IsError)
+                    {
+                        return await StopAsync(request, review.Blocking[0], redos, cancellationToken).ConfigureAwait(false);
+                    }
+
                     await Say(review.Approved ? "review: approved" : "review: blocked").ConfigureAwait(false);
                     if (review.Approved)
                     {
@@ -308,7 +330,13 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         while (true)
         {
             await Say("build: start").ConfigureAwait(false);
-            await buildPhase.RunAsync(issue.Title, issue.Body, request.BuildModel, request.BuildTurns, redoTexts, cancellationToken).ConfigureAwait(false);
+            BuildPhaseResult built = await buildPhase.RunAsync(issue.Title, issue.Body, request.BuildModel, request.BuildTurns, redoTexts, cancellationToken).ConfigureAwait(false);
+            if (!built.Passed)
+            {
+                return await StopAsync(request, built.Failure, redos, cancellationToken).ConfigureAwait(false);
+            }
+
+
             await Say("lint: start").ConfigureAwait(false);
             await lintGate.RunAsync(request.Directory, issue.Title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
             redoTexts = await CleanupGate.ScopeFaultsAsync(git, baseCommit, request.Directory, scope, cancellationToken).ConfigureAwait(false);
@@ -337,6 +365,11 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
                         await Say("review: start").ConfigureAwait(false);
                         ReviewPhaseResult review = await reviewPhase
                             .RunAsync(issue.Title, issue.Body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, cancellationToken).ConfigureAwait(false);
+                        if (review.IsError)
+                        {
+                            return await StopAsync(request, review.Blocking[0], redos, cancellationToken).ConfigureAwait(false);
+                        }
+
                         await Say(review.Approved ? "review: approved" : "review: blocked").ConfigureAwait(false);
                         if (review.Approved)
                         {
@@ -365,6 +398,13 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
             redos++;
             await Say($"redo: {redos}").ConfigureAwait(false);
         }
+    }
+
+    private async Task<FactoryRunResult> StopAsync(FactoryRunRequest request, string text, int redos, CancellationToken cancellationToken)
+    {
+        string shown = string.IsNullOrWhiteSpace(text) ? "claude answered with an error and no text." : text;
+        await CommentAsync(request, shown, [], cancellationToken).ConfigureAwait(false);
+        return new FactoryRunResult(null, redos);
     }
 
     private Task<CommandResult> RunCheckAsync(Sandbox sandbox, string command, CancellationToken cancellationToken) =>

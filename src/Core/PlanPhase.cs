@@ -24,7 +24,12 @@ public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false)
         Dictionary<string, string> baseline = Snapshot(workTree, refactor);
         string prompt = BuildPrompt(title, body);
 
-        List<string> failures = await RunOnceAsync(prompt, model, maxTurns, workTree, baseline, cancellationToken).ConfigureAwait(false);
+        (List<string> failures, bool isError) = await RunOnceAsync(prompt, model, maxTurns, workTree, baseline, cancellationToken).ConfigureAwait(false);
+        if (isError)
+        {
+            return new PlanPhaseResult(false, null, failures);
+        }
+
         if (failures.Count is 0)
         {
             return new PlanPhaseResult(true, Pin.Take(workTree), []);
@@ -37,7 +42,7 @@ public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false)
             correction.Append("- ").Append(failure).Append('\n');
         }
 
-        failures = await RunOnceAsync(correction.ToString(), model, maxTurns, workTree, baseline, cancellationToken).ConfigureAwait(false);
+        (failures, _) = await RunOnceAsync(correction.ToString(), model, maxTurns, workTree, baseline, cancellationToken).ConfigureAwait(false);
         return failures.Count is 0
             ? new PlanPhaseResult(true, Pin.Take(workTree), [])
             : new PlanPhaseResult(false, null, failures);
@@ -57,7 +62,7 @@ public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false)
         + "Remove each feature file whose behaviour the issue removes or replaces. "
         + "Leave every other file as it is.";
 
-    private async Task<List<string>> RunOnceAsync(
+    private async Task<(List<string> Failures, bool IsError)> RunOnceAsync(
         string prompt,
         string model,
         int maxTurns,
@@ -68,10 +73,10 @@ public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false)
         ClaudeCodeResult answer = await agent.RunAsync(prompt, model, maxTurns, cancellationToken).ConfigureAwait(false);
         if (answer.IsError)
         {
-            return [string.IsNullOrWhiteSpace(answer.Result) ? "claude answered with an error and no text." : answer.Result];
+            return ([string.IsNullOrWhiteSpace(answer.Result) ? "claude answered with an error and no text." : answer.Result], true);
         }
 
-        return refactor ? RefactorGate(workTree, baseline) : Gate(workTree, baseline);
+        return (refactor ? RefactorGate(workTree, baseline) : Gate(workTree, baseline), false);
     }
 
     private static List<string> RefactorGate(string workTree, Dictionary<string, string> baseline)

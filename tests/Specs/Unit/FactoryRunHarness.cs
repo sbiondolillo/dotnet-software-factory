@@ -22,6 +22,7 @@ public sealed class FactoryRunHarness : IDisposable
     private readonly DirectoryInfo _clone = Directory.CreateTempSubdirectory("factory-run-clone-");
     private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("factory-run-root-");
     private int _builds;
+    private int _reviews;
 
     public FactoryRunHarness()
     {
@@ -71,6 +72,18 @@ public sealed class FactoryRunHarness : IDisposable
     public bool BuildIsError { get; set; }
 
     public bool PlanIsError { get; set; }
+
+    /// <summary>The builds, by number, whose answer carries the error flag.</summary>
+    public HashSet<int> ErrorBuilds { get; } = [];
+
+    /// <summary>The reviews, by number, whose answer carries the error flag.</summary>
+    public HashSet<int> ErrorReviews { get; } = [];
+
+    /// <summary>The result text of an answer in <see cref="ErrorBuilds"/> or <see cref="ErrorReviews"/>.</summary>
+    public string ErrorText { get; set; } = "";
+
+    /// <summary>What FactoryRun wrote to its progress writer.</summary>
+    public StringWriter Progress { get; } = new();
 
     public HashSet<int> RedBuilds { get; } = [];
 
@@ -153,7 +166,7 @@ public sealed class FactoryRunHarness : IDisposable
         var request = new FactoryRunRequest(
             Owner, Repo, Issue, Token, RunId, _clone.FullName, BaseBranch, "factory-sandbox:test", _root.FullName,
             PlanModel, PlanTurns, BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames);
-        return new FactoryRun(mock.Object, client).RunAsync(request, cancellationToken);
+        return new FactoryRun(mock.Object, client, Progress).RunAsync(request, cancellationToken);
     }
 
     public void Dispose()
@@ -311,6 +324,11 @@ public sealed class FactoryRunHarness : IDisposable
             _builds++;
         }
 
+        if (kind is "review")
+        {
+            _reviews++;
+        }
+
         Prompts.Add(new SeenPrompt(kind, model, turns, text, _builds));
         bool refactor = Labels.Contains("refactor");
         if (kind is "plan" && AgentWritesPlan)
@@ -362,12 +380,17 @@ public sealed class FactoryRunHarness : IDisposable
             }
         }
 
-        if (kind is "review")
+        if (kind is "review" && !ErrorReviews.Contains(_reviews))
         {
             bool rejected = RejectedBuilds.Contains(_builds);
             Write(".factory/review.json", rejected
                 ? JsonSerializer.Serialize(new { approved = false, blocking = new[] { Blocking } })
                 : """{"approved":true,"blocking":[]}""");
+        }
+
+        if ((kind is "build" && ErrorBuilds.Contains(_builds)) || (kind is "review" && ErrorReviews.Contains(_reviews)))
+        {
+            return new CommandResult { StandardOutput = Json(true, ErrorText) };
         }
 
         return new CommandResult { StandardOutput = Json(kind is "build" && BuildIsError || kind is "plan" && PlanIsError, kind is "build" && BuildIsError ? "build error" : kind is "plan" && PlanIsError ? "plan went wrong" : "done") };

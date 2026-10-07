@@ -144,14 +144,125 @@ public sealed class FactoryRunTests
     }
 
     [Fact]
-    public async Task AnErrorFlagOnTheBuildAnswerStillRunsTheGates()
+    public async Task AnErrorFlagOnTheBuildAnswerStopsTheRunBeforeAnyGate()
     {
         using var h = new FactoryRunHarness();
-        h.BuildIsError = true;
+        h.ErrorBuilds.Add(1);
+        h.ErrorText = "Invalid API key";
         FactoryRunResult result = await h.RunAsync(Ct);
-        Assert.NotNull(result.PullRequest);
-        Assert.Contains(h.Commands, c => c.Arguments.Contains("format") && c.Arguments.Contains("--no-restore"));
-        Assert.Contains(h.Commands, c => c.Arguments.Contains("test") && c.Arguments.Contains("--logger"));
+        Assert.Null(result.PullRequest);
+        Assert.Equal(0, result.Redos);
+        Assert.Equal(["plan", "build"], h.Prompts.Select(p => p.Kind));
+        Assert.DoesNotContain(h.Commands, c => c.Arguments.Contains("format"));
+        Assert.DoesNotContain(h.Commands, c => c.Arguments.Contains("--logger"));
+        Assert.Contains("Invalid API key", Assert.Single(h.CommentBodies));
+        Assert.DoesNotContain("push", h.Events);
+        Assert.Contains("rm", h.Events);
+        Assert.DoesNotContain(h.Requests, r => r.Uri.EndsWith("/pulls", StringComparison.Ordinal) && r.Method is "POST");
+    }
+
+    [Fact]
+    public async Task AnErrorFlagOnTheFirstReviewAnswerSpendsNoRedo()
+    {
+        using var h = new FactoryRunHarness();
+        h.ErrorReviews.Add(1);
+        h.ErrorText = "Invalid API key";
+        FactoryRunResult result = await h.RunAsync(Ct);
+        Assert.Null(result.PullRequest);
+        Assert.Equal(0, result.Redos);
+        Assert.Equal(["plan", "build", "review"], h.Prompts.Select(p => p.Kind));
+        Assert.Contains("Invalid API key", Assert.Single(h.CommentBodies));
+    }
+
+    [Fact]
+    public async Task AnErrorOnTheSecondBuildStopsWithOneRedo()
+    {
+        using var h = new FactoryRunHarness();
+        h.RedBuilds.Add(1);
+        h.ErrorBuilds.Add(2);
+        FactoryRunResult result = await h.RunAsync(Ct);
+        Assert.Null(result.PullRequest);
+        Assert.Equal(1, result.Redos);
+        Assert.Equal(2, h.Builds);
+        Assert.Single(h.CommentBodies);
+    }
+
+    [Fact]
+    public async Task AnErrorOnTheSecondReviewStopsWithOneRedo()
+    {
+        using var h = new FactoryRunHarness();
+        h.RejectedBuilds.Add(1);
+        h.ErrorReviews.Add(2);
+        FactoryRunResult result = await h.RunAsync(Ct);
+        Assert.Null(result.PullRequest);
+        Assert.Equal(1, result.Redos);
+        Assert.Equal(2, h.Builds);
+        Assert.Equal(2, h.Prompts.Count(p => p.Kind is "review"));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  \n ")]
+    public async Task AnErrorWithNoTextGivesTheFixedSentenceAndStandardOutputHoldsTheBody(string text)
+    {
+        using var h = new FactoryRunHarness();
+        h.ErrorBuilds.Add(1);
+        h.ErrorText = text;
+        await h.RunAsync(Ct);
+        string body = Assert.Single(h.CommentBodies);
+        Assert.Contains("claude answered with an error and no text.", body);
+        Assert.EndsWith(body, h.Progress.ToString().TrimEnd('\n'));
+    }
+
+    [Theory]
+    [InlineData("cleanup", 1, 0, "build")]
+    [InlineData("cleanup", 0, 1, "build,review")]
+    [InlineData("refactor", 1, 0, "plan,build")]
+    [InlineData("refactor", 0, 1, "plan,build,review")]
+    public async Task AnErrorStopsACleanupAndARefactorRun(string label, int errorBuild, int errorReview, string kinds)
+    {
+        using var h = new FactoryRunHarness();
+        h.Labels.Add(label);
+        h.Body = "## Scope\n\nREADME.md\n\n## Check\n\n```sh\ngrep -q Install README.md\n```\n";
+        if (errorBuild is 1)
+        {
+            h.ErrorBuilds.Add(1);
+        }
+
+        if (errorReview is 1)
+        {
+            h.ErrorReviews.Add(1);
+        }
+
+        h.ErrorText = "Invalid API key";
+        FactoryRunResult result = await h.RunAsync(Ct);
+        Assert.Null(result.PullRequest);
+        Assert.Equal(0, result.Redos);
+        Assert.Equal(kinds.Split(','), h.Prompts.Select(p => p.Kind));
+        Assert.Contains("Invalid API key", Assert.Single(h.CommentBodies));
+        Assert.DoesNotContain("push", h.Events);
+    }
+
+    [Fact]
+    public async Task AnErrorOnThePlainPlanPromptPostsItsTextAndRunsNoBuild()
+    {
+        using var h = new FactoryRunHarness();
+        h.PlanIsError = true;
+        FactoryRunResult result = await h.RunAsync(Ct);
+        Assert.Equal(new FactoryRunResult(null, 0), result);
+        Assert.Equal(["plan"], h.Prompts.Select(p => p.Kind));
+        Assert.Contains("plan went wrong", Assert.Single(h.CommentBodies));
+    }
+
+    [Fact]
+    public async Task AnErrorOnTheRefactorPlanPromptSendsOnePrompt()
+    {
+        using var h = new FactoryRunHarness();
+        h.Labels.Add("refactor");
+        h.PlanIsError = true;
+        FactoryRunResult result = await h.RunAsync(Ct);
+        Assert.Null(result.PullRequest);
+        Assert.Equal(["plan"], h.Prompts.Select(p => p.Kind));
     }
 
     [Fact]
