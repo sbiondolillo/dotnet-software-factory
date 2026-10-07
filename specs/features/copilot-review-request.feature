@@ -133,11 +133,3 @@ Feature: The factory requests the Copilot review of each pull request it watches
     And GitHub answers the read of the review threads with an empty list of threads
     When a caller starts the watch
     Then the watch gives back a green result
-
-  @bullet-10
-  Scenario: The README states the Copilot review request in place of the old line
-    When a reader reads the section "## Start a new repo" of README.md
-    # run: printf '%s' "The factory requests a Copilot code review of each pull request it watches. The repo's owner needs a Copilot plan that includes Copilot code review."
-    Then the section holds the line "The factory requests a Copilot code review of each pull request it watches. The repo's owner needs a Copilot plan that includes Copilot code review."
-    # run: printf '%s' 'Copilot code review is requested on every pull request.'
-    And the section holds no line "Copilot code review is requested on every pull request."

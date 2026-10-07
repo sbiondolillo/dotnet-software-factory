@@ -13,8 +13,8 @@ public sealed class PullRequestWatch(
     private readonly Func<TimeSpan, CancellationToken, Task> _delay = delay ?? ((span, token) => Task.Delay(span, token));
     private readonly TimeProvider _time = time ?? TimeProvider.System;
 
-    /// <summary>Polls the check runs and the reviews of a pull request, then gives back green or red and the unresolved threads.</summary>
-    public async Task<PullRequestWatchResult> WatchAsync(string owner, string repo, int number, string reviewerLogin, TimeSpan wait, TimeSpan timeout, CancellationToken cancellationToken = default)
+    /// <summary>Polls the check runs and the reviews of a pull request (the check runs alone when <paramref name="reviewerLogin"/> is null), then gives back green or red and the unresolved threads.</summary>
+    public async Task<PullRequestWatchResult> WatchAsync(string owner, string repo, int number, string? reviewerLogin, TimeSpan wait, TimeSpan timeout, CancellationToken cancellationToken = default)
     {
         long start = _time.GetTimestamp();
         bool green;
@@ -23,10 +23,12 @@ public sealed class PullRequestWatch(
             cancellationToken.ThrowIfCancellationRequested();
             string sha = await pullRequests.ReadHeadShaAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
             IReadOnlyList<CheckRun> runs = await pullRequests.ReadCheckRunsAsync(owner, repo, sha, cancellationToken).ConfigureAwait(false);
-            IReadOnlyList<Review> reviews = await reviewThreads.ReadReviewsAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
+            IReadOnlyList<Review> reviews = reviewerLogin is null
+                ? []
+                : await reviewThreads.ReadReviewsAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
             bool settled = runs.Count is not 0
                 && runs.All(r => r.Status is "completed")
-                && reviews.Any(r => r.Author == reviewerLogin && r.CommitSha.Length is not 0 && r.CommitSha == sha);
+                && (reviewerLogin is null || reviews.Any(r => r.Author == reviewerLogin && r.CommitSha.Length is not 0 && r.CommitSha == sha));
             if (settled)
             {
                 green = runs.All(r => r.Conclusion is "success" or "skipped");

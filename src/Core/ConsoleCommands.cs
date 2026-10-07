@@ -71,7 +71,20 @@ public static class ConsoleCommands
             }
         });
 
-        var command = new Command(verb, description) { repo, number, passEnv, timeout };
+        var copilotReview = new Option<string>("--copilot-review")
+        {
+            Description = "Whether the factory requests a Copilot code review and waits for it: on or off.",
+            DefaultValueFactory = _ => "on",
+        };
+        copilotReview.Validators.Add(result =>
+        {
+            if (result.Tokens.Count is not 0 && result.Tokens is not [{ Value: "on" or "off" }])
+            {
+                result.AddError("Option '--copilot-review' must be on or off.");
+            }
+        });
+
+        var command = new Command(verb, description) { repo, number, passEnv, timeout, copilotReview };
         var rounds = new Option<int>("--review-rounds")
         {
             Description = "The most feedback runs one run makes.",
@@ -93,7 +106,7 @@ public static class ConsoleCommands
         {
             string[] names = parse.GetValue(passEnv) ?? [];
             string[] repoParts = parse.GetValue(repo)!.Split('/');
-            var options = new Options(verb, new RepoName(repoParts[0], repoParts[1]), parse.GetValue(number), names, TimeSpan.FromMinutes(parse.GetValue(timeout)), verb is "run" ? parse.GetValue(rounds) : 0);
+            var options = new Options(verb, new RepoName(repoParts[0], repoParts[1]), parse.GetValue(number), names, TimeSpan.FromMinutes(parse.GetValue(timeout)), verb is "run" ? parse.GetValue(rounds) : 0, parse.GetValue(copilotReview) is not "off");
             return await RunVerbAsync(options, host, token).ConfigureAwait(false);
         });
         return command;
@@ -189,7 +202,7 @@ public static class ConsoleCommands
             localHead = await FeedbackAsync(options, host, client, token, number, cancellationToken).ConfigureAwait(false);
         }
 
-        (PullRequestWatchResult last, string head) = await WatchAsync(host, pullRequests, reviewThreads, watch, owner, repo, number, localHead, options.Timeout, cancellationToken).ConfigureAwait(false);
+        (PullRequestWatchResult last, string head) = await WatchAsync(host, pullRequests, reviewThreads, watch, owner, repo, number, localHead, options.Timeout, options.CopilotReview, cancellationToken).ConfigureAwait(false);
         if (options.Verb is "run")
         {
             int rounds = 0;
@@ -199,7 +212,7 @@ public static class ConsoleCommands
                 localHead = await FeedbackAsync(options, host, client, token, number, cancellationToken).ConfigureAwait(false);
                 rounds++;
                 string before = head;
-                (last, head) = await WatchAsync(host, pullRequests, reviewThreads, watch, owner, repo, number, localHead, options.Timeout, cancellationToken).ConfigureAwait(false);
+                (last, head) = await WatchAsync(host, pullRequests, reviewThreads, watch, owner, repo, number, localHead, options.Timeout, options.CopilotReview, cancellationToken).ConfigureAwait(false);
                 changed = head != before;
             }
         }
@@ -239,6 +252,7 @@ public static class ConsoleCommands
         int number,
         string? localHead,
         TimeSpan timeout,
+        bool copilotReview,
         CancellationToken cancellationToken)
     {
         await host.Out.WriteLineAsync("watch: start").ConfigureAwait(false);
@@ -264,14 +278,17 @@ public static class ConsoleCommands
         }
 
         string head = await pullRequests.ReadHeadShaAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
-        IReadOnlyList<Review> reviews = await reviewThreads.ReadReviewsAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
-        if (!reviews.Any(r => r.Author == Reviewer && r.CommitSha.Length is not 0 && r.CommitSha == head))
+        if (copilotReview)
         {
-            string nodeId = await pullRequests.ReadNodeIdAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
-            await reviewThreads.RequestReviewAsync(nodeId, Reviewer, cancellationToken).ConfigureAwait(false);
+            IReadOnlyList<Review> reviews = await reviewThreads.ReadReviewsAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
+            if (!reviews.Any(r => r.Author == Reviewer && r.CommitSha.Length is not 0 && r.CommitSha == head))
+            {
+                string nodeId = await pullRequests.ReadNodeIdAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
+                await reviewThreads.RequestReviewAsync(nodeId, Reviewer, cancellationToken).ConfigureAwait(false);
+            }
         }
 
-        PullRequestWatchResult result = await watch.WatchAsync(owner, repo, number, Reviewer, PollWait, timeout, cancellationToken).ConfigureAwait(false);
+        PullRequestWatchResult result = await watch.WatchAsync(owner, repo, number, copilotReview ? Reviewer : null, PollWait, timeout, cancellationToken).ConfigureAwait(false);
         return (result, head);
     }
 
@@ -288,5 +305,5 @@ public static class ConsoleCommands
         public void Deconstruct(out string owner, out string name) => (owner, name) = (Owner, Name);
     }
 
-    private sealed record Options(string Verb, RepoName Repo, int Number, IReadOnlyList<string> SecretNames, TimeSpan Timeout, int ReviewRounds);
+    private sealed record Options(string Verb, RepoName Repo, int Number, IReadOnlyList<string> SecretNames, TimeSpan Timeout, int ReviewRounds, bool CopilotReview);
 }
