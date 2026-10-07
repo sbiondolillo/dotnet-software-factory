@@ -8,6 +8,8 @@ public sealed class StarterState : IDisposable
     private readonly string _home = Directory.CreateTempSubdirectory("starter-home-").FullName;
     private readonly string _copy = Path.Combine(Directory.CreateTempSubdirectory("starter-copy-").FullName, "copy");
 
+    private static readonly SemaphoreSlim DotnetGate = new(1, 1);
+
     public int? InstallExit { get; set; }
 
     public int? NewExit { get; set; }
@@ -17,13 +19,23 @@ public sealed class StarterState : IDisposable
     public static string Starter => Path.Combine(StarterChecks.RepoRoot(), "templates", "starter");
 
     public async Task<CommandResult> DotnetAsync(params string[] arguments)
-        => await new CommandRunner().RunAsync(new CommandSpec
+    {
+        await DotnetGate.WaitAsync().ConfigureAwait(false);
+        try
         {
-            Command = "dotnet",
-            Arguments = arguments,
-            EnvironmentVariables = new() { ["DOTNET_CLI_HOME"] = _home, ["DOTNET_NOLOGO"] = "1" },
-            Timeout = TimeSpan.FromMinutes(3),
-        }).ConfigureAwait(false);
+            return await new CommandRunner().RunAsync(new CommandSpec
+            {
+                Command = "dotnet",
+                Arguments = arguments,
+                EnvironmentVariables = new() { ["DOTNET_CLI_HOME"] = _home, ["DOTNET_NOLOGO"] = "1" },
+                Timeout = TimeSpan.FromMinutes(3),
+            }).ConfigureAwait(false);
+        }
+        finally
+        {
+            DotnetGate.Release();
+        }
+    }
 
     public void Dispose()
     {
