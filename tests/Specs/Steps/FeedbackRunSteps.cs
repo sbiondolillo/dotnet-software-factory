@@ -36,13 +36,6 @@ public sealed class FeedbackRunSteps : IDisposable
 
     private FeedbackRunResult Result => _result ?? throw new InvalidOperationException("the run gave no result");
 
-    private static string Id(string name) => name switch
-    {
-        "A" => FeedbackRunHarness.ThreadA,
-        "B" => FeedbackRunHarness.ThreadB,
-        _ => FeedbackRunHarness.ThreadC,
-    };
-
     private SeenPrompt Build(int index) => _h.BuildPrompts.ElementAt(index - 1);
 
     private IEnumerable<(string Id, string Body)> Replies =>

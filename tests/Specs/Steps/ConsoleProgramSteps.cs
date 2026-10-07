@@ -10,8 +10,6 @@ namespace Specs.Steps;
 [Binding]
 public sealed partial class ConsoleProgramSteps : IDisposable
 {
-    private const string Url = "https://github.com/sbiondolillo/factory-scratch.git";
-
     private readonly ConsoleHarness _h = new();
     private readonly ConsoleState _state;
     private readonly FactoryRunSteps _factory;
