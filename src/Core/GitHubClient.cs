@@ -14,6 +14,9 @@ public sealed class GitHubClient(HttpClient httpClient, string token, TimeSpan? 
 
     private readonly ResiliencePipeline<Answer> _pipeline = BuildPipeline(baseWait ?? TimeSpan.FromSeconds(2));
 
+    /// <summary>The wait that the client's own retry builds on, 2 seconds when none was given.</summary>
+    public TimeSpan BaseWait { get; } = baseWait ?? TimeSpan.FromSeconds(2);
+
     /// <summary>Sends a request and gives back the JSON of the answer. A transient failure is sent again, up to 3 more times.</summary>
     public async Task<JsonElement> SendAsync(HttpMethod method, string path, string? jsonBody = null, CancellationToken cancellationToken = default)
     {
