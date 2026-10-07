@@ -14,7 +14,9 @@ on:
         description: The branch, tag or commit of the factory
         default: v0
 
-permissions: {}
+# The job's own token reads the check runs of the pull request. A fine-grained token has no Checks permission on a private repo.
+permissions:
+  checks: read
 
 jobs:
   factory:
@@ -32,6 +34,7 @@ jobs:
       - name: Run the factory
         env:
           FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_GITHUB_TOKEN }}
+          FACTORY_CHECKS_TOKEN: ${{ github.token }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           EXAMPLE_API_KEY: ${{ secrets.EXAMPLE_API_KEY }}
         run: dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --pass-env EXAMPLE_API_KEY

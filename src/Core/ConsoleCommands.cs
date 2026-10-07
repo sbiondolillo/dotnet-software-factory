@@ -10,6 +10,7 @@ namespace Core;
 public static class ConsoleCommands
 {
     private const string TokenName = "FACTORY_GITHUB_TOKEN";
+    private const string ChecksTokenName = "FACTORY_CHECKS_TOKEN";
     private const string KeyName = "ANTHROPIC_API_KEY";
     private const string Model = "claude-sonnet-5-5";
     private const string AuthorName = "dotnet-software-factory";
@@ -136,9 +137,11 @@ public static class ConsoleCommands
         string token = host.Environment(TokenName)!;
         using var http = new HttpClient(host.Handler, disposeHandler: false);
         var client = new GitHubClient(http, token);
+        string checksToken = host.Environment(ChecksTokenName) is { Length: > 0 } own ? own : token;
+        var checksClient = checksToken == token ? client : new GitHubClient(http, checksToken);
         try
         {
-            return await ExecuteAsync(options, host, client, token, cancellationToken).ConfigureAwait(false);
+            return await ExecuteAsync(options, host, client, checksClient, token, cancellationToken).ConfigureAwait(false);
         }
         catch (GitHubRequestException ex)
         {
@@ -152,9 +155,9 @@ public static class ConsoleCommands
         }
     }
 
-    private static async Task<int> ExecuteAsync(Options options, ConsoleHost host, GitHubClient client, string token, CancellationToken cancellationToken)
+    private static async Task<int> ExecuteAsync(Options options, ConsoleHost host, GitHubClient client, GitHubClient checksClient, string token, CancellationToken cancellationToken)
     {
-        var pullRequests = new PullRequests(client);
+        var pullRequests = new PullRequests(client, checksClient);
         var reviewThreads = new ReviewThreads(client);
         var watch = new PullRequestWatch(pullRequests, reviewThreads, host.Delay, host.Time);
         var git = new Git(host.Runner);

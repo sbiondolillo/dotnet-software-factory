@@ -4,7 +4,7 @@ Feature: The starter's review-feedback workflow answers the review threads of a 
     Given the template is installed
     When I run dotnet new "factory-starter" into an empty directory
 
-  @bullet-1
+  @bullet-6
   Scenario: The copy's review-feedback workflow holds the pinned text
     # run: printf '%s\n' 'review-feedback.yml'
     Then the copy's workflow "review-feedback.yml" holds this text
@@ -16,7 +16,9 @@ Feature: The starter's review-feedback workflow answers the review threads of a 
         pull_request_target:
           types: [labeled]
 
-      permissions: {}
+      # The job's own token reads the check runs of the pull request. A fine-grained token has no Checks permission on a private repo.
+      permissions:
+        checks: read
 
       concurrency:
         group: review-feedback-${{ github.event.pull_request.number }}
@@ -41,6 +43,7 @@ Feature: The starter's review-feedback workflow answers the review threads of a 
             - name: Answer the review threads
               env:
                 FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_GITHUB_TOKEN }}
+                FACTORY_CHECKS_TOKEN: ${{ github.token }}
                 ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
                 EXAMPLE_API_KEY: ${{ secrets.EXAMPLE_API_KEY }}
               run: dotnet run --project src/App -c Release -- feedback --repo ${{ github.repository }} --pr ${{ github.event.pull_request.number }} --pass-env EXAMPLE_API_KEY

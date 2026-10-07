@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace Core;
 
 /// <summary>Opens pull requests and reads check runs through a <see cref="GitHubClient"/>.</summary>
-public sealed class PullRequests(GitHubClient client)
+public sealed class PullRequests(GitHubClient client, GitHubClient? checksClient = null)
 {
     /// <summary>Opens a pull request, or gives back the one already open from the branch.</summary>
     public async Task<PullRequest> OpenAsync(string owner, string repo, string head, string baseBranch, string title, string body, CancellationToken cancellationToken = default)
@@ -30,10 +30,10 @@ public sealed class PullRequests(GitHubClient client)
         return Read(created);
     }
 
-    /// <summary>Reads every check run on a commit.</summary>
+    /// <summary>Reads every check run on a commit, with the checks client when one was given.</summary>
     public async Task<IReadOnlyList<CheckRun>> ReadCheckRunsAsync(string owner, string repo, string sha, CancellationToken cancellationToken = default)
     {
-        JsonElement json = await client.SendAsync(HttpMethod.Get, $"/repos/{owner}/{repo}/commits/{sha}/check-runs", null, cancellationToken).ConfigureAwait(false);
+        JsonElement json = await (checksClient ?? client).SendAsync(HttpMethod.Get, $"/repos/{owner}/{repo}/commits/{sha}/check-runs", null, cancellationToken).ConfigureAwait(false);
         var runs = new List<CheckRun>();
         if (json.TryGetProperty("check_runs", out JsonElement array) && array.ValueKind is JsonValueKind.Array)
         {

@@ -10,17 +10,6 @@ Feature: A repo made from the starter holds the factory's three workflows
     Then the copy's ".github/workflows/" holds the files "factory.yml", "ci.yml" and "review-feedback.yml"
     And the copy's ".github/workflows/" holds no other file
 
-  @bullet-3
-  Scenario: The factory workflow gives no permissions
-    # run: printf '%s\n' 'factory.yml' '{}'
-    Then the workflow "factory.yml" has the permissions "{}"
-
-  @bullet-8
-  Scenario: Only the run step of the factory job has an environment
-    # run: printf '%s\n' 'factory.yml' 'FACTORY_GITHUB_TOKEN' 'ANTHROPIC_API_KEY' 'EXAMPLE_API_KEY' 'factory.yml'
-    Then the step with the run command in "factory.yml" has "FACTORY_GITHUB_TOKEN", "ANTHROPIC_API_KEY" and "EXAMPLE_API_KEY" in its environment, each from the secret of the same name
-    And no other step in "factory.yml" has an environment
-
   @bullet-9
   Scenario: The CI workflow has two triggers
     # run: printf '%s\n' 'ci.yml' 'pull_request' 'push' 'main'
@@ -93,3 +82,50 @@ Feature: A repo made from the starter holds the factory's three workflows
   Scenario: The README says how a run starts and which tag the workflow names
     # run: printf '%s\n' '## Start a new repo' 'factory' 'factory.yml' 'v0'
     Then the README section "## Start a new repo" says that the repo's owner starts a run with the label "factory" on an issue, and that "factory.yml" names the tag "v0" of the factory
+
+  @bullet-5
+  Scenario: The copy's factory workflow holds the pinned text
+    # run: printf '%s\n' 'factory.yml'
+    Then the copy's workflow "factory.yml" holds this text
+      """
+      # Starts a factory run when the repo's owner labels an issue `factory`, or by hand at a chosen ref.
+      name: factory
+
+      on:
+        issues:
+          types: [labeled]
+        workflow_dispatch:
+          inputs:
+            issue:
+              description: The number of the issue to run
+              required: true
+              type: number
+            ref:
+              description: The branch, tag or commit of the factory
+              default: v0
+
+      # The job's own token reads the check runs of the pull request. A fine-grained token has no Checks permission on a private repo.
+      permissions:
+        checks: read
+
+      jobs:
+        factory:
+          runs-on: ubuntu-latest
+          if: github.event_name == 'workflow_dispatch' || (github.event.label.name == 'factory' && github.event.sender.login == github.repository_owner)
+          steps:
+            - uses: actions/checkout@v7
+              with:
+                repository: sbiondolillo/dotnet-software-factory
+                ref: ${{ inputs.ref || 'v0' }}
+                token: ${{ secrets.FACTORY_GITHUB_TOKEN }}
+            - uses: actions/setup-dotnet@v6
+              with:
+                global-json-file: global.json
+            - name: Run the factory
+              env:
+                FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_GITHUB_TOKEN }}
+                FACTORY_CHECKS_TOKEN: ${{ github.token }}
+                ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+                EXAMPLE_API_KEY: ${{ secrets.EXAMPLE_API_KEY }}
+              run: dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --pass-env EXAMPLE_API_KEY
+      """
