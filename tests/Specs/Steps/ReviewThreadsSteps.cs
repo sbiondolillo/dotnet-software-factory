@@ -12,6 +12,10 @@ public sealed class ReviewThreadsSteps(ExceptionState exceptionState, RecordingH
     private IReadOnlyList<Review>? _reviews;
     private IReadOnlyList<ReviewThread>? _threads;
 
+    public IReadOnlyList<Review>? Reviews => _reviews;
+
+    public IReadOnlyList<ReviewThread>? Threads => _threads;
+
     [Given("a ReviewThreads built over a GitHub client")]
     public void GivenBuilt() => _sut = new ReviewThreads(new GitHubClient(new HttpClient(handler), "token", TimeSpan.Zero));
 

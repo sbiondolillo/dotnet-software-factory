@@ -14,6 +14,7 @@ public sealed record ReviewThread(string Id, bool IsResolved, string Path, int? 
 /// <summary>Reads, replies to and resolves review threads through GitHub's GraphQL API.</summary>
 public sealed class ReviewThreads(GitHubClient client)
 {
+    private const string FaultText = "Something went wrong while executing your query";
     private const string ReviewsQuery = "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviews(first: 100) { nodes { state author { login } commit { oid } } } } } }";
     private const string ThreadsQuery = "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewThreads(first: 100) { nodes { id isResolved path line comments(first: 100) { nodes { author { login } body } } } } } } }";
     private const string ReplyQuery = "mutation($threadId: ID!, $body: String!) { addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $threadId, body: $body}) { comment { id } } }";
@@ -84,6 +85,25 @@ public sealed class ReviewThreads(GitHubClient client)
             : "";
 
     private async Task<JsonElement> SendAsync(string query, object variables, CancellationToken cancellationToken)
+    {
+        const int MaxSends = 4;
+        for (int sent = 1; ; sent++)
+        {
+            try
+            {
+                return await SendOnceAsync(query, variables, cancellationToken).ConfigureAwait(false);
+            }
+            catch (GitHubGraphQLException ex) when (sent < MaxSends && ex.Messages.Any(m => m.StartsWith(FaultText, StringComparison.Ordinal)))
+            {
+                if (client.BaseWait > TimeSpan.Zero)
+                {
+                    await Task.Delay(client.BaseWait, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+    }
+
+    private async Task<JsonElement> SendOnceAsync(string query, object variables, CancellationToken cancellationToken)
     {
         string json = JsonSerializer.Serialize(new { query, variables });
         JsonElement answer = await client.SendAsync(HttpMethod.Post, "/graphql", json, cancellationToken).ConfigureAwait(false);
