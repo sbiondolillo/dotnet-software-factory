@@ -75,7 +75,7 @@ The body starts "Cleanup." and a plain imperative. It states the defect in the t
 
 ## Before you file
 
-Read the draft once for each row. File it when every row passes.
+Read the draft once for each row. File it when every row passes. A person with Claude Code runs the skill `write-issue` in `.claude/skills/`, which makes this pass and two more with subagents.
 
 | Row | How to read it | Pass |
 |---|---|---|
