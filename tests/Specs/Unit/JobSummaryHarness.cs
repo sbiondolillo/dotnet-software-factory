@@ -74,6 +74,21 @@ public sealed class JobSummaryHarness : IDisposable
 
     public bool LintFails { get; set; }
 
+    /// <summary>The version the run states, or null for none.</summary>
+    public string? Version { get; set; }
+
+    /// <summary>The passed tests the TRX file holds besides the first one.</summary>
+    public int ExtraPassedTests { get; set; }
+
+    /// <summary>The feature files git shows at the base commit, by path; a path with no entry is absent there.</summary>
+    public Dictionary<string, string> BaseFiles { get; } = [];
+
+    /// <summary>The feature files the work tree holds when the review starts, by path; null removes the file.</summary>
+    public Dictionary<string, string?> WorkFiles { get; } = [];
+
+    /// <summary>The body of the pull request the run opened, or null for none.</summary>
+    public string? PullBody { get; private set; }
+
     public StringWriter Progress { get; } = new();
 
     public StringWriter Errors { get; } = new();
@@ -95,7 +110,7 @@ public sealed class JobSummaryHarness : IDisposable
         var request = new FactoryRunRequest(
             "sbiondolillo", "factory-scratch", 12, "token", "a1b2c3d4", _clone.FullName, "main", "factory-sandbox:test", _root.FullName,
             "plan-model", 20, "build-model", 60, "review-model", 30, "Factory", "factory@example.com", []);
-        return new FactoryRun(mock.Object, client, Progress, Errors, _clock, SummaryPath).RunAsync(request, cancellationToken);
+        return new FactoryRun(mock.Object, client, Progress, Errors, _clock, SummaryPath, Version).RunAsync(request, cancellationToken);
     }
 
     public void Dispose()
@@ -115,7 +130,10 @@ public sealed class JobSummaryHarness : IDisposable
                 "clone" => Cloned(spec.Arguments[2]),
                 "rev-parse" => new CommandResult { StandardOutput = "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c\n" },
                 "status" => new CommandResult { StandardOutput = " M src/Checkout.cs\n" },
-                "diff" => new CommandResult { StandardOutput = spec.Arguments.Contains("--name-only") ? "" : "diff --git a/src/Checkout.cs b/src/Checkout.cs\n" },
+                "show" => BaseFiles.TryGetValue(spec.Arguments[1][(spec.Arguments[1].IndexOf(':', StringComparison.Ordinal) + 1)..], out string? text)
+                    ? new CommandResult { StandardOutput = text }
+                    : new CommandResult { ExitCode = 128, StandardError = "fatal: path does not exist" },
+                "diff" => new CommandResult { StandardOutput = spec.Arguments.Contains("--name-only") ? string.Join('\n', BaseFiles.Keys.Concat(WorkFiles.Keys).Distinct()) + "\n" : "diff --git a/src/Checkout.cs b/src/Checkout.cs\n" },
                 _ => new CommandResult(),
             };
         }
@@ -176,6 +194,11 @@ public sealed class JobSummaryHarness : IDisposable
 
         List<(string Class, string Method, string Outcome, string? Message)> tests =
             [("Specs.Features.CheckoutFeature", "TheTotalIsTheSumOfThePrices", "Passed", null)];
+        for (int i = 0; i < ExtraPassedTests; i++)
+        {
+            tests.Add(("Specs.Unit.ExtraTests", $"Passes{i}", "Passed", null));
+        }
+
         string stdout = "";
         if (red)
         {
@@ -220,6 +243,18 @@ public sealed class JobSummaryHarness : IDisposable
         else if (text.StartsWith("Review the build", StringComparison.Ordinal))
         {
             _reviews++;
+            foreach ((string path, string? content) in WorkFiles)
+            {
+                if (content is null)
+                {
+                    File.Delete(Path.Combine(_clone.FullName, path));
+                }
+                else
+                {
+                    Write(path, content);
+                }
+            }
+
             answer = ReviewAnswers.GetValueOrDefault(_reviews) ?? new SummaryAnswer(1, "0", 0);
             if (!answer.IsError)
             {
@@ -257,6 +292,11 @@ public sealed class JobSummaryHarness : IDisposable
         {
             string path = request.RequestUri!.AbsolutePath;
             string method = request.Method.Method;
+            if (method is "POST" && path.EndsWith("/pulls", StringComparison.Ordinal))
+            {
+                harness.PullBody = JsonDocument.Parse(request.Content!.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult()).RootElement.GetProperty("body").GetString();
+            }
+
             if (method is "POST" && path.EndsWith("/comments", StringComparison.Ordinal))
             {
                 harness.Comments++;

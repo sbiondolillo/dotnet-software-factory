@@ -99,6 +99,12 @@ public static class ConsoleCommands
         return command;
     }
 
+    /// <summary>The informational version of the entry assembly, the text that <c>--version</c> prints.</summary>
+    private static string? EntryVersion() =>
+        (System.Reflection.Assembly.GetEntryAssembly() ?? System.Reflection.Assembly.GetExecutingAssembly())
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion;
+
     /// <summary>The whole number the option's token holds, or <see cref="int.MaxValue"/> when it holds none, for the parser's own line to report.</summary>
     private static int Value(OptionResult result) =>
         result.Tokens is [{ } token] && int.TryParse(token.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) ? value : int.MaxValue;
@@ -156,7 +162,7 @@ public static class ConsoleCommands
                 var request = new FactoryRunRequest(
                     owner, repo, options.Number, token, runId, directory.FullName, baseBranch, ImageTag, host.RootDirectory,
                     Model, 50, Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames);
-                result = await new FactoryRun(host.Runner, client, host.Out, host.Error, host.Time, host.Environment("GITHUB_STEP_SUMMARY")).RunAsync(request, cancellationToken).ConfigureAwait(false);
+                result = await new FactoryRun(host.Runner, client, host.Out, host.Error, host.Time, host.Environment("GITHUB_STEP_SUMMARY"), EntryVersion()).RunAsync(request, cancellationToken).ConfigureAwait(false);
                 localHead = result.PullRequest is null ? null : await git.ReadHeadShaAsync(directory.FullName, cancellationToken).ConfigureAwait(false);
             }
             finally
