@@ -140,13 +140,6 @@ Feature: Factory run
     # run: printf 'WEATHER_API_KEY\nMAPS_API_KEY\ndotnet run --no-restore --project tests/Integration'
     Then docker gives the names "WEATHER_API_KEY" and "MAPS_API_KEY" to the command "dotnet run --no-restore --project tests/Integration"
 
-  @bullet-20
-  Scenario: An error flag on the build answer passes no gate
-    Given claude answers the build prompt with the error flag set
-    When a caller starts a run
-    # run: printf '10\n0'
-    Then FactoryRun gives back a result with the pull request of the number 10 and 0 Redos
-
   @bullet-21
   Scenario: A red test gate feeds the next build
     Given the test gate is red after the first build and passes after the second build

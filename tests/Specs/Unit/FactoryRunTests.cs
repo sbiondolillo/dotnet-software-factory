@@ -144,14 +144,14 @@ public sealed class FactoryRunTests
     }
 
     [Fact]
-    public async Task AnErrorFlagOnTheBuildAnswerStillRunsTheGates()
+    public async Task AnErrorFlagOnTheBuildAnswerStopsTheRun()
     {
         using var h = new FactoryRunHarness();
         h.BuildIsError = true;
         FactoryRunResult result = await h.RunAsync(Ct);
-        Assert.NotNull(result.PullRequest);
-        Assert.Contains(h.Commands, c => c.Arguments.Contains("format") && c.Arguments.Contains("--no-restore"));
-        Assert.Contains(h.Commands, c => c.Arguments.Contains("test") && c.Arguments.Contains("--logger"));
+        Assert.Equal(new FactoryRunResult(null, 0), result);
+        Assert.DoesNotContain(h.Commands, c => c.Arguments.Contains("format") && c.Arguments.Contains("--no-restore"));
+        Assert.DoesNotContain(h.Commands, c => c.Arguments.Contains("test") && c.Arguments.Contains("--logger"));
     }
 
     [Fact]

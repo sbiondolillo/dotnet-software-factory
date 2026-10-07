@@ -72,6 +72,15 @@ public sealed class FactoryRunHarness : IDisposable
 
     public bool PlanIsError { get; set; }
 
+    /// <summary>The builds, by number, whose answer carries the error flag.</summary>
+    public HashSet<int> ErrorBuilds { get; } = [];
+
+    /// <summary>The reviews, by the number of builds before them, whose answer carries the error flag.</summary>
+    public HashSet<int> ErrorReviews { get; } = [];
+
+    /// <summary>The result text of an answer with the error flag set, or null for the harness's own text.</summary>
+    public string? ErrorText { get; set; }
+
     public HashSet<int> RedBuilds { get; } = [];
 
     public HashSet<int> RejectedBuilds { get; } = [];
@@ -129,6 +138,9 @@ public sealed class FactoryRunHarness : IDisposable
 
     public List<CommandSpec> Commands { get; } = [];
 
+    /// <summary>What the run wrote to its progress writer.</summary>
+    public StringWriter Progress { get; } = new();
+
     public List<SeenPrompt> Prompts { get; } = [];
 
     public List<SeenRequest> Requests { get; } = [];
@@ -153,7 +165,7 @@ public sealed class FactoryRunHarness : IDisposable
         var request = new FactoryRunRequest(
             Owner, Repo, Issue, Token, RunId, _clone.FullName, BaseBranch, "factory-sandbox:test", _root.FullName,
             PlanModel, PlanTurns, BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames);
-        return new FactoryRun(mock.Object, client).RunAsync(request, cancellationToken);
+        return new FactoryRun(mock.Object, client, Progress).RunAsync(request, cancellationToken);
     }
 
     public void Dispose()
@@ -370,7 +382,19 @@ public sealed class FactoryRunHarness : IDisposable
                 : """{"approved":true,"blocking":[]}""");
         }
 
-        return new CommandResult { StandardOutput = Json(kind is "build" && BuildIsError || kind is "plan" && PlanIsError, kind is "build" && BuildIsError ? "build error" : kind is "plan" && PlanIsError ? "plan went wrong" : "done") };
+        bool error = kind switch
+        {
+            "build" => BuildIsError || ErrorBuilds.Contains(_builds),
+            "plan" => PlanIsError,
+            _ => ErrorReviews.Contains(_builds),
+        };
+        string fallback = kind switch
+        {
+            "build" => "build error",
+            "plan" => "plan went wrong",
+            _ => "review went wrong",
+        };
+        return new CommandResult { StandardOutput = Json(error, error ? ErrorText ?? fallback : "done") };
     }
 
     private static void WriteIn(string directory, string relative, string text)

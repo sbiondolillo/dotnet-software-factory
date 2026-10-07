@@ -139,16 +139,23 @@ Feature: The plan phase writes the scenarios and the plan, and the scenarios are
     # run: printf 'Invalid API key'
     And a failure holds "Invalid API key"
 
-  @bullet-16
-  Scenario: An error answer with no result text still leads to a second prompt
-    Given the agent on the first run writes the sound feature file and the plan
-    And claude answers the first run with the error flag set and no result text
-    When I run the plan phase
-    Then the plan phase ran two prompts
-
   @bullet-17
   Scenario: Every command run through the command runner is a docker command
     Given the agent on the first run writes the sound feature file and the plan
     When I run the plan phase
     Then the result is passed
     And each command the plan phase ran is a docker command
+
+  @bullet-13
+  Scenario: An error answer with no result text sends one prompt
+    Given the agent on the first run writes the sound feature file and the plan
+    And claude answers the first run with the error flag set and no result text
+    When I run the plan phase
+    Then the plan phase ran one prompt
+
+  @bullet-14
+  Scenario: An error answer with no result text gives a failed result
+    Given the agent on the first run writes the sound feature file and the plan
+    And claude answers the first run with the error flag set and no result text
+    When I run the plan phase
+    Then the result is failed

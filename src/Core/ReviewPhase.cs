@@ -3,8 +3,8 @@ using System.Text.Json;
 
 namespace Core;
 
-/// <summary>The verdict of <see cref="ReviewPhase"/>: an approval, or a rejection with its blocking items.</summary>
-public sealed record ReviewPhaseResult(bool Approved, IReadOnlyList<string> Blocking);
+/// <summary>The verdict of <see cref="ReviewPhase"/>: an approval, or a rejection with its blocking items. AgentError is true when the answer carried the error flag.</summary>
+public sealed record ReviewPhaseResult(bool Approved, IReadOnlyList<string> Blocking, bool AgentError = false);
 
 /// <summary>Asks the agent to review the build against the issue, the scenarios and the plan, and reads its verdict.</summary>
 public sealed class ReviewPhase(ClaudeCodeAgent agent, Git git, bool cleanup = false, bool refactor = false, bool readsPlan = true)
@@ -35,7 +35,7 @@ public sealed class ReviewPhase(ClaudeCodeAgent agent, Git git, bool cleanup = f
         ClaudeCodeResult answer = await agent.RunAsync(prompt, model, maxTurns, cancellationToken).ConfigureAwait(false);
         if (answer.IsError)
         {
-            return Reject(string.IsNullOrWhiteSpace(answer.Result) ? "claude answered with an error and no text." : answer.Result);
+            return new ReviewPhaseResult(false, [string.IsNullOrWhiteSpace(answer.Result) ? "claude answered with an error and no text." : answer.Result], true);
         }
 
         return ReadVerdict(verdictFile);

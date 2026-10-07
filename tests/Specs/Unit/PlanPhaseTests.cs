@@ -97,34 +97,45 @@ public sealed class PlanPhaseTests : IDisposable
     }
 
     [Fact]
-    public async Task ErrorAnswersOnBothRunsFailWithTheTextAndSkipTheGate()
+    public async Task AnErrorAnswerFailsWithTheTextAfterOnePromptAndSkipsTheGate()
     {
         _h.AgentWritesSoundFiles(null);
         _h.Answer(null, true, "Invalid API key");
         PlanPhaseResult result = await _h.RunAsync();
         AssertOneFailureNaming(result, "Invalid API key");
-        Assert.Equal(2, _h.Prompts.Count);
-        Assert.Contains("Invalid API key", _h.Prompts[1]);
+        Assert.False(result.Passed);
+        Assert.Null(result.Pin);
+        Assert.Single(_h.Prompts);
     }
 
     [Fact]
-    public async Task AnErrorWithNoTextLeadsToASecondPromptAndAFailureSentence()
+    public async Task AnErrorWithNoTextFailsWithTheSentenceAfterOnePrompt()
     {
-        _h.Answer(null, true, "");
+        _h.Answer(null, true, "  ");
         PlanPhaseResult result = await _h.RunAsync();
-        Assert.Equal(2, _h.Prompts.Count);
-        Assert.Single(result.Failures);
-        Assert.False(string.IsNullOrWhiteSpace(result.Failures[0]));
+        Assert.Single(_h.Prompts);
+        AssertOneFailureNaming(result, "claude answered with an error and no text.");
     }
 
     [Fact]
-    public async Task AnErrorOnTheFirstRunAndACleanSoundSecondRunPass()
+    public async Task AnErrorOnTheFirstRunSendsNoCorrectionEvenWhenTheFilesAreSound()
     {
         _h.AgentWritesSoundFiles(null);
         _h.Answer(1, true, "Overloaded");
         PlanPhaseResult result = await _h.RunAsync();
-        Assert.True(result.Passed);
+        Assert.False(result.Passed);
+        Assert.Single(_h.Prompts);
+    }
+
+    [Fact]
+    public async Task AnErrorToTheCorrectionPromptFailsWithTheText()
+    {
+        _h.AgentWrites(1, "src/One.cs", "x");
+        _h.Answer(2, true, "Overloaded");
+        PlanPhaseResult result = await _h.RunAsync();
         Assert.Equal(2, _h.Prompts.Count);
+        Assert.False(result.Passed);
+        AssertOneFailureNaming(result, "Overloaded");
     }
 
     [Fact]
