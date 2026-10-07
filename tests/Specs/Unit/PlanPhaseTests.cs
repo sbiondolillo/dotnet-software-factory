@@ -103,28 +103,38 @@ public sealed class PlanPhaseTests : IDisposable
         _h.Answer(null, true, "Invalid API key");
         PlanPhaseResult result = await _h.RunAsync();
         AssertOneFailureNaming(result, "Invalid API key");
-        Assert.Equal(2, _h.Prompts.Count);
-        Assert.Contains("Invalid API key", _h.Prompts[1]);
+        Assert.Single(_h.Prompts);
     }
 
     [Fact]
-    public async Task AnErrorWithNoTextLeadsToASecondPromptAndAFailureSentence()
+    public async Task AnErrorOnARefactorPlanSendsOnePromptAndFails()
+    {
+        _h.Refactor = true;
+        _h.Answer(null, true, "Invalid API key");
+        PlanPhaseResult result = await _h.RunAsync();
+        Assert.False(result.Passed);
+        Assert.Equal(["Invalid API key"], result.Failures);
+        Assert.Single(_h.Prompts);
+    }
+
+    [Fact]
+    public async Task AnErrorWithNoTextSendsOnePromptAndGivesTheFailureSentence()
     {
         _h.Answer(null, true, "");
         PlanPhaseResult result = await _h.RunAsync();
-        Assert.Equal(2, _h.Prompts.Count);
-        Assert.Single(result.Failures);
-        Assert.False(string.IsNullOrWhiteSpace(result.Failures[0]));
+        Assert.Single(_h.Prompts);
+        Assert.Equal(["claude answered with an error and no text."], result.Failures);
     }
 
     [Fact]
-    public async Task AnErrorOnTheFirstRunAndACleanSoundSecondRunPass()
+    public async Task AnErrorOnTheFirstRunFailsAfterOnePrompt()
     {
         _h.AgentWritesSoundFiles(null);
         _h.Answer(1, true, "Overloaded");
         PlanPhaseResult result = await _h.RunAsync();
-        Assert.True(result.Passed);
-        Assert.Equal(2, _h.Prompts.Count);
+        Assert.False(result.Passed);
+        Assert.Equal(["Overloaded"], result.Failures);
+        Assert.Single(_h.Prompts);
     }
 
     [Fact]
