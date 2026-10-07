@@ -5,7 +5,90 @@ Feature: A repo made from the starter holds the rules of an issue the factory bu
     When I run dotnet new "factory-starter" into an empty directory
 
   @bullet-1
-  Scenario: The copy's write-an-issue page holds the rules of an issue
+  Scenario: The copy's write-issue skill holds the steps of the skill
+    # run: printf '%s\n' '.claude/skills/write-issue/SKILL.md'
+    Then the copy's file ".claude/skills/write-issue/SKILL.md" holds this text
+      """
+      ---
+      name: write-issue
+      description: Write an issue that the factory builds, judge the draft, and file it. Use when asked to write, draft, revise or check an issue for this repo, or to turn a request into an issue.
+      ---
+
+      The factory reads the labels, the title and the body of the issue, and nothing else. `docs/write-an-issue.md` holds every rule a body follows. [`REVIEW.md`](REVIEW.md) holds the three angles that judge a draft. This skill ends when the issue is filed, with its URL in the handover. The repo's owner starts the run.
+
+      ## 1. Pick the recipe
+
+      Read `## Pick the recipe` of `docs/write-an-issue.md`. Done when the change fits one row. A change that fits two rows is two issues.
+
+      ## 2. Read `main` for each claim
+
+      A claim is each fact the draft states about the code: a file, a name, a command, a text a document holds, a test that stays unchanged. Open the file on `main` that holds each one, and keep its path and line.
+
+      For each text the draft replaces or removes, find every test that reads it:
+
+      ```
+      git grep -n -F '<old text>' origin/main -- specs tests
+      ```
+
+      Done when each claim names its line on `main`, and each scenario a hit is in is named in the draft as removed, replaced, or kept with each of its `Then` lines as a criterion.
+
+      ## 3. Write the draft
+
+      Read the section of `docs/write-an-issue.md` for the recipe, then write the title and the body to a file. Done when every row of `## Before you file` passes on the file.
+
+      ## 4. Judge the draft
+
+      Run the three angles of [`REVIEW.md`](REVIEW.md) on the file, as three subagents in parallel. A harness with no subagents runs them one after another in this session. Apply every fix of the three verdicts in one pass, then run the three angles again. Done when each of the three verdicts is `accept`.
+
+      A verdict that says `no rule` is a gap in `docs/write-an-issue.md`. Apply its fix, and name the finding in the handover with the rule it proposes.
+
+      ## 5. File it
+
+      ```
+      gh issue create --title '<title>' --body-file <file> --label <refactor|cleanup>
+      ```
+
+      An issue with no recipe label takes no `--label`. Done when the handover holds the URL and each `no rule` finding.
+      """
+
+  @bullet-2
+  Scenario: The copy's write-issue skill holds the angles that judge a draft
+    # run: printf '%s\n' '.claude/skills/write-issue/REVIEW.md'
+    Then the copy's file ".claude/skills/write-issue/REVIEW.md" holds this text
+      """
+      # Judge a draft
+
+      Reference for step 4 of [`write-issue`](SKILL.md). Each angle is one subagent. It gets the path of the draft, reads the repo at `main`, and writes one verdict.
+
+      ## The verdict
+
+      ```
+      verdict: accept | reject
+      findings:
+      - line: <the line of the draft>
+        rule: <a heading or a row of docs/write-an-issue.md> | no rule
+        fault: <what is wrong, in one sentence>
+        fix: <the text that replaces the line>
+      ```
+
+      `accept` has zero findings. A finding with `no rule` names a fault that no rule of `docs/write-an-issue.md` covers, and its `fix` holds the rule it proposes beside the text.
+
+      ## The angles
+
+      **Body rules.** Read every rule of `docs/write-an-issue.md` and every row of its `## Before you file` table against the draft, one at a time. Done when each rule and each row has been read against every sentence it governs.
+
+      **Claims against `main`.** Read each claim the draft makes about the code against the file on `main` that holds it. Read each bullet against `main`, and trace what `main` does after the bullet's event: a bullet `main` already meets is a finding. For each text the draft replaces or removes, run `git grep -n -F` over `specs` and `tests`, and check that the draft names each scenario a hit is in. For each stream or file a bullet adds lines to, find each test that counts its lines, and check that the draft names it. Done when each claim names its line on `main`, and each test the change makes false is named.
+
+      **Testability.** Read each bullet as the test suite reads it. Each test of `tests/Specs/` answers every call to a service from a stub, so each bullet states a behaviour that a stub can show. Each canned answer a bullet hands a stub names its source in `## Context`: a test of `tests/Integration/`, or the request that got it. An answer that no request can produce says so in `## Context`. Done when each bullet has a stub that can show it, and each answer has a source.
+      """
+
+  @bullet-3
+  Scenario: The copy's write-issue skill holds two files and no other
+    # run: printf '%s\n' '.claude/skills/write-issue/' 'SKILL.md' 'REVIEW.md'
+    Then the copy's directory ".claude/skills/write-issue/" holds the files "SKILL.md" and "REVIEW.md" and no other file
+
+  @bullet-4
+  Scenario: The copy's write-an-issue page holds the rules of an issue and points at the skill
     # run: printf '%s\n' 'docs/write-an-issue.md'
     Then the copy's file "docs/write-an-issue.md" holds this text
       """
@@ -86,7 +169,7 @@ Feature: A repo made from the starter holds the rules of an issue the factory bu
 
       ## Before you file
 
-      Read the draft once for each row. File it when every row passes.
+      Read the draft once for each row. File it when every row passes. A person with Claude Code runs the skill `write-issue` in `.claude/skills/`, which makes this pass and two more with subagents.
 
       | Row | How to read it | Pass |
       |---|---|---|
@@ -107,7 +190,15 @@ Feature: A repo made from the starter holds the rules of an issue the factory bu
       | scope and check | a `cleanup` body | `## Scope` holds a path, and `## Check` holds one fenced `sh` block |
       """
 
-  @bullet-2
+  @bullet-4
+  Scenario: The copy's write-an-issue page points at the skill in Before you file
+    # run: printf '%s\n' 'docs/write-an-issue.md' '## Before you file' 'Read the draft once for each row'
+    Then the copy's file "docs/write-an-issue.md", in "## Before you file", holds this paragraph in place of the paragraph that starts "Read the draft once for each row"
+      """
+      Read the draft once for each row. File it when every row passes. A person with Claude Code runs the skill `write-issue` in `.claude/skills/`, which makes this pass and two more with subagents.
+      """
+
+  @bullet-4
   Scenario: The copy's AGENTS.md points at the write-an-issue page
     Then the copy's AGENTS.md at its root holds this text
       """

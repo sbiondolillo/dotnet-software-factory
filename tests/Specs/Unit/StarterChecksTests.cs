@@ -255,4 +255,52 @@ public sealed class StarterChecksTests : IDisposable
 
     [Fact]
     public void CommentLacksPassesForALongerLine() => StarterChecks.CommentLacks(Project("a target here"), "target");
+
+    private const string Page = "# T\n\n## A\n\nRead it. Old.\n\n## B\n\nRead it. Other.\n\nTail.\n";
+
+    [Fact]
+    public void ParagraphFailsOnMissingFile()
+    {
+        var e = Assert.Throws<InvalidOperationException>(() => StarterChecks.SectionHoldsParagraph(Path.Combine(_root, "x.md"), "## A", "Read", "Read it."));
+        Assert.Contains("x.md", e.Message);
+    }
+
+    [Fact]
+    public void ParagraphFailsOnMissingSection()
+    {
+        string path = Write("p.md", Page);
+        var e = Assert.Throws<InvalidOperationException>(() => StarterChecks.SectionHoldsParagraph(path, "## C", "Read", "Read it."));
+        Assert.Contains("## C", e.Message);
+    }
+
+    [Fact]
+    public void ParagraphFailsWhenNoneStartsWithWords()
+    {
+        string path = Write("p.md", Page);
+        var e = Assert.Throws<InvalidOperationException>(() => StarterChecks.SectionHoldsParagraph(path, "## A", "Write", "Write it."));
+        Assert.Contains("holds no paragraph", e.Message);
+    }
+
+    [Fact]
+    public void ParagraphFailsWhenItDiffers()
+    {
+        string path = Write("p.md", Page);
+        var e = Assert.Throws<InvalidOperationException>(() => StarterChecks.SectionHoldsParagraph(path, "## A", "Read it", "Read it. New."));
+        Assert.Contains("Old.", e.Message);
+    }
+
+    [Fact]
+    public void ParagraphFailsWhenOldStandsBesideNew()
+    {
+        string path = Write("p.md", "## A\n\nRead it. Old.\n\nRead it. New.\n");
+        var e = Assert.Throws<InvalidOperationException>(() => StarterChecks.SectionHoldsParagraph(path, "## A", "Read it", "Read it. New."));
+        Assert.Contains("2 paragraphs", e.Message);
+    }
+
+    [Fact]
+    public void ParagraphPassesAndIgnoresOtherSections()
+    {
+        string path = Write("p.md", Page);
+        StarterChecks.SectionHoldsParagraph(path, "## A", "Read it", "Read it. Old.");
+    }
 }

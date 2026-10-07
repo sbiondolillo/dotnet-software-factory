@@ -72,6 +72,40 @@ public static partial class StarterChecks
         }
     }
 
+    /// <summary>Fails unless the section of the file holds the paragraph, and no other paragraph of the section starts with the same words.</summary>
+    public static void SectionHoldsParagraph(string path, string heading, string start, string paragraph)
+    {
+        if (!File.Exists(path))
+        {
+            throw new InvalidOperationException($"the copy lacks {Path.GetFileName(path)}");
+        }
+
+        string[] lines = File.ReadAllText(path).Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        int at = Array.IndexOf(lines, heading);
+        if (at < 0)
+        {
+            throw new InvalidOperationException($"{Path.GetFileName(path)} lacks the section {heading}");
+        }
+
+        string[] section = [.. lines.Skip(at + 1).TakeWhile(line => !line.StartsWith("## ", StringComparison.Ordinal))];
+        string[] paragraphs = [.. string.Join('\n', section).Split("\n\n", StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim('\n'))];
+        string[] starting = [.. paragraphs.Where(p => p.StartsWith(start, StringComparison.Ordinal))];
+        if (starting.Length is 0)
+        {
+            throw new InvalidOperationException($"the section {heading} holds no paragraph that starts '{start}'");
+        }
+
+        if (starting.Length > 1)
+        {
+            throw new InvalidOperationException($"the section {heading} holds {starting.Length} paragraphs that start '{start}'");
+        }
+
+        if (starting[0] != paragraph.Trim('\n'))
+        {
+            throw new InvalidOperationException($"the paragraph that starts '{start}' reads '{starting[0]}', not '{paragraph.Trim('\n')}'");
+        }
+    }
+
     /// <summary>The lines of the first XML comment of a file, trimmed.</summary>
     private static string[] CommentLines(string path)
     {
