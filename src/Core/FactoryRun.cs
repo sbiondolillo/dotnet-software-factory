@@ -27,9 +27,11 @@ public sealed record FactoryRunRequest(
 public sealed record FactoryRunResult(PullRequest? PullRequest, int Redos);
 
 /// <summary>Takes one issue of a target repo to a pull request within three Redos.</summary>
-public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWriter? progress = null, TextWriter? log = null, TimeProvider? time = null)
+public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWriter? progress = null, TextWriter? log = null, TimeProvider? time = null, string? summaryPath = null)
 {
     private const int RedoBudget = 3;
+    private readonly TimeProvider _clock = time ?? TimeProvider.System;
+    private JobSummary _summary = new();
     private const string CleanupLabel = "cleanup";
     private const string RefactorLabel = "refactor";
 
@@ -38,6 +40,19 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
 
     /// <summary>Runs the issue through the plan, the build, the gates and the review, and delivers an approved build.</summary>
     public async Task<FactoryRunResult> RunAsync(FactoryRunRequest request, CancellationToken cancellationToken = default)
+    {
+        _summary = new JobSummary();
+        try
+        {
+            return await RunCoreAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            await WriteSummaryAsync().ConfigureAwait(false);
+        }
+    }
+
+    private async Task<FactoryRunResult> RunCoreAsync(FactoryRunRequest request, CancellationToken cancellationToken)
     {
         GitHubIssue issue = await client.ReadIssueAsync(request.Owner, request.Repo, request.IssueNumber, cancellationToken).ConfigureAwait(false);
         IReadOnlyList<string> scope = [];
@@ -97,7 +112,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         Sandbox sandbox = await Sandbox.StartAsync(runner, request.ImageTag, request.RootDirectory, request.Directory, cancellationToken).ConfigureAwait(false);
         await using (sandbox.ConfigureAwait(false))
         {
-            var agent = new ClaudeCodeAgent(sandbox, log, time);
+            var agent = new ClaudeCodeAgent(sandbox, log, time, (elapsed, answer) => _summary.Prompt(elapsed, answer.NumTurns, answer.CostUsd));
             if (refactor)
             {
                 return await RunRefactorAsync(request, issue, sandbox, agent, git, baseCommit, cancellationToken).ConfigureAwait(false);
@@ -113,11 +128,13 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
                 .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, request.Directory, cancellationToken).ConfigureAwait(false);
             if (!plan.Passed || plan.Pin is null)
             {
+                _summary.AddRow("plan", null, "failed");
                 await Say("plan: failed").ConfigureAwait(false);
                 await CommentAsync(request, "The plan phase failed:", plan.Failures, cancellationToken).ConfigureAwait(false);
                 return new FactoryRunResult(null, 0);
             }
 
+            _summary.AddRow("plan", null, "passed");
             await Say("plan: passed").ConfigureAwait(false);
             var buildPhase = new BuildPhase(agent);
             var lintGate = new LintGate(sandbox, git, log);
@@ -125,27 +142,34 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
             var reviewPhase = new ReviewPhase(agent, git);
 
             int redos = 0;
+            string producer = "";
             IReadOnlyList<string> redoTexts = [];
             while (true)
             {
                 await Say("build: start").ConfigureAwait(false);
+                long buildStart = _clock.GetTimestamp();
                 BuildPhaseResult built = await buildPhase.RunAsync(issue.Title, issue.Body, request.BuildModel, request.BuildTurns, redoTexts, cancellationToken).ConfigureAwait(false);
                 if (!built.Passed)
                 {
+                    _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "failed");
                     return await StopAsync(request, built.Failure, redos, cancellationToken).ConfigureAwait(false);
                 }
 
 
                 await Say("lint: start").ConfigureAwait(false);
                 await lintGate.RunAsync(request.Directory, issue.Title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
+                producer = _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "passed");
+                long testStart = _clock.GetTimestamp();
                 await Say("test: start").ConfigureAwait(false);
                 TestGateResult gate = await testGate.RunAsync(request.Directory, plan.Pin, request.SecretNames, cancellationToken).ConfigureAwait(false);
                 await Say(gate.Passed ? "test: passed" : "test: failed").ConfigureAwait(false);
+                producer = _summary.AddRow("test", _clock.GetElapsedTime(testStart), gate.Passed ? "passed" : "failed");
                 if (gate.Passed)
                 {
                     await Say("review: start").ConfigureAwait(false);
                     ReviewPhaseResult review = await reviewPhase
                         .RunAsync(issue.Title, issue.Body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, cancellationToken).ConfigureAwait(false);
+                    string reviewRow = _summary.AddRow("review", null, review.IsError ? "failed" : review.Approved ? "approved" : "blocked");
                     if (review.IsError)
                     {
                         return await StopAsync(request, review.Blocking[0], redos, cancellationToken).ConfigureAwait(false);
@@ -162,6 +186,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
                     }
 
                     redoTexts = review.Blocking;
+                    producer = reviewRow;
                 }
                 else
                 {
@@ -175,6 +200,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
                 }
 
                 redos++;
+                _summary.AddRedos(redos, producer, redoTexts);
                 await Say($"redo: {redos}").ConfigureAwait(false);
             }
         }
@@ -212,11 +238,13 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
             .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, request.Directory, cancellationToken).ConfigureAwait(false);
         if (!plan.Passed)
         {
+            _summary.AddRow("plan", null, "failed");
             await Say("plan: failed").ConfigureAwait(false);
             await CommentAsync(request, "The plan phase failed:", plan.Failures, cancellationToken).ConfigureAwait(false);
             return new FactoryRunResult(null, 0);
         }
 
+        _summary.AddRow("plan", null, "passed");
         await Say("plan: passed").ConfigureAwait(false);
         Pin pin = Pin.TakeRefactor(request.Directory);
         var buildPhase = new BuildPhase(agent, refactor: true);
@@ -225,22 +253,28 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         var reviewPhase = new ReviewPhase(agent, git, refactor: true);
 
         int redos = 0;
+        string producer = "";
         IReadOnlyList<string> redoTexts = [];
         while (true)
         {
             await Say("build: start").ConfigureAwait(false);
+            long buildStart = _clock.GetTimestamp();
             BuildPhaseResult built = await buildPhase.RunAsync(issue.Title, issue.Body, request.BuildModel, request.BuildTurns, redoTexts, cancellationToken).ConfigureAwait(false);
             if (!built.Passed)
             {
+                _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "failed");
                 return await StopAsync(request, built.Failure, redos, cancellationToken).ConfigureAwait(false);
             }
 
 
             await Say("lint: start").ConfigureAwait(false);
             await lintGate.RunAsync(request.Directory, issue.Title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
+            producer = _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "passed");
+            long testStart = _clock.GetTimestamp();
             await Say("test: start").ConfigureAwait(false);
             TestGateResult gate = await testGate.RunAsync(request.Directory, pin, request.SecretNames, cancellationToken).ConfigureAwait(false);
             await Say(gate.Passed ? "test: passed" : "test: failed").ConfigureAwait(false);
+            producer = _summary.AddRow("test", _clock.GetElapsedTime(testStart), gate.Passed ? "passed" : "failed");
             if (!gate.Passed)
             {
                 redoTexts = gate.Evidence;
@@ -250,8 +284,10 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
                 CommandResult? after = null;
                 if (check is not null)
                 {
+                    long checkStart = _clock.GetTimestamp();
                     after = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
                     await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
+                    producer = _summary.AddRow("check", _clock.GetElapsedTime(checkStart), after.ExitCode is 0 ? "green" : "red");
                 }
 
                 if (after is not null && after.ExitCode is not 0)
@@ -263,6 +299,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
                     await Say("review: start").ConfigureAwait(false);
                     ReviewPhaseResult review = await reviewPhase
                         .RunAsync(issue.Title, issue.Body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, cancellationToken).ConfigureAwait(false);
+                    string reviewRow = _summary.AddRow("review", null, review.IsError ? "failed" : review.Approved ? "approved" : "blocked");
                     if (review.IsError)
                     {
                         return await StopAsync(request, review.Blocking[0], redos, cancellationToken).ConfigureAwait(false);
@@ -279,6 +316,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
                     }
 
                     redoTexts = review.Blocking;
+                    producer = reviewRow;
                 }
             }
 
@@ -289,6 +327,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
             }
 
             redos++;
+            _summary.AddRedos(redos, producer, redoTexts);
             await Say($"redo: {redos}").ConfigureAwait(false);
         }
     }
@@ -326,27 +365,33 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         IReadOnlySet<string> basePassed = await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false);
 
         int redos = 0;
+        string producer = "";
         IReadOnlyList<string> redoTexts = [];
         while (true)
         {
             await Say("build: start").ConfigureAwait(false);
+            long buildStart = _clock.GetTimestamp();
             BuildPhaseResult built = await buildPhase.RunAsync(issue.Title, issue.Body, request.BuildModel, request.BuildTurns, redoTexts, cancellationToken).ConfigureAwait(false);
             if (!built.Passed)
             {
+                _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "failed");
                 return await StopAsync(request, built.Failure, redos, cancellationToken).ConfigureAwait(false);
             }
 
 
             await Say("lint: start").ConfigureAwait(false);
             await lintGate.RunAsync(request.Directory, issue.Title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
+            producer = _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "passed");
             redoTexts = await CleanupGate.ScopeFaultsAsync(git, baseCommit, request.Directory, scope, cancellationToken).ConfigureAwait(false);
             if (redoTexts.Count is 0)
             {
+                long testStart = _clock.GetTimestamp();
                 await Say("test: start").ConfigureAwait(false);
                 TestGateResult gate = await testGate
                     .RunAsync(request.Directory, pin, request.SecretNames, path => CleanupGate.PinExempt(scope, path), cancellationToken)
                     .ConfigureAwait(false);
                 await Say(gate.Passed ? "test: passed" : "test: failed").ConfigureAwait(false);
+                producer = _summary.AddRow("test", _clock.GetElapsedTime(testStart), gate.Passed ? "passed" : "failed");
                 if (!gate.Passed)
                 {
                     redoTexts = gate.Evidence;
@@ -358,13 +403,16 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
 
                 if (redoTexts.Count is 0)
                 {
+                    long checkStart = _clock.GetTimestamp();
                     CommandResult after = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
                     await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
+                    producer = _summary.AddRow("check", _clock.GetElapsedTime(checkStart), after.ExitCode is 0 ? "green" : "red");
                     if (after.ExitCode is 0)
                     {
                         await Say("review: start").ConfigureAwait(false);
                         ReviewPhaseResult review = await reviewPhase
                             .RunAsync(issue.Title, issue.Body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, cancellationToken).ConfigureAwait(false);
+                        string reviewRow = _summary.AddRow("review", null, review.IsError ? "failed" : review.Approved ? "approved" : "blocked");
                         if (review.IsError)
                         {
                             return await StopAsync(request, review.Blocking[0], redos, cancellationToken).ConfigureAwait(false);
@@ -381,6 +429,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
                         }
 
                         redoTexts = review.Blocking;
+                        producer = reviewRow;
                     }
                     else
                     {
@@ -396,6 +445,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
             }
 
             redos++;
+            _summary.AddRedos(redos, producer, redoTexts);
             await Say($"redo: {redos}").ConfigureAwait(false);
         }
     }
@@ -409,6 +459,25 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
 
     private Task<CommandResult> RunCheckAsync(Sandbox sandbox, string command, CancellationToken cancellationToken) =>
         CleanupGate.RunCheckAsync(sandbox, command, progress, cancellationToken, log);
+
+    private async Task WriteSummaryAsync()
+    {
+        if (string.IsNullOrEmpty(summaryPath) || _summary.IsEmpty)
+        {
+            return;
+        }
+
+        try
+        {
+            string earlier = File.Exists(summaryPath) ? await File.ReadAllTextAsync(summaryPath).ConfigureAwait(false) : "";
+            string gap = earlier.Length is 0 ? "" : earlier.EndsWith('\n') ? "\n" : "\n\n";
+            await File.AppendAllTextAsync(summaryPath, gap + _summary.Render()).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            await ProgressLine.WriteAsync(log, $"summary: cannot write {summaryPath}: {exception.Message}").ConfigureAwait(false);
+        }
+    }
 
     private Task Say(string line) => ProgressLine.WriteAsync(progress, line);
 

@@ -156,7 +156,7 @@ public static class ConsoleCommands
                 var request = new FactoryRunRequest(
                     owner, repo, options.Number, token, runId, directory.FullName, baseBranch, ImageTag, host.RootDirectory,
                     Model, 50, Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames);
-                result = await new FactoryRun(host.Runner, client, host.Out, host.Error, host.Time).RunAsync(request, cancellationToken).ConfigureAwait(false);
+                result = await new FactoryRun(host.Runner, client, host.Out, host.Error, host.Time, host.Environment("GITHUB_STEP_SUMMARY")).RunAsync(request, cancellationToken).ConfigureAwait(false);
                 localHead = result.PullRequest is null ? null : await git.ReadHeadShaAsync(directory.FullName, cancellationToken).ConfigureAwait(false);
             }
             finally
