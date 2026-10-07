@@ -6,7 +6,7 @@ namespace Core;
 public sealed record BuildPhaseResult(bool Passed, string Failure);
 
 /// <summary>Asks the agent to implement the plan and bind every pinned scenario.</summary>
-public sealed class BuildPhase(ClaudeCodeAgent agent, bool cleanup = false, bool refactor = false)
+public sealed class BuildPhase(ClaudeCodeAgent agent, bool cleanup = false, bool refactor = false, bool readsPlan = true)
 {
     private const int PromptLimit = 131071;
     private const string CutMarker = "[cut]";
@@ -103,7 +103,9 @@ public sealed class BuildPhase(ClaudeCodeAgent agent, bool cleanup = false, bool
             prompt.Append("Do the refactor of the issue below.\n\n")
                 .Append("Issue title:\n").Append(title).Append("\n\n")
                 .Append("Issue body:\n").Append(body).Append("\n\n")
-                .Append("Read the plan, .factory/plan.md, and change the structure of the code as it says. ")
+                .Append(readsPlan
+                    ? "Read the plan, .factory/plan.md, and change the structure of the code as it says. "
+                    : "Change the structure of the code as the issue says. ")
                 .Append("Change no file under specs/features/, tests/Specs/ or tests/Integration/: every test stays as it is. ")
                 .Append("Leave each build settings file as it is; the build settings files are named ")
                 .Append(string.Join(", ", Pin.SettingsFileNames.Order(StringComparer.Ordinal)))

@@ -87,6 +87,9 @@ public sealed class FeedbackRunHarness : IDisposable
     /// <summary>The files the first build writes into the clone.</summary>
     public List<string> FirstBuildWrites { get; } = [];
 
+    /// <summary>The files the first build adds: they are absent on the head commit and present after the build.</summary>
+    public List<string> FirstBuildAdds { get; } = [];
+
     public Dictionary<int, (int Code, string Out, string Err)> CheckResults { get; } = [];
 
     public List<(string Class, string Method)> BaseOnlyTests { get; } = [];
@@ -187,6 +190,14 @@ public sealed class FeedbackRunHarness : IDisposable
                 }
 
                 Directory.CreateDirectory(Path.Combine(spec.Arguments[2], "specs", "features"));
+                if (Labels.Contains("refactor"))
+                {
+                    foreach (string path in FirstBuildChanges.Except(FirstBuildAdds))
+                    {
+                        Write(path, "as on the head commit");
+                    }
+                }
+
                 return new CommandResult();
             case "checkout":
                 return CheckoutFailure is null ? new CommandResult() : new CommandResult { ExitCode = 1, StandardError = CheckoutFailure };
@@ -274,6 +285,19 @@ public sealed class FeedbackRunHarness : IDisposable
                 foreach (string path in FirstBuildWrites)
                 {
                     Write(path, "written by the build");
+                }
+
+                foreach (string path in FirstBuildAdds)
+                {
+                    Write(path, "added by the build");
+                }
+
+                if (Labels.Contains("refactor"))
+                {
+                    foreach (string path in FirstBuildChanges.Except(FirstBuildAdds))
+                    {
+                        File.AppendAllText(Path.Combine(_clone.FullName, path), "\nchanged by the build");
+                    }
                 }
             }
         }

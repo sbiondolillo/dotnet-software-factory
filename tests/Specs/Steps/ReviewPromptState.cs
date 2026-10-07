@@ -4,4 +4,7 @@ namespace Specs.Steps;
 public sealed class ReviewPromptState
 {
     public string? Text { get; set; }
+
+    /// <summary>Reads the review prompt of a feedback run, once the run has happened.</summary>
+    public Func<string?>? Lookup { get; set; }
 }

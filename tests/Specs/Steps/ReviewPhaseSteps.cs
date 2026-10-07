@@ -25,7 +25,7 @@ public sealed class ReviewPhaseSteps(IssueState issue, ExceptionState exceptionS
 
     private ReviewPhaseResult Result => _result ?? throw new InvalidOperationException("the review phase did not run");
 
-    private string Prompt => promptState.Text ?? _h.Prompts[0];
+    private string Prompt => promptState.Text ?? promptState.Lookup?.Invoke() ?? _h.Prompts[0];
 
     [Given("the review model is {string} and the turn limit is {int}")]
     public void GivenModel(string model, int turns)

@@ -132,7 +132,7 @@ public sealed class FeedbackCleanupScopeSteps(FactoryRunSteps factory, FeedbackR
 
     private void SetCheck(int number, string label, string heading, string line)
     {
-        Assert.Equal(11, number);
+        Assert.True(number is 11 or 15);
         Assert.Equal("## Check", heading);
         factory.Harness.Labels.Add(label);
         factory.Harness.Body = $"## Check\n\n```sh\n{line}\n```\n";

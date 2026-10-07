@@ -133,7 +133,7 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     [Given("the issue {int} has the label {string}")]
     public void GivenConsoleLabel(int number, string label)
     {
-        if (number is 11)
+        if (number is 11 or 15)
         {
             H.Labels.Add(label);
             return;
@@ -235,8 +235,10 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     [Then("no review prompt runs before it")]
     public void ThenNoReviewBefore()
     {
-        int next = H.Prompts.IndexOf(NextBuild());
-        Assert.DoesNotContain(H.Prompts.Take(next), p => p.Kind is "review");
+        List<SeenPrompt> prompts = factory.OtherPrompts ?? H.Prompts;
+        int next = prompts.IndexOf(NextBuild());
+        Assert.True(next >= 0);
+        Assert.DoesNotContain(prompts.Take(next), p => p.Kind is "review");
     }
 
     [Then("FactoryRun runs the review prompt")]
