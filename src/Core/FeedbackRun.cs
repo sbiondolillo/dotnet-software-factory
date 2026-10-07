@@ -46,6 +46,7 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
         IReadOnlyList<string> scope = [];
         string? check = null;
         bool cleanup = false;
+        bool refactor = false;
         if (PullRequests.ParseClosingIssue(await pullRequests.ReadBodyAsync(request.Owner, request.Repo, request.PullNumber, cancellationToken).ConfigureAwait(false)) is int issueNumber)
         {
             GitHubIssue issue = await client.ReadIssueAsync(request.Owner, request.Repo, issueNumber, cancellationToken).ConfigureAwait(false);
@@ -55,6 +56,11 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
                 scope = CleanupBody.ReadScope(issue.Body);
                 check = CleanupBody.ReadCheck(issue.Body);
             }
+            else if (issue.Labels.Contains("refactor"))
+            {
+                refactor = true;
+                check = CleanupBody.ReadCheck(issue.Body);
+            }
         }
 
         var git = new Git(runner);
@@ -62,7 +68,7 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
         await git.CloneAsync($"https://github.com/{request.Owner}/{request.Repo}.git", request.Token, request.Directory, cancellationToken).ConfigureAwait(false);
         await git.CheckoutExistingBranchAsync(branch, request.Directory, cancellationToken).ConfigureAwait(false);
         string baseCommit = await git.ReadHeadShaAsync(request.Directory, cancellationToken).ConfigureAwait(false);
-        Pin pin = Pin.Take(request.Directory);
+        Pin pin = refactor ? Pin.TakeRefactor(request.Directory) : Pin.Take(request.Directory);
 
         string title = $"Answer the review threads of pull request #{request.PullNumber.ToString(CultureInfo.InvariantCulture)}";
         string body = Describe(threads);
@@ -73,10 +79,10 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
         await using (sandbox.ConfigureAwait(false))
         {
             var agent = new ClaudeCodeAgent(sandbox);
-            var buildPhase = new BuildPhase(agent, cleanup);
+            var buildPhase = new BuildPhase(agent, cleanup, refactor, readsPlan: false);
             var lintGate = new LintGate(sandbox, git);
             var testGate = new TestGate(sandbox);
-            var reviewPhase = new ReviewPhase(agent, git, cleanup);
+            var reviewPhase = new ReviewPhase(agent, git, cleanup, refactor, readsPlan: false);
 
             IReadOnlySet<string> basePassed = cleanup
                 ? await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false)
@@ -117,9 +123,9 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
                             : await testGate.RunAsync(request.Directory, pin, request.SecretNames, cancellationToken).ConfigureAwait(false);
                         await Say(gate.Passed ? "test: passed" : "test: failed").ConfigureAwait(false);
                         IReadOnlyList<string> gateFaults = gate.Passed ? [] : gate.Evidence;
-                        if (gate.Passed && cleanup)
+                        if (gate.Passed && (cleanup || refactor))
                         {
-                            gateFaults = CleanupGate.LostTests(basePassed, gate);
+                            gateFaults = cleanup ? CleanupGate.LostTests(basePassed, gate) : [];
                             if (gateFaults.Count is 0 && check is not null)
                             {
                                 CommandResult after = await CleanupGate.RunCheckAsync(sandbox, check, progress, cancellationToken).ConfigureAwait(false);

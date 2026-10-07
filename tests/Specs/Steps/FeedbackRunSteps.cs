@@ -20,12 +20,13 @@ public sealed class FeedbackRunSteps : IDisposable
     private Exception? _exception;
     private SeenPrompt? _prompt;
 
-    public FeedbackRunSteps(FactoryRunSteps shared, BuildPhaseSteps buildPhase)
+    public FeedbackRunSteps(FactoryRunSteps shared, BuildPhaseSteps buildPhase, ReviewPromptState reviewPrompt)
     {
         _shared = shared;
         shared.OtherCommands = _h.Commands;
         shared.OtherPrompts = _h.Prompts;
         buildPhase.FirstPrompt = () => Build(1).Text;
+        reviewPrompt.Lookup = () => _h.Prompts.FirstOrDefault(p => p.Kind is "review")?.Text;
     }
 
     /// <summary>The harness of the run, for the step class of a feature of the same run.</summary>

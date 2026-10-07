@@ -7,7 +7,7 @@ namespace Core;
 public sealed record ReviewPhaseResult(bool Approved, IReadOnlyList<string> Blocking);
 
 /// <summary>Asks the agent to review the build against the issue, the scenarios and the plan, and reads its verdict.</summary>
-public sealed class ReviewPhase(ClaudeCodeAgent agent, Git git, bool cleanup = false, bool refactor = false)
+public sealed class ReviewPhase(ClaudeCodeAgent agent, Git git, bool cleanup = false, bool refactor = false, bool readsPlan = true)
 {
     private const string VerdictPath = ".factory/review.json";
     private const string CutMarker = "[cut]";
@@ -104,8 +104,8 @@ public sealed class ReviewPhase(ClaudeCodeAgent agent, Git git, bool cleanup = f
             + "Read every change since the base commit in the work tree.\n\n"
             + "Your job:\n"
             + (refactor
-                ? "1. Read the plan, .factory/plan.md.\n"
-                    + "2. Judge the build against the plan and every sentence of the issue. "
+                ? (readsPlan ? "1. Read the plan, .factory/plan.md.\n" : "1. Read every change since the base commit.\n")
+                    + (readsPlan ? "2. Judge the build against the plan and every sentence of the issue. " : "2. Judge the build against every sentence of the issue. ")
                     + "Block a change to any file under specs/features/, tests/Specs/ or tests/Integration/.\n"
                 : cleanup
                 ? "1. Read every feature file under specs/features/.\n"
