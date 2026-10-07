@@ -17,4 +17,8 @@ public sealed class StarterAgentsSteps(StarterState state)
     [Then("the comment in the copy's {string} does not hold the line {string}")]
     public void ThenTheCommentLacks(string file, string line)
         => StarterChecks.CommentLacks(Path.Combine(state.Copy, file), line);
+
+    [Then("the copy's file {string} holds this text")]
+    public void ThenTheCopysFileHolds(string file, string docString)
+        => StarterChecks.TextEquals(Path.Combine(state.Copy, file), docString);
 }
