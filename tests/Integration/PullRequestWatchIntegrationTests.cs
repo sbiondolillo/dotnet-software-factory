@@ -94,6 +94,40 @@ public sealed class PullRequestWatchIntegrationTests
     }
 
     [Fact]
+    public async Task WhileTheFixtureBuildRunsItsCheckRunIsInProgressWithNoConclusion()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        GitHubClient client = Client();
+        string branch = "";
+        int number = 0;
+        try
+        {
+            (branch, number) = await OpenAsync(client, ct, "watch-green/", "watch-fixture/");
+            var pulls = new PullRequests(client);
+            DateTime deadline = DateTime.UtcNow.AddMinutes(15);
+            CheckRun? build = null;
+            while (build is null || build.Status is "queued")
+            {
+                string sha = await pulls.ReadHeadShaAsync(Owner, Repo, number, ct);
+                build = (await pulls.ReadCheckRunsAsync(Owner, Repo, sha, ct)).FirstOrDefault(r => r.Name is "build");
+                if (build is { Status: "in_progress" } or { Status: "completed" })
+                {
+                    break;
+                }
+
+                Assert.True(DateTime.UtcNow < deadline, "GitHub started no watch-fixture build within 15 minutes");
+                await Task.Delay(TimeSpan.FromSeconds(1), ct);
+            }
+
+            Assert.Equal(new CheckRun("build", "in_progress", ""), build);
+        }
+        finally
+        {
+            await CleanUpAsync(client, number, branch);
+        }
+    }
+
+    [Fact]
     public async Task TheHeadShaOfAPullRequestIsTheBranchHeadAndPullZeroGives404()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;

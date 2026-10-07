@@ -14,7 +14,4 @@ public sealed class CopilotReviewRequestSteps
 
     [Then("the section holds the line {string}")]
     public void ThenHolds(string line) => Assert.Contains(line, _section.Split('\n'));
-
-    [Then("the section holds no line {string}")]
-    public void ThenHoldsNo(string line) => Assert.DoesNotContain(line, _section.Split('\n'));
 }

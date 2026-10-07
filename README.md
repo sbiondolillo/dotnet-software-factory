@@ -41,7 +41,7 @@ Replace `EXAMPLE_API_KEY` in `factory.yml`, in `review-feedback.yml` and in `ci.
 
 Protect the branch `main`, with the checks `build` and `integration` required.
 
-The factory requests a Copilot code review of each pull request it watches. The repo's owner needs a Copilot plan that includes Copilot code review.
+The factory requests a Copilot code review of each pull request it watches, and waits for that review on the head commit. This needs a Copilot plan that includes Copilot code review. With no such plan, add `--copilot-review off` to the run command in `factory.yml` and in `review-feedback.yml`. The factory then requests no review and waits for the checks alone. The review prompt of the factory reviews each build with either value.
 
 The repo's owner starts a run with the label `factory` on an issue. `factory.yml` names the tag `v0` of the factory.
 
