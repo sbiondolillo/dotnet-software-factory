@@ -1,8 +1,8 @@
 # A `factory` label on an issue starts a homelab-factory run against it
 # (sam/homelab-factory#92). The Python factory builds this repo one module per
-# issue. Exactly one of the labels behavior, refactor and cleanup names the
-# recipe the run uses: an issue that carries none of the three, or two of
-# them, fails before the run starts.
+# issue. Exactly one of the labels behavior, refactor, cleanup and reframe
+# names the recipe the run uses: an issue that carries none of the four, or
+# two of them, fails before the run starts.
 #
 # The job runs on llm-01's self-hosted runner, which homelab-ansible
 # roles/factory_runner installs, and delivers a PR here.
@@ -38,10 +38,10 @@ jobs:
           recipe="$(python3 - "$LABELS" <<'EOF'
           import json, sys
           names = {label["name"] for label in json.loads(sys.argv[1])}
-          hits = sorted(names & {"behavior", "refactor", "cleanup"})
+          hits = sorted(names & {"behavior", "refactor", "cleanup", "reframe"})
           if len(hits) != 1:
               sys.exit("the issue's labels must name exactly one of the recipes "
-                       "behavior, refactor and cleanup; they name: "
+                       "behavior, refactor, cleanup and reframe; they name: "
                        + (", ".join(hits) if hits else "none"))
           print(hits[0])
           EOF
