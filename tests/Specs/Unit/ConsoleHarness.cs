@@ -176,10 +176,7 @@ public sealed class ConsoleHarness : IDisposable
         return ConsoleProgram.RunAsync(args, host, cancellationToken);
     }
 
-    public void Dispose()
-    {
-        _root.Delete(recursive: true);
-    }
+    public void Dispose() => _root.Delete(recursive: true);
 
     private static string Json(string text) =>
         JsonSerializer.Serialize(new Dictionary<string, object> { ["is_error"] = false, ["result"] = text, ["num_turns"] = 1, ["total_cost_usd"] = 0.0 });

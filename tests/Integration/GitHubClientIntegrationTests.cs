@@ -41,7 +41,7 @@ public sealed class GitHubClientIntegrationTests
             Assert.Equal(title, issue.Title);
             Assert.Equal("the body", issue.Body);
             Assert.Equal(login, issue.Author);
-            Assert.Equal(["bug", "question"], issue.Labels.Order().ToArray());
+            Assert.Equal<string[]>(["bug", "question"], [.. issue.Labels.Order()]);
 
             await client.PostCommentAsync(Owner, Repo, number, comment, ct);
             JsonElement comments = await client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/issues/{number}/comments", null, ct);

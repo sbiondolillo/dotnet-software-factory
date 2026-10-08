@@ -179,24 +179,24 @@ public sealed class GitIntegrationTests
             ?? throw new InvalidOperationException($"GitHub's branch API returned no body for {branch}");
     }
 
-    private sealed class BranchInfo
+    public sealed class BranchInfo
     {
         public required BranchCommit Commit { get; init; }
     }
 
-    private sealed class BranchCommit
+    public sealed class BranchCommit
     {
         public required string Sha { get; init; }
 
         public required CommitDetail Commit { get; init; }
     }
 
-    private sealed class CommitDetail
+    public sealed class CommitDetail
     {
         public required CommitAuthor Author { get; init; }
     }
 
-    private sealed class CommitAuthor
+    public sealed class CommitAuthor
     {
         public required string Name { get; init; }
 

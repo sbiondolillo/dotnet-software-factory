@@ -91,6 +91,8 @@ public static class FeatureFiles
                 case Scenario scenario:
                     scenarios.Add((scenario.Name, string.Join('\n', scenario.Steps.Select(StepSignature))));
                     break;
+                default:
+                    break;
             }
         }
     }
@@ -113,6 +115,8 @@ public static class FeatureFiles
                     break;
                 case Scenario scenario:
                     titles.Add(scenario.Name);
+                    break;
+                default:
                     break;
             }
         }

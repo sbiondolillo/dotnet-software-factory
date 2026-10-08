@@ -45,6 +45,6 @@ public sealed class PullRequestWatch(
         }
 
         IReadOnlyList<ReviewThread> threads = await reviewThreads.ReadThreadsAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
-        return new PullRequestWatchResult(green, threads.Where(t => !t.IsResolved).ToList());
+        return new PullRequestWatchResult(green, [.. threads.Where(t => !t.IsResolved)]);
     }
 }

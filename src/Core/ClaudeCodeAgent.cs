@@ -45,12 +45,8 @@ public sealed class ClaudeCodeAgent(Sandbox sandbox, TextWriter? log = null, Tim
             [],
             cancellationToken).ConfigureAwait(false);
 
-        using JsonDocument? document = ParseObject(result.StandardOutput);
-        if (document is null)
-        {
-            throw new ClaudeCodeException(
-                $"claude exited with the code {result.ExitCode} and wrote no JSON object: {result.StandardError}");
-        }
+        using JsonDocument document = ParseObject(result.StandardOutput) ?? throw new ClaudeCodeException(
+            $"claude exited with the code {result.ExitCode} and wrote no JSON object: {result.StandardError}");
 
         JsonElement root = document.RootElement;
         var answer = new ClaudeCodeResult(

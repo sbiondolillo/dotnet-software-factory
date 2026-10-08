@@ -101,6 +101,7 @@ public sealed class DeliverBodySteps(DeliverBodyState state)
     [Given("the issue {int} has the label {string} and a {string} section")]
     public void GivenLabelCheck(int issue, string label, string heading)
     {
+        _ = issue;
         Assert.Equal("## Check", heading);
         AddLabel(state, label);
         state.Harness.Body = JobSummaryHarness.CleanupBody;
@@ -109,6 +110,7 @@ public sealed class DeliverBodySteps(DeliverBodyState state)
     [Given("the issue {int} has the label {string} and no {string} section")]
     public void GivenLabelNoCheck(int issue, string label, string heading)
     {
+        _ = issue;
         Assert.Equal("## Check", heading);
         AddLabel(state, label);
         state.Harness.Body = "Move the checkout total into its own class.";

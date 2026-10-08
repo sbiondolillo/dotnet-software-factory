@@ -70,12 +70,16 @@ public sealed class ReviewPhaseHarness : IDisposable
         return await phase.RunAsync(title, body, model, turns, _work.FullName, baseCommit);
     }
 
-    private CommandResult Git(CommandSpec spec) => new()
+    private CommandResult Git(CommandSpec spec)
     {
-        ExitCode = DiffExitCode,
-        StandardOutput = DiffText,
-        StandardError = DiffExitCode is 0 ? "" : "fatal: bad object",
-    };
+        _ = spec;
+        return new()
+        {
+            ExitCode = DiffExitCode,
+            StandardOutput = DiffText,
+            StandardError = DiffExitCode is 0 ? "" : "fatal: bad object",
+        };
+    }
 
     private CommandResult Exec(CommandSpec spec)
     {

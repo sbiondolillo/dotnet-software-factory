@@ -21,15 +21,22 @@ public sealed class PullRequestsSteps(ExceptionState exceptionState) : IDisposab
     public void GivenBuilt() => _pullRequests = new PullRequests(new GitHubClient(new HttpClient(_handler), "token", TimeSpan.Zero));
 
     [Given("no pull request from the branch {string} is open")]
-    public void GivenNoneOpen(string branch) => _handler.LookupBody = "[]";
+    public void GivenNoneOpen(string branch)
+    {
+        _ = branch;
+        _handler.LookupBody = "[]";
+    }
 
     [Given("GitHub answers the open of a pull request with the number {int} and the html_url {string}")]
     public void GivenOpenAnswer(int number, string url) =>
         _handler.PostBody = JsonSerializer.Serialize(new { number, html_url = url });
 
     [Given("the pull request {int}, with the html_url {string}, is already open from the branch {string}")]
-    public void GivenAlreadyOpen(int number, string url, string branch) =>
+    public void GivenAlreadyOpen(int number, string url, string branch)
+    {
+        _ = branch;
         _handler.LookupBody = JsonSerializer.Serialize(new[] { new { number, html_url = url } });
+    }
 
     [Given("GitHub answers the read of check runs with no check runs")]
     public void GivenNoRuns() => _handler.ReadBody = "{\"total_count\": 0, \"check_runs\": []}";

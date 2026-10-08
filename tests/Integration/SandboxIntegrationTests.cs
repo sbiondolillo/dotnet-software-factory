@@ -122,7 +122,7 @@ public sealed class SandboxIntegrationTests : IDisposable
 
         CommandResult removed = await DockerAsync("rm", "--force", id);
 
-        await WaitForAsync(() => HostHasProcess("sleep", "600") is false, 5_000);
+        await WaitForAsync(() => !HostHasProcess("sleep", "600"), 5_000);
         Assert.False(HostHasProcess("sleep", "600"));
 
         Assert.Equal(id + "\n", removed.StandardOutput);
@@ -131,8 +131,8 @@ public sealed class SandboxIntegrationTests : IDisposable
 
     private static async Task WaitForAsync(Func<bool> condition, int timeoutMilliseconds)
     {
-        var deadline = Environment.TickCount64 + (long)timeoutMilliseconds;
-        while (condition() is false && Environment.TickCount64 < deadline)
+        var deadline = Environment.TickCount64 + timeoutMilliseconds;
+        while (!condition() && Environment.TickCount64 < deadline)
         {
             await Task.Delay(100, TestContext.Current.CancellationToken);
         }
@@ -143,7 +143,7 @@ public sealed class SandboxIntegrationTests : IDisposable
         foreach (string directory in Directory.EnumerateDirectories("/proc"))
         {
             string? name = Path.GetFileName(directory);
-            if (name is null || name.Length is 0 || name.Any(character => char.IsDigit(character) is false))
+            if (name is null || name.Length is 0 || name.Any(character => !char.IsDigit(character)))
             {
                 continue;
             }

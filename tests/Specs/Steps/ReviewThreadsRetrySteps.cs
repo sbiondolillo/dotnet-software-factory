@@ -31,10 +31,8 @@ public sealed class ReviewThreadsRetrySteps(ExceptionState exceptionState, Recor
         handler.Answer(200, "{\"data\":{\"repository\":{\"pullRequest\":{\"reviews\":{\"nodes\":[{\"state\":\"APPROVED\",\"author\":{\"login\":" + Q(login) + "},\"commit\":{\"oid\":\"abc\"}}]}}}}}");
 
     [When("a caller requests a review on pull request {int} of the repo {string} of the owner {string}")]
-    public async Task WhenRequest(int number, string repo, string owner)
-    {
+    public async Task WhenRequest(int number, string repo, string owner) =>
         await Try(() => Sut().RequestReviewAsync($"{owner}/{repo}#{number}", "bot"));
-    }
 
     [Then("ReviewThreads returns one thread with the id {string}")]
     public void ThenThread(string id) => Assert.Equal(id, Assert.Single(shared.Threads!).Id);

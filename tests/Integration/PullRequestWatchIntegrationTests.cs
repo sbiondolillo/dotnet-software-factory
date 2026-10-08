@@ -57,9 +57,14 @@ public sealed class PullRequestWatchIntegrationTests
             string sha = await pulls.ReadHeadShaAsync(Owner, Repo, number, ct);
             IReadOnlyList<CheckRun> runs = await pulls.ReadCheckRunsAsync(Owner, Repo, sha, ct);
             if (runs.Any(r => r.Name is "build"))
+            {
                 return;
+            }
+
             if (DateTime.UtcNow >= deadline)
+            {
                 Assert.Fail("GitHub started no watch-fixture workflow run within 15 minutes");
+            }
             await Task.Delay(TimeSpan.FromSeconds(10), ct);
         }
     }
