@@ -23,7 +23,7 @@ public sealed class ReviewThreadsTests
     {
         (ReviewThreads sut, _) = Make(200, "{\"data\":{\"repository\":{\"pullRequest\":null}},\"errors\":[{\"message\":\"nope\"}]}");
         GitHubGraphQLException ex = await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ReadReviewsAsync("o", "r", 0, Token));
-        Assert.Contains("nope", ex.Message);
+        Assert.Contains("nope", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -52,8 +52,8 @@ public sealed class ReviewThreadsTests
     {
         (ReviewThreads sut, _) = Make(200, Errors);
         GitHubGraphQLException ex = await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ResolveAsync("t", Token));
-        Assert.Contains("first bad", ex.Message);
-        Assert.Contains("second bad", ex.Message);
+        Assert.Contains("first bad", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("second bad", ex.Message, StringComparison.Ordinal);
     }
 
     [Theory]

@@ -183,6 +183,6 @@ public sealed class DeliverTests
         string body = PullBody(handler);
         Assert.StartsWith("Closes #7", body, StringComparison.Ordinal);
         Assert.Matches(@"\nTotal: \$0 in 0 s$", body);
-        Assert.Contains("https://x/pull/10", Assert.Single(handler.Requests, r => r.Uri.EndsWith("/comments", StringComparison.Ordinal)).Content);
+        Assert.Contains("https://x/pull/10", Assert.Single(handler.Requests, r => r.Uri.EndsWith("/comments", StringComparison.Ordinal)).Content, StringComparison.Ordinal);
     }
 }

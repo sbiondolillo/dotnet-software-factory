@@ -54,7 +54,7 @@ public sealed class ReviewThreadsRetrySteps(ExceptionState exceptionState, Recor
 
     [Then("the message of the exception holds {string}")]
     public void ThenMessage(string text) =>
-        Assert.Contains(text, Assert.IsType<GitHubGraphQLException>(exceptionState.Exception).Message);
+        Assert.Contains(text, Assert.IsType<GitHubGraphQLException>(exceptionState.Exception).Message, StringComparison.Ordinal);
 
     private static string Q(string value) => JsonSerializer.Serialize(value);
 

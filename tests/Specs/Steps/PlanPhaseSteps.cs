@@ -181,7 +181,7 @@ public sealed class PlanPhaseSteps(IssueState issue) : IDisposable
     {
         foreach (string text in texts)
         {
-            Assert.Contains(text, prompt);
+            Assert.Contains(text, prompt, StringComparison.Ordinal);
         }
     }
 }

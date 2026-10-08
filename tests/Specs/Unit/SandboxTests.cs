@@ -47,7 +47,7 @@ public sealed class SandboxTests : IDisposable
         SandboxException exception = await Assert.ThrowsAsync<SandboxException>(
             () => StartAsync(Runner(run: code, runError: error), TestContext.Current.CancellationToken));
 
-        Assert.Contains(error, exception.Message);
+        Assert.Contains(error, exception.Message, StringComparison.Ordinal);
         Assert.Equal(["image", "run"], _recorded.Select(s => s.Arguments[0]));
     }
 

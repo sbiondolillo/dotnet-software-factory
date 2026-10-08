@@ -34,9 +34,9 @@ public sealed class BuildPhaseTests
         await h.RunAsync(redo: [longText, "short fault"]);
         string prompt = h.Prompts[0];
         Assert.True(Encoding.UTF8.GetByteCount(prompt) <= Limit);
-        Assert.Contains("short fault", prompt);
-        Assert.Contains("[cut]", prompt);
-        Assert.Contains(new string('a', 100000) + "[cut]", prompt);
+        Assert.Contains("short fault", prompt, StringComparison.Ordinal);
+        Assert.Contains("[cut]", prompt, StringComparison.Ordinal);
+        Assert.Contains(new string('a', 100000) + "[cut]", prompt, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public sealed class BuildPhaseTests
         string prompt = h.Prompts[0];
         Assert.True(Encoding.UTF8.GetByteCount(prompt) <= Limit);
         Assert.DoesNotContain('\uFFFD', prompt);
-        Assert.Contains("é[cut]", prompt);
+        Assert.Contains("é[cut]", prompt, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public sealed class BuildPhaseTests
         await h.RunAsync(redo: [new string('a', 200000), new string('b', 150000)]);
         string prompt = h.Prompts[0];
         Assert.True(Encoding.UTF8.GetByteCount(prompt) <= Limit);
-        Assert.Contains("The checkout shows the total of the cart.", prompt);
+        Assert.Contains("The checkout shows the total of the cart.", prompt, StringComparison.Ordinal);
         int a = System.Text.RegularExpressions.Regex.Match(prompt, "a{1000,}").Length;
         int b = System.Text.RegularExpressions.Regex.Match(prompt, "b{1000,}").Length;
         Assert.True(Math.Abs(a - b) <= 1);
@@ -72,7 +72,7 @@ public sealed class BuildPhaseTests
         string prompt = h.Prompts[0];
         Assert.True(Encoding.UTF8.GetByteCount(prompt) <= Limit);
         Assert.DoesNotContain('\uFFFD', prompt);
-        Assert.Contains("\U0001F600[cut]", prompt);
+        Assert.Contains("\U0001F600[cut]", prompt, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public sealed class BuildPhaseTests
         using var exact = new BuildPhaseHarness();
         await exact.RunAsync(redo: [new string('x', Limit - baseBytes + 1)]);
         Assert.Equal(Limit, Encoding.UTF8.GetByteCount(exact.Prompts[0]));
-        Assert.DoesNotContain("[cut]", exact.Prompts[0]);
+        Assert.DoesNotContain("[cut]", exact.Prompts[0], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -92,8 +92,8 @@ public sealed class BuildPhaseTests
     {
         using var h = new BuildPhaseHarness();
         await h.RunAsync();
-        Assert.DoesNotContain("[cut]", h.Prompts[0]);
-        Assert.DoesNotContain("Redo", h.Prompts[0]);
+        Assert.DoesNotContain("[cut]", h.Prompts[0], StringComparison.Ordinal);
+        Assert.DoesNotContain("Redo", h.Prompts[0], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public sealed class BuildPhaseTests
         await h.RunAsync();
         foreach (string name in Pin.SettingsFileNames)
         {
-            Assert.Contains(name, h.Prompts[0]);
+            Assert.Contains(name, h.Prompts[0], StringComparison.Ordinal);
         }
     }
 

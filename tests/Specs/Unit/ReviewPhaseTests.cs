@@ -47,8 +47,8 @@ public sealed class ReviewPhaseTests
         GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => new Git(mock.Object).ReadDiffAsync("abc", "/work", TestContext.Current.CancellationToken));
 
-        Assert.Contains("diff", exception.Message);
-        Assert.Contains("fatal: bad object abc", exception.Message);
+        Assert.Contains("diff", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("fatal: bad object abc", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public sealed class ReviewPhaseTests
         ReviewPhaseResult result = await h.RunAsync();
 
         Assert.False(result.Approved);
-        Assert.Contains(".factory/review.json", Assert.Single(result.Blocking));
+        Assert.Contains(".factory/review.json", Assert.Single(result.Blocking), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -140,8 +140,8 @@ public sealed class ReviewPhaseTests
 
         await h.RunAsync();
 
-        Assert.Contains("diff --git a/x b/x\n+line\n", h.Prompts[0]);
-        Assert.DoesNotContain("[cut]", h.Prompts[0]);
+        Assert.Contains("diff --git a/x b/x\n+line\n", h.Prompts[0], StringComparison.Ordinal);
+        Assert.DoesNotContain("[cut]", h.Prompts[0], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -153,7 +153,7 @@ public sealed class ReviewPhaseTests
 
         string prompt = h.Prompts[0];
         Assert.True(Encoding.UTF8.GetByteCount(prompt) <= 131071);
-        Assert.EndsWith("[cut]", prompt);
+        Assert.EndsWith("[cut]", prompt, StringComparison.Ordinal);
         for (int i = 0; i < prompt.Length; i++)
         {
             if (char.IsHighSurrogate(prompt[i]))
@@ -176,11 +176,11 @@ public sealed class ReviewPhaseTests
         await h.RunAsync();
 
         string prompt = h.Prompts[0];
-        Assert.Contains("START" + new string('a', 1000), prompt);
-        Assert.EndsWith("[cut]", prompt);
-        Assert.Contains("Add a checkout total", prompt);
-        Assert.Contains("The checkout shows the total of the cart.", prompt);
-        Assert.Contains(ReviewPhaseHarness.DefaultBase, prompt);
+        Assert.Contains("START" + new string('a', 1000), prompt, StringComparison.Ordinal);
+        Assert.EndsWith("[cut]", prompt, StringComparison.Ordinal);
+        Assert.Contains("Add a checkout total", prompt, StringComparison.Ordinal);
+        Assert.Contains("The checkout shows the total of the cart.", prompt, StringComparison.Ordinal);
+        Assert.Contains(ReviewPhaseHarness.DefaultBase, prompt, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -190,6 +190,6 @@ public sealed class ReviewPhaseTests
 
         await h.RunAsync();
 
-        Assert.DoesNotContain(h.WorkTree, h.Prompts[0]);
+        Assert.DoesNotContain(h.WorkTree, h.Prompts[0], StringComparison.Ordinal);
     }
 }

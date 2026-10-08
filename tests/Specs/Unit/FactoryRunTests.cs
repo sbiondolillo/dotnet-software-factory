@@ -18,7 +18,7 @@ public sealed class FactoryRunTests
         using var h = new FactoryRunHarness();
         h.Lacks.Add(path);
         FactoryRunResult result = await h.RunAsync(Ct);
-        Assert.Contains(path, Assert.Single(h.CommentBodies));
+        Assert.Contains(path, Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.Equal(new FactoryRunResult(null, 0), result);
         Assert.DoesNotContain(h.Commands, c => c.Command is "docker");
         Assert.Empty(h.Prompts);
@@ -32,8 +32,8 @@ public sealed class FactoryRunTests
         h.Lacks.Add("tests/Specs/");
         await h.RunAsync(Ct);
         string body = Assert.Single(h.CommentBodies);
-        Assert.Contains("Solution.slnx", body);
-        Assert.Contains("tests/Specs/", body);
+        Assert.Contains("Solution.slnx", body, StringComparison.Ordinal);
+        Assert.Contains("tests/Specs/", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -50,8 +50,8 @@ public sealed class FactoryRunTests
         };
         await h.RunAsync(Ct);
         string body = Assert.Single(h.CommentBodies);
-        Assert.Contains("Solution.slnx", body);
-        Assert.Contains("specs/features/", body);
+        Assert.Contains("Solution.slnx", body, StringComparison.Ordinal);
+        Assert.Contains("specs/features/", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public sealed class FactoryRunTests
         using var h = new FactoryRunHarness();
         h.AgentWritesPlan = false;
         FactoryRunResult result = await h.RunAsync(Ct);
-        Assert.Contains(".factory/plan.md", Assert.Single(h.CommentBodies));
+        Assert.Contains(".factory/plan.md", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain(h.Prompts, p => p.Kind is "build");
         Assert.Equal(new FactoryRunResult(null, 0), result);
         Assert.Contains("rm", h.Events);
@@ -84,7 +84,7 @@ public sealed class FactoryRunTests
         Assert.Equal(1, result.Redos);
         List<SeenPrompt> prompts = h.Prompts;
         Assert.Equal(["plan", "build", "build", "review"], prompts.Select(p => p.Kind));
-        Assert.Contains(FactoryRunHarness.RedText, prompts[2].Text);
+        Assert.Contains(FactoryRunHarness.RedText, prompts[2].Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public sealed class FactoryRunTests
         h.RejectedBuilds.Add(1);
         FactoryRunResult result = await h.RunAsync(Ct);
         Assert.Equal(1, result.Redos);
-        Assert.Contains(FactoryRunHarness.Blocking, h.Prompts.Where(p => p.Kind is "build").ElementAt(1).Text);
+        Assert.Contains(FactoryRunHarness.Blocking, h.Prompts.Where(p => p.Kind is "build").ElementAt(1).Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -121,8 +121,8 @@ public sealed class FactoryRunTests
         Assert.Equal(4, h.Prompts.Count(p => p.Kind is "build"));
         Assert.DoesNotContain(h.Prompts, p => p.Kind is "review");
         string body = Assert.Single(h.CommentBodies);
-        Assert.Contains(FactoryRunHarness.RedText, body);
-        Assert.Contains("spent", body);
+        Assert.Contains(FactoryRunHarness.RedText, body, StringComparison.Ordinal);
+        Assert.Contains("spent", body, StringComparison.Ordinal);
         Assert.DoesNotContain("push", h.Events);
         Assert.Equal(new FactoryRunResult(null, 3), result);
     }
@@ -136,7 +136,7 @@ public sealed class FactoryRunTests
         h.RedBuilds.Add(3);
         h.RejectedBuilds.Add(4);
         FactoryRunResult result = await h.RunAsync(Ct);
-        Assert.Contains(FactoryRunHarness.Blocking, Assert.Single(h.CommentBodies));
+        Assert.Contains(FactoryRunHarness.Blocking, Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.Equal(4, h.Prompts.Count(p => p.Kind is "build"));
         Assert.Single(h.Prompts, p => p.Kind is "review");
         Assert.DoesNotContain("push", h.Events);
@@ -155,7 +155,7 @@ public sealed class FactoryRunTests
         Assert.Equal(["plan", "build"], h.Prompts.Select(p => p.Kind));
         Assert.DoesNotContain(h.Commands, c => c.Arguments.Contains("format"));
         Assert.DoesNotContain(h.Commands, c => c.Arguments.Contains("--logger"));
-        Assert.Contains("Invalid API key", Assert.Single(h.CommentBodies));
+        Assert.Contains("Invalid API key", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain("push", h.Events);
         Assert.Contains("rm", h.Events);
         Assert.DoesNotContain(h.Requests, r => r.Uri.EndsWith("/pulls", StringComparison.Ordinal) && r.Method is "POST");
@@ -171,7 +171,7 @@ public sealed class FactoryRunTests
         Assert.Null(result.PullRequest);
         Assert.Equal(0, result.Redos);
         Assert.Equal(["plan", "build", "review"], h.Prompts.Select(p => p.Kind));
-        Assert.Contains("Invalid API key", Assert.Single(h.CommentBodies));
+        Assert.Contains("Invalid API key", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -210,8 +210,8 @@ public sealed class FactoryRunTests
         h.ErrorText = text;
         await h.RunAsync(Ct);
         string body = Assert.Single(h.CommentBodies);
-        Assert.Contains("claude answered with an error and no text.", body);
-        Assert.EndsWith(body, h.Progress.ToString().TrimEnd('\n'));
+        Assert.Contains("claude answered with an error and no text.", body, StringComparison.Ordinal);
+        Assert.EndsWith(body, h.Progress.ToString().TrimEnd('\n'), StringComparison.Ordinal);
     }
 
     [Theory]
@@ -239,7 +239,7 @@ public sealed class FactoryRunTests
         Assert.Null(result.PullRequest);
         Assert.Equal(0, result.Redos);
         Assert.Equal(kinds.Split(','), h.Prompts.Select(p => p.Kind));
-        Assert.Contains("Invalid API key", Assert.Single(h.CommentBodies));
+        Assert.Contains("Invalid API key", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain("push", h.Events);
     }
 
@@ -251,7 +251,7 @@ public sealed class FactoryRunTests
         FactoryRunResult result = await h.RunAsync(Ct);
         Assert.Equal(new FactoryRunResult(null, 0), result);
         Assert.Equal(["plan"], h.Prompts.Select(p => p.Kind));
-        Assert.Contains("plan went wrong", Assert.Single(h.CommentBodies));
+        Assert.Contains("plan went wrong", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -278,8 +278,8 @@ public sealed class FactoryRunTests
         await h.RunAsync(Ct);
         string body = Assert.Single(h.CommentBodies);
         Assert.True(Encoding.UTF8.GetByteCount(body) <= 262144);
-        Assert.Contains(new string('a', 200000), body);
-        Assert.Contains("[cut]", body);
+        Assert.Contains(new string('a', 200000), body, StringComparison.Ordinal);
+        Assert.Contains("[cut]", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -296,7 +296,7 @@ public sealed class FactoryRunTests
         string body = Assert.Single(h.CommentBodies);
         Assert.True(Encoding.UTF8.GetByteCount(body) <= 262144);
         Assert.DoesNotContain('\uFFFD', body);
-        Assert.Contains("[cut]", body);
+        Assert.Contains("[cut]", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -311,8 +311,8 @@ public sealed class FactoryRunTests
         h.TestStdout = new string('a', 1000);
         await h.RunAsync(Ct);
         string body = Assert.Single(h.CommentBodies);
-        Assert.Contains(new string('a', 1000), body);
-        Assert.DoesNotContain("[cut]", body);
+        Assert.Contains(new string('a', 1000), body, StringComparison.Ordinal);
+        Assert.DoesNotContain("[cut]", body, StringComparison.Ordinal);
     }
 
     [Fact]

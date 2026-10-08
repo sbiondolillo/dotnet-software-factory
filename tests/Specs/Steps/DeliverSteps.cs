@@ -106,7 +106,7 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
     public void ThenOpened(string slug, string head, string baseBranch, string title)
     {
         RecordedRequest post = OpenRequest();
-        Assert.EndsWith($"/repos/{slug}/pulls", post.Uri);
+        Assert.EndsWith($"/repos/{slug}/pulls", post.Uri, StringComparison.Ordinal);
         using var json = JsonDocument.Parse(post.Content!);
         Assert.Equal(head, json.RootElement.GetProperty("head").GetString());
         Assert.Equal(baseBranch, json.RootElement.GetProperty("base").GetString());
@@ -125,8 +125,8 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
     public void ThenComment(int issue, string slug, string text)
     {
         RecordedRequest comment = Assert.Single(Comments());
-        Assert.EndsWith($"/repos/{slug}/issues/{issue}/comments", comment.Uri);
-        Assert.Contains(text, comment.Content);
+        Assert.EndsWith($"/repos/{slug}/issues/{issue}/comments", comment.Uri, StringComparison.Ordinal);
+        Assert.Contains(text, comment.Content, StringComparison.Ordinal);
     }
 
     [Then("Deliver gives back the pull request with the number {int} and the web address {string}")]

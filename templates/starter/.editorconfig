@@ -65,3 +65,6 @@ dotnet_diagnostic.IDE0008.severity = warning
 # Parentheses where precedence mixes; `?:` for an assignment only.
 dotnet_diagnostic.IDE0048.severity = warning
 dotnet_diagnostic.IDE0045.severity = warning
+# Ordinal comparison, and results that must be used.
+dotnet_diagnostic.CA1307.severity = warning
+dotnet_diagnostic.CA1806.severity = warning

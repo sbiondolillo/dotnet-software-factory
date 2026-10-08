@@ -50,8 +50,8 @@ public sealed class LintGateTests : IDisposable
         LintGateException exception = await Assert.ThrowsAsync<LintGateException>(
             () => gate.RunAsync("/tree", "m", "n", "e@x", TestContext.Current.CancellationToken));
 
-        Assert.Contains(code.ToString(System.Globalization.CultureInfo.InvariantCulture), exception.Message);
-        Assert.Contains(error, exception.Message);
+        Assert.Contains(code.ToString(System.Globalization.CultureInfo.InvariantCulture), exception.Message, StringComparison.Ordinal);
+        Assert.Contains(error, exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(_recorded, s => s.Command == "git");
     }
 

@@ -13,7 +13,7 @@ public sealed class PlanPhaseTests : IDisposable
     {
         Assert.False(result.Passed);
         Assert.Single(result.Failures);
-        Assert.Contains(path, result.Failures[0]);
+        Assert.Contains(path, result.Failures[0], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -56,8 +56,8 @@ public sealed class PlanPhaseTests : IDisposable
         PlanPhaseResult result = await _h.RunAsync();
         Assert.False(result.Passed);
         Assert.Equal(2, result.Failures.Count);
-        Assert.Single(result.Failures, f => f.Contains("specs/features/empty.feature"));
-        Assert.Single(result.Failures, f => f.Contains("specs/features/none.feature"));
+        Assert.Single(result.Failures, f => f.Contains("specs/features/empty.feature", StringComparison.Ordinal));
+        Assert.Single(result.Failures, f => f.Contains("specs/features/none.feature", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -80,9 +80,9 @@ public sealed class PlanPhaseTests : IDisposable
         PlanPhaseResult result = await _h.RunAsync();
         Assert.False(result.Passed);
         Assert.Equal(3, result.Failures.Count);
-        Assert.Single(result.Failures, f => f.Contains("src/deep/New.cs"));
-        Assert.Single(result.Failures, f => f.Contains("a/changed.txt"));
-        Assert.Single(result.Failures, f => f.Contains("removed.txt"));
+        Assert.Single(result.Failures, f => f.Contains("src/deep/New.cs", StringComparison.Ordinal));
+        Assert.Single(result.Failures, f => f.Contains("a/changed.txt", StringComparison.Ordinal));
+        Assert.Single(result.Failures, f => f.Contains("removed.txt", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -145,8 +145,8 @@ public sealed class PlanPhaseTests : IDisposable
         _h.AgentWrites(1, "src/Two.cs", "x");
         PlanPhaseResult result = await _h.RunAsync();
         Assert.Equal(2, _h.Prompts.Count);
-        Assert.Contains("src/One.cs", _h.Prompts[1]);
-        Assert.Contains("src/Two.cs", _h.Prompts[1]);
+        Assert.Contains("src/One.cs", _h.Prompts[1], StringComparison.Ordinal);
+        Assert.Contains("src/Two.cs", _h.Prompts[1], StringComparison.Ordinal);
         Assert.Equal(2, result.Failures.Count);
     }
 
@@ -178,10 +178,10 @@ public sealed class PlanPhaseTests : IDisposable
         Assert.Equal(2, _h.Prompts.Count);
         foreach (string prompt in _h.Prompts)
         {
-            Assert.Contains("Title T", prompt);
-            Assert.Contains("Line one\nLine two", prompt);
-            Assert.Contains("specs/features/", prompt);
-            Assert.Contains(".factory/plan.md", prompt);
+            Assert.Contains("Title T", prompt, StringComparison.Ordinal);
+            Assert.Contains("Line one\nLine two", prompt, StringComparison.Ordinal);
+            Assert.Contains("specs/features/", prompt, StringComparison.Ordinal);
+            Assert.Contains(".factory/plan.md", prompt, StringComparison.Ordinal);
         }
     }
 
@@ -203,7 +203,7 @@ public sealed class PlanPhaseTests : IDisposable
         PlanPhaseResult result = await _h.RunAsync();
         Assert.False(result.Passed);
         Assert.Equal(2, _h.Prompts.Count);
-        Assert.Contains(result.Failures, f => f.Contains("specs/features/"));
+        Assert.Contains(result.Failures, f => f.Contains("specs/features/", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -280,6 +280,6 @@ public sealed class PlanPhaseTests : IDisposable
         Assert.True(result.Passed);
         Assert.Equal(2, _h.Prompts.Count);
         Assert.Equal(1, _h.Prompts[0].Split(Sentence).Length - 1);
-        Assert.Contains(Sentence, _h.Prompts[1]);
+        Assert.Contains(Sentence, _h.Prompts[1], StringComparison.Ordinal);
     }
 }

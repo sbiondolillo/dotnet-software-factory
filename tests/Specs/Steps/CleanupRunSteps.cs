@@ -205,38 +205,38 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     public void ThenCommentError(string text)
     {
         string body = Assert.Single(H.CommentBodies);
-        Assert.Contains(text, body);
-        Assert.Contains("sh: 1: cannot run the check", body);
+        Assert.Contains(text, body, StringComparison.Ordinal);
+        Assert.Contains("sh: 1: cannot run the check", body, StringComparison.Ordinal);
     }
 
     [Then("FactoryRun posts one comment on the issue that holds the standard error of the command")]
-    public void ThenCommentOnlyError() => Assert.Contains("standard error of the check", Assert.Single(H.CommentBodies));
+    public void ThenCommentOnlyError() => Assert.Contains("standard error of the check", Assert.Single(H.CommentBodies), StringComparison.Ordinal);
 
     [Then("FactoryRun runs one prompt with the model {string} and the turn limit {int} that holds the title and the body of the issue")]
     public void ThenBuildPrompt(string model, int turns)
     {
         SeenPrompt prompt = Assert.Single(H.Prompts, p => p.Model == model);
         Assert.Equal(turns.ToString(System.Globalization.CultureInfo.InvariantCulture), prompt.Turns);
-        Assert.Contains(H.Title, prompt.Text);
-        Assert.Contains(H.Body, prompt.Text);
+        Assert.Contains(H.Title, prompt.Text, StringComparison.Ordinal);
+        Assert.Contains(H.Body, prompt.Text, StringComparison.Ordinal);
     }
 
     [Then("the build prompt holds no {string}")]
-    public void ThenBuildNo(string text) => Assert.DoesNotContain(text, Assert.Single(H.Prompts, p => p.Kind is "build").Text);
+    public void ThenBuildNo(string text) => Assert.DoesNotContain(text, Assert.Single(H.Prompts, p => p.Kind is "build").Text, StringComparison.Ordinal);
 
     [Then("the review prompt holds no {string}")]
-    public void ThenReviewNo(string text) => Assert.DoesNotContain(text, Assert.Single(H.Prompts, p => p.Kind is "review").Text);
+    public void ThenReviewNo(string text) => Assert.DoesNotContain(text, Assert.Single(H.Prompts, p => p.Kind is "review").Text, StringComparison.Ordinal);
 
     [Then("the next build prompt holds a Redo text that holds {string}")]
-    public void ThenRedo(string text) => Assert.Contains(text, NextBuild().Text);
+    public void ThenRedo(string text) => Assert.Contains(text, NextBuild().Text, StringComparison.Ordinal);
 
     [Then("the next build prompt holds a Redo text that holds {string}, the standard output and the standard error of the command")]
     public void ThenRedoOutput(string code)
     {
         string text = NextBuild().Text;
-        Assert.Contains(code, text);
-        Assert.Contains("standard output of the check", text);
-        Assert.Contains("standard error of the check", text);
+        Assert.Contains(code, text, StringComparison.Ordinal);
+        Assert.Contains("standard output of the check", text, StringComparison.Ordinal);
+        Assert.Contains("standard error of the check", text, StringComparison.Ordinal);
     }
 
     [Then("no review prompt runs before it")]
@@ -256,9 +256,9 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     {
         SeenPrompt prompt = Assert.Single(H.Prompts, p => p.Model == model);
         Assert.Equal(turns.ToString(System.Globalization.CultureInfo.InvariantCulture), prompt.Turns);
-        Assert.Contains(H.Title, prompt.Text);
-        Assert.Contains(H.Body, prompt.Text);
-        Assert.Contains(H.HeadSha, prompt.Text);
+        Assert.Contains(H.Title, prompt.Text, StringComparison.Ordinal);
+        Assert.Contains(H.Body, prompt.Text, StringComparison.Ordinal);
+        Assert.Contains(H.HeadSha, prompt.Text, StringComparison.Ordinal);
     }
 
     [Then("FactoryRun opens a pull request with the title {string} and gives back a result with that pull request and {int} Redos")]
@@ -285,14 +285,14 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     }
 
     [Then("the section mentions the label {string}")]
-    public static void ThenLabel(string label) => Assert.Contains($"`{label}`", Readme());
+    public static void ThenLabel(string label) => Assert.Contains($"`{label}`", Readme(), StringComparison.Ordinal);
 
     [Then("the section mentions the headings {string} and {string}")]
     public static void ThenHeadings(string first, string second)
     {
         string section = Readme();
-        Assert.Contains(first, section);
-        Assert.Contains(second, section);
+        Assert.Contains(first, section, StringComparison.Ordinal);
+        Assert.Contains(second, section, StringComparison.Ordinal);
     }
 
     private static string Readme() =>

@@ -89,7 +89,7 @@ public sealed class TestGateIntegrationTests : IDisposable
         CommandResult result = await DotnetAsync(sandbox, ["restore", "--locked-mode"]);
 
         Assert.Equal(1, result.ExitCode);
-        Assert.Contains("error NU1004", result.StandardOutput);
+        Assert.Contains("error NU1004", result.StandardOutput, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -104,7 +104,7 @@ public sealed class TestGateIntegrationTests : IDisposable
         CommandResult result = await DotnetAsync(sandbox, ["build", "--no-restore"]);
 
         Assert.Equal(1, result.ExitCode);
-        Assert.Contains("error CS0103", result.StandardOutput);
+        Assert.Contains("error CS0103", result.StandardOutput, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -119,7 +119,7 @@ public sealed class TestGateIntegrationTests : IDisposable
         CommandResult result = await DotnetAsync(sandbox, ["format", "--verify-no-changes", "--no-restore"]);
 
         Assert.Equal(2, result.ExitCode);
-        Assert.Contains("error WHITESPACE", result.StandardError);
+        Assert.Contains("error WHITESPACE", result.StandardError, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public sealed class TestGateIntegrationTests : IDisposable
         Assert.Equal(TestOutcome.Failed, test.Outcome);
         Assert.Equal("Specs.Unit.CheckoutTests", test.ClassName);
         Assert.Equal("AddsTwoPrices", test.Method);
-        Assert.Contains("Assert.Equal() Failure: Values differ", test.Message);
+        Assert.Contains("Assert.Equal() Failure: Values differ", test.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -169,7 +169,7 @@ public sealed class TestGateIntegrationTests : IDisposable
             "namespace Specs;\npublic class Broken\n{\n    public int Value = \"text\";\n}\n");
 
         Assert.Equal(1, result.ExitCode);
-        Assert.Contains("error CS0029", result.StandardOutput);
+        Assert.Contains("error CS0029", result.StandardOutput, StringComparison.Ordinal);
         Assert.Empty(tests);
     }
 
@@ -190,7 +190,7 @@ public sealed class TestGateIntegrationTests : IDisposable
             "using Xunit;\nnamespace Integration;\npublic class ProbeTests\n{\n    [Fact] public void Fails() => Assert.Equal(1, 2);\n}\n");
 
         Assert.Equal(1, result.ExitCode);
-        Assert.Contains("Failed: 1", result.StandardOutput);
+        Assert.Contains("Failed: 1", result.StandardOutput, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -199,7 +199,7 @@ public sealed class TestGateIntegrationTests : IDisposable
         CommandResult result = await IntegrationAsync("namespace Integration;\npublic class Placeholder { }\n");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("Total: 0", result.StandardOutput);
+        Assert.Contains("Total: 0", result.StandardOutput, StringComparison.Ordinal);
     }
 
     private const string ProbeNameTest =

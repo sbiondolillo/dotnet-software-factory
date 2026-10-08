@@ -224,12 +224,12 @@ public sealed class FeedbackRunSteps : IDisposable
     {
         foreach (string text in new[] { a, b, c, d, e, f, g, h, i })
         {
-            Assert.Contains(text, _prompt!.Text);
+            Assert.Contains(text, _prompt!.Text, StringComparison.Ordinal);
         }
     }
 
     [Then("that prompt holds {string}")]
-    public void ThenHolds(string text) => Assert.Contains(text, _prompt!.Text);
+    public void ThenHolds(string text) => Assert.Contains(text, _prompt!.Text, StringComparison.Ordinal);
 
     [Then("FeedbackRun adds a reply to the thread A and a reply to the thread B")]
     public void ThenRepliesAb() =>
@@ -245,7 +245,7 @@ public sealed class FeedbackRunSteps : IDisposable
     public void ThenFirstPrompt(string model) => Assert.Equal(model, _h.Prompts[0].Model);
 
     [Then("FeedbackRun runs a review prompt that holds {string}")]
-    public void ThenReviewHolds(string text) => Assert.Contains(text, Assert.Single(_h.Prompts, p => p.Kind is "review").Text);
+    public void ThenReviewHolds(string text) => Assert.Contains(text, Assert.Single(_h.Prompts, p => p.Kind is "review").Text, StringComparison.Ordinal);
 
     [Then("docker gives both names {string} and {string} to the command {string}")]
     public void ThenNames(string first, string second, string command)
@@ -304,17 +304,17 @@ public sealed class FeedbackRunSteps : IDisposable
     }
 
     [Then("the second build prompt holds {string}")]
-    public void ThenSecond(string text) => Assert.Contains(text, Build(2).Text);
+    public void ThenSecond(string text) => Assert.Contains(text, Build(2).Text, StringComparison.Ordinal);
 
     [Then("the second build prompt holds {string} and {string}")]
     public void ThenSecondTwo(string first, string second)
     {
-        Assert.Contains(first, Build(2).Text);
-        Assert.Contains(second, Build(2).Text);
+        Assert.Contains(first, Build(2).Text, StringComparison.Ordinal);
+        Assert.Contains(second, Build(2).Text, StringComparison.Ordinal);
     }
 
     [Then("the third build prompt holds {string}")]
-    public void ThenThird(string text) => Assert.Contains(text, Build(3).Text);
+    public void ThenThird(string text) => Assert.Contains(text, Build(3).Text, StringComparison.Ordinal);
 
     [Then("FeedbackRun runs the second build prompt before any prompt with the model {string}")]
     public void ThenSecondBeforeReview(string model)
@@ -332,16 +332,16 @@ public sealed class FeedbackRunSteps : IDisposable
     public void ThenCommentOf(int number, string slug, string text)
     {
         SeenRequest request = Assert.Single(_h.Requests, r => r.Method is "POST" && r.Uri.EndsWith("/comments", StringComparison.Ordinal));
-        Assert.Contains($"/repos/{slug}/issues/{number}/comments", request.Uri);
-        Assert.Contains(text, Assert.Single(_h.CommentBodies));
+        Assert.Contains($"/repos/{slug}/issues/{number}/comments", request.Uri, StringComparison.Ordinal);
+        Assert.Contains(text, Assert.Single(_h.CommentBodies), StringComparison.Ordinal);
     }
 
     [Then("FeedbackRun posts one comment on the pull request {int} that holds {string}")]
     public void ThenComment(int number, string text)
     {
         SeenRequest request = Assert.Single(_h.Requests, r => r.Method is "POST" && r.Uri.EndsWith("/comments", StringComparison.Ordinal));
-        Assert.Contains($"/issues/{number}/comments", request.Uri);
-        Assert.Contains(text, Assert.Single(_h.CommentBodies));
+        Assert.Contains($"/issues/{number}/comments", request.Uri, StringComparison.Ordinal);
+        Assert.Contains(text, Assert.Single(_h.CommentBodies), StringComparison.Ordinal);
     }
 
     [Then("FeedbackRun posts one comment of {int} bytes or fewer in bytes, and the comment holds the letter {string} {int} times in sequence and {string}")]
@@ -349,8 +349,8 @@ public sealed class FeedbackRunSteps : IDisposable
     {
         string body = Assert.Single(_h.CommentBodies);
         Assert.True(Encoding.UTF8.GetByteCount(body) <= limit);
-        Assert.Contains(string.Concat(Enumerable.Repeat(letter, count)), body);
-        Assert.Contains(marker, body);
+        Assert.Contains(string.Concat(Enumerable.Repeat(letter, count)), body, StringComparison.Ordinal);
+        Assert.Contains(marker, body, StringComparison.Ordinal);
     }
 
     [Then("FeedbackRun removes the container after the last reply")]

@@ -135,7 +135,7 @@ public sealed class ReviewPhaseSteps(IssueState issue, ExceptionState exceptionS
 
     [Then("the review prompt holds the letter {string} {int} times in sequence")]
     public void ThenLetters(string letter, int count) =>
-        Assert.Contains(string.Concat(Enumerable.Repeat(letter, count)), Prompt);
+        Assert.Contains(string.Concat(Enumerable.Repeat(letter, count)), Prompt, StringComparison.Ordinal);
 
     [Then("the review gives back an approval")]
     public void ThenApproval()

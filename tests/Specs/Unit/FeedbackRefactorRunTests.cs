@@ -37,7 +37,7 @@ public sealed class FeedbackRefactorRunTests
         }
 
         await h.RunAsync(Ct);
-        Assert.Contains($"pin: {path}", h.BuildPrompts.ElementAt(1).Text);
+        Assert.Contains($"pin: {path}", h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
         Assert.True(h.Prompts.IndexOf(h.BuildPrompts.ElementAt(1)) is 1);
     }
 
@@ -50,7 +50,7 @@ public sealed class FeedbackRefactorRunTests
         using FeedbackRunHarness h = Refactor();
         h.CheckResults[1] = (code, "", "");
         await h.RunAsync(Ct);
-        Assert.Contains($"The check command exited with the code {code}", h.BuildPrompts.ElementAt(1).Text);
+        Assert.Contains($"The check command exited with the code {code}", h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
         Assert.Equal("build", h.Prompts[1].Kind);
     }
 
@@ -61,7 +61,7 @@ public sealed class FeedbackRefactorRunTests
         h.RedBuilds.Add(1);
         await h.RunAsync(Ct);
         Assert.Equal(2, h.BuildPrompts.Count());
-        Assert.Contains("dotnet test exited with the code 1", h.BuildPrompts.ElementAt(1).Text);
+        Assert.Contains("dotnet test exited with the code 1", h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
         Assert.Equal(1, h.Commands.Count(RunsCheck));
         Assert.Equal("build", h.Prompts[1].Kind);
     }
@@ -82,7 +82,7 @@ public sealed class FeedbackRefactorRunTests
         h.FirstBuildChanges.Add("tests/Specs/Steps/GreetingSteps.cs");
         await h.RunAsync(Ct);
         Assert.DoesNotContain(h.Commands, RunsCheck);
-        Assert.DoesNotContain("pin:", h.BuildPrompts.Last().Text);
+        Assert.DoesNotContain("pin:", h.BuildPrompts.Last().Text, StringComparison.Ordinal);
         Assert.Contains(h.Prompts, p => p.Kind is "review");
     }
 
@@ -93,7 +93,7 @@ public sealed class FeedbackRefactorRunTests
         h.FirstBuildChanges.Add("tests/Specs/Steps/GreetingSteps.cs");
         await h.RunAsync(Ct);
         Assert.DoesNotContain(h.Requests, r => r.Uri.Contains("/issues/", StringComparison.Ordinal));
-        Assert.DoesNotContain("pin:", h.BuildPrompts.Last().Text);
+        Assert.DoesNotContain("pin:", h.BuildPrompts.Last().Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public sealed class FeedbackRefactorRunTests
 
         FeedbackRunResult result = await h.RunAsync(Ct);
         Assert.Equal(new FeedbackRunResult(0, 2, 3), result);
-        Assert.Contains("The budget of 3 Redos is spent", Assert.Single(h.CommentBodies));
+        Assert.Contains("The budget of 3 Redos is spent", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -117,8 +117,8 @@ public sealed class FeedbackRefactorRunTests
         await h.RunAsync(Ct);
         foreach (SeenPrompt prompt in h.Prompts)
         {
-            Assert.Contains("tests/Integration/", prompt.Text);
-            Assert.DoesNotContain(".factory/plan.md", prompt.Text);
+            Assert.Contains("tests/Integration/", prompt.Text, StringComparison.Ordinal);
+            Assert.DoesNotContain(".factory/plan.md", prompt.Text, StringComparison.Ordinal);
         }
     }
 }

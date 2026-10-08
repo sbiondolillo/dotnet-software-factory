@@ -25,11 +25,11 @@ public sealed class GitHubClientTests
         (GitHubClient client, _) = Make(status, "plain text");
         GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => client.SendAsync(HttpMethod.Post, "/x/y", "{}", TestContext.Current.CancellationToken));
         Assert.Equal(status, ex.StatusCode);
-        Assert.Contains("POST", ex.Message);
-        Assert.Contains("/x/y", ex.Message);
-        Assert.Contains(status.ToString(System.Globalization.CultureInfo.InvariantCulture), ex.Message);
-        Assert.Contains("plain text", ex.Message);
-        Assert.DoesNotContain("secret-token", ex.Message);
+        Assert.Contains("POST", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("/x/y", ex.Message, StringComparison.Ordinal);
+        Assert.Contains(status.ToString(System.Globalization.CultureInfo.InvariantCulture), ex.Message, StringComparison.Ordinal);
+        Assert.Contains("plain text", ex.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-token", ex.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -70,7 +70,7 @@ public sealed class GitHubClientTests
         (GitHubClient client, RecordingHandler handler) = Make(200, "{}");
         await client.SendAsync(HttpMethod.Get, "/x", null, TestContext.Current.CancellationToken);
         Assert.Equal("Bearer secret-token", handler.Requests[0].Headers["Authorization"]);
-        Assert.DoesNotContain("secret-token", handler.Requests[0].Uri);
+        Assert.DoesNotContain("secret-token", handler.Requests[0].Uri, StringComparison.Ordinal);
     }
 
     private static GitHubClient Client(RecordingHandler handler, TimeSpan? wait = null) =>
@@ -116,7 +116,7 @@ public sealed class GitHubClientTests
         handler.Answer(status, "nope");
         GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Client(handler).SendAsync(HttpMethod.Get, "/x", null, TestContext.Current.CancellationToken));
         Assert.Equal(status, ex.StatusCode);
-        Assert.Contains("nope", ex.Message);
+        Assert.Contains("nope", ex.Message, StringComparison.Ordinal);
         Assert.Single(handler.Requests);
     }
 
@@ -130,7 +130,7 @@ public sealed class GitHubClientTests
         handler.Answer(504, "last");
         GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Client(handler).SendAsync(HttpMethod.Get, "/x", null, TestContext.Current.CancellationToken));
         Assert.Equal(504, ex.StatusCode);
-        Assert.Contains("last", ex.Message);
+        Assert.Contains("last", ex.Message, StringComparison.Ordinal);
         Assert.Equal(4, handler.Requests.Count);
     }
 

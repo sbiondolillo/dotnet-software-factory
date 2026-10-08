@@ -130,21 +130,21 @@ public sealed partial class ConsoleProgramSteps : IDisposable
     public void ThenErrorIsLine(string line) => Assert.Equal(line, Assert.Single(ConsoleHarness.Lines(_h.Error)));
 
     [Then("standard error is one line that holds {string}")]
-    public void ThenErrorIsOneLineHolding(string text) => Assert.Contains(text, Assert.Single(ConsoleHarness.Lines(_h.Error)));
+    public void ThenErrorIsOneLineHolding(string text) => Assert.Contains(text, Assert.Single(ConsoleHarness.Lines(_h.Error)), StringComparison.Ordinal);
 
     [Then("standard error is one line that holds {string} and {string}")]
     public void ThenErrorIsOneLineHoldingTwo(string a, string b)
     {
         string line = Assert.Single(ConsoleHarness.Lines(_h.Error));
-        Assert.Contains(a, line);
-        Assert.Contains(b, line);
+        Assert.Contains(a, line, StringComparison.Ordinal);
+        Assert.Contains(b, line, StringComparison.Ordinal);
     }
 
     [Then("standard error holds text")]
     public void ThenErrorText() => Assert.NotEmpty(_h.Error.ToString());
 
     [Then("standard error holds one line that holds {string}")]
-    public void ThenErrorLine(string text) => Assert.Contains(text, Assert.Single(ConsoleHarness.Lines(_h.Error)));
+    public void ThenErrorLine(string text) => Assert.Contains(text, Assert.Single(ConsoleHarness.Lines(_h.Error)), StringComparison.Ordinal);
 
     [Then("GitHub gets no review request")]
     public void ThenNoReviewRequest() => Assert.Empty(ReviewRequests);
@@ -356,8 +356,8 @@ public sealed partial class ConsoleProgramSteps : IDisposable
         (string Kind, string Model, string Turns, string Text) prompt = Assert.Single(_h.Prompts, p => p.Kind is "build" && p.Text.Contains(".factory/threads.json", StringComparison.Ordinal));
         Assert.Equal(model, prompt.Model);
         Assert.Equal(turns.ToString(System.Globalization.CultureInfo.InvariantCulture), prompt.Turns);
-        Assert.Contains(first, prompt.Text);
-        Assert.Contains(second, prompt.Text);
+        Assert.Contains(first, prompt.Text, StringComparison.Ordinal);
+        Assert.Contains(second, prompt.Text, StringComparison.Ordinal);
     }
 
     [Then("the program resolves the thread {string}")]
@@ -423,7 +423,7 @@ public sealed partial class ConsoleProgramSteps : IDisposable
         string output = _h.Out.ToString();
         foreach (string value in values)
         {
-            Assert.Contains(value, output);
+            Assert.Contains(value, output, StringComparison.Ordinal);
         }
     }
 }
