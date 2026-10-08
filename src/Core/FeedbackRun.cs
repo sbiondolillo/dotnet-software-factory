@@ -221,7 +221,7 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
         JsonElement root;
         try
         {
-            using JsonDocument document = JsonDocument.Parse(File.ReadAllText(file));
+            using var document = JsonDocument.Parse(File.ReadAllText(file));
             root = document.RootElement.Clone();
         }
         catch (JsonException)

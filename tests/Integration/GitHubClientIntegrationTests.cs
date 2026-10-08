@@ -74,7 +74,7 @@ public sealed class GitHubClientIntegrationTests
     [Fact]
     public async Task ReadingIssueZeroGives404()
     {
-        var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Client().ReadIssueAsync(Owner, Repo, 0, TestContext.Current.CancellationToken));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Client().ReadIssueAsync(Owner, Repo, 0, TestContext.Current.CancellationToken));
         Assert.Equal(404, ex.StatusCode);
     }
 
@@ -87,7 +87,7 @@ public sealed class GitHubClientIntegrationTests
         try
         {
             await client.PostCommentAsync(Owner, Repo, number, new string('a', 262144), ct);
-            var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => client.PostCommentAsync(Owner, Repo, number, new string('é', 131073), ct));
+            GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => client.PostCommentAsync(Owner, Repo, number, new string('é', 131073), ct));
             Assert.Equal(422, ex.StatusCode);
         }
         finally
@@ -99,7 +99,7 @@ public sealed class GitHubClientIntegrationTests
     [Fact]
     public async Task AnInvalidTokenGives401()
     {
-        var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Client("invalid").ReadIssueAsync(Owner, Repo, 1, TestContext.Current.CancellationToken));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Client("invalid").ReadIssueAsync(Owner, Repo, 1, TestContext.Current.CancellationToken));
         Assert.Equal(401, ex.StatusCode);
     }
 }

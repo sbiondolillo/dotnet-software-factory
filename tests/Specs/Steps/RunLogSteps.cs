@@ -63,7 +63,7 @@ public sealed class RunLogSteps(ConsoleProgramSteps console)
     {
         List<string> lines = [.. ConsoleHarness.Lines(H.Error)];
         int at = 0;
-        foreach (var row in table.Rows)
+        foreach (DataTableRow? row in table.Rows)
         {
             string[] parts = row[0].Split("<any>");
             int found = lines.FindIndex(at, l => l.StartsWith(parts[0], StringComparison.Ordinal) && l.EndsWith(parts[^1], StringComparison.Ordinal));

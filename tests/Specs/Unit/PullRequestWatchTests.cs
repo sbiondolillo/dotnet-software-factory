@@ -27,7 +27,7 @@ public sealed class PullRequestWatchTests
     {
         (PullRequestWatch sut, WatchHandler handler) = Make();
         handler.PullStatus = 404;
-        var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Watch(sut, TimeSpan.Zero, null, TestContext.Current.CancellationToken));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Watch(sut, TimeSpan.Zero, null, TestContext.Current.CancellationToken));
         Assert.Equal(404, ex.StatusCode);
     }
 
@@ -38,7 +38,7 @@ public sealed class PullRequestWatchTests
     {
         (PullRequestWatch sut, WatchHandler handler) = Make();
         handler.CheckStatus = status;
-        var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Watch(sut, TimeSpan.Zero, null, TestContext.Current.CancellationToken));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Watch(sut, TimeSpan.Zero, null, TestContext.Current.CancellationToken));
         Assert.Equal(status, ex.StatusCode);
     }
 

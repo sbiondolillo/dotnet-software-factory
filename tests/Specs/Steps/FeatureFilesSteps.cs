@@ -101,14 +101,14 @@ public sealed class FeatureFilesSteps(ExceptionState exceptionState) : IDisposab
     [Then("FeatureFiles throws a FeatureFileException naming the path {string}")]
     public void ThenFeatureFilesThrowsAFeatureFileExceptionNamingThePath(string path)
     {
-        var exception = Assert.IsType<FeatureFileException>(exceptionState.Exception);
+        FeatureFileException exception = Assert.IsType<FeatureFileException>(exceptionState.Exception);
         Assert.Equal(path, exception.Path);
     }
 
     [Then("the exception message holds the parser's message")]
     public void ThenTheExceptionMessageHoldsTheParsersMessage()
     {
-        var exception = Assert.IsType<FeatureFileException>(exceptionState.Exception);
+        FeatureFileException exception = Assert.IsType<FeatureFileException>(exceptionState.Exception);
         try
         {
             new Parser().Parse(new StringReader(_lastContent!));

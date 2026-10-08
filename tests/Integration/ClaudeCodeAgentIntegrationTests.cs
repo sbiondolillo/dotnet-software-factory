@@ -43,7 +43,7 @@ public sealed class ClaudeCodeAgentIntegrationTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Empty(result.StandardError);
-        using JsonDocument document = JsonDocument.Parse(result.StandardOutput);
+        using var document = JsonDocument.Parse(result.StandardOutput);
         JsonElement root = document.RootElement;
         Assert.False(root.GetProperty("is_error").GetBoolean());
         Assert.Equal(1, root.GetProperty("num_turns").GetInt32());

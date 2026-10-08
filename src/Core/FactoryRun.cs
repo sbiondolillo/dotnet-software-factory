@@ -254,7 +254,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
 
         _summary.AddRow("plan", null, "passed");
         await Say("plan: passed").ConfigureAwait(false);
-        Pin pin = Pin.TakeRefactor(request.Directory);
+        var pin = Pin.TakeRefactor(request.Directory);
         var buildPhase = new BuildPhase(agent, refactor: true);
         var lintGate = new LintGate(sandbox, git, log);
         var testGate = new TestGate(sandbox, log);
@@ -369,7 +369,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         var lintGate = new LintGate(sandbox, git, log);
         var testGate = new TestGate(sandbox, log);
         var reviewPhase = new ReviewPhase(agent, git, cleanup: true);
-        Pin pin = Pin.Take(request.Directory);
+        var pin = Pin.Take(request.Directory);
         IReadOnlySet<string> basePassed = await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false);
 
         int redos = 0;
@@ -400,14 +400,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
                     .ConfigureAwait(false);
                 await Say(gate.Passed ? "test: passed" : "test: failed").ConfigureAwait(false);
                 producer = _summary.AddRow("test", _clock.GetElapsedTime(testStart), gate.Passed ? "passed" : "failed");
-                if (!gate.Passed)
-                {
-                    redoTexts = gate.Evidence;
-                }
-                else
-                {
-                    redoTexts = CleanupGate.LostTests(basePassed, gate);
-                }
+                redoTexts = !gate.Passed ? gate.Evidence : CleanupGate.LostTests(basePassed, gate);
 
                 if (redoTexts.Count is 0)
                 {

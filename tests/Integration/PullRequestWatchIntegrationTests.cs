@@ -145,7 +145,7 @@ public sealed class PullRequestWatchIntegrationTests
             JsonElement reference = await client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/git/ref/heads/{branch}", null, ct);
             string expected = reference.GetProperty("object").GetProperty("sha").GetString() ?? "";
             Assert.Equal(expected, await new PullRequests(client).ReadHeadShaAsync(Owner, Repo, number, ct));
-            var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => new PullRequests(client).ReadHeadShaAsync(Owner, Repo, 0, ct));
+            GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => new PullRequests(client).ReadHeadShaAsync(Owner, Repo, 0, ct));
             Assert.Equal(404, ex.StatusCode);
         }
         finally

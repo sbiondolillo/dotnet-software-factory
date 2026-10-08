@@ -35,7 +35,7 @@ public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false)
             return new PlanPhaseResult(true, Pin.Take(workTree), []);
         }
 
-        var correction = new StringBuilder(prompt)
+        StringBuilder correction = new StringBuilder(prompt)
             .Append("\n\nYour previous run failed these checks. Fix each one:\n");
         foreach (string failure in failures)
         {

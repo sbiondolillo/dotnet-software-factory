@@ -117,7 +117,7 @@ public sealed class HeadBranchIntegrationTests
     public async Task TheReadOfAPullRequestThatDoesNotExistThrowsTheGitHubRequestException()
     {
         var client = new GitHubClient(new HttpClient(), Token);
-        var ex = await Assert.ThrowsAsync<GitHubRequestException>(
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(
             () => new PullRequests(client).ReadHeadBranchAsync(Owner, Repo, 999999999, TestContext.Current.CancellationToken));
         Assert.Equal(404, ex.StatusCode);
     }
@@ -160,7 +160,7 @@ public sealed class HeadBranchIntegrationTests
         {
             var git = new Git(new CommandRunner());
             await git.CloneAsync($"https://github.com/{Owner}/{Repo}.git", Token, directory.FullName, ct);
-            var ex = await Assert.ThrowsAsync<GitCommandException>(
+            GitCommandException ex = await Assert.ThrowsAsync<GitCommandException>(
                 () => git.CheckoutExistingBranchAsync("no-such-branch-" + Guid.NewGuid().ToString("N"), directory.FullName, ct));
             Assert.Contains("did not match any file(s) known to git", ex.Message);
         }

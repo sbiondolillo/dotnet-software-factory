@@ -85,7 +85,7 @@ public sealed class PullRequestsSteps(ExceptionState exceptionState) : IDisposab
     public void ThenOpenContent(string head, string baseBranch, string title, string body)
     {
         RecordedRequest request = _handler.Requests.Single(r => r.Method is "POST");
-        using JsonDocument document = JsonDocument.Parse(request.Content!);
+        using var document = JsonDocument.Parse(request.Content!);
         JsonElement root = document.RootElement;
         Assert.Equal(head, root.GetProperty("head").GetString());
         Assert.Equal(baseBranch, root.GetProperty("base").GetString());

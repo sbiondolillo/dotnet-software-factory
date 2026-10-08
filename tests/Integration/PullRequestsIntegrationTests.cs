@@ -110,7 +110,7 @@ public sealed class PullRequestsIntegrationTests
     public async Task AnUnknownCommitThrowsWith422()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
-        var ex = await Assert.ThrowsAsync<GitHubRequestException>(() =>
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() =>
             new PullRequests(Client()).ReadCheckRunsAsync(Owner, Repo, new string('0', 40), ct));
         Assert.Equal(422, ex.StatusCode);
     }
@@ -121,10 +121,10 @@ public sealed class PullRequestsIntegrationTests
         CancellationToken ct = TestContext.Current.CancellationToken;
         GitHubClient client = Client();
         string head = "pr-test/" + Guid.NewGuid().ToString("N");
-        var ex = await Assert.ThrowsAsync<GitHubRequestException>(() =>
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() =>
             new PullRequests(client).OpenAsync(Owner, Repo, head, "main", "test " + head, "body", ct));
         Assert.Equal(422, ex.StatusCode);
-        var gone = await Assert.ThrowsAsync<GitHubRequestException>(() =>
+        GitHubRequestException gone = await Assert.ThrowsAsync<GitHubRequestException>(() =>
             client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/git/ref/heads/{head}", null, ct));
         Assert.Equal(404, gone.StatusCode);
     }

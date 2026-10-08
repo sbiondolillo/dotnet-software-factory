@@ -47,7 +47,7 @@ public sealed class LintGateTests : IDisposable
     {
         LintGate gate = await GateAsync(new CommandResult { ExitCode = code, StandardError = error }, Changed, token: TestContext.Current.CancellationToken);
 
-        var exception = await Assert.ThrowsAsync<LintGateException>(
+        LintGateException exception = await Assert.ThrowsAsync<LintGateException>(
             () => gate.RunAsync("/tree", "m", "n", "e@x", TestContext.Current.CancellationToken));
 
         Assert.Contains(code.ToString(System.Globalization.CultureInfo.InvariantCulture), exception.Message);

@@ -18,7 +18,7 @@ public sealed class HeadBranchTests
         var handler = new RecordingHandler();
         handler.Answer(status, "{\"message\":\"x\"}");
         var sut = new PullRequests(new GitHubClient(new HttpClient(handler), "t", TimeSpan.Zero));
-        var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadHeadBranchAsync("o", "r", 10, Ct));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadHeadBranchAsync("o", "r", 10, Ct));
         Assert.Equal(status, ex.StatusCode);
     }
 
@@ -63,7 +63,7 @@ public sealed class HeadBranchTests
         var mock = new Mock<CommandRunner>(MockBehavior.Strict);
         mock.Setup(r => r.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CommandResult { ExitCode = 1, StandardError = "did not match any file(s) known to git" });
-        var ex = await Assert.ThrowsAsync<GitCommandException>(() => new Git(mock.Object).CheckoutExistingBranchAsync("b", "/tmp/clone", Ct));
+        GitCommandException ex = await Assert.ThrowsAsync<GitCommandException>(() => new Git(mock.Object).CheckoutExistingBranchAsync("b", "/tmp/clone", Ct));
         Assert.Contains("checkout", ex.Message);
         Assert.Contains("did not match any file(s) known to git", ex.Message);
     }

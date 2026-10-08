@@ -153,7 +153,7 @@ public sealed partial class ConsoleProgramSteps : IDisposable
     public void ThenReviewRequest(string name, string login)
     {
         TimedRequest request = Assert.Single(_h.Requests, r => r.Path.EndsWith("/graphql", StringComparison.Ordinal) && r.Content!.Contains(name, StringComparison.Ordinal));
-        using JsonDocument json = JsonDocument.Parse(request.Content!);
+        using var json = JsonDocument.Parse(request.Content!);
         Assert.Equal([login], json.RootElement.GetProperty("variables").GetProperty("botLogins").EnumerateArray().Select(e => e.GetString()));
     }
 
@@ -231,7 +231,7 @@ public sealed partial class ConsoleProgramSteps : IDisposable
     public void ThenBase(string branch)
     {
         TimedRequest open = Assert.Single(_h.Posts("/pulls"));
-        using JsonDocument json = JsonDocument.Parse(open.Content!);
+        using var json = JsonDocument.Parse(open.Content!);
         Assert.Equal(branch, json.RootElement.GetProperty("base").GetString());
     }
 
@@ -353,7 +353,7 @@ public sealed partial class ConsoleProgramSteps : IDisposable
     [Then("the feedback run's build prompt runs with the model {string} and the turn limit {int}, and holds {string} and {string}")]
     public void ThenFeedbackPrompt(string model, int turns, string first, string second)
     {
-        var prompt = Assert.Single(_h.Prompts, p => p.Kind is "build" && p.Text.Contains(".factory/threads.json", StringComparison.Ordinal));
+        (string Kind, string Model, string Turns, string Text) prompt = Assert.Single(_h.Prompts, p => p.Kind is "build" && p.Text.Contains(".factory/threads.json", StringComparison.Ordinal));
         Assert.Equal(model, prompt.Model);
         Assert.Equal(turns.ToString(System.Globalization.CultureInfo.InvariantCulture), prompt.Turns);
         Assert.Contains(first, prompt.Text);
@@ -411,7 +411,7 @@ public sealed partial class ConsoleProgramSteps : IDisposable
 
     private (string Model, string Turns) Prompt(string kind)
     {
-        var prompt = _h.Prompts.First(p => p.Kind == kind);
+        (string Kind, string Model, string Turns, string Text) prompt = _h.Prompts.First(p => p.Kind == kind);
         return (prompt.Model, prompt.Turns);
     }
 

@@ -138,7 +138,7 @@ public static class ConsoleCommands
         using var http = new HttpClient(host.Handler, disposeHandler: false);
         var client = new GitHubClient(http, token);
         string checksToken = host.Environment(ChecksTokenName) is { Length: > 0 } own ? own : token;
-        var checksClient = checksToken == token ? client : new GitHubClient(http, checksToken);
+        GitHubClient checksClient = checksToken == token ? client : new GitHubClient(http, checksToken);
         try
         {
             return await ExecuteAsync(options, host, client, checksClient, token, cancellationToken).ConfigureAwait(false);

@@ -101,7 +101,7 @@ public sealed class LintGateIntegrationTests : IDisposable
         Assert.Equal(head, await git.ReadHeadShaAsync(_tree.FullName, TestContext.Current.CancellationToken));
 
         File.Delete(Path.Combine(_tree.FullName, "Probe.csproj"));
-        var exception = await Assert.ThrowsAsync<LintGateException>(
+        LintGateException exception = await Assert.ThrowsAsync<LintGateException>(
             () => new LintGate(sandbox, git).RunAsync(_tree.FullName, "m", "n", "e@x", TestContext.Current.CancellationToken));
         Assert.Contains("1", exception.Message);
         Assert.Contains("Could not find a MSBuild project file or solution file", exception.Message);

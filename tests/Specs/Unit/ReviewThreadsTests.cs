@@ -22,7 +22,7 @@ public sealed class ReviewThreadsTests
     public async Task AReviewReadWithErrorsAndNullPullRequestThrowsGraphQl()
     {
         (ReviewThreads sut, _) = Make(200, "{\"data\":{\"repository\":{\"pullRequest\":null}},\"errors\":[{\"message\":\"nope\"}]}");
-        var ex = await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ReadReviewsAsync("o", "r", 0, Token));
+        GitHubGraphQLException ex = await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ReadReviewsAsync("o", "r", 0, Token));
         Assert.Contains("nope", ex.Message);
     }
 
@@ -51,7 +51,7 @@ public sealed class ReviewThreadsTests
     public async Task SeveralErrorsAreAllInTheMessage()
     {
         (ReviewThreads sut, _) = Make(200, Errors);
-        var ex = await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ResolveAsync("t", Token));
+        GitHubGraphQLException ex = await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ResolveAsync("t", Token));
         Assert.Contains("first bad", ex.Message);
         Assert.Contains("second bad", ex.Message);
     }
@@ -74,7 +74,7 @@ public sealed class ReviewThreadsTests
         (ReviewThreads sut, RecordingHandler handler) = Make(200, "{\"data\":{}}");
         const string body = "say \"hi\"\nagain";
         await sut.ReplyAsync("t", body, Token);
-        using JsonDocument document = JsonDocument.Parse(handler.Requests[^1].Content!);
+        using var document = JsonDocument.Parse(handler.Requests[^1].Content!);
         Assert.Equal(body, document.RootElement.GetProperty("variables").GetProperty("body").GetString());
     }
 
@@ -115,7 +115,7 @@ public sealed class ReviewThreadsTests
     public async Task AReviewRequestWithErrorsThrowsGraphQlWithTheMessage()
     {
         (ReviewThreads sut, _) = Make(200, Errors);
-        var ex = await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.RequestReviewAsync("PR_1", "copilot-pull-request-reviewer", Token));
+        GitHubGraphQLException ex = await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.RequestReviewAsync("PR_1", "copilot-pull-request-reviewer", Token));
         Assert.Contains("first bad", ex.Message, StringComparison.Ordinal);
     }
 
@@ -124,7 +124,7 @@ public sealed class ReviewThreadsTests
     {
         (ReviewThreads sut, RecordingHandler handler) = Make(200, "{\"data\":{\"requestReviewsByLogin\":{\"pullRequest\":{\"id\":\"PR_1\"}}}}");
         await sut.RequestReviewAsync("PR_1", "copilot-pull-request-reviewer", Token);
-        using JsonDocument json = JsonDocument.Parse(Assert.Single(handler.Requests).Content!);
+        using var json = JsonDocument.Parse(Assert.Single(handler.Requests).Content!);
         Assert.Contains("requestReviewsByLogin", json.RootElement.GetProperty("query").GetString(), StringComparison.Ordinal);
         JsonElement variables = json.RootElement.GetProperty("variables");
         Assert.Equal("PR_1", variables.GetProperty("pullRequestId").GetString());

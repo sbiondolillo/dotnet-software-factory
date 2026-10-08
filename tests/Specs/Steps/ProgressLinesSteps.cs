@@ -110,7 +110,7 @@ public sealed class ProgressLinesSteps(ConsoleProgramSteps console)
     private string Body(int number)
     {
         TimedRequest post = Assert.Single(H.Posts($"/issues/{number}/comments"));
-        using JsonDocument json = JsonDocument.Parse(post.Content!);
+        using var json = JsonDocument.Parse(post.Content!);
         return json.RootElement.GetProperty("body").GetString()!;
     }
 

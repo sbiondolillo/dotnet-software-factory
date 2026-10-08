@@ -19,7 +19,7 @@ public sealed class SandboxImage(CommandRunner runner)
 
         string globalJson = await File.ReadAllTextAsync(
             Path.Combine(rootDirectory, "global.json"), cancellationToken).ConfigureAwait(false);
-        using JsonDocument document = JsonDocument.Parse(globalJson);
+        using var document = JsonDocument.Parse(globalJson);
         string version = document.RootElement.GetProperty("sdk").GetProperty("version").GetString()
             ?? throw new InvalidOperationException("global.json sdk.version is not a string");
 

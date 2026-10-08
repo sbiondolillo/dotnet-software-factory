@@ -38,7 +38,7 @@ public sealed class TestReportTests : IDisposable
     public void NonXmlThrowsWithPathAndParserMessage()
     {
         string path = Write("This is not a test report.");
-        var exception = Assert.Throws<TestReportException>(() => TestReport.Read(path));
+        TestReportException exception = Assert.Throws<TestReportException>(() => TestReport.Read(path));
         Assert.Equal(path, exception.Path);
         Assert.Contains(path, exception.Message);
     }

@@ -28,7 +28,7 @@ public sealed class GitHubClient(HttpClient httpClient, string token, TimeSpan? 
             throw new GitHubRequestException(method.Method, path, answer.Status, answer.Text);
         }
 
-        using JsonDocument document = JsonDocument.Parse(string.IsNullOrWhiteSpace(answer.Text) ? "null" : answer.Text);
+        using var document = JsonDocument.Parse(string.IsNullOrWhiteSpace(answer.Text) ? "null" : answer.Text);
         return document.RootElement.Clone();
     }
 

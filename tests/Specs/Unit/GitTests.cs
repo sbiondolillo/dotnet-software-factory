@@ -9,10 +9,10 @@ public sealed class GitTests
     [Fact]
     public async Task CloneThrowsAGitCommandExceptionNamingCloneWhenTheCommandFails()
     {
-        var mock = NewMock(("clone", new CommandResult { ExitCode = 1, StandardError = "fatal: could not clone" }));
+        Mock<CommandRunner> mock = NewMock(("clone", new CommandResult { ExitCode = 1, StandardError = "fatal: could not clone" }));
         var git = new Git(mock.Object);
 
-        var exception = await Assert.ThrowsAsync<GitCommandException>(
+        GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => git.CloneAsync("https://example.com/repo.git", "token", "/tmp/dir", TestContext.Current.CancellationToken));
 
         Assert.Contains("clone", exception.Message);
@@ -32,7 +32,7 @@ public sealed class GitTests
             });
         var git = new Git(mock.Object);
 
-        var exception = await Assert.ThrowsAsync<GitCommandException>(
+        GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => git.CommitAllAsync("/tmp/dir", "message", "Ada Lovelace", "ada@example.com", TestContext.Current.CancellationToken));
 
         Assert.Contains("add", exception.Message);
@@ -50,7 +50,7 @@ public sealed class GitTests
                 : new CommandResult { ExitCode = 1, StandardError = "fatal: commit failed" }));
         var git = new Git(mock.Object);
 
-        var exception = await Assert.ThrowsAsync<GitCommandException>(
+        GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => git.CommitAllAsync("/tmp/dir", "message", "Ada Lovelace", "ada@example.com", TestContext.Current.CancellationToken));
 
         Assert.Contains("commit", exception.Message);
@@ -60,10 +60,10 @@ public sealed class GitTests
     [Fact]
     public async Task PushThrowsAGitCommandExceptionNamingPushWhenTheCommandFails()
     {
-        var mock = NewMock(("push", new CommandResult { ExitCode = 1, StandardError = "fatal: could not push" }));
+        Mock<CommandRunner> mock = NewMock(("push", new CommandResult { ExitCode = 1, StandardError = "fatal: could not push" }));
         var git = new Git(mock.Object);
 
-        var exception = await Assert.ThrowsAsync<GitCommandException>(
+        GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => git.PushAsync("branch", "/tmp/dir", "token", TestContext.Current.CancellationToken));
 
         Assert.Contains("push", exception.Message);
@@ -73,10 +73,10 @@ public sealed class GitTests
     [Fact]
     public async Task ReadHeadShaThrowsAGitCommandExceptionNamingRevParseWhenTheCommandFails()
     {
-        var mock = NewMock(("rev-parse", new CommandResult { ExitCode = 1, StandardError = "fatal: bad revision" }));
+        Mock<CommandRunner> mock = NewMock(("rev-parse", new CommandResult { ExitCode = 1, StandardError = "fatal: bad revision" }));
         var git = new Git(mock.Object);
 
-        var exception = await Assert.ThrowsAsync<GitCommandException>(() => git.ReadHeadShaAsync("/tmp/dir", TestContext.Current.CancellationToken));
+        GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(() => git.ReadHeadShaAsync("/tmp/dir", TestContext.Current.CancellationToken));
 
         Assert.Contains("rev-parse", exception.Message);
         Assert.Contains("fatal: bad revision", exception.Message);
@@ -85,10 +85,10 @@ public sealed class GitTests
     [Fact]
     public async Task ListChangedFilesThrowsAGitCommandExceptionNamingDiffWhenTheCommandFails()
     {
-        var mock = NewMock(("diff", new CommandResult { ExitCode = 1, StandardError = "fatal: unknown revision" }));
+        Mock<CommandRunner> mock = NewMock(("diff", new CommandResult { ExitCode = 1, StandardError = "fatal: unknown revision" }));
         var git = new Git(mock.Object);
 
-        var exception = await Assert.ThrowsAsync<GitCommandException>(
+        GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => git.ListChangedFilesAsync("no-such-base", "/tmp/dir", TestContext.Current.CancellationToken));
 
         Assert.Contains("diff", exception.Message);
@@ -99,10 +99,10 @@ public sealed class GitTests
     public async Task AGitCommandExceptionMessageHoldsTheWholeMultiLineStandardError()
     {
         string standardError = "fatal: line one\nfatal: line two\nfatal: line three";
-        var mock = NewMock(("push", new CommandResult { ExitCode = 1, StandardError = standardError }));
+        Mock<CommandRunner> mock = NewMock(("push", new CommandResult { ExitCode = 1, StandardError = standardError }));
         var git = new Git(mock.Object);
 
-        var exception = await Assert.ThrowsAsync<GitCommandException>(
+        GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => git.PushAsync("branch", "/tmp/dir", "token", TestContext.Current.CancellationToken));
 
         Assert.Contains(standardError, exception.Message);
@@ -111,7 +111,7 @@ public sealed class GitTests
     [Fact]
     public async Task ReadHeadShaTrimsTheTrailingNewlineGitPrints()
     {
-        var mock = NewMock(("rev-parse", new CommandResult { ExitCode = 0, StandardOutput = "903c6f7ea009814ad6cff2d387717be8f34bab03\n" }));
+        Mock<CommandRunner> mock = NewMock(("rev-parse", new CommandResult { ExitCode = 0, StandardOutput = "903c6f7ea009814ad6cff2d387717be8f34bab03\n" }));
         var git = new Git(mock.Object);
 
         string sha = await git.ReadHeadShaAsync("/tmp/dir", TestContext.Current.CancellationToken);
@@ -252,7 +252,7 @@ public sealed class GitTests
         mock.Setup(runner => runner.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CommandResult { ExitCode = 128, StandardError = "fatal: not a repo" });
 
-        var exception = await Assert.ThrowsAsync<GitCommandException>(
+        GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => new Git(mock.Object).HasChangesAsync("/tmp/dir", TestContext.Current.CancellationToken));
 
         Assert.Contains("status", exception.Message);

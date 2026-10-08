@@ -50,10 +50,10 @@ public sealed class Pin
     /// <summary>Reports which pinned files of a directory differ from this pin.</summary>
     public PinComparison Compare(string directory)
     {
-        var now = Scan(directory, _wide);
-        var changed = now.Where(pair => _hashes.TryGetValue(pair.Key, out var old) && old != pair.Value).Select(pair => pair.Key);
-        var added = now.Keys.Where(path => !_hashes.ContainsKey(path));
-        var removed = _hashes.Keys.Where(path => !now.ContainsKey(path));
+        Dictionary<string, string> now = Scan(directory, _wide);
+        IEnumerable<string> changed = now.Where(pair => _hashes.TryGetValue(pair.Key, out string? old) && old != pair.Value).Select(pair => pair.Key);
+        IEnumerable<string> added = now.Keys.Where(path => !_hashes.ContainsKey(path));
+        IEnumerable<string> removed = _hashes.Keys.Where(path => !now.ContainsKey(path));
         return new PinComparison(Order(changed), Order(added), Order(removed));
     }
 
@@ -67,9 +67,9 @@ public sealed class Pin
     private static Dictionary<string, string> Scan(string directory, bool wide)
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
+        foreach (string file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
         {
-            var relative = Path.GetRelativePath(directory, file).Replace('\\', '/');
+            string relative = Path.GetRelativePath(directory, file).Replace('\\', '/');
             if (IsPinned(relative, wide))
             {
                 result[relative] = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(file)));
@@ -81,8 +81,8 @@ public sealed class Pin
 
     private static bool IsPinned(string relative, bool wide)
     {
-        var segments = relative.Split('/');
-        var directories = segments[..^1];
+        string[] segments = relative.Split('/');
+        string[] directories = segments[..^1];
         if (directories.Any(segment => segment is "bin" or "obj"))
         {
             return false;
@@ -95,7 +95,7 @@ public sealed class Pin
             return true;
         }
 
-        return directories.Length >= 2 && directories[0] == "specs" && directories[1] == "features"
+        return (directories.Length >= 2 && directories[0] == "specs" && directories[1] == "features")
             || SettingsNames.Contains(segments[^1]);
     }
 }

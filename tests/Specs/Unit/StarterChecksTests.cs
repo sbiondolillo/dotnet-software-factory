@@ -200,7 +200,7 @@ public sealed class StarterChecksTests : IDisposable
     [Fact]
     public void TextEqualsFailsOnMissingFile()
     {
-        var e = Assert.Throws<InvalidOperationException>(() => StarterChecks.TextEquals(Path.Combine(_root, "AGENTS.md"), "a"));
+        InvalidOperationException e = Assert.Throws<InvalidOperationException>(() => StarterChecks.TextEquals(Path.Combine(_root, "AGENTS.md"), "a"));
         Assert.Contains("AGENTS.md", e.Message);
     }
 
@@ -208,7 +208,7 @@ public sealed class StarterChecksTests : IDisposable
     public void TextEqualsShowsFirstDifferingLine()
     {
         string path = Write("t.md", "one\ntwx\nthree\n");
-        var e = Assert.Throws<InvalidOperationException>(() => StarterChecks.TextEquals(path, "one\ntwo\nthree"));
+        InvalidOperationException e = Assert.Throws<InvalidOperationException>(() => StarterChecks.TextEquals(path, "one\ntwo\nthree"));
         Assert.Contains("line 2", e.Message);
         Assert.Contains("twx", e.Message);
     }
@@ -228,7 +228,7 @@ public sealed class StarterChecksTests : IDisposable
     [Fact]
     public void CommentStartsFailsOnOtherLineAndShowsBoth()
     {
-        var e = Assert.Throws<InvalidOperationException>(() => StarterChecks.CommentStarts(Project("old"), "new"));
+        InvalidOperationException e = Assert.Throws<InvalidOperationException>(() => StarterChecks.CommentStarts(Project("old"), "new"));
         Assert.Contains("old", e.Message);
         Assert.Contains("new", e.Message);
     }
@@ -249,7 +249,7 @@ public sealed class StarterChecksTests : IDisposable
     [InlineData("first", "target")]
     public void CommentLacksFailsWhenAnyLineIsTheLine(string first, string second)
     {
-        var e = Assert.Throws<InvalidOperationException>(() => StarterChecks.CommentLacks(Project(first, second), "target"));
+        InvalidOperationException e = Assert.Throws<InvalidOperationException>(() => StarterChecks.CommentLacks(Project(first, second), "target"));
         Assert.Contains("target", e.Message);
     }
 

@@ -200,7 +200,7 @@ public sealed class ReviewThreadsIntegrationTests
     public async Task AnInvalidTokenThrowsRequestExceptionWith401()
     {
         var sut = new ReviewThreads(Client("invalid"));
-        var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadThreadsAsync(Owner, Repo, 1, TestContext.Current.CancellationToken));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadThreadsAsync(Owner, Repo, 1, TestContext.Current.CancellationToken));
         Assert.Equal(401, ex.StatusCode);
     }
 

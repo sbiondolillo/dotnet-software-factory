@@ -82,7 +82,7 @@ public sealed class GitHubClientSteps(ExceptionState exceptionState, RecordingHa
     [Then("the content of the recorded request is JSON whose {string} is {string}")]
     public void ThenContentJson(string name, string value)
     {
-        using JsonDocument document = JsonDocument.Parse(_handler.Requests[^1].Content!);
+        using var document = JsonDocument.Parse(_handler.Requests[^1].Content!);
         Assert.Equal(value, document.RootElement.GetProperty(name).GetString());
     }
 

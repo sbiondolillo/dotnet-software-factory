@@ -46,7 +46,7 @@ public sealed class SandboxImageIntegrationTests
             Assert.NotEmpty(result.StandardError);
 
             await File.WriteAllTextAsync(Path.Combine(directory.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""", TestContext.Current.CancellationToken);
-            var exception = await Assert.ThrowsAsync<SandboxImageException>(
+            SandboxImageException exception = await Assert.ThrowsAsync<SandboxImageException>(
                 () => new SandboxImage(Runner).EnsureAsync($"factory-nofile:{Guid.NewGuid():N}", directory.FullName, TestContext.Current.CancellationToken));
             Assert.NotEmpty(exception.Message.Replace("docker build failed:", "", StringComparison.Ordinal).Trim());
         }
@@ -67,7 +67,7 @@ public sealed class SandboxImageIntegrationTests
             Directory.CreateDirectory(Path.Combine(copy.FullName, "sandbox"));
             File.Copy(Path.Combine(root, "global.json"), Path.Combine(copy.FullName, "global.json"));
             File.Copy(Path.Combine(root, "sandbox", "Dockerfile"), Path.Combine(copy.FullName, "sandbox", "Dockerfile"));
-            using JsonDocument document = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(root, "global.json"), TestContext.Current.CancellationToken));
+            using var document = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(root, "global.json"), TestContext.Current.CancellationToken));
             string version = document.RootElement.GetProperty("sdk").GetProperty("version").GetString()!;
 
             var recording = new RecordingRunner();

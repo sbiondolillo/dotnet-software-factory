@@ -21,7 +21,7 @@ public sealed class ProgressLinesTests
     private static string Body(ConsoleHarness h, int number)
     {
         TimedRequest post = Assert.Single(h.Posts($"/issues/{number}/comments"));
-        using JsonDocument json = JsonDocument.Parse(post.Content!);
+        using var json = JsonDocument.Parse(post.Content!);
         return json.RootElement.GetProperty("body").GetString()!;
     }
 

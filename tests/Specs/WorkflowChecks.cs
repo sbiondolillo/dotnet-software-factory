@@ -117,7 +117,7 @@ public static partial class WorkflowChecks
     public static void RequiredInput(string file, string eventName, string input, string type)
     {
         Dictionary<string, object?>? map = Input(file, eventName, input);
-        if (map is null || map.GetValueOrDefault("required") as string != "true" || map.GetValueOrDefault("type") as string != type)
+        if (map is null || map.GetValueOrDefault("required") is not "true" || (map.GetValueOrDefault("type") as string) != type)
         {
             throw new InvalidOperationException($"the trigger {eventName} of {file} has no required input {input} with the type {type}");
         }
@@ -126,7 +126,7 @@ public static partial class WorkflowChecks
     /// <summary>Fails when the trigger has no input with the default.</summary>
     public static void InputDefault(string file, string eventName, string input, string value)
     {
-        if (Input(file, eventName, input)?.GetValueOrDefault("default") as string != value)
+        if ((Input(file, eventName, input)?.GetValueOrDefault("default") as string) != value)
         {
             throw new InvalidOperationException($"the trigger {eventName} of {file} has no input {input} with the default {value}");
         }
@@ -157,8 +157,8 @@ public static partial class WorkflowChecks
     {
         object? actual = Root(file).GetValueOrDefault("permissions");
         bool ok = expected.Contains(": ", StringComparison.Ordinal)
-            ? actual is Dictionary<string, object?> { Count: 1 } map && map.TryGetValue(expected.Split(": ")[0], out object? value) && value as string == expected.Split(": ")[1]
-            : actual as string == expected;
+            ? actual is Dictionary<string, object?> { Count: 1 } map && map.TryGetValue(expected.Split(": ")[0], out object? value) && (value as string) == expected.Split(": ")[1]
+            : (actual as string) == expected;
         if (!ok)
         {
             throw new InvalidOperationException($"{file} does not have the permissions {expected}");
@@ -179,7 +179,7 @@ public static partial class WorkflowChecks
     public static void JobRuns(string file, string runner, string condition)
     {
         Dictionary<string, object?> job = Jobs(file).Values.First() as Dictionary<string, object?> ?? throw new InvalidOperationException($"{file} has no job");
-        if (job.GetValueOrDefault("runs-on") as string != runner || job.GetValueOrDefault("if") as string != condition)
+        if ((job.GetValueOrDefault("runs-on") as string) != runner || (job.GetValueOrDefault("if") as string) != condition)
         {
             throw new InvalidOperationException($"the job of {file} does not run on {runner} with the condition {condition}");
         }
@@ -190,8 +190,8 @@ public static partial class WorkflowChecks
     {
         Dictionary<string, object?> step = Steps(OnlyJob(file)).FirstOrDefault() ?? throw new InvalidOperationException($"{file} has no step");
         Dictionary<string, object?> with = With(step);
-        if (!IsUses(step, Checkout) || with.GetValueOrDefault("repository") as string != repository
-            || with.GetValueOrDefault("ref") as string != reference || with.GetValueOrDefault("token") as string != token)
+        if (!IsUses(step, Checkout) || (with.GetValueOrDefault("repository") as string) != repository
+            || (with.GetValueOrDefault("ref") as string) != reference || (with.GetValueOrDefault("token") as string) != token)
         {
             throw new InvalidOperationException($"the first step of {file} is not the checkout of {repository} at {reference} with {token}");
         }
@@ -201,7 +201,7 @@ public static partial class WorkflowChecks
     public static void SetupBeforeRun(string file, string run)
     {
         List<Dictionary<string, object?>> steps = Steps(OnlyJob(file));
-        int runIndex = steps.FindIndex(step => step.GetValueOrDefault("run") as string == run);
+        int runIndex = steps.FindIndex(step => (step.GetValueOrDefault("run") as string) == run);
         if (runIndex < 0 || !steps.Take(runIndex).Any(IsSetup))
         {
             throw new InvalidOperationException($"{file} has no SDK setup before the step that runs {run}");
@@ -211,7 +211,7 @@ public static partial class WorkflowChecks
     /// <summary>Fails when the last step of the one job does not run the command.</summary>
     public static void LastStepRuns(string file, string run)
     {
-        if (Steps(OnlyJob(file)).LastOrDefault()?.GetValueOrDefault("run") as string != run)
+        if ((Steps(OnlyJob(file)).LastOrDefault()?.GetValueOrDefault("run") as string) != run)
         {
             throw new InvalidOperationException($"the last step of {file} does not run {run}");
         }
@@ -220,10 +220,10 @@ public static partial class WorkflowChecks
     /// <summary>Fails when the step with the run command has an environment other than the names, each from the secret of its name.</summary>
     public static void RunStepEnvironment(string file, string run, params string[] names)
     {
-        Dictionary<string, object?>? step = Jobs(file).Values.SelectMany(job => Steps(job as Dictionary<string, object?> ?? [])).FirstOrDefault(s => s.GetValueOrDefault("run") as string == run)
+        Dictionary<string, object?>? step = Jobs(file).Values.SelectMany(job => Steps(job as Dictionary<string, object?> ?? [])).FirstOrDefault(s => (s.GetValueOrDefault("run") as string) == run)
             ?? throw new InvalidOperationException($"{file} has no step that runs {run}");
         Dictionary<string, object?> env = step.GetValueOrDefault("env") as Dictionary<string, object?> ?? [];
-        if (env.Count != names.Length || names.Any(name => env.GetValueOrDefault(name) as string != "${{ secrets." + name + " }}"))
+        if (env.Count != names.Length || names.Any(name => (env.GetValueOrDefault(name) as string) != "${{ secrets." + name + " }}"))
         {
             throw new InvalidOperationException($"the step that runs {run} in {file} does not have exactly {string.Join(", ", names)} from their secrets");
         }
@@ -234,7 +234,7 @@ public static partial class WorkflowChecks
     {
         Dictionary<string, object?> root = Root(file);
         bool other = root.ContainsKey("env") || Jobs(file).Values.Any(job => job is Dictionary<string, object?> map
-            && (map.ContainsKey("env") || Steps(map).Any(step => step.ContainsKey("env") && step.GetValueOrDefault("run") as string != run)));
+            && (map.ContainsKey("env") || Steps(map).Any(step => step.ContainsKey("env") && (step.GetValueOrDefault("run") as string) != run)));
         if (other)
         {
             throw new InvalidOperationException($"{file} has an environment beside the one of the step that runs {run}");
@@ -245,7 +245,7 @@ public static partial class WorkflowChecks
     public static void JobsOn(string file, string runner, params string[] names)
     {
         Dictionary<string, object?> jobs = Jobs(file);
-        if (jobs.Count != names.Length || names.Any(name => jobs.GetValueOrDefault(name) is not Dictionary<string, object?> job || job.GetValueOrDefault("runs-on") as string != runner))
+        if (jobs.Count != names.Length || names.Any(name => jobs.GetValueOrDefault(name) is not Dictionary<string, object?> job || (job.GetValueOrDefault("runs-on") as string) != runner))
         {
             throw new InvalidOperationException($"{file} does not have exactly the jobs {string.Join(", ", names)} on {runner}");
         }
@@ -254,7 +254,7 @@ public static partial class WorkflowChecks
     /// <summary>Fails when the job does not need the other job.</summary>
     public static void Needs(string file, string job, string needed)
     {
-        if (Job(file, job).GetValueOrDefault("needs") as string != needed)
+        if ((Job(file, job).GetValueOrDefault("needs") as string) != needed)
         {
             throw new InvalidOperationException($"the job {job} of {file} does not need {needed}");
         }
@@ -373,7 +373,7 @@ public static partial class WorkflowChecks
         => step.GetValueOrDefault("uses") is string uses && uses.StartsWith(action, StringComparison.Ordinal);
 
     private static bool IsSetup(Dictionary<string, object?> step)
-        => IsUses(step, Setup) && With(step).GetValueOrDefault("global-json-file") as string == "global.json";
+        => IsUses(step, Setup) && With(step).GetValueOrDefault("global-json-file") is "global.json";
 
     private static List<string> List(object? value)
         => value is string text && text.StartsWith('[') && text.EndsWith(']')
