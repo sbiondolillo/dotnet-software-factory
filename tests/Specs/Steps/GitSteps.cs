@@ -9,10 +9,10 @@ namespace Specs.Steps;
 public sealed class GitSteps(ExceptionState exceptionState)
 {
     private readonly List<CommandSpec> _recorded = [];
-    private readonly Dictionary<string, CommandResult> _results = new();
+    private readonly Dictionary<string, CommandResult> _results = [];
     private readonly List<CancellationToken> _recordedTokens = [];
-    private readonly Dictionary<string, CancellationToken> _tokens = new();
-    private readonly Dictionary<string, string> _throwOnSubcommand = new();
+    private readonly Dictionary<string, CancellationToken> _tokens = [];
+    private readonly Dictionary<string, string> _throwOnSubcommand = [];
 
     private Mock<CommandRunner>? _mock;
     private Git? _git;
@@ -252,7 +252,7 @@ public sealed class GitSteps(ExceptionState exceptionState)
     public void ThenGitThrowsAGitCommandExceptionWhoseMessageContains(string text)
     {
         Assert.IsType<GitCommandException>(exceptionState.Exception);
-        Assert.Contains(text, exceptionState.Exception!.Message);
+        Assert.Contains(text, exceptionState.Exception.Message);
     }
 
     [Then("every call the mock CommandRunner recorded received the cancellation token named {string}")]

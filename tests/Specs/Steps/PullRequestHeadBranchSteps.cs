@@ -12,11 +12,19 @@ public sealed class PullRequestHeadBranchSteps(RecordingHandler handler)
     private Exception? _exception;
 
     [Given("GitHub answers the read of pull request {int} of {string} with the head ref {string}")]
-    public void GivenAnswer(int number, string slug, string headRef) =>
+    public void GivenAnswer(int number, string slug, string headRef)
+    {
+        _ = slug;
         handler.Answer(200, JsonSerializer.Serialize(new { number, head = new { @ref = headRef, sha = "abc" } }));
+    }
 
     [Given("GitHub fails the read of pull request {int} of {string}")]
-    public void GivenFails(int number, string slug) => handler.Answer(404, "{\"message\":\"Not Found\"}");
+    public void GivenFails(int number, string slug)
+    {
+        _ = number;
+        _ = slug;
+        handler.Answer(404, "{\"message\":\"Not Found\"}");
+    }
 
     [When("I read the head branch of pull request {int} of {string}")]
     public async Task WhenRead(int number, string slug)

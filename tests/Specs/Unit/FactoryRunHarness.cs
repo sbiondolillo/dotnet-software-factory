@@ -24,10 +24,8 @@ public sealed class FactoryRunHarness : IDisposable
     private int _builds;
     private int _reviews;
 
-    public FactoryRunHarness()
-    {
+    public FactoryRunHarness() =>
         File.WriteAllText(Path.Combine(_root.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
-    }
 
     public string Owner { get; set; } = "sbiondolillo";
 

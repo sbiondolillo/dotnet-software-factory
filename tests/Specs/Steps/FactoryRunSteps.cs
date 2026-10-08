@@ -270,7 +270,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
             List<string> arguments = [.. spec.Arguments];
             int id = arguments.IndexOf(Specs.Unit.FactoryRunHarness.ContainerId);
             string line = string.Join(' ', arguments[(id + 1)..]);
-            List<string> names = arguments[..id].Where(a => a is not ("exec" or "--env")).ToList();
+            List<string> names = [.. arguments[..id].Where(a => a is not ("exec" or "--env"))];
             if (line == command)
             {
                 Assert.Equal([first, second], names);
@@ -320,10 +320,8 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     }
 
     [Then("FactoryRun removes the container after the delivery")]
-    public void ThenRemoved()
-    {
+    public void ThenRemoved() =>
         Assert.Equal(["push", "comment", "rm"], _h.Events);
-    }
 
     [Then("FactoryRun throws GitHubRequestException and removes the container")]
     public void ThenThrows()

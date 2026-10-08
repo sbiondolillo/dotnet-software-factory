@@ -9,7 +9,7 @@ namespace Specs.Steps;
 public sealed class SandboxImageSteps(ExceptionState exceptionState, ScenarioContext scenarioContext) : IDisposable
 {
     private readonly List<CommandSpec> _recorded = [];
-    private readonly Dictionary<string, CommandResult> _results = new();
+    private readonly Dictionary<string, CommandResult> _results = [];
     private readonly DirectoryInfo _directory = Directory.CreateTempSubdirectory("factory-sandbox-image-");
 
     public void Dispose() => _directory.Delete(recursive: true);

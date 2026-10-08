@@ -148,5 +148,5 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
         Assert.Single(_handler.Requests, r => r.Method is "POST" && r.Uri.EndsWith("/pulls", StringComparison.Ordinal));
 
     private List<RecordedRequest> Comments() =>
-        _handler.Requests.Where(r => r.Uri.EndsWith("/comments", StringComparison.Ordinal)).ToList();
+        [.. _handler.Requests.Where(r => r.Uri.EndsWith("/comments", StringComparison.Ordinal))];
 }

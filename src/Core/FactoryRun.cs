@@ -261,7 +261,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         var reviewPhase = new ReviewPhase(agent, git, refactor: true);
 
         int redos = 0;
-        string producer = "";
+        string producer;
         IReadOnlyList<string> redoTexts = [];
         while (true)
         {
@@ -277,7 +277,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
 
             await Say("lint: start").ConfigureAwait(false);
             await lintGate.RunAsync(request.Directory, issue.Title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
-            producer = _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "passed");
+            _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "passed");
             long testStart = _clock.GetTimestamp();
             await Say("test: start").ConfigureAwait(false);
             TestGateResult gate = await testGate.RunAsync(request.Directory, pin, request.SecretNames, cancellationToken).ConfigureAwait(false);

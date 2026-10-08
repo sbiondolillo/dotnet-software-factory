@@ -13,7 +13,7 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState, ConsoleSta
     private static readonly Regex QuotedSpan = new(@"""[^""]*""|'[^']*'", RegexOptions.Compiled);
 
     private readonly CommandRunner _runner = new();
-    private readonly Dictionary<string, string> _extraEnvironment = new();
+    private readonly Dictionary<string, string> _extraEnvironment = [];
     private Mock<CommandRunner>? _mock;
 
     private string? _command;
@@ -35,7 +35,7 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState, ConsoleSta
     public void GivenTheCommandIsWithArguments(string command, string tail)
     {
         _command = Unquote(command);
-        _arguments = QuotedSpan.Matches(tail).Select(match => Unquote(match.Value)).ToArray();
+        _arguments = [.. QuotedSpan.Matches(tail).Select(match => Unquote(match.Value))];
     }
 
     [Given("the working directory is {string}")]

@@ -96,10 +96,8 @@ public sealed class ConsoleProgramTests : IDisposable
     }
 
     [Fact]
-    public async Task TwoFaultsGiveOneLineForEach()
-    {
+    public async Task TwoFaultsGiveOneLineForEach() =>
         Assert.Equal(2, (await RefusedAsync("run --repo ab --issue 0")).Count);
-    }
 
     [Theory]
     [InlineData("--help", new[] { "run", "feedback" })]

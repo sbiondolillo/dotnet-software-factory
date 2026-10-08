@@ -185,10 +185,8 @@ public sealed class FeedbackRunSteps : IDisposable
     }
 
     [Then("FeedbackRun clones no repo and starts no container")]
-    public void ThenNoClone()
-    {
+    public void ThenNoClone() =>
         Assert.DoesNotContain(_h.Commands, c => c.Command is "docker" || c.Arguments[0] is "clone");
-    }
 
     [Then("FeedbackRun gives back a result with {int} thread(s) resolved, {int} thread(s) unresolved and {int} Redo(s)")]
     public void ThenResult(int resolved, int unresolved, int redos) =>
@@ -257,7 +255,7 @@ public sealed class FeedbackRunSteps : IDisposable
             List<string> arguments = [.. spec.Arguments];
             int id = arguments.IndexOf(FeedbackRunHarness.ContainerId);
             string line = string.Join(' ', arguments[(id + 1)..]);
-            List<string> names = arguments[..id].Where(a => a is not ("exec" or "--env")).ToList();
+            List<string> names = [.. arguments[..id].Where(a => a is not ("exec" or "--env"))];
             if (line == command)
             {
                 Assert.Equal([first, second], names);

@@ -39,10 +39,8 @@ public sealed class TestReportSteps(ExceptionState exceptionState) : IDisposable
     }
 
     [Given("one of the results passed and the other failed")]
-    public void GivenOnePassedOneFailed()
-    {
+    public void GivenOnePassedOneFailed() =>
         Assert.Equal(["Passed", "Failed"], _results.Select(result => result.Outcome));
-    }
 
     [Given("a TRX file with a test run with no results")]
     public void GivenNoResults() => _rawContent = Wrap("", "");
