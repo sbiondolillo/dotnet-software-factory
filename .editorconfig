@@ -68,3 +68,16 @@ dotnet_diagnostic.IDE0045.severity = warning
 # Ordinal comparison, and results that must be used.
 dotnet_diagnostic.CA1307.severity = warning
 dotnet_diagnostic.CA1806.severity = warning
+# Product code only: disposal, blocking calls, catch-all, ConfigureAwait.
+dotnet_diagnostic.CA2000.severity = warning
+dotnet_diagnostic.CA2213.severity = warning
+dotnet_diagnostic.CA1849.severity = warning
+dotnet_diagnostic.CA1031.severity = warning
+dotnet_diagnostic.CA2007.severity = warning
+
+[tests/**.cs]
+dotnet_diagnostic.CA2000.severity = none
+dotnet_diagnostic.CA2213.severity = none
+dotnet_diagnostic.CA1849.severity = none
+dotnet_diagnostic.CA1031.severity = none
+dotnet_diagnostic.CA2007.severity = none
