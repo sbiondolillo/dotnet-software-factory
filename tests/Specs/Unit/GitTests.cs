@@ -15,8 +15,8 @@ public sealed class GitTests
         GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => git.CloneAsync("https://example.com/repo.git", "token", "/tmp/dir", TestContext.Current.CancellationToken));
 
-        Assert.Contains("clone", exception.Message);
-        Assert.Contains("fatal: could not clone", exception.Message);
+        Assert.Contains("clone", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("fatal: could not clone", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -35,8 +35,8 @@ public sealed class GitTests
         GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => git.CommitAllAsync("/tmp/dir", "message", "Ada Lovelace", "ada@example.com", TestContext.Current.CancellationToken));
 
-        Assert.Contains("add", exception.Message);
-        Assert.Contains("fatal: add failed", exception.Message);
+        Assert.Contains("add", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("fatal: add failed", exception.Message, StringComparison.Ordinal);
         Assert.Equal(["add"], runs);
     }
 
@@ -53,8 +53,8 @@ public sealed class GitTests
         GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => git.CommitAllAsync("/tmp/dir", "message", "Ada Lovelace", "ada@example.com", TestContext.Current.CancellationToken));
 
-        Assert.Contains("commit", exception.Message);
-        Assert.Contains("fatal: commit failed", exception.Message);
+        Assert.Contains("commit", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("fatal: commit failed", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -66,8 +66,8 @@ public sealed class GitTests
         GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => git.PushAsync("branch", "/tmp/dir", "token", TestContext.Current.CancellationToken));
 
-        Assert.Contains("push", exception.Message);
-        Assert.Contains("fatal: could not push", exception.Message);
+        Assert.Contains("push", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("fatal: could not push", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -78,8 +78,8 @@ public sealed class GitTests
 
         GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(() => git.ReadHeadShaAsync("/tmp/dir", TestContext.Current.CancellationToken));
 
-        Assert.Contains("rev-parse", exception.Message);
-        Assert.Contains("fatal: bad revision", exception.Message);
+        Assert.Contains("rev-parse", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("fatal: bad revision", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -91,8 +91,8 @@ public sealed class GitTests
         GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => git.ListChangedFilesAsync("no-such-base", "/tmp/dir", TestContext.Current.CancellationToken));
 
-        Assert.Contains("diff", exception.Message);
-        Assert.Contains("fatal: unknown revision", exception.Message);
+        Assert.Contains("diff", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("fatal: unknown revision", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -105,7 +105,7 @@ public sealed class GitTests
         GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => git.PushAsync("branch", "/tmp/dir", "token", TestContext.Current.CancellationToken));
 
-        Assert.Contains(standardError, exception.Message);
+        Assert.Contains(standardError, exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -255,6 +255,6 @@ public sealed class GitTests
         GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => new Git(mock.Object).HasChangesAsync("/tmp/dir", TestContext.Current.CancellationToken));
 
-        Assert.Contains("status", exception.Message);
+        Assert.Contains("status", exception.Message, StringComparison.Ordinal);
     }
 }

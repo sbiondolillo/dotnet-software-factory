@@ -41,12 +41,12 @@ public sealed class DeliverIntegrationTests
 
             JsonElement pr = await client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/pulls/{pull}", null, ct);
             Assert.Equal(title, pr.GetProperty("title").GetString());
-            Assert.StartsWith($"Closes #{issue}", pr.GetProperty("body").GetString());
+            Assert.StartsWith($"Closes #{issue}", pr.GetProperty("body").GetString(), StringComparison.Ordinal);
             Assert.Equal(result.HtmlUrl, pr.GetProperty("html_url").GetString());
 
             JsonElement comments = await client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/issues/{issue}/comments", null, ct);
             JsonElement only = Assert.Single(comments.EnumerateArray().ToList());
-            Assert.Contains(result.HtmlUrl, only.GetProperty("body").GetString());
+            Assert.Contains(result.HtmlUrl, only.GetProperty("body").GetString(), StringComparison.Ordinal);
         }
         finally
         {

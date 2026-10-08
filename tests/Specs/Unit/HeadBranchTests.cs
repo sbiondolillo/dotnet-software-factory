@@ -29,7 +29,7 @@ public sealed class HeadBranchTests
         handler.Answer(200, JsonSerializer.Serialize(new { head = new { @ref = "factory/a1b2c3d4" } }));
         var sut = new PullRequests(new GitHubClient(new HttpClient(handler), "t", TimeSpan.Zero));
         Assert.Equal("factory/a1b2c3d4", await sut.ReadHeadBranchAsync("o", "r", 10, Ct));
-        Assert.EndsWith("/repos/o/r/pulls/10", Assert.Single(handler.Requests).Uri);
+        Assert.EndsWith("/repos/o/r/pulls/10", Assert.Single(handler.Requests).Uri, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -64,8 +64,8 @@ public sealed class HeadBranchTests
         mock.Setup(r => r.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CommandResult { ExitCode = 1, StandardError = "did not match any file(s) known to git" });
         GitCommandException ex = await Assert.ThrowsAsync<GitCommandException>(() => new Git(mock.Object).CheckoutExistingBranchAsync("b", "/tmp/clone", Ct));
-        Assert.Contains("checkout", ex.Message);
-        Assert.Contains("did not match any file(s) known to git", ex.Message);
+        Assert.Contains("checkout", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("did not match any file(s) known to git", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

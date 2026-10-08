@@ -42,6 +42,6 @@ public sealed class ErrorAnswerStopSteps(FactoryRunSteps factory)
     public void ThenOutputHoldsBody()
     {
         string body = Assert.Single(H.CommentBodies);
-        Assert.EndsWith(body, H.Progress.ToString().TrimEnd('\n'));
+        Assert.EndsWith(body, H.Progress.ToString().TrimEnd('\n'), StringComparison.Ordinal);
     }
 }

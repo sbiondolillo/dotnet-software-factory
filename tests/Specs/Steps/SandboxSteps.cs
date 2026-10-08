@@ -145,7 +145,7 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
     public void ThenThrows()
     {
         Assert.IsType<SandboxException>(exceptionState.Exception);
-        Assert.Contains(_run.StandardError, exceptionState.Exception.Message);
+        Assert.Contains(_run.StandardError, exceptionState.Exception.Message, StringComparison.Ordinal);
     }
 
     [Then("the runner ran a CommandSpec whose program is {string} and whose first argument is {string}")]

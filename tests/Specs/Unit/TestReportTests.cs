@@ -40,21 +40,21 @@ public sealed class TestReportTests : IDisposable
         string path = Write("This is not a test report.");
         TestReportException exception = Assert.Throws<TestReportException>(() => TestReport.Read(path));
         Assert.Equal(path, exception.Path);
-        Assert.Contains(path, exception.Message);
+        Assert.Contains(path, exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void AnEmptyFileThrowsNamingThePath()
     {
         string path = Write("");
-        Assert.Contains(path, Assert.Throws<TestReportException>(() => TestReport.Read(path)).Message);
+        Assert.Contains(path, Assert.Throws<TestReportException>(() => TestReport.Read(path)).Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void WellFormedXmlThatIsNotATrxThrowsNamingThePath()
     {
         string path = Write("<html/>");
-        Assert.Contains(path, Assert.Throws<TestReportException>(() => TestReport.Read(path)).Message);
+        Assert.Contains(path, Assert.Throws<TestReportException>(() => TestReport.Read(path)).Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public sealed class TestReportTests : IDisposable
     public void AResultWithNoDefinitionThrowsNamingThePath()
     {
         string path = Write(Steps.TrxBuilder.Wrap("", "<UnitTestResult testId=\"x\" outcome=\"Passed\" />"));
-        Assert.Contains(path, Assert.Throws<TestReportException>(() => TestReport.Read(path)).Message);
+        Assert.Contains(path, Assert.Throws<TestReportException>(() => TestReport.Read(path)).Message, StringComparison.Ordinal);
     }
 
     [Fact]

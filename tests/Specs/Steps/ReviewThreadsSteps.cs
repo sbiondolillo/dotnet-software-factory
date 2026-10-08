@@ -80,7 +80,7 @@ public sealed class ReviewThreadsSteps(ExceptionState exceptionState, RecordingH
     public void ThenQueryNames(string name)
     {
         using var document = JsonDocument.Parse(handler.Requests[^1].Content!);
-        Assert.Contains(name, document.RootElement.GetProperty("query").GetString());
+        Assert.Contains(name, document.RootElement.GetProperty("query").GetString(), StringComparison.Ordinal);
     }
 
     [Then("the variables of the recorded request hold the owner {string}, the name {string} and the number {int}")]
@@ -147,7 +147,7 @@ public sealed class ReviewThreadsSteps(ExceptionState exceptionState, RecordingH
 
     [Then("ReviewThreads throws a GitHubGraphQLException whose message holds {string}")]
     public void ThenGraphQl(string text) =>
-        Assert.Contains(text, Assert.IsType<GitHubGraphQLException>(exceptionState.Exception).Message);
+        Assert.Contains(text, Assert.IsType<GitHubGraphQLException>(exceptionState.Exception).Message, StringComparison.Ordinal);
 
     [Then("ReviewThreads throws a GitHubRequestException that gives the status code {int}")]
     public void ThenRequestException(int status) =>

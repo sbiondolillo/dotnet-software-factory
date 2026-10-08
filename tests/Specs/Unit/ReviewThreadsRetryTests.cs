@@ -40,7 +40,7 @@ public sealed class ReviewThreadsRetryTests
         (ReviewThreads sut, RecordingHandler handler) = Make();
         handler.Answer(200, Errors(Fault));
         GitHubGraphQLException ex = await Assert.ThrowsAsync<GitHubGraphQLException>(() => Call(sut, op));
-        Assert.Contains("Something went wrong while executing your query", ex.Message);
+        Assert.Contains("Something went wrong while executing your query", ex.Message, StringComparison.Ordinal);
         Assert.Equal(4, handler.Requests.Count);
     }
 

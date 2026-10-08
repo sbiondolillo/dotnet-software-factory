@@ -113,15 +113,15 @@ public sealed class GitHubClientSteps(ExceptionState exceptionState, RecordingHa
     [Then("the exception message names the method {string} and the path {string}")]
     public void ThenNames(string method, string path)
     {
-        Assert.Contains(method, exceptionState.Exception!.Message);
-        Assert.Contains(path, exceptionState.Exception.Message);
+        Assert.Contains(method, exceptionState.Exception!.Message, StringComparison.Ordinal);
+        Assert.Contains(path, exceptionState.Exception.Message, StringComparison.Ordinal);
     }
 
     [Then("the exception message holds the status code and the body of the answer")]
     public void ThenHolds()
     {
-        Assert.Contains("500", exceptionState.Exception!.Message);
-        Assert.Contains("server exploded", exceptionState.Exception.Message);
+        Assert.Contains("500", exceptionState.Exception!.Message, StringComparison.Ordinal);
+        Assert.Contains("server exploded", exceptionState.Exception.Message, StringComparison.Ordinal);
     }
 
     [Then("the exception gives the status code {int}")]

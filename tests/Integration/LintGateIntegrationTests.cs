@@ -82,7 +82,7 @@ public sealed class LintGateIntegrationTests : IDisposable
             _tree.FullName, "Format it", "Ada Lovelace", "ada@example.com", TestContext.Current.CancellationToken);
 
         Assert.True(committed);
-        Assert.Contains("    public void Greet", await File.ReadAllTextAsync(Path.Combine(_tree.FullName, "Greeter.cs"), TestContext.Current.CancellationToken));
+        Assert.Contains("    public void Greet", await File.ReadAllTextAsync(Path.Combine(_tree.FullName, "Greeter.cs"), TestContext.Current.CancellationToken), StringComparison.Ordinal);
         CommandResult log = await GitRawAsync(_tree.FullName, "log", "-1", "--format=%s|%an|%ae");
         Assert.Equal("Format it|Ada Lovelace|ada@example.com", log.StandardOutput.Trim());
         Assert.False(await git.HasChangesAsync(_tree.FullName, TestContext.Current.CancellationToken));
@@ -103,7 +103,7 @@ public sealed class LintGateIntegrationTests : IDisposable
         File.Delete(Path.Combine(_tree.FullName, "Probe.csproj"));
         LintGateException exception = await Assert.ThrowsAsync<LintGateException>(
             () => new LintGate(sandbox, git).RunAsync(_tree.FullName, "m", "n", "e@x", TestContext.Current.CancellationToken));
-        Assert.Contains("1", exception.Message);
-        Assert.Contains("Could not find a MSBuild project file or solution file", exception.Message);
+        Assert.Contains("1", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Could not find a MSBuild project file or solution file", exception.Message, StringComparison.Ordinal);
     }
 }

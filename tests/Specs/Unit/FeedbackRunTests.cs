@@ -40,7 +40,7 @@ public sealed class FeedbackRunTests
     {
         using var h = new FeedbackRunHarness { Report = n => n is 1 ? null : Both() };
         FeedbackRunResult result = await h.RunAsync(Ct);
-        Assert.Contains(".factory/threads.json", h.BuildPrompts.ElementAt(1).Text);
+        Assert.Contains(".factory/threads.json", h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
         Assert.Equal(1, result.Redos);
         Assert.Equal(["build", "build", "dotnet", "review"], h.Events.Where(e => e is "build" or "dotnet" or "review"));
         Assert.Single(h.Commands, c => c.Command is "git" && c.Arguments[0] is "commit");
@@ -57,7 +57,7 @@ public sealed class FeedbackRunTests
         using var h = new FeedbackRunHarness { Report = n => n is 1 ? text : Both() };
         FeedbackRunResult result = await h.RunAsync(Ct);
         Assert.Equal(1, result.Redos);
-        Assert.Contains(".factory/threads.json", h.BuildPrompts.ElementAt(1).Text);
+        Assert.Contains(".factory/threads.json", h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public sealed class FeedbackRunTests
     {
         using var h = new FeedbackRunHarness { Report = n => n is 1 ? FeedbackRunHarness.FixedReport(A) : Both() };
         await h.RunAsync(Ct);
-        Assert.Contains(B, h.BuildPrompts.ElementAt(1).Text);
+        Assert.Contains(B, h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -79,8 +79,8 @@ public sealed class FeedbackRunTests
         using var h = new FeedbackRunHarness { Report = n => n is 1 ? report : Both() };
         await h.RunAsync(Ct);
         string text = h.BuildPrompts.ElementAt(1).Text;
-        Assert.Contains(A, text);
-        Assert.Contains(shown, text);
+        Assert.Contains(A, text, StringComparison.Ordinal);
+        Assert.Contains(shown, text, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -96,8 +96,8 @@ public sealed class FeedbackRunTests
         FeedbackRunResult result = await h.RunAsync(Ct);
         Assert.Equal(1, result.Redos);
         string text = h.BuildPrompts.ElementAt(1).Text;
-        Assert.Contains(A, text);
-        Assert.Contains("reply", text);
+        Assert.Contains(A, text, StringComparison.Ordinal);
+        Assert.Contains("reply", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -107,8 +107,8 @@ public sealed class FeedbackRunTests
         using var h = new FeedbackRunHarness { Report = n => n is 1 ? report : Both() };
         await h.RunAsync(Ct);
         string text = h.BuildPrompts.ElementAt(1).Text;
-        Assert.Contains($"no item for the thread {A}", text);
-        Assert.Contains($"no item for the thread {B}", text);
+        Assert.Contains($"no item for the thread {A}", text, StringComparison.Ordinal);
+        Assert.Contains($"no item for the thread {B}", text, StringComparison.Ordinal);
 
         string extra = FeedbackRunHarness.Items([(A, "fixed", "x"), (B, "fixed", "y"), ("PRRT_other", "done", "")]);
         using var g = new FeedbackRunHarness { Report = _ => extra };
@@ -121,7 +121,7 @@ public sealed class FeedbackRunTests
         using var h = new FeedbackRunHarness { Report = n => n is 1 ? Both() : null };
         h.RedBuilds.Add(1);
         FeedbackRunResult result = await h.RunAsync(Ct);
-        Assert.Contains(".factory/threads.json", h.BuildPrompts.ElementAt(2).Text);
+        Assert.Contains(".factory/threads.json", h.BuildPrompts.ElementAt(2).Text, StringComparison.Ordinal);
         Assert.Equal(new FeedbackRunResult(0, 2, 3), result);
     }
 
@@ -149,7 +149,7 @@ public sealed class FeedbackRunTests
         FeedbackRunResult result = await h.RunAsync(Ct);
         Assert.Equal(new FeedbackRunResult(0, 2, 3), result);
         Assert.Single(h.CommentBodies);
-        Assert.Contains("3 Redos", Assert.Single(h.CommentBodies));
+        Assert.Contains("3 Redos", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain("push", h.Events);
         Assert.Empty(RepliedIds(h));
         Assert.Contains("rm", h.Events);
@@ -166,7 +166,7 @@ public sealed class FeedbackRunTests
 
         FeedbackRunResult result = await h.RunAsync(Ct);
         Assert.Equal(new FeedbackRunResult(0, 2, 3), result);
-        Assert.Contains(FeedbackRunHarness.Blocking, Assert.Single(h.CommentBodies));
+        Assert.Contains(FeedbackRunHarness.Blocking, Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain("push", h.Events);
     }
 
@@ -176,7 +176,7 @@ public sealed class FeedbackRunTests
         using var h = new FeedbackRunHarness { Report = _ => null };
         FeedbackRunResult result = await h.RunAsync(Ct);
         Assert.Equal(new FeedbackRunResult(0, 2, 3), result);
-        Assert.Contains(".factory/threads.json", Assert.Single(h.CommentBodies));
+        Assert.Contains(".factory/threads.json", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain("dotnet", h.Events);
     }
 
@@ -192,9 +192,9 @@ public sealed class FeedbackRunTests
         await h.RunAsync(Ct);
         string body = Assert.Single(h.CommentBodies);
         Assert.True(Encoding.UTF8.GetByteCount(body) <= 262144);
-        Assert.Contains("[cut]", body);
+        Assert.Contains("[cut]", body, StringComparison.Ordinal);
         Assert.DoesNotContain('\uFFFD', body);
-        Assert.Contains(new string('é', 1000), body);
+        Assert.Contains(new string('é', 1000), body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -207,7 +207,7 @@ public sealed class FeedbackRunTests
         }
 
         await h.RunAsync(Ct);
-        Assert.DoesNotContain("[cut]", Assert.Single(h.CommentBodies));
+        Assert.DoesNotContain("[cut]", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -248,7 +248,7 @@ public sealed class FeedbackRunTests
     {
         using var h = new FeedbackRunHarness { CheckoutFailure = "did not match any file(s) known to git" };
         GitCommandException ex = await Assert.ThrowsAsync<GitCommandException>(() => h.RunAsync(Ct));
-        Assert.Contains("did not match", ex.Message);
+        Assert.Contains("did not match", ex.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(h.Commands, c => c.Command is "docker");
     }
 
@@ -257,8 +257,8 @@ public sealed class FeedbackRunTests
     {
         using var h = new FeedbackRunHarness { NullLine = true };
         Assert.Equal(new FeedbackRunResult(2, 0, 0), await h.RunAsync(Ct));
-        Assert.DoesNotContain("Line: 14", h.BuildPrompts.First().Text);
-        Assert.DoesNotContain("Line: \n", h.BuildPrompts.First().Text);
+        Assert.DoesNotContain("Line: 14", h.BuildPrompts.First().Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Line: \n", h.BuildPrompts.First().Text, StringComparison.Ordinal);
     }
 
     [Fact]

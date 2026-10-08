@@ -123,7 +123,7 @@ public sealed class ConsoleProgramTests : IDisposable
     {
         _h.Environment[name] = "";
         Assert.Equal(1, await StartAsync($"run {Repo} --issue 1"));
-        Assert.Contains(name, Assert.Single(ConsoleHarness.Lines(_h.Error)));
+        Assert.Contains(name, Assert.Single(ConsoleHarness.Lines(_h.Error)), StringComparison.Ordinal);
         Assert.Empty(_h.Requests);
         Assert.Empty(_h.Commands);
     }
@@ -133,7 +133,7 @@ public sealed class ConsoleProgramTests : IDisposable
     {
         _h.Environment.Clear();
         Assert.Equal(1, await StartAsync($"run {Repo} --issue 1"));
-        Assert.Contains("FACTORY_GITHUB_TOKEN", Assert.Single(ConsoleHarness.Lines(_h.Error)));
+        Assert.Contains("FACTORY_GITHUB_TOKEN", Assert.Single(ConsoleHarness.Lines(_h.Error)), StringComparison.Ordinal);
     }
 
     [Theory]
@@ -143,7 +143,7 @@ public sealed class ConsoleProgramTests : IDisposable
     {
         _h.RepoStatus = status;
         Assert.Equal(1, await StartAsync($"run {Repo} --issue 1"));
-        Assert.Contains(status.ToString(System.Globalization.CultureInfo.InvariantCulture), Assert.Single(ConsoleHarness.Lines(_h.Error)));
+        Assert.Contains(status.ToString(System.Globalization.CultureInfo.InvariantCulture), Assert.Single(ConsoleHarness.Lines(_h.Error)), StringComparison.Ordinal);
         Assert.DoesNotContain(_h.Commands, c => c.Command is "git");
     }
 
@@ -155,7 +155,7 @@ public sealed class ConsoleProgramTests : IDisposable
         _h.Refusal = (suffix, status);
         Assert.Equal(1, await StartAsync($"run {Repo} --issue 1 --timeout 0"));
         string[] others = [.. ConsoleHarness.Lines(_h.Error).Where(l => !l.StartsWith("agent: ", StringComparison.Ordinal) && !l.StartsWith("command: ", StringComparison.Ordinal))];
-        Assert.Contains(status.ToString(System.Globalization.CultureInfo.InvariantCulture), Assert.Single(others));
+        Assert.Contains(status.ToString(System.Globalization.CultureInfo.InvariantCulture), Assert.Single(others), StringComparison.Ordinal);
         Assert.All(_h.CloneDirectories, directory => Assert.False(Directory.Exists(directory)));
     }
 

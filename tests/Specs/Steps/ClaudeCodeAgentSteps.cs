@@ -164,15 +164,15 @@ public sealed class ClaudeCodeAgentSteps(ExceptionState exceptionState) : IDispo
     [Then("the exception message holds {string} and the reason")]
     public void ThenMessageReason(string code)
     {
-        Assert.Contains(code, exceptionState.Exception!.Message);
-        Assert.Contains("Not logged in", exceptionState.Exception.Message);
+        Assert.Contains(code, exceptionState.Exception!.Message, StringComparison.Ordinal);
+        Assert.Contains("Not logged in", exceptionState.Exception.Message, StringComparison.Ordinal);
     }
 
     [Then("the exception message holds {string}")]
-    public void ThenMessage(string text) => Assert.Contains(text, exceptionState.Exception!.Message);
+    public void ThenMessage(string text) => Assert.Contains(text, exceptionState.Exception!.Message, StringComparison.Ordinal);
 
     [Then("the exception message holds the path")]
-    public void ThenMessagePath() => Assert.Contains(_path, exceptionState.Exception!.Message);
+    public void ThenMessagePath() => Assert.Contains(_path, exceptionState.Exception!.Message, StringComparison.Ordinal);
 
     [Then("the runner runs no docker exec")]
     public void ThenNoExec() => Assert.DoesNotContain(_recorded, spec => spec.Arguments[0] == "exec");

@@ -80,8 +80,8 @@ public sealed class GitIntegrationTests
         GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => git.PushAsync(branch, directory.FullName, "invalid", TestContext.Current.CancellationToken));
 
-        Assert.Contains("push", exception.Message);
-        Assert.Contains("Authentication failed", exception.Message);
+        Assert.Contains("push", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Authentication failed", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -96,8 +96,8 @@ public sealed class GitIntegrationTests
         GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => git.ListChangedFilesAsync("no-such-base", directory.FullName, TestContext.Current.CancellationToken));
 
-        Assert.Contains("diff", exception.Message);
-        Assert.Contains("unknown revision", exception.Message);
+        Assert.Contains("diff", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("unknown revision", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -111,12 +111,12 @@ public sealed class GitIntegrationTests
 
         string diff = await git.ReadDiffAsync(baseSha, directory.FullName, TestContext.Current.CancellationToken);
 
-        Assert.Contains("diff --git a/a.txt b/a.txt", diff);
-        Assert.Contains("+two", diff);
+        Assert.Contains("diff --git a/a.txt b/a.txt", diff, StringComparison.Ordinal);
+        Assert.Contains("+two", diff, StringComparison.Ordinal);
         int bSection = diff.IndexOf("diff --git a/b.txt b/b.txt", StringComparison.Ordinal);
         Assert.True(bSection >= 0);
-        Assert.Contains("new file mode 100644", diff[bSection..]);
-        Assert.DoesNotContain("c.txt", diff);
+        Assert.Contains("new file mode 100644", diff[bSection..], StringComparison.Ordinal);
+        Assert.DoesNotContain("c.txt", diff, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -138,8 +138,8 @@ public sealed class GitIntegrationTests
         GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => git.ReadDiffAsync(unknown, directory.FullName, TestContext.Current.CancellationToken));
 
-        Assert.Contains("diff", exception.Message);
-        Assert.Contains($"fatal: bad object {unknown}", exception.Message);
+        Assert.Contains("diff", exception.Message, StringComparison.Ordinal);
+        Assert.Contains($"fatal: bad object {unknown}", exception.Message, StringComparison.Ordinal);
     }
 
     private static async Task<(DirectoryInfo Directory, string BaseSha, Git Git)> NewLocalRepoAsync()

@@ -51,8 +51,8 @@ public sealed class TestReportIntegrationTests
         Assert.Equal(TestOutcome.Passed, tests.Single(test => test.Method == "Passes").Outcome);
         ReportedTest failed = tests.Single(test => test.Method == "Fails");
         Assert.Equal(TestOutcome.Failed, failed.Outcome);
-        Assert.Contains("Assert.Equal() Failure", failed.Message);
-        Assert.DoesNotContain("   at ", failed.Message);
+        Assert.Contains("Assert.Equal() Failure", failed.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("   at ", failed.Message, StringComparison.Ordinal);
         Assert.Equal(TestOutcome.Skipped, tests.Single(test => test.Method == "Skipped").Outcome);
     }
 }

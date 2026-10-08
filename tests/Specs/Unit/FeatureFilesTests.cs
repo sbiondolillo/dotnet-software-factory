@@ -38,7 +38,7 @@ public sealed class FeatureFilesTests
             FeatureFileException exception = Assert.Throws<FeatureFileException>(() => FeatureFiles.ReadScenarioTitles(path));
 
             string parserMessage = Assert.ThrowsAny<ParserException>(() => new Parser().Parse(new StringReader(content))).Message;
-            Assert.Contains(parserMessage, exception.Message);
+            Assert.Contains(parserMessage, exception.Message, StringComparison.Ordinal);
         }
         finally
         {

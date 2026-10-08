@@ -28,8 +28,8 @@ public sealed class RefactorRunTests
         using FactoryRunHarness h = Make(labels: other);
         FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
         string comment = Assert.Single(h.CommentBodies);
-        Assert.Contains("refactor", comment);
-        Assert.Contains(other, comment);
+        Assert.Contains("refactor", comment, StringComparison.Ordinal);
+        Assert.Contains(other, comment, StringComparison.Ordinal);
         Assert.Empty(h.Commands);
         Assert.Equal(new FactoryRunResult(null, 0), result);
     }
@@ -40,7 +40,7 @@ public sealed class RefactorRunTests
         using FactoryRunHarness h = Make();
         h.CheckResults[0] = (0, "", "");
         FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("The check passes before the plan", Assert.Single(h.CommentBodies));
+        Assert.Contains("The check passes before the plan", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain(h.Prompts, p => p.Kind is "plan");
         Assert.Contains(h.Commands, c => c.Arguments.Contains("remove"));
         Assert.Equal(new FactoryRunResult(null, 0), result);
@@ -55,8 +55,8 @@ public sealed class RefactorRunTests
         h.CheckResults[0] = (code, "", "no such command");
         await h.RunAsync(TestContext.Current.CancellationToken);
         string comment = Assert.Single(h.CommentBodies);
-        Assert.Contains(code.ToString(CultureInfo.InvariantCulture), comment);
-        Assert.Contains("no such command", comment);
+        Assert.Contains(code.ToString(CultureInfo.InvariantCulture), comment, StringComparison.Ordinal);
+        Assert.Contains("no such command", comment, StringComparison.Ordinal);
         Assert.DoesNotContain(h.Prompts, p => p.Kind is "plan");
     }
 
@@ -68,7 +68,7 @@ public sealed class RefactorRunTests
         using FactoryRunHarness h = Make();
         h.PlanExtraFiles.Add(path);
         await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains(path, h.Prompts.Where(p => p.Kind is "plan").ElementAt(1).Text);
+        Assert.Contains(path, h.Prompts.Where(p => p.Kind is "plan").ElementAt(1).Text, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -84,8 +84,8 @@ public sealed class RefactorRunTests
         };
         (remove ? h.PlanRemoves : h.PlanExtraFiles).Add("src/Old.cs");
         FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("src/Old.cs", Assert.Single(h.CommentBodies));
-        Assert.Contains(remove ? "gone" : "changed", h.CommentBodies.Single());
+        Assert.Contains("src/Old.cs", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
+        Assert.Contains(remove ? "gone" : "changed", h.CommentBodies.Single(), StringComparison.Ordinal);
         Assert.DoesNotContain(h.Prompts, p => p.Kind is "build");
         Assert.Equal(new FactoryRunResult(null, 0), result);
     }
@@ -96,7 +96,7 @@ public sealed class RefactorRunTests
         using FactoryRunHarness h = Make();
         h.AgentWritesPlan = false;
         FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains(".factory/plan.md", Assert.Single(h.CommentBodies));
+        Assert.Contains(".factory/plan.md", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.Equal(2, h.Prompts.Count(p => p.Kind is "plan"));
         Assert.DoesNotContain(h.Prompts, p => p.Kind is "build");
         Assert.Equal(new FactoryRunResult(null, 0), result);
@@ -107,8 +107,8 @@ public sealed class RefactorRunTests
     {
         using FactoryRunHarness h = Make();
         await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.DoesNotContain("specs/features/", h.Prompts.First(p => p.Kind is "plan").Text);
-        Assert.DoesNotContain("tests/Specs/Unit/", Builds(h).First().Text);
+        Assert.DoesNotContain("specs/features/", h.Prompts.First(p => p.Kind is "plan").Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("tests/Specs/Unit/", Builds(h).First().Text, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -120,7 +120,7 @@ public sealed class RefactorRunTests
         using FactoryRunHarness h = Make();
         h.FirstBuildChanges.Add(path);
         await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains($"pin: {path}", NextBuildText(h));
+        Assert.Contains($"pin: {path}", NextBuildText(h), StringComparison.Ordinal);
         Assert.DoesNotContain(h.Prompts.TakeWhile(p => p != Builds(h).ElementAt(1)), p => p.Kind is "review");
     }
 
@@ -130,7 +130,7 @@ public sealed class RefactorRunTests
         using FactoryRunHarness h = Make();
         h.FirstBuildAdds.Add("tests/Specs/Unit/GreetingTests.cs");
         await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("pin: tests/Specs/Unit/GreetingTests.cs", NextBuildText(h));
+        Assert.Contains("pin: tests/Specs/Unit/GreetingTests.cs", NextBuildText(h), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public sealed class RefactorRunTests
         using FactoryRunHarness h = Make();
         h.FirstBuildRemoves.Add("tests/Specs/Steps/GreetingSteps.cs");
         await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("pin: tests/Specs/Steps/GreetingSteps.cs", NextBuildText(h));
+        Assert.Contains("pin: tests/Specs/Steps/GreetingSteps.cs", NextBuildText(h), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -149,9 +149,9 @@ public sealed class RefactorRunTests
         h.CheckResults[1] = (1, "the out", "the err");
         await h.RunAsync(TestContext.Current.CancellationToken);
         string text = NextBuildText(h);
-        Assert.Contains("code 1", text);
-        Assert.Contains("the out", text);
-        Assert.Contains("the err", text);
+        Assert.Contains("code 1", text, StringComparison.Ordinal);
+        Assert.Contains("the out", text, StringComparison.Ordinal);
+        Assert.Contains("the err", text, StringComparison.Ordinal);
         Assert.DoesNotContain(h.Prompts.TakeWhile(p => p != Builds(h).ElementAt(1)), p => p.Kind is "review");
     }
 
@@ -161,7 +161,7 @@ public sealed class RefactorRunTests
         using FactoryRunHarness h = Make();
         h.RejectedBuilds.Add(1);
         FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains(FactoryRunHarness.Blocking, NextBuildText(h));
+        Assert.Contains(FactoryRunHarness.Blocking, NextBuildText(h), StringComparison.Ordinal);
         Assert.Equal(1, result.Redos);
         Assert.NotNull(result.PullRequest);
     }
@@ -176,7 +176,7 @@ public sealed class RefactorRunTests
         }
 
         FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("still red", Assert.Single(h.CommentBodies));
+        Assert.Contains("still red", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain(h.Commands, c => c.Command is "git" && c.Arguments[0] is "push");
         Assert.Equal(new FactoryRunResult(null, 3), result);
     }
@@ -187,7 +187,7 @@ public sealed class RefactorRunTests
         using FactoryRunHarness h = Make();
         h.WorktreeAddFails = true;
         SandboxException exception = await Assert.ThrowsAsync<SandboxException>(() => h.RunAsync(TestContext.Current.CancellationToken));
-        Assert.Contains("cannot add the worktree", exception.Message);
+        Assert.Contains("cannot add the worktree", exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(h.Prompts, p => p.Kind is "plan");
     }
 
@@ -208,7 +208,7 @@ public sealed class RefactorRunTests
         using FactoryRunHarness h = Make();
         h.PlanIsError = true;
         FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("plan went wrong", Assert.Single(h.CommentBodies));
+        Assert.Contains("plan went wrong", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain(h.Prompts, p => p.Kind is "build");
         Assert.Null(result.PullRequest);
     }

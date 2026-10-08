@@ -114,23 +114,23 @@ public sealed class RefactorRunSteps(FactoryRunSteps factory, IObjectContainer c
     {
         SeenPrompt prompt = Assert.Single(H.Prompts, p => p.Model == model);
         Assert.Equal(turns.ToString(CultureInfo.InvariantCulture), prompt.Turns);
-        Assert.Contains(H.Title, prompt.Text);
-        Assert.Contains(H.Body, prompt.Text);
-        Assert.Contains(path, prompt.Text);
+        Assert.Contains(H.Title, prompt.Text, StringComparison.Ordinal);
+        Assert.Contains(H.Body, prompt.Text, StringComparison.Ordinal);
+        Assert.Contains(path, prompt.Text, StringComparison.Ordinal);
     }
 
     [Then("FactoryRun runs one prompt with the model {string} and the turn limit {int} that holds the title of the issue, the body of the issue, the base commit and {string}")]
     public void ThenReviewHolds(string model, int turns, string path)
     {
         ThenPromptHolds(model, turns, path);
-        Assert.Contains(H.HeadSha, Assert.Single(H.Prompts, p => p.Model == model).Text);
+        Assert.Contains(H.HeadSha, Assert.Single(H.Prompts, p => p.Model == model).Text, StringComparison.Ordinal);
     }
 
     [Then("the plan prompt holds no {string}")]
-    public void ThenPlanNo(string text) => Assert.DoesNotContain(text, Assert.Single(H.Prompts, p => p.Kind is "plan").Text);
+    public void ThenPlanNo(string text) => Assert.DoesNotContain(text, Assert.Single(H.Prompts, p => p.Kind is "plan").Text, StringComparison.Ordinal);
 
     [Then("the second plan prompt holds {string}")]
-    public void ThenSecondPlan(string text) => Assert.Contains(text, H.Prompts.Where(p => p.Kind is "plan").ElementAt(1).Text);
+    public void ThenSecondPlan(string text) => Assert.Contains(text, H.Prompts.Where(p => p.Kind is "plan").ElementAt(1).Text, StringComparison.Ordinal);
 
     [Then("the section mentions the heading {string} and the paths {string}, {string} and {string}")]
     public static void ThenReadme(string heading, string first, string second, string third)
@@ -138,7 +138,7 @@ public sealed class RefactorRunSteps(FactoryRunSteps factory, IObjectContainer c
         string section = WorkflowChecks.Section(Path.Combine(StarterChecks.RepoRoot(), "README.md"), "## Start a new repo");
         foreach (string text in new[] { heading, first, second, third })
         {
-            Assert.Contains(text, section);
+            Assert.Contains(text, section, StringComparison.Ordinal);
         }
     }
 

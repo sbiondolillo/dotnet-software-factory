@@ -42,7 +42,7 @@ public sealed class FactoryRunIntegrationTests
             string body = Assert.Single(comments.EnumerateArray().ToList()).GetProperty("body").GetString() ?? "";
             foreach (string path in new[] { "Solution.slnx", "specs/features/", "tests/Specs/", "tests/Integration/" })
             {
-                Assert.Contains(path, body);
+                Assert.Contains(path, body, StringComparison.Ordinal);
             }
         }
         finally

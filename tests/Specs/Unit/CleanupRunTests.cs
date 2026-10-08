@@ -25,7 +25,7 @@ public sealed class CleanupRunTests
     {
         using FactoryRunHarness h = Make("cleanup", "behavior");
         FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("behavior", Assert.Single(h.CommentBodies));
+        Assert.Contains("behavior", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain(h.Commands, c => c.Command is "docker");
         Assert.Equal(new FactoryRunResult(null, 0), result);
     }
@@ -40,7 +40,7 @@ public sealed class CleanupRunTests
         using FactoryRunHarness h = Make("cleanup");
         h.Body = body;
         FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains(heading, Assert.Single(h.CommentBodies));
+        Assert.Contains(heading, Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain(h.Commands, c => c.Command is "docker");
         Assert.Null(result.PullRequest);
     }
@@ -51,7 +51,7 @@ public sealed class CleanupRunTests
         using FactoryRunHarness h = Make("cleanup");
         h.CheckResults[0] = (0, "", "");
         FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("The check passes before the build", Assert.Single(h.CommentBodies));
+        Assert.Contains("The check passes before the build", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain(h.Prompts, p => p.Kind is "build");
         Assert.Contains(h.Commands, c => c.Arguments.Contains("remove"));
         Assert.Equal(0, result.Redos);
@@ -66,8 +66,8 @@ public sealed class CleanupRunTests
         h.CheckResults[0] = (code, "", "no such command");
         await h.RunAsync(TestContext.Current.CancellationToken);
         string comment = Assert.Single(h.CommentBodies);
-        Assert.Contains(code.ToString(System.Globalization.CultureInfo.InvariantCulture), comment);
-        Assert.Contains("no such command", comment);
+        Assert.Contains(code.ToString(System.Globalization.CultureInfo.InvariantCulture), comment, StringComparison.Ordinal);
+        Assert.Contains("no such command", comment, StringComparison.Ordinal);
         Assert.DoesNotContain(h.Prompts, p => p.Kind is "build");
     }
 
@@ -81,7 +81,7 @@ public sealed class CleanupRunTests
         h.FirstBuildChanges.Add(path);
         await h.RunAsync(TestContext.Current.CancellationToken);
         SeenPrompt second = h.Prompts.Where(p => p.Kind is "build").ElementAt(1);
-        Assert.Contains(redo, second.Text);
+        Assert.Contains(redo, second.Text, StringComparison.Ordinal);
         Assert.True(h.Prompts.FindIndex(p => p.Kind is "review") > h.Prompts.IndexOf(second));
     }
 
@@ -93,7 +93,7 @@ public sealed class CleanupRunTests
         h.FirstBuildChanges.Add(".editorconfig");
         h.FirstBuildWrites.Add(".editorconfig");
         FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.DoesNotContain(h.Prompts, p => p.Text.Contains("pin: .editorconfig"));
+        Assert.DoesNotContain(h.Prompts, p => p.Text.Contains("pin: .editorconfig", StringComparison.Ordinal));
         Assert.Contains(h.Prompts, p => p.Kind is "review");
         Assert.NotNull(result.PullRequest);
         Assert.Equal(0, result.Redos);
@@ -105,7 +105,7 @@ public sealed class CleanupRunTests
         using FactoryRunHarness h = Make("cleanup");
         h.BaseOnlyTests.Add(("Specs.Unit.GreeterTests", "Greets"));
         await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("lost test: Specs.Unit.GreeterTests.Greets", h.Prompts.Where(p => p.Kind is "build").ElementAt(1).Text);
+        Assert.Contains("lost test: Specs.Unit.GreeterTests.Greets", h.Prompts.Where(p => p.Kind is "build").ElementAt(1).Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -115,9 +115,9 @@ public sealed class CleanupRunTests
         h.CheckResults[1] = (2, "the out", "the err");
         await h.RunAsync(TestContext.Current.CancellationToken);
         string text = h.Prompts.Where(p => p.Kind is "build").ElementAt(1).Text;
-        Assert.Contains("code 2", text);
-        Assert.Contains("the out", text);
-        Assert.Contains("the err", text);
+        Assert.Contains("code 2", text, StringComparison.Ordinal);
+        Assert.Contains("the out", text, StringComparison.Ordinal);
+        Assert.Contains("the err", text, StringComparison.Ordinal);
         Assert.Equal(0, h.Prompts.Take(h.Prompts.IndexOf(h.Prompts.Where(p => p.Kind is "build").ElementAt(1))).Count(p => p.Kind is "review"));
     }
 
@@ -131,7 +131,7 @@ public sealed class CleanupRunTests
         }
 
         FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("still red", Assert.Single(h.CommentBodies));
+        Assert.Contains("still red", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain(h.Commands, c => c.Command is "git" && c.Arguments[0] is "push");
         Assert.Equal(new FactoryRunResult(null, 3), result);
     }
@@ -141,6 +141,6 @@ public sealed class CleanupRunTests
     {
         using FactoryRunHarness h = Make("cleanup");
         await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.All(h.Prompts, p => Assert.DoesNotContain(".factory/plan.md", p.Text));
+        Assert.All(h.Prompts, p => Assert.DoesNotContain(".factory/plan.md", p.Text, StringComparison.Ordinal));
     }
 }

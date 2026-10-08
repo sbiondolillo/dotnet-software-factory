@@ -62,7 +62,7 @@ public sealed class FeedbackCleanupScopeTests
         using FeedbackRunHarness h = Cleanup();
         h.FirstBuildChanges.Add("src/Core/Greeter.cs");
         await h.RunAsync(Ct);
-        Assert.Contains("outside the scope: src/Core/Greeter.cs", h.BuildPrompts.ElementAt(1).Text);
+        Assert.Contains("outside the scope: src/Core/Greeter.cs", h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
         Assert.Equal("test: start", h.Out.ToString().Split('\n').First(l => l.StartsWith("test:", StringComparison.Ordinal)));
         Assert.Equal(1, h.Out.ToString().Split('\n').Count(l => l is "test: start"));
     }
@@ -73,7 +73,7 @@ public sealed class FeedbackCleanupScopeTests
         using FeedbackRunHarness h = Cleanup();
         h.FirstBuildChanges.Add("specs/features/a.feature");
         await h.RunAsync(Ct);
-        Assert.Contains("pin: specs/features/a.feature", h.BuildPrompts.ElementAt(1).Text);
+        Assert.Contains("pin: specs/features/a.feature", h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public sealed class FeedbackCleanupScopeTests
         h.BaseOnlyTests.Add(("Specs.Unit.GreeterTests", "Greets"));
         h.CheckResults[1] = (1, "", "");
         await h.RunAsync(Ct);
-        Assert.Contains("lost test: Specs.Unit.GreeterTests.Greets", h.BuildPrompts.ElementAt(1).Text);
+        Assert.Contains("lost test: Specs.Unit.GreeterTests.Greets", h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
         Assert.DoesNotContain("check: red", h.Out.ToString().Split('\n').Take(Array.IndexOf(h.Out.ToString().Split('\n'), "redo: 1")));
     }
 
@@ -106,8 +106,8 @@ public sealed class FeedbackCleanupScopeTests
         using FeedbackRunHarness h = Cleanup();
         h.RedBuilds.Add(1);
         await h.RunAsync(Ct);
-        Assert.Contains(FeedbackRunHarness.RedText, h.BuildPrompts.ElementAt(1).Text);
-        Assert.DoesNotContain("check: red", h.Out.ToString());
+        Assert.Contains(FeedbackRunHarness.RedText, h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("check: red", h.Out.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -116,8 +116,8 @@ public sealed class FeedbackCleanupScopeTests
         using FeedbackRunHarness h = Cleanup();
         h.CheckResults[1] = (1, "out", "err");
         await h.RunAsync(Ct);
-        Assert.Contains("The check command exited with the code 1", h.BuildPrompts.ElementAt(1).Text);
-        Assert.Contains("check: red", h.Out.ToString());
+        Assert.Contains("The check command exited with the code 1", h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
+        Assert.Contains("check: red", h.Out.ToString(), StringComparison.Ordinal);
         Assert.Equal("build", h.Prompts[1].Kind);
     }
 
@@ -132,7 +132,7 @@ public sealed class FeedbackCleanupScopeTests
 
         FeedbackRunResult result = await h.RunAsync(Ct);
         Assert.Equal(new FeedbackRunResult(0, 2, 3), result);
-        Assert.Contains("The budget of 3 Redos is spent", Assert.Single(h.CommentBodies));
+        Assert.Contains("The budget of 3 Redos is spent", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain(h.Prompts, p => p.Kind is "review");
     }
 
@@ -152,6 +152,6 @@ public sealed class FeedbackCleanupScopeTests
             .Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
         int at = Array.FindIndex(paragraphs, p => p.StartsWith("The body of a `cleanup` issue names the paths", StringComparison.Ordinal));
         Assert.True(at >= 0);
-        Assert.Contains("feedback run on the pull request of a `cleanup` issue holds the build to the issue's `## Scope` and runs its `## Check`", paragraphs[at + 1]);
+        Assert.Contains("feedback run on the pull request of a `cleanup` issue holds the build to the issue's `## Scope` and runs its `## Check`", paragraphs[at + 1], StringComparison.Ordinal);
     }
 }

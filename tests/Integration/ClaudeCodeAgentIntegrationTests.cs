@@ -122,7 +122,7 @@ public sealed class ClaudeCodeAgentIntegrationTests : IDisposable
         using JsonDocument document = Parse(result);
         Assert.True(document.RootElement.GetProperty("is_error").GetBoolean());
         Assert.Equal(404, document.RootElement.GetProperty("api_error_status").GetInt32());
-        Assert.Contains("no-such-model", document.RootElement.GetProperty("result").GetString());
+        Assert.Contains("no-such-model", document.RootElement.GetProperty("result").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -190,7 +190,7 @@ public sealed class ClaudeCodeAgentIntegrationTests : IDisposable
         CommandStartException exception = await Assert.ThrowsAsync<CommandStartException>(
             () => ClaudeAsync(sandbox, Args(new string('a', 131072), Model, "1")));
 
-        Assert.Contains("Argument list too long", exception.Message);
+        Assert.Contains("Argument list too long", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

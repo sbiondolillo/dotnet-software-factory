@@ -60,7 +60,7 @@ public sealed class FeedbackRefactorRunSteps(FactoryRunSteps factory, FeedbackRu
     public void GivenEachStepPasses() => Assert.Empty(H.RedBuilds);
 
     [Then("the build prompt holds {string}")]
-    public void ThenBuildHolds(string text) => Assert.Contains(text, H.BuildPrompts.First().Text);
+    public void ThenBuildHolds(string text) => Assert.Contains(text, H.BuildPrompts.First().Text, StringComparison.Ordinal);
 
     [Then("the section holds this paragraph after the paragraph that starts {string}")]
     public static void ThenParagraph(string start, Table table)

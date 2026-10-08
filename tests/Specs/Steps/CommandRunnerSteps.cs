@@ -145,16 +145,16 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState, ConsoleSta
     }
 
     [Then("the standard output contains {string}")]
-    public void ThenTheStandardOutputContains(string text) => Assert.Contains(text, StandardOutput());
+    public void ThenTheStandardOutputContains(string text) => Assert.Contains(text, StandardOutput(), StringComparison.Ordinal);
 
     [Then("the standard output does not contain {string}")]
-    public void ThenTheStandardOutputDoesNotContain(string text) => Assert.DoesNotContain(text, StandardOutput());
+    public void ThenTheStandardOutputDoesNotContain(string text) => Assert.DoesNotContain(text, StandardOutput(), StringComparison.Ordinal);
 
     [Then("the standard error contains {string}")]
-    public void ThenTheStandardErrorContains(string text) => Assert.Contains(text, StandardError());
+    public void ThenTheStandardErrorContains(string text) => Assert.Contains(text, StandardError(), StringComparison.Ordinal);
 
     [Then("the standard error does not contain {string}")]
-    public void ThenTheStandardErrorDoesNotContain(string text) => Assert.DoesNotContain(text, StandardError());
+    public void ThenTheStandardErrorDoesNotContain(string text) => Assert.DoesNotContain(text, StandardError(), StringComparison.Ordinal);
 
     [Then("the standard output is {string}")]
     public void ThenTheStandardOutputIs(string expected) => Assert.Equal(expected, StandardOutput());
@@ -188,7 +188,7 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState, ConsoleSta
     public void ThenTheExceptionMessageContains(string text)
     {
         Assert.NotNull(exceptionState.Exception);
-        Assert.Contains(text, exceptionState.Exception.Message);
+        Assert.Contains(text, exceptionState.Exception.Message, StringComparison.Ordinal);
     }
 
     [Then("the {string} program is no longer running")]

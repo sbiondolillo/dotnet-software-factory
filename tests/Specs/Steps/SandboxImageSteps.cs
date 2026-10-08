@@ -87,7 +87,7 @@ public sealed class SandboxImageSteps(ExceptionState exceptionState, ScenarioCon
 
     [Then("the exception message holds the standard error of the build")]
     public void ThenMessage() =>
-        Assert.Contains(_results["build"].StandardError, exceptionState.Exception?.Message);
+        Assert.Contains(_results["build"].StandardError, exceptionState.Exception?.Message, StringComparison.Ordinal);
 
     private static void AssertFollows(CommandSpec spec, string flag, string value)
     {

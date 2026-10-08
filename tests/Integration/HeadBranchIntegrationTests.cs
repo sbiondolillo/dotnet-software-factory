@@ -162,7 +162,7 @@ public sealed class HeadBranchIntegrationTests
             await git.CloneAsync($"https://github.com/{Owner}/{Repo}.git", Token, directory.FullName, ct);
             GitCommandException ex = await Assert.ThrowsAsync<GitCommandException>(
                 () => git.CheckoutExistingBranchAsync("no-such-branch-" + Guid.NewGuid().ToString("N"), directory.FullName, ct));
-            Assert.Contains("did not match any file(s) known to git", ex.Message);
+            Assert.Contains("did not match any file(s) known to git", ex.Message, StringComparison.Ordinal);
         }
         finally
         {

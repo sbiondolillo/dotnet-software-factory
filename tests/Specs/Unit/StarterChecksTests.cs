@@ -201,7 +201,7 @@ public sealed class StarterChecksTests : IDisposable
     public void TextEqualsFailsOnMissingFile()
     {
         InvalidOperationException e = Assert.Throws<InvalidOperationException>(() => StarterChecks.TextEquals(Path.Combine(_root, "AGENTS.md"), "a"));
-        Assert.Contains("AGENTS.md", e.Message);
+        Assert.Contains("AGENTS.md", e.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -209,8 +209,8 @@ public sealed class StarterChecksTests : IDisposable
     {
         string path = Write("t.md", "one\ntwx\nthree\n");
         InvalidOperationException e = Assert.Throws<InvalidOperationException>(() => StarterChecks.TextEquals(path, "one\ntwo\nthree"));
-        Assert.Contains("line 2", e.Message);
-        Assert.Contains("twx", e.Message);
+        Assert.Contains("line 2", e.Message, StringComparison.Ordinal);
+        Assert.Contains("twx", e.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -229,16 +229,16 @@ public sealed class StarterChecksTests : IDisposable
     public void CommentStartsFailsOnOtherLineAndShowsBoth()
     {
         InvalidOperationException e = Assert.Throws<InvalidOperationException>(() => StarterChecks.CommentStarts(Project("old"), "new"));
-        Assert.Contains("old", e.Message);
-        Assert.Contains("new", e.Message);
+        Assert.Contains("old", e.Message, StringComparison.Ordinal);
+        Assert.Contains("new", e.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void CommentStartsFailsOnNoCommentOrMissingFile()
     {
         string plain = Write("q.csproj", "<Project />");
-        Assert.Contains("q.csproj", Assert.Throws<InvalidOperationException>(() => StarterChecks.CommentStarts(plain, "x")).Message);
-        Assert.Contains("nope.csproj", Assert.Throws<InvalidOperationException>(() => StarterChecks.CommentStarts(Path.Combine(_root, "nope.csproj"), "x")).Message);
+        Assert.Contains("q.csproj", Assert.Throws<InvalidOperationException>(() => StarterChecks.CommentStarts(plain, "x")).Message, StringComparison.Ordinal);
+        Assert.Contains("nope.csproj", Assert.Throws<InvalidOperationException>(() => StarterChecks.CommentStarts(Path.Combine(_root, "nope.csproj"), "x")).Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -250,7 +250,7 @@ public sealed class StarterChecksTests : IDisposable
     public void CommentLacksFailsWhenAnyLineIsTheLine(string first, string second)
     {
         InvalidOperationException e = Assert.Throws<InvalidOperationException>(() => StarterChecks.CommentLacks(Project(first, second), "target"));
-        Assert.Contains("target", e.Message);
+        Assert.Contains("target", e.Message, StringComparison.Ordinal);
     }
 
     [Fact]

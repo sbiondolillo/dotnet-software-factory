@@ -216,8 +216,8 @@ public sealed class GitSteps(ExceptionState exceptionState)
     [Then("each GIT_CONFIG_VALUE_1 holds {string}")]
     public void ThenEachGitConfigValue1Holds(string text)
     {
-        Assert.Contains(text, FindSpec("clone").EnvironmentVariables["GIT_CONFIG_VALUE_1"]);
-        Assert.Contains(text, FindSpec("push").EnvironmentVariables["GIT_CONFIG_VALUE_1"]);
+        Assert.Contains(text, FindSpec("clone").EnvironmentVariables["GIT_CONFIG_VALUE_1"], StringComparison.Ordinal);
+        Assert.Contains(text, FindSpec("push").EnvironmentVariables["GIT_CONFIG_VALUE_1"], StringComparison.Ordinal);
     }
 
     [Then("each GIT_CONFIG_VALUE_1 holds {string} and {string}")]
@@ -229,8 +229,8 @@ public sealed class GitSteps(ExceptionState exceptionState)
                      FindSpec("push").EnvironmentVariables["GIT_CONFIG_VALUE_1"],
                  })
         {
-            Assert.Contains(first, value);
-            Assert.Contains(second, value);
+            Assert.Contains(first, value, StringComparison.Ordinal);
+            Assert.Contains(second, value, StringComparison.Ordinal);
         }
     }
 
@@ -252,7 +252,7 @@ public sealed class GitSteps(ExceptionState exceptionState)
     public void ThenGitThrowsAGitCommandExceptionWhoseMessageContains(string text)
     {
         Assert.IsType<GitCommandException>(exceptionState.Exception);
-        Assert.Contains(text, exceptionState.Exception.Message);
+        Assert.Contains(text, exceptionState.Exception.Message, StringComparison.Ordinal);
     }
 
     [Then("every call the mock CommandRunner recorded received the cancellation token named {string}")]

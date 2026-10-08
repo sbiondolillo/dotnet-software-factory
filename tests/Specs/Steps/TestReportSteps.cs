@@ -105,7 +105,7 @@ public sealed class TestReportSteps(ExceptionState exceptionState) : IDisposable
 
     [Then("the exception message names the path of the file")]
     public void ThenNamesPath()
-        => Assert.Contains(_path, Assert.IsType<TestReportException>(exceptionState.Exception).Message);
+        => Assert.Contains(_path, Assert.IsType<TestReportException>(exceptionState.Exception).Message, StringComparison.Ordinal);
 
     [Then("the exception message holds the message of the parser")]
     public void ThenHoldsParserMessage()
@@ -121,7 +121,7 @@ public sealed class TestReportSteps(ExceptionState exceptionState) : IDisposable
         }
 
         Assert.NotEqual("", expected);
-        Assert.Contains(expected, Assert.IsType<TestReportException>(exceptionState.Exception).Message);
+        Assert.Contains(expected, Assert.IsType<TestReportException>(exceptionState.Exception).Message, StringComparison.Ordinal);
     }
 
     public void Dispose() => Directory.Delete(_root, recursive: true);

@@ -141,8 +141,8 @@ public sealed class LintGateSteps(ExceptionState exceptionState) : IDisposable
     [Then("the exception message holds {string} and {string}")]
     public void ThenMessageHolds(string first, string second)
     {
-        Assert.Contains(first, exceptionState.Exception!.Message);
-        Assert.Contains(second, exceptionState.Exception.Message);
+        Assert.Contains(first, exceptionState.Exception!.Message, StringComparison.Ordinal);
+        Assert.Contains(second, exceptionState.Exception.Message, StringComparison.Ordinal);
     }
 
     [Then("no git command ran")]

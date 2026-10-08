@@ -116,7 +116,7 @@ public sealed class FeatureFilesSteps(ExceptionState exceptionState) : IDisposab
         }
         catch (ParserException parserException)
         {
-            Assert.Contains(parserException.Message, exception.Message);
+            Assert.Contains(parserException.Message, exception.Message, StringComparison.Ordinal);
         }
     }
 

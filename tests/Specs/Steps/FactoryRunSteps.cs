@@ -182,8 +182,8 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     {
         Specs.Unit.SeenPrompt prompt = Assert.Single(_h.Prompts, p => p.Model == model);
         Assert.Equal(turns.ToString(System.Globalization.CultureInfo.InvariantCulture), prompt.Turns);
-        Assert.Contains(first, prompt.Text);
-        Assert.Contains(second, prompt.Text);
+        Assert.Contains(first, prompt.Text, StringComparison.Ordinal);
+        Assert.Contains(second, prompt.Text, StringComparison.Ordinal);
     }
 
     [Then("FactoryRun runs one prompt with the model {string} and the turn limit {int}")]
@@ -194,14 +194,14 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     }
 
     [Then("FactoryRun posts one comment on the issue that holds {string}")]
-    public void ThenComment(string text) => Assert.Contains(text, Assert.Single(_h.CommentBodies));
+    public void ThenComment(string text) => Assert.Contains(text, Assert.Single(_h.CommentBodies), StringComparison.Ordinal);
 
     [Then("FactoryRun posts one comment on the issue that holds {string} and {string}")]
     public void ThenCommentTwo(string first, string second)
     {
         string body = Assert.Single(_h.CommentBodies);
-        Assert.Contains(first, body);
-        Assert.Contains(second, body);
+        Assert.Contains(first, body, StringComparison.Ordinal);
+        Assert.Contains(second, body, StringComparison.Ordinal);
     }
 
     [Then("FactoryRun starts no container and runs no prompt")]
@@ -241,7 +241,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     public void ThenOpens(string slug, string head, string baseBranch, string title)
     {
         Specs.Unit.SeenRequest open = Assert.Single(_h.Requests, r => r.Method is "POST" && r.Uri.EndsWith("/pulls", StringComparison.Ordinal));
-        Assert.EndsWith($"/repos/{slug}/pulls", open.Uri);
+        Assert.EndsWith($"/repos/{slug}/pulls", open.Uri, StringComparison.Ordinal);
         using var json = System.Text.Json.JsonDocument.Parse(open.Content!);
         Assert.Equal(head, json.RootElement.GetProperty("head").GetString());
         Assert.Equal(baseBranch, json.RootElement.GetProperty("base").GetString());
@@ -285,7 +285,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     }
 
     [Then("FactoryRun runs a second build prompt that holds {string}")]
-    public void ThenSecondBuild(string text) => Assert.Contains(text, Builds.ElementAt(1).Text);
+    public void ThenSecondBuild(string text) => Assert.Contains(text, Builds.ElementAt(1).Text, StringComparison.Ordinal);
 
     [Then("FactoryRun runs the second build prompt before any prompt with the model {string}")]
     public void ThenSecondBeforeReview(string model)
@@ -305,7 +305,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     [Then("FactoryRun posts one comment on the issue that holds {string} and gives back a result with no pull request and {int} Redo(s)")]
     public void ThenCommentAndResult(string text, int redos)
     {
-        Assert.Contains(text, Assert.Single(_h.CommentBodies));
+        Assert.Contains(text, Assert.Single(_h.CommentBodies), StringComparison.Ordinal);
         Assert.Null(Result.PullRequest);
         Assert.Equal(redos, Result.Redos);
     }
@@ -315,8 +315,8 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     {
         string body = Assert.Single(_h.CommentBodies);
         Assert.True(Encoding.UTF8.GetByteCount(body) <= limit);
-        Assert.Contains(string.Concat(Enumerable.Repeat(letter, count)), body);
-        Assert.Contains(marker, body);
+        Assert.Contains(string.Concat(Enumerable.Repeat(letter, count)), body, StringComparison.Ordinal);
+        Assert.Contains(marker, body, StringComparison.Ordinal);
     }
 
     [Then("FactoryRun removes the container after the delivery")]

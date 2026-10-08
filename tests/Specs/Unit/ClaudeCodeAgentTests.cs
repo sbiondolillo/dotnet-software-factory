@@ -46,8 +46,8 @@ public sealed class ClaudeCodeAgentTests : IDisposable
 
         ClaudeCodeException exception = await Assert.ThrowsAsync<ClaudeCodeException>(() => RunAsync(agent));
 
-        Assert.Contains(code.ToString(System.Globalization.CultureInfo.InvariantCulture), exception.Message);
-        Assert.Contains(reason, exception.Message);
+        Assert.Contains(code.ToString(System.Globalization.CultureInfo.InvariantCulture), exception.Message, StringComparison.Ordinal);
+        Assert.Contains(reason, exception.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -92,7 +92,7 @@ public sealed class ClaudeCodeAgentTests : IDisposable
 
         ClaudeCodeException exception = await Assert.ThrowsAsync<ClaudeCodeException>(() => RunAsync(agent, string.Concat(Enumerable.Repeat(letter, count))));
 
-        Assert.Contains("131072", exception.Message);
+        Assert.Contains("131072", exception.Message, StringComparison.Ordinal);
         Assert.False(Executed);
     }
 
@@ -135,6 +135,6 @@ public sealed class ClaudeCodeAgentTests : IDisposable
 
         ClaudeCodeOutputException exception = Assert.Throws<ClaudeCodeOutputException>(() => ClaudeCodeAgent.ReadJsonFile(path));
 
-        Assert.Contains(path, exception.Message);
+        Assert.Contains(path, exception.Message, StringComparison.Ordinal);
     }
 }

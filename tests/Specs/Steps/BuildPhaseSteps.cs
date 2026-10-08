@@ -85,12 +85,12 @@ public sealed class BuildPhaseSteps(IssueState issue) : IDisposable
     public void ThenBytes(int limit) => Assert.True(Encoding.UTF8.GetByteCount(_h.Prompts[0]) <= limit);
 
     [Then("the build prompt holds the letter {string} {int} times in sequence")]
-    public void ThenSequence(string letter, int count) => Assert.Contains(Repeat(letter, count), _h.Prompts[0]);
+    public void ThenSequence(string letter, int count) => Assert.Contains(Repeat(letter, count), _h.Prompts[0], StringComparison.Ordinal);
 
     [Then("the build prompt holds the letter {string} {int} times in sequence and {string}")]
     public void ThenSequenceAnd(string letter, int count, string text)
     {
-        Assert.Contains(Repeat(letter, count), _h.Prompts[0]);
+        Assert.Contains(Repeat(letter, count), _h.Prompts[0], StringComparison.Ordinal);
         AssertHolds(text);
     }
 
@@ -101,7 +101,7 @@ public sealed class BuildPhaseSteps(IssueState issue) : IDisposable
     public void ThenFailed() => Assert.False(Result.Passed);
 
     [Then("the build failure holds {string}")]
-    public void ThenFailure(string text) => Assert.Contains(text, Result.Failure);
+    public void ThenFailure(string text) => Assert.Contains(text, Result.Failure, StringComparison.Ordinal);
 
     private static string Repeat(string letter, int count) => string.Concat(Enumerable.Repeat(letter, count));
 
@@ -112,7 +112,7 @@ public sealed class BuildPhaseSteps(IssueState issue) : IDisposable
     {
         foreach (string text in texts)
         {
-            Assert.Contains(text, FirstPrompt is null ? _h.Prompts[0] : FirstPrompt());
+            Assert.Contains(text, FirstPrompt is null ? _h.Prompts[0] : FirstPrompt(), StringComparison.Ordinal);
         }
     }
 }

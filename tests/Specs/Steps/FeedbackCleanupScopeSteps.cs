@@ -61,8 +61,8 @@ public sealed class FeedbackCleanupScopeSteps(FactoryRunSteps factory, FeedbackR
     public void ThenRedoName(string text, string name)
     {
         string prompt = H.BuildPrompts.ElementAt(1).Text;
-        Assert.Contains(text, prompt);
-        Assert.Contains(name, prompt);
+        Assert.Contains(text, prompt, StringComparison.Ordinal);
+        Assert.Contains(name, prompt, StringComparison.Ordinal);
     }
 
     [Then("the test gate of the feedback run passes")]
@@ -124,10 +124,10 @@ public sealed class FeedbackCleanupScopeSteps(FactoryRunSteps factory, FeedbackR
         string[] paragraphs = ReadmeSection("## Start a new repo").Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
         int at = Array.FindIndex(paragraphs, p => p.StartsWith("The body of a `cleanup` issue names the paths", StringComparison.Ordinal));
         string sentence = paragraphs[at + 1];
-        Assert.Contains("feedback run", sentence);
-        Assert.Contains("pull request of a `cleanup` issue", sentence);
-        Assert.Contains("issue's `## Scope`", sentence);
-        Assert.Contains("`## Check`", sentence);
+        Assert.Contains("feedback run", sentence, StringComparison.Ordinal);
+        Assert.Contains("pull request of a `cleanup` issue", sentence, StringComparison.Ordinal);
+        Assert.Contains("issue's `## Scope`", sentence, StringComparison.Ordinal);
+        Assert.Contains("`## Check`", sentence, StringComparison.Ordinal);
     }
 
     private void SetCheck(int number, string label, string heading, string line)

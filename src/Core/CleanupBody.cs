@@ -58,7 +58,7 @@ public static partial class CleanupBody
     public static bool InScope(IReadOnlyList<string> scope, string path) =>
         scope.Any(entry =>
             entry.EndsWith('/') ? path.StartsWith(entry, StringComparison.Ordinal)
-            : entry.Contains('*') ? Glob(entry).IsMatch(path)
+            : entry.Contains('*', StringComparison.Ordinal) ? Glob(entry).IsMatch(path)
             : path == entry);
 
     private static Regex Glob(string entry)
@@ -92,7 +92,7 @@ public static partial class CleanupBody
         foreach (char mark in new[] { '`', '~' })
         {
             int count = trimmed.TakeWhile(c => c == mark).Count();
-            if (count >= 3 && (mark is '~' || !trimmed[count..].Contains('`')))
+            if (count >= 3 && (mark is '~' || !trimmed[count..].Contains('`', StringComparison.Ordinal)))
             {
                 return new string(mark, count);
             }

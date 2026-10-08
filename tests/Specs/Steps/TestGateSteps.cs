@@ -179,18 +179,18 @@ public sealed class TestGateSteps : IDisposable
     public void ThenTestReason()
     {
         string text = Assert.Single(_result!.Evidence);
-        Assert.Contains("dotnet test", text);
-        Assert.Contains("code 1", text);
-        Assert.Contains(Out, text);
+        Assert.Contains("dotnet test", text, StringComparison.Ordinal);
+        Assert.Contains("code 1", text, StringComparison.Ordinal);
+        Assert.Contains(Out, text, StringComparison.Ordinal);
     }
 
     [Then("the evidence names the integration command and holds the code 1 and the summary")]
     public void ThenIntegrationEvidence()
     {
         string text = Assert.Single(_result!.Evidence);
-        Assert.Contains("dotnet run", text);
-        Assert.Contains("code 1", text);
-        Assert.Contains("Failed: 1", text);
+        Assert.Contains("dotnet run", text, StringComparison.Ordinal);
+        Assert.Contains("code 1", text, StringComparison.Ordinal);
+        Assert.Contains("Failed: 1", text, StringComparison.Ordinal);
     }
 
     private void Fail(string subcommand) =>
@@ -212,7 +212,7 @@ public sealed class TestGateSteps : IDisposable
         string all = string.Join("\n", _result!.Evidence);
         foreach (string part in parts)
         {
-            Assert.Contains(part, all);
+            Assert.Contains(part, all, StringComparison.Ordinal);
         }
     }
 
@@ -222,9 +222,9 @@ public sealed class TestGateSteps : IDisposable
     {
         string text = Assert.Single(_result!.Evidence);
         int code = subcommand is "format" ? 2 : 1;
-        Assert.Contains($"dotnet {subcommand}", text);
-        Assert.Contains($"code {code}", text);
-        Assert.Contains(Out, text);
-        Assert.Contains(Err, text);
+        Assert.Contains($"dotnet {subcommand}", text, StringComparison.Ordinal);
+        Assert.Contains($"code {code}", text, StringComparison.Ordinal);
+        Assert.Contains(Out, text, StringComparison.Ordinal);
+        Assert.Contains(Err, text, StringComparison.Ordinal);
     }
 }

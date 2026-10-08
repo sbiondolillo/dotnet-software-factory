@@ -28,9 +28,9 @@ public sealed class TestGateTests : IDisposable
         Assert.False(result.Passed);
         Assert.Equal(0, _harness.DockerCommands);
         string all = string.Join("\n", result.Evidence);
-        Assert.Contains("specs/features/checkout.feature", all);
-        Assert.Contains("specs/features/new.feature", all);
-        Assert.Contains("global.json", all);
+        Assert.Contains("specs/features/checkout.feature", all, StringComparison.Ordinal);
+        Assert.Contains("specs/features/new.feature", all, StringComparison.Ordinal);
+        Assert.Contains("global.json", all, StringComparison.Ordinal);
         Assert.Equal(3, result.Evidence.Count);
     }
 
@@ -47,10 +47,10 @@ public sealed class TestGateTests : IDisposable
         Assert.False(result.Passed);
         Assert.Equal(subcommand, _harness.Seen[^1].Subcommand);
         string text = Assert.Single(result.Evidence);
-        Assert.Contains($"dotnet {name}", text);
-        Assert.Contains($"code {code}", text);
-        Assert.Contains("OUT", text);
-        Assert.Contains("ERR", text);
+        Assert.Contains($"dotnet {name}", text, StringComparison.Ordinal);
+        Assert.Contains($"code {code}", text, StringComparison.Ordinal);
+        Assert.Contains("OUT", text, StringComparison.Ordinal);
+        Assert.Contains("ERR", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -63,9 +63,9 @@ public sealed class TestGateTests : IDisposable
         Assert.False(result.Passed);
         Assert.Equal("test", _harness.Seen[^1].Subcommand);
         string text = Assert.Single(result.Evidence);
-        Assert.Contains("dotnet test", text);
-        Assert.Contains("OUT", text);
-        Assert.Contains("ERR", text);
+        Assert.Contains("dotnet test", text, StringComparison.Ordinal);
+        Assert.Contains("OUT", text, StringComparison.Ordinal);
+        Assert.Contains("ERR", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -79,9 +79,9 @@ public sealed class TestGateTests : IDisposable
         Assert.False(result.Passed);
         Assert.DoesNotContain(_harness.Seen, c => c.Subcommand is "run");
         string all = string.Join("\n", result.Evidence);
-        Assert.Contains("Specs.Unit.CheckoutTests", all);
-        Assert.Contains("AddsTwoPrices", all);
-        Assert.Contains("Assert.Equal() Failure: Values differ", all);
+        Assert.Contains("Specs.Unit.CheckoutTests", all, StringComparison.Ordinal);
+        Assert.Contains("AddsTwoPrices", all, StringComparison.Ordinal);
+        Assert.Contains("Assert.Equal() Failure: Values differ", all, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -93,8 +93,8 @@ public sealed class TestGateTests : IDisposable
 
         Assert.False(result.Passed);
         string text = Assert.Single(result.Evidence);
-        Assert.Contains("Specs.Unit.CheckoutTests", text);
-        Assert.Contains("AddsInFrench", text);
+        Assert.Contains("Specs.Unit.CheckoutTests", text, StringComparison.Ordinal);
+        Assert.Contains("AddsInFrench", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -106,9 +106,9 @@ public sealed class TestGateTests : IDisposable
 
         Assert.False(result.Passed);
         string text = Assert.Single(result.Evidence);
-        Assert.Contains("specs/features/checkout.feature", text);
-        Assert.Contains("The total is the sum of the prices", text);
-        Assert.Contains("TheTotalIsTheSumOfThePrices", text);
+        Assert.Contains("specs/features/checkout.feature", text, StringComparison.Ordinal);
+        Assert.Contains("The total is the sum of the prices", text, StringComparison.Ordinal);
+        Assert.Contains("TheTotalIsTheSumOfThePrices", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -121,7 +121,7 @@ public sealed class TestGateTests : IDisposable
         TestGateResult result = await harness.RunAsync([], TestContext.Current.CancellationToken);
 
         Assert.False(result.Passed);
-        Assert.Contains("APer_LocationTotal", Assert.Single(result.Evidence));
+        Assert.Contains("APer_LocationTotal", Assert.Single(result.Evidence), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -137,7 +137,7 @@ public sealed class TestGateTests : IDisposable
         TestGateResult result = await RunAsync();
 
         Assert.False(result.Passed);
-        Assert.Contains("TheTotalIsTheSumOfThePrices", string.Join("\n", result.Evidence));
+        Assert.Contains("TheTotalIsTheSumOfThePrices", string.Join("\n", result.Evidence), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -161,8 +161,8 @@ public sealed class TestGateTests : IDisposable
 
         Assert.False(result.Passed);
         string text = Assert.Single(result.Evidence);
-        Assert.Contains("dotnet test", text);
-        Assert.Contains("reason", text);
+        Assert.Contains("dotnet test", text, StringComparison.Ordinal);
+        Assert.Contains("reason", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -174,8 +174,8 @@ public sealed class TestGateTests : IDisposable
 
         Assert.False(result.Passed);
         string text = Assert.Single(result.Evidence);
-        Assert.Contains("specs/features/checkout.feature", text);
-        Assert.Contains("TheTotalIsTheSumOfThePrices", text);
+        Assert.Contains("specs/features/checkout.feature", text, StringComparison.Ordinal);
+        Assert.Contains("TheTotalIsTheSumOfThePrices", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -187,9 +187,9 @@ public sealed class TestGateTests : IDisposable
 
         Assert.False(result.Passed);
         string text = Assert.Single(result.Evidence);
-        Assert.Contains("dotnet run", text);
-        Assert.Contains("code 1", text);
-        Assert.Contains("Failed: 1", text);
+        Assert.Contains("dotnet run", text, StringComparison.Ordinal);
+        Assert.Contains("code 1", text, StringComparison.Ordinal);
+        Assert.Contains("Failed: 1", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -222,8 +222,8 @@ public sealed class TestGateTests : IDisposable
 
         Assert.False(result.Passed);
         string text = Assert.Single(result.Evidence);
-        Assert.Contains("specs/features/sub/other.feature", text);
-        Assert.Contains("AnotherOne", text);
+        Assert.Contains("specs/features/sub/other.feature", text, StringComparison.Ordinal);
+        Assert.Contains("AnotherOne", text, StringComparison.Ordinal);
     }
 
     private static async Task<TestGateResult> RunWithNewPin(TestGateHarness harness)
