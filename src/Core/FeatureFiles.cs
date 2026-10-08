@@ -51,6 +51,21 @@ public static class FeatureFiles
         return scenarios;
     }
 
+    /// <summary>Reads the feature file at <paramref name="featureFilePath"/> and returns the 1-based line of the opening
+    /// delimiter of each doc string whose non-blank text lines all begin with whitespace after Gherkin removed the delimiter's
+    /// indent, so all sit deeper than the delimiter's column. Throws <see cref="FeatureFileException"/> when the parser rejects the file.</summary>
+    public static IReadOnlyList<int> ReadDeepDocStringLines(string featureFilePath)
+    {
+        GherkinDocument document = Parse(featureFilePath, File.ReadAllText(featureFilePath));
+        var lines = new List<int>();
+        if (document.Feature is not null)
+        {
+            CollectDeepDocStrings(document.Feature.Children, lines);
+        }
+
+        return lines;
+    }
+
     /// <summary>Computes the name Reqnroll generates for the test method of a scenario titled
     /// <paramref name="scenarioTitle"/>.</summary>
     public static string ComputeTestName(string scenarioTitle) => CodeFormattingExtensions.ToIdentifier(scenarioTitle);
@@ -120,5 +135,38 @@ public static class FeatureFiles
                     break;
             }
         }
+    }
+
+    private static void CollectDeepDocStrings(IEnumerable<IHasLocation> children, List<int> lines)
+    {
+        foreach (IHasLocation child in children)
+        {
+            IEnumerable<Step> steps = child switch
+            {
+                Rule rule => CollectRuleSteps(rule, lines),
+                Scenario scenario => scenario.Steps,
+                Background background => background.Steps,
+                _ => [],
+            };
+            foreach (Step step in steps)
+            {
+                if (step.Argument is DocString doc && IsDeep(doc.Content))
+                {
+                    lines.Add(doc.Location.Line);
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<Step> CollectRuleSteps(Rule rule, List<int> lines)
+    {
+        CollectDeepDocStrings(rule.Children, lines);
+        return [];
+    }
+
+    private static bool IsDeep(string content)
+    {
+        string[] texts = [.. content.Split('\n').Where(line => line.Trim().Length > 0)];
+        return texts.Length > 0 && texts.All(line => char.IsWhiteSpace(line[0]));
     }
 }

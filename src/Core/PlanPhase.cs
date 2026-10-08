@@ -127,6 +127,13 @@ public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false)
                 {
                     failures.Add($"The feature file {path} holds no scenario.");
                 }
+                else
+                {
+                    foreach (int line in FeatureFiles.ReadDeepDocStringLines(Path.Combine(workTree, path)))
+                    {
+                        failures.Add($"The feature file {path} has a doc string at line {line} whose text sits deeper than the column of its opening delimiter; start its text at that column.");
+                    }
+                }
             }
             catch (FeatureFileException exception)
             {

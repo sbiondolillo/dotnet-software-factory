@@ -114,6 +114,12 @@ public sealed class PlanPhaseSteps(IssueState issue) : IDisposable
     [Given("claude answers the first run with the error flag set and no result text")]
     public void GivenFirstErrorNoText() => _h.Answer(1, true, "");
 
+    [Given("the agent on every run writes the file {string} with the lines")]
+    public void GivenEveryWritesLines(string path, Table table) => _h.AgentWrites(null, path, Lines(table));
+
+    [Given("the agent on the first run writes the file {string} with the lines")]
+    public void GivenFirstWritesLines(string path, Table table) => _h.AgentWrites(1, path, Lines(table));
+
     [When("I run the plan phase")]
     public async Task WhenIRun() =>
         _result = await _h.RunAsync(issue.Title, issue.Body, _model, _turns);
@@ -167,6 +173,10 @@ public sealed class PlanPhaseSteps(IssueState issue) : IDisposable
     [Then("a failure holds {string}")]
     public void ThenFailureNames(string text) => Assert.Contains(Result.Failures, f => f.Contains(text, StringComparison.Ordinal));
 
+    [Then("the failure holds {string}, {string} and {string}")]
+    public void ThenFailureHolds(string a, string b, string c) =>
+        Assert.Contains(Result.Failures, f => new[] { a, b, c }.All(t => f.Contains(t, StringComparison.Ordinal)));
+
     [Then("the result holds {int} failure")]
     public void ThenHoldsFailures(int count) => Assert.Equal(count, Result.Failures.Count);
 
@@ -176,6 +186,9 @@ public sealed class PlanPhaseSteps(IssueState issue) : IDisposable
         Assert.NotEmpty(_h.Recorded);
         Assert.All(_h.Recorded, spec => Assert.Equal("docker", spec.Command));
     }
+
+    private static string Lines(Table table) =>
+        string.Join('\n', table.Rows.Select(row => (new string(' ', int.Parse(row["indent"], CultureInfo.InvariantCulture)) + row["text"]).TrimEnd())) + "\n";
 
     private static void AssertHolds(string prompt, params string[] texts)
     {
