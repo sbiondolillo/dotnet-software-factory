@@ -21,7 +21,7 @@ public sealed class PinSteps : IDisposable
     [Given("the directory holds the file {string} with the content {string}")]
     public void GivenTheDirectoryHolds(string path, string content)
     {
-        var full = Path.Combine(_root, path);
+        string full = Path.Combine(_root, path);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
         File.WriteAllText(full, content);
     }
@@ -36,8 +36,8 @@ public sealed class PinSteps : IDisposable
     [When("one byte of {string} changes")]
     public void WhenOneByteChanges(string path)
     {
-        var full = Path.Combine(_root, path);
-        var bytes = File.ReadAllBytes(full);
+        string full = Path.Combine(_root, path);
+        byte[] bytes = File.ReadAllBytes(full);
         bytes[0] ^= 1;
         File.WriteAllBytes(full, bytes);
     }

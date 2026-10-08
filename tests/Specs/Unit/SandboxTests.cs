@@ -44,7 +44,7 @@ public sealed class SandboxTests : IDisposable
     [InlineData(125, "")]
     public async Task AFailedRunThrowsWithTheStandardErrorAndStartsNothingLater(int code, string error)
     {
-        var exception = await Assert.ThrowsAsync<SandboxException>(
+        SandboxException exception = await Assert.ThrowsAsync<SandboxException>(
             () => StartAsync(Runner(run: code, runError: error), TestContext.Current.CancellationToken));
 
         Assert.Contains(error, exception.Message);

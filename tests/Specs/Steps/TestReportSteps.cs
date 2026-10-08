@@ -23,7 +23,7 @@ public sealed class TestReportSteps(ExceptionState exceptionState) : IDisposable
     [Given("its failure message is the three lines {string}, {string} and {string}")]
     public void GivenItsFailureMessage(string one, string two, string three)
     {
-        var last = _results[^1];
+        (string Class, string Method, string Outcome, string? Message) last = _results[^1];
         _results[^1] = (last.Class, last.Method, last.Outcome, $"{one}\n{two}\n{three}");
     }
 

@@ -41,7 +41,7 @@ public sealed class FeedbackRunSteps : IDisposable
     private IEnumerable<(string Id, string Body)> Replies =>
         _h.Requests.Where(r => r.Content is not null && r.Content.Contains("addPullRequestReviewThreadReply", StringComparison.Ordinal)).Select(r =>
         {
-            using JsonDocument json = JsonDocument.Parse(r.Content!);
+            using var json = JsonDocument.Parse(r.Content!);
             JsonElement variables = json.RootElement.GetProperty("variables");
             return (variables.GetProperty("threadId").GetString() ?? "", variables.GetProperty("body").GetString() ?? "");
         });

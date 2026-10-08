@@ -271,7 +271,7 @@ public sealed class FactoryRunHarness : IDisposable
         string subcommand = arguments[id + 2];
         if (program is "sh" && subcommand is "-c")
         {
-            (int code, string output, string error) = CheckResults.TryGetValue(_builds, out var given) ? given : _builds is 0 ? (1, "", "check failed") : (0, "", "");
+            (int code, string output, string error) = CheckResults.TryGetValue(_builds, out (int Code, string Out, string Err) given) ? given : _builds is 0 ? (1, "", "check failed") : (0, "", "");
             return new CommandResult { ExitCode = code, StandardOutput = output, StandardError = error };
         }
 
@@ -391,7 +391,7 @@ public sealed class FactoryRunHarness : IDisposable
             return new CommandResult { StandardOutput = Json(true, ErrorText) };
         }
 
-        return new CommandResult { StandardOutput = Json(kind is "build" && BuildIsError || kind is "plan" && PlanIsError, kind is "build" && BuildIsError ? "build error" : kind is "plan" && PlanIsError ? "plan went wrong" : "done") };
+        return new CommandResult { StandardOutput = Json((kind is "build" && BuildIsError) || (kind is "plan" && PlanIsError), kind is "build" && BuildIsError ? "build error" : kind is "plan" && PlanIsError ? "plan went wrong" : "done") };
     }
 
     private static void WriteIn(string directory, string relative, string text)

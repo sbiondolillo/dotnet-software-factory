@@ -79,14 +79,14 @@ public sealed class ReviewThreadsSteps(ExceptionState exceptionState, RecordingH
     [Then("the content of the recorded request is JSON whose query names {string}")]
     public void ThenQueryNames(string name)
     {
-        using JsonDocument document = JsonDocument.Parse(handler.Requests[^1].Content!);
+        using var document = JsonDocument.Parse(handler.Requests[^1].Content!);
         Assert.Contains(name, document.RootElement.GetProperty("query").GetString());
     }
 
     [Then("the variables of the recorded request hold the owner {string}, the name {string} and the number {int}")]
     public void ThenOwnerNameNumber(string owner, string name, int number)
     {
-        using JsonDocument document = JsonDocument.Parse(handler.Requests[^1].Content!);
+        using var document = JsonDocument.Parse(handler.Requests[^1].Content!);
         JsonElement variables = document.RootElement.GetProperty("variables");
         Assert.Equal(owner, variables.GetProperty("owner").GetString());
         Assert.Equal(name, variables.GetProperty("name").GetString());
@@ -96,7 +96,7 @@ public sealed class ReviewThreadsSteps(ExceptionState exceptionState, RecordingH
     [Then("the variables of the recorded request hold the threadId {string} and the body {string}")]
     public void ThenThreadIdBody(string threadId, string body)
     {
-        using JsonDocument document = JsonDocument.Parse(handler.Requests[^1].Content!);
+        using var document = JsonDocument.Parse(handler.Requests[^1].Content!);
         JsonElement variables = document.RootElement.GetProperty("variables");
         Assert.Equal(threadId, variables.GetProperty("threadId").GetString());
         Assert.Equal(body, variables.GetProperty("body").GetString());
@@ -105,7 +105,7 @@ public sealed class ReviewThreadsSteps(ExceptionState exceptionState, RecordingH
     [Then("the variables of the recorded request hold the threadId {string}")]
     public void ThenThreadId(string threadId)
     {
-        using JsonDocument document = JsonDocument.Parse(handler.Requests[^1].Content!);
+        using var document = JsonDocument.Parse(handler.Requests[^1].Content!);
         Assert.Equal(threadId, document.RootElement.GetProperty("variables").GetProperty("threadId").GetString());
     }
 

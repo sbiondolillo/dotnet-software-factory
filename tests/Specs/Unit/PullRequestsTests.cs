@@ -20,7 +20,7 @@ public sealed class PullRequestsTests
     {
         (PullRequests sut, RoutingHandler handler) = Make();
         handler.ReadStatus = status;
-        var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadCheckRunsAsync("o", "r", "abc", TestContext.Current.CancellationToken));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadCheckRunsAsync("o", "r", "abc", TestContext.Current.CancellationToken));
         Assert.Equal(status, ex.StatusCode);
     }
 
@@ -38,7 +38,7 @@ public sealed class PullRequestsTests
     {
         (PullRequests sut, RoutingHandler handler) = Make();
         handler.PostStatus = 422;
-        var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => sut.OpenAsync("o", "r", "b", "main", "t", "x", TestContext.Current.CancellationToken));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => sut.OpenAsync("o", "r", "b", "main", "t", "x", TestContext.Current.CancellationToken));
         Assert.Equal(422, ex.StatusCode);
     }
 
@@ -75,7 +75,7 @@ public sealed class PullRequestsTests
         (PullRequests sut, RoutingHandler handler) = Make();
         handler.PostBody = "{\"number\":1,\"html_url\":\"u\"}";
         await sut.OpenAsync("o", "r", "b", "main", "say \"hi\"\nnow", "line1\n\"two\"", TestContext.Current.CancellationToken);
-        using JsonDocument doc = JsonDocument.Parse(handler.Requests.Single(r => r.Method is "POST").Content!);
+        using var doc = JsonDocument.Parse(handler.Requests.Single(r => r.Method is "POST").Content!);
         Assert.Equal("say \"hi\"\nnow", doc.RootElement.GetProperty("title").GetString());
         Assert.Equal("line1\n\"two\"", doc.RootElement.GetProperty("body").GetString());
     }
@@ -106,7 +106,7 @@ public sealed class PullRequestsTests
     {
         (PullRequests sut, RoutingHandler handler) = Make();
         handler.LookupStatus = 404;
-        var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadHeadShaAsync("o", "r", 1, TestContext.Current.CancellationToken));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadHeadShaAsync("o", "r", 1, TestContext.Current.CancellationToken));
         Assert.Equal(404, ex.StatusCode);
     }
 }

@@ -251,7 +251,7 @@ public sealed class ConsoleHarness : IDisposable
 
         if (arguments[id + 1] is "sh" && arguments[id + 2] is "-c")
         {
-            (int code, string output, string error) = CheckResults.TryGetValue(_builds, out var given) ? given : _builds is 0 ? (1, "", "check failed") : (0, "", "");
+            (int code, string output, string error) = CheckResults.TryGetValue(_builds, out (int Code, string Out, string Err) given) ? given : _builds is 0 ? (1, "", "check failed") : (0, "", "");
             return new CommandResult { ExitCode = code, StandardOutput = output, StandardError = error };
         }
 
@@ -327,7 +327,7 @@ public sealed class ConsoleHarness : IDisposable
                     : """{"approved":true,"blocking":[]}""");
         }
 
-        if (!Answers.TryGetValue(kind, out var answer))
+        if (!Answers.TryGetValue(kind, out (int Turns, string Cost, TimeSpan Elapsed) answer))
         {
             return new CommandResult { StandardOutput = Json("done") };
         }
@@ -392,7 +392,7 @@ public sealed class ConsoleHarness : IDisposable
 
     private (int Status, string Body) GraphQl(string content)
     {
-        using JsonDocument json = JsonDocument.Parse(content);
+        using var json = JsonDocument.Parse(content);
         string query = json.RootElement.GetProperty("query").GetString() ?? "";
         if (query.Contains("reviewThreads", StringComparison.Ordinal))
         {

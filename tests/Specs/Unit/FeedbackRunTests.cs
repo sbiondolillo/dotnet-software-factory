@@ -247,7 +247,7 @@ public sealed class FeedbackRunTests
     public async Task ACheckoutThatFailsReachesTheCallerAndStartsNoContainer()
     {
         using var h = new FeedbackRunHarness { CheckoutFailure = "did not match any file(s) known to git" };
-        var ex = await Assert.ThrowsAsync<GitCommandException>(() => h.RunAsync(Ct));
+        GitCommandException ex = await Assert.ThrowsAsync<GitCommandException>(() => h.RunAsync(Ct));
         Assert.Contains("did not match", ex.Message);
         Assert.DoesNotContain(h.Commands, c => c.Command is "docker");
     }

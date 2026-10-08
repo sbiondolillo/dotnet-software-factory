@@ -23,7 +23,7 @@ public sealed class GitHubClientTests
     public async Task NonSuccessThrowsWithMethodPathStatusAndBody(int status)
     {
         (GitHubClient client, _) = Make(status, "plain text");
-        var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => client.SendAsync(HttpMethod.Post, "/x/y", "{}", TestContext.Current.CancellationToken));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => client.SendAsync(HttpMethod.Post, "/x/y", "{}", TestContext.Current.CancellationToken));
         Assert.Equal(status, ex.StatusCode);
         Assert.Contains("POST", ex.Message);
         Assert.Contains("/x/y", ex.Message);
@@ -45,7 +45,7 @@ public sealed class GitHubClientTests
     public async Task ReadingAnIssueThrowsOnFailure()
     {
         (GitHubClient client, _) = Make(404, "nope");
-        var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => client.ReadIssueAsync("o", "r", 1, TestContext.Current.CancellationToken));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => client.ReadIssueAsync("o", "r", 1, TestContext.Current.CancellationToken));
         Assert.Equal(404, ex.StatusCode);
     }
 
@@ -114,7 +114,7 @@ public sealed class GitHubClientTests
     {
         var handler = new RecordingHandler();
         handler.Answer(status, "nope");
-        var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Client(handler).SendAsync(HttpMethod.Get, "/x", null, TestContext.Current.CancellationToken));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Client(handler).SendAsync(HttpMethod.Get, "/x", null, TestContext.Current.CancellationToken));
         Assert.Equal(status, ex.StatusCode);
         Assert.Contains("nope", ex.Message);
         Assert.Single(handler.Requests);
@@ -128,7 +128,7 @@ public sealed class GitHubClientTests
         handler.Enqueue(502, "second");
         handler.Enqueue(503, "third");
         handler.Answer(504, "last");
-        var ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Client(handler).SendAsync(HttpMethod.Get, "/x", null, TestContext.Current.CancellationToken));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Client(handler).SendAsync(HttpMethod.Get, "/x", null, TestContext.Current.CancellationToken));
         Assert.Equal(504, ex.StatusCode);
         Assert.Contains("last", ex.Message);
         Assert.Equal(4, handler.Requests.Count);

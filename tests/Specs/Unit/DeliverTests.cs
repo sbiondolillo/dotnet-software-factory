@@ -150,7 +150,7 @@ public sealed class DeliverTests
     [Fact]
     public async Task APushThatFailsThrowsAndSendsNoRequest()
     {
-        var (deliver, _, handler) = Build("push");
+        (Deliver? deliver, List<string> _, RoutingHandler? handler) = Build("push");
         await Assert.ThrowsAsync<GitCommandException>(() => RunAsync(deliver));
         Assert.Empty(handler.Requests);
     }
@@ -158,7 +158,7 @@ public sealed class DeliverTests
     [Fact]
     public async Task ACheckoutThatFailsThrowsAndRunsNoPushAndSendsNoRequest()
     {
-        var (deliver, git, handler) = Build("checkout");
+        (Deliver? deliver, List<string>? git, RoutingHandler? handler) = Build("checkout");
         await Assert.ThrowsAsync<GitCommandException>(() => RunAsync(deliver));
         Assert.Equal(["checkout"], git);
         Assert.Empty(handler.Requests);
@@ -167,8 +167,8 @@ public sealed class DeliverTests
     [Fact]
     public async Task A422OnTheOpenThrowsAndPostsNoComment()
     {
-        var (deliver, _, handler) = Build(status: 422);
-        var exception = await Assert.ThrowsAsync<GitHubRequestException>(() => RunAsync(deliver));
+        (Deliver? deliver, List<string> _, RoutingHandler? handler) = Build(status: 422);
+        GitHubRequestException exception = await Assert.ThrowsAsync<GitHubRequestException>(() => RunAsync(deliver));
         Assert.Equal(422, exception.StatusCode);
         Assert.DoesNotContain(handler.Requests, r => r.Uri.EndsWith("/comments", StringComparison.Ordinal));
     }
@@ -176,7 +176,7 @@ public sealed class DeliverTests
     [Fact]
     public async Task TheHappyPathOpensOnePullRequestAndPostsOneComment()
     {
-        var (deliver, git, handler) = Build();
+        (Deliver? deliver, List<string>? git, RoutingHandler? handler) = Build();
         PullRequest result = await RunAsync(deliver);
         Assert.Equal(new PullRequest(10, "https://x/pull/10"), result);
         Assert.Equal(["checkout", "push"], git);

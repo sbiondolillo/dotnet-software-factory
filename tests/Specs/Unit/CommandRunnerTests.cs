@@ -16,7 +16,7 @@ public sealed class CommandRunnerTests
             Timeout = TimeSpan.FromSeconds(1),
         };
 
-        var exception = await Assert.ThrowsAsync<System.TimeoutException>(() => runner.RunAsync(spec, TestContext.Current.CancellationToken));
+        TimeoutException exception = await Assert.ThrowsAsync<System.TimeoutException>(() => runner.RunAsync(spec, TestContext.Current.CancellationToken));
 
         Assert.Contains("sh", exception.Message);
         Assert.Contains("1 second", exception.Message);
@@ -78,7 +78,7 @@ public sealed class CommandRunnerTests
     public async Task AProgramOnNoPathThrowsACommandStartExceptionThatNamesIt()
     {
         var runner = new CommandRunner();
-        var exception = await Assert.ThrowsAsync<CommandStartException>(
+        CommandStartException exception = await Assert.ThrowsAsync<CommandStartException>(
             () => runner.RunAsync(new CommandSpec { Command = "factory-unit-missing-xyz" }, TestContext.Current.CancellationToken));
 
         Assert.Contains("factory-unit-missing-xyz", exception.Message);

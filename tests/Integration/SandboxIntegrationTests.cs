@@ -131,7 +131,7 @@ public sealed class SandboxIntegrationTests : IDisposable
 
     private static async Task WaitForAsync(Func<bool> condition, int timeoutMilliseconds)
     {
-        var deadline = Environment.TickCount64 + timeoutMilliseconds;
+        long deadline = Environment.TickCount64 + timeoutMilliseconds;
         while (!condition() && Environment.TickCount64 < deadline)
         {
             await Task.Delay(100, TestContext.Current.CancellationToken);

@@ -44,7 +44,7 @@ public sealed class ReviewPhaseTests
         mock.Setup(r => r.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CommandResult { ExitCode = 128, StandardError = "fatal: bad object abc" });
 
-        var exception = await Assert.ThrowsAsync<GitCommandException>(
+        GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
             () => new Git(mock.Object).ReadDiffAsync("abc", "/work", TestContext.Current.CancellationToken));
 
         Assert.Contains("diff", exception.Message);

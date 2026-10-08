@@ -56,3 +56,12 @@ csharp_style_expression_bodied_local_functions = when_on_single_line
 dotnet_diagnostic.IDE0022.severity = warning
 dotnet_diagnostic.IDE0021.severity = warning
 dotnet_diagnostic.IDE0061.severity = warning
+# `var` only when the type is apparent.
+csharp_style_var_for_built_in_types = false
+csharp_style_var_when_type_is_apparent = true
+csharp_style_var_elsewhere = false
+dotnet_diagnostic.IDE0007.severity = warning
+dotnet_diagnostic.IDE0008.severity = warning
+# Parentheses where precedence mixes; `?:` for an assignment only.
+dotnet_diagnostic.IDE0048.severity = warning
+dotnet_diagnostic.IDE0045.severity = warning

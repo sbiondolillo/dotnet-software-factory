@@ -107,7 +107,7 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
     {
         RecordedRequest post = OpenRequest();
         Assert.EndsWith($"/repos/{slug}/pulls", post.Uri);
-        using JsonDocument json = JsonDocument.Parse(post.Content!);
+        using var json = JsonDocument.Parse(post.Content!);
         Assert.Equal(head, json.RootElement.GetProperty("head").GetString());
         Assert.Equal(baseBranch, json.RootElement.GetProperty("base").GetString());
         Assert.Equal(title, json.RootElement.GetProperty("title").GetString());
@@ -116,7 +116,7 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
     [Then("the first line of the body of the pull request is {string}")]
     public void ThenBody(string line)
     {
-        using JsonDocument json = JsonDocument.Parse(OpenRequest().Content!);
+        using var json = JsonDocument.Parse(OpenRequest().Content!);
         string body = json.RootElement.GetProperty("body").GetString() ?? "";
         Assert.Equal(line, body.Split('\n')[0]);
     }

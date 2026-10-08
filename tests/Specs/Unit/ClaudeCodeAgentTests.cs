@@ -44,7 +44,7 @@ public sealed class ClaudeCodeAgentTests : IDisposable
     {
         ClaudeCodeAgent agent = await AgentAsync(new CommandResult { ExitCode = code, StandardError = reason });
 
-        var exception = await Assert.ThrowsAsync<ClaudeCodeException>(() => RunAsync(agent));
+        ClaudeCodeException exception = await Assert.ThrowsAsync<ClaudeCodeException>(() => RunAsync(agent));
 
         Assert.Contains(code.ToString(System.Globalization.CultureInfo.InvariantCulture), exception.Message);
         Assert.Contains(reason, exception.Message);
@@ -90,7 +90,7 @@ public sealed class ClaudeCodeAgentTests : IDisposable
     {
         ClaudeCodeAgent agent = await AgentAsync(new CommandResult { StandardOutput = Ok });
 
-        var exception = await Assert.ThrowsAsync<ClaudeCodeException>(() => RunAsync(agent, string.Concat(Enumerable.Repeat(letter, count))));
+        ClaudeCodeException exception = await Assert.ThrowsAsync<ClaudeCodeException>(() => RunAsync(agent, string.Concat(Enumerable.Repeat(letter, count))));
 
         Assert.Contains("131072", exception.Message);
         Assert.False(Executed);
@@ -133,7 +133,7 @@ public sealed class ClaudeCodeAgentTests : IDisposable
             File.WriteAllText(path, text);
         }
 
-        var exception = Assert.Throws<ClaudeCodeOutputException>(() => ClaudeCodeAgent.ReadJsonFile(path));
+        ClaudeCodeOutputException exception = Assert.Throws<ClaudeCodeOutputException>(() => ClaudeCodeAgent.ReadJsonFile(path));
 
         Assert.Contains(path, exception.Message);
     }

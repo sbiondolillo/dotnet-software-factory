@@ -15,7 +15,7 @@ public sealed class PinTests : IDisposable
 
     private void Write(string path, string content)
     {
-        var full = Path.Combine(_root, path);
+        string full = Path.Combine(_root, path);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
         File.WriteAllText(full, content);
     }
@@ -28,7 +28,7 @@ public sealed class PinTests : IDisposable
         var pin = Pin.Take(_root);
         Assert.Equal(["global.json"], pin.Hashes.Keys);
         Write("src/Core/Greeter.cs", "b");
-        var diff = pin.Compare(_root);
+        PinComparison diff = pin.Compare(_root);
         Assert.Empty(diff.Changed);
         Assert.Empty(diff.Added);
         Assert.Empty(diff.Removed);
@@ -42,7 +42,7 @@ public sealed class PinTests : IDisposable
         var pin = Pin.Take(_root);
         Write("global.json", "[]");
         File.Delete(Path.Combine(_root, "nuget.config"));
-        var diff = pin.Compare(_root);
+        PinComparison diff = pin.Compare(_root);
         Assert.Equal(["global.json"], diff.Changed);
         Assert.Equal(["nuget.config"], diff.Removed);
         Assert.Empty(diff.Added);
@@ -52,7 +52,7 @@ public sealed class PinTests : IDisposable
     public void UnchangedDirectoryHasNoDifferences()
     {
         Write("specs/features/a.feature", "x");
-        var diff = Pin.Take(_root).Compare(_root);
+        PinComparison diff = Pin.Take(_root).Compare(_root);
         Assert.Empty(diff.Changed);
         Assert.Empty(diff.Added);
         Assert.Empty(diff.Removed);
@@ -125,7 +125,7 @@ public sealed class PinTests : IDisposable
         }
 
         Write("src/Core/Greeter.cs", "b");
-        var diff = pin.Compare(_root);
+        PinComparison diff = pin.Compare(_root);
         Assert.Equal([.. roots.Order(StringComparer.Ordinal).Select(r => $"{r}/changed.cs")], diff.Changed);
         Assert.Equal([.. roots.Order(StringComparer.Ordinal).Select(r => $"{r}/added.cs")], diff.Added);
         Assert.Equal([.. roots.Order(StringComparer.Ordinal).Select(r => $"{r}/removed.cs")], diff.Removed);

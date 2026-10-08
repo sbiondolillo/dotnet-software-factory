@@ -229,7 +229,7 @@ public sealed class FeedbackRunHarness : IDisposable
 
         if (program is "sh" && arguments[id + 2] is "-c")
         {
-            (int code, string output, string error) = CheckResults.TryGetValue(_builds, out var given) ? given : (0, "", "");
+            (int code, string output, string error) = CheckResults.TryGetValue(_builds, out (int Code, string Out, string Err) given) ? given : (0, "", "");
             return new CommandResult { ExitCode = code, StandardOutput = output, StandardError = error };
         }
 
@@ -325,7 +325,7 @@ public sealed class FeedbackRunHarness : IDisposable
 
     private string ThreadsJson()
     {
-        var nodes = Threads.Select(id => id is ThreadA
+        IEnumerable<object> nodes = Threads.Select(id => id is ThreadA
             ? Node(id, false, "src/Core/Checkout.cs", NullLine ? null : 14, "sbiondolillo", "The total ignores the second item of the cart.")
             : id is ThreadB
                 ? Node(id, false, "tests/Specs/Unit/CheckoutTests.cs", 9, "ada", "Name the unit of the total.")
@@ -380,7 +380,7 @@ public sealed class FeedbackRunHarness : IDisposable
 
         private (int Status, string Body) GraphQl(string content)
         {
-            using JsonDocument json = JsonDocument.Parse(content);
+            using var json = JsonDocument.Parse(content);
             string query = json.RootElement.GetProperty("query").GetString() ?? "";
             JsonElement variables = json.RootElement.GetProperty("variables");
             if (query.Contains("reviewThreads", StringComparison.Ordinal))

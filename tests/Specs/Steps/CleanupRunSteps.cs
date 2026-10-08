@@ -133,7 +133,7 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     [Given("the issue {int} has the label {string}")]
     public void GivenConsoleLabel(int number, string label)
     {
-        var body = container.Resolve<DeliverBodyState>();
+        DeliverBodyState body = container.Resolve<DeliverBodyState>();
         if (body.InUse)
         {
             DeliverBodySteps.AddLabel(body, label);

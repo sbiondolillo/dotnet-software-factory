@@ -175,7 +175,7 @@ public sealed class GitSteps(ExceptionState exceptionState)
     [Then("each of these CommandSpecs has the working directory {string}:")]
     public void ThenEachOfTheseCommandSpecsHasTheWorkingDirectory(string directory, Table table)
     {
-        foreach (var row in table.Rows)
+        foreach (DataTableRow? row in table.Rows)
         {
             CommandSpec spec = FindSpec(MapOperation(row["operation"]));
             Assert.Equal(directory, spec.WorkingDirectory);
@@ -204,7 +204,7 @@ public sealed class GitSteps(ExceptionState exceptionState)
     [Then("the clone's CommandSpec and the push's CommandSpec each hold these environment variables:")]
     public void ThenTheCloneAndPushCommandSpecsEachHoldTheseEnvironmentVariables(Table table)
     {
-        foreach (var row in table.Rows)
+        foreach (DataTableRow? row in table.Rows)
         {
             string name = row["name"];
             string value = row["value"];
