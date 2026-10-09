@@ -16,6 +16,7 @@ first commit. What each file is:
 | `src/App/` | the console program, built as `dotnet-software-factory` |
 | `.github/workflows/factory.yml` | a `factory` label on an issue starts a homelab-factory run on it |
 | `.github/workflows/ci.yml` | the checks: the `build` job, then the `integration` job |
+| `.github/workflows/relock.yml` | on a Dependabot pull request, regenerates the `packages.lock.json` of each project in `Solution.slnx` and pushes them with the Dependabot secret `RELOCK_TOKEN` |
 | `specs/features/` | the pinned `.feature` files. One ships here, so the first build has a binding to follow |
 | `tests/Specs/` | the test project: Reqnroll under xUnit v3, with the step class for that feature |
 | `tests/Integration/` | the integration suite: xUnit v3 tests against the real GitHub, `docker` and Claude Code. `dotnet test` skips it |
