@@ -7,7 +7,7 @@ Feature: A repo made from the starter holds an issue template for each recipe
   @bullet-1
   Scenario: The behaviour template holds the skeleton of a behaviour issue
     # run: printf '%s' '.github/ISSUE_TEMPLATE/behaviour.md'
-    Then the copy's file ".github/ISSUE_TEMPLATE/behaviour.md" holds this text
+    Then the copy's file ".github/ISSUE_TEMPLATE/behaviour.md" holds this text, with a line that holds "# specs/features/<name>.feature"
       """
       ---
       name: Behaviour
@@ -20,17 +20,34 @@ Feature: A repo made from the starter holds an issue template for each recipe
 
       **Today.** <What `main` does now that stops that person, in 3 sentences or fewer.>
 
-      **What changes.** <Each file and each program that a criterion names, with the kind of each thing. Each scenario the change removes or replaces. Then each invariant.>
+      **What changes.** <Each file and each program that a scenario names, with the kind of each thing. Then each invariant.>
 
-      ## Acceptance criteria
+      ## Scenarios
 
-      - When <event>, <the actor> <result>.
-      - `<path>`, in `<section>`, holds <text>.
+      <One block for each feature file. A file on main: the scenarios that the change adds or edits. A new file: its Feature: line first, then its scenarios. The rules are docs/write-an-issue.md.>
+
+      ```gherkin
+      # specs/features/<name>.feature
+        Scenario: <what the person observes>
+          Given <the state>
+          When <the event>
+          Then <the result>
+      ```
 
       ## Context
 
-      <A fact of the world that a criterion needs, with its source.>
+      <A fact of the world that a scenario needs, with its source.>
       """
+
+  Scenario: A filled behaviour template gives its scenario to a feature file of the copy
+    Given the copy's ".github/ISSUE_TEMPLATE/behaviour.md" with "<name>" replaced by "greeting" and each other placeholder replaced by "x"
+    When the scenarios of that body are applied to the copy
+    Then the apply gives no fault
+    And the copy's "specs/features/greeting.feature" ends with one blank line and the scenario of the template's block
+
+  Scenario: The behaviour template as it stands gets the fault of its path line
+    When the scenarios of the copy's ".github/ISSUE_TEMPLATE/behaviour.md" are applied to the copy
+    Then the apply gives the one fault "Each fenced block under the heading ## Scenarios starts with the line # specs/features/<name>.feature. A block starts with '# specs/features/<name>.feature'."
 
   @bullet-2
   Scenario: The refactor template holds the skeleton of a refactor issue

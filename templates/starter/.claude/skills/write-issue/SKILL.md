@@ -19,11 +19,11 @@ For each text the draft replaces or removes, find every test that reads it:
 git grep -n -F '<old text>' origin/main -- specs tests
 ```
 
-Done when each claim names its line on `main`. Each scenario a hit is in is named in the draft as removed or replaced, or it is kept with each of its `Then` lines as a criterion.
+Done when each claim names its line on `main`. Each scenario a hit is in is under `## Removed scenarios`, or in a block of the draft with every line of its new text.
 
 ## 3. Write the draft
 
-Read the section of `docs/write-an-issue.md` for the recipe, then write the title and the body to a file. Done when every row of `## Before you file` passes on the file.
+Read the section of `docs/write-an-issue.md` for the recipe, then write the title and the body to a file. A behaviour draft writes its scenarios as blocks under `## Scenarios`: open each feature file it names on `main` first, and reuse each step text that `tests/Specs/Steps/` binds when the step means the same. Done when every row of `## Before you file` passes on the file.
 
 ## 4. Judge the draft
 
