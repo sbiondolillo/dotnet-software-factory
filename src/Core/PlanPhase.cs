@@ -127,6 +127,11 @@ public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false)
                 {
                     failures.Add($"The feature file {path} holds no scenario.");
                 }
+
+                foreach (int line in FeatureFiles.ReadOverIndentedDocStringLines(path, File.ReadAllText(Path.Combine(workTree, path))))
+                {
+                    failures.Add($"The feature file {path}: the doc string at line {line} has text indented past its opening delimiter; start the text at the column of its opening delimiter.");
+                }
             }
             catch (FeatureFileException exception)
             {

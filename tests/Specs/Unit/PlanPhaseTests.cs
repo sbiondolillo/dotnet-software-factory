@@ -282,4 +282,89 @@ public sealed class PlanPhaseTests : IDisposable
         Assert.Equal(1, _h.Prompts[0].Split(Sentence).Length - 1);
         Assert.Contains(Sentence, _h.Prompts[1], StringComparison.Ordinal);
     }
+
+    private static string Doc(string delimiter, string indent, params string[] lines) =>
+        "Feature: F\n\n  Scenario: S\n    Given a\n"
+        + $"      {delimiter}\n" + string.Concat(lines.Select(l => l.Length == 0 ? "\n" : $"      {indent}{l}\n")) + $"      {delimiter}\n";
+
+    private async Task<PlanPhaseResult> RunWithAsync(params (string Path, string Text)[] files)
+    {
+        _h.AgentWrites(null, ".factory/plan.md", "p");
+        foreach ((string path, string text) in files)
+        {
+            _h.AgentWrites(null, path, text);
+        }
+
+        return await _h.RunAsync();
+    }
+
+    private static void AssertDeep(PlanPhaseResult result, string path, int line)
+    {
+        Assert.False(result.Passed);
+        Assert.Single(result.Failures);
+        Assert.Contains(path, result.Failures[0], StringComparison.Ordinal);
+        Assert.Contains($"line {line}", result.Failures[0], StringComparison.Ordinal);
+        Assert.Contains("the column of its opening delimiter", result.Failures[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ADeeperQuoteDocStringFails() =>
+        AssertDeep(await RunWithAsync(("specs/features/a.feature", Doc("\"\"\"", "  ", "x"))), "specs/features/a.feature", 5);
+
+    [Fact]
+    public async Task ADeeperBacktickDocStringFails() =>
+        AssertDeep(await RunWithAsync(("specs/features/a.feature", Doc("```", "  ", "x"))), "specs/features/a.feature", 5);
+
+    [Fact]
+    public async Task AMixedDocStringPasses()
+    {
+        PlanPhaseResult result = await RunWithAsync(("specs/features/a.feature", Doc("\"\"\"", "", "a", "  b")));
+        Assert.True(result.Passed, string.Join("; ", result.Failures));
+    }
+
+    [Fact]
+    public async Task ABlankLineDoesNotCountAsFlatText() =>
+        AssertDeep(await RunWithAsync(("specs/features/a.feature", Doc("\"\"\"", "  ", "x", "", "y"))), "specs/features/a.feature", 5);
+
+    [Fact]
+    public async Task ADelimiterOfTheOtherKindInsideIsJudgedByTheOuterOne()
+    {
+        string text = Doc("```", "  ", "\"\"\"", "x", "\"\"\"");
+        AssertDeep(await RunWithAsync(("specs/features/a.feature", text)), "specs/features/a.feature", 5);
+    }
+
+    [Fact]
+    public async Task ABacktickDelimiterInsideAQuoteDocStringIsJudgedByTheOuterOne() =>
+        AssertDeep(await RunWithAsync(("specs/features/a.feature", Doc("\"\"\"", "  ", "```", "x", "```"))), "specs/features/a.feature", 5);
+
+    [Fact]
+    public async Task TwoFilesGiveOneFailureEachInPathOrder()
+    {
+        PlanPhaseResult result = await RunWithAsync(
+            ("specs/features/b.feature", Doc("\"\"\"", "  ", "x")),
+            ("specs/features/a.feature", Doc("```", "  ", "x")));
+        Assert.Equal(2, result.Failures.Count);
+        Assert.Contains("specs/features/a.feature", result.Failures[0], StringComparison.Ordinal);
+        Assert.Contains("specs/features/b.feature", result.Failures[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ACorrectionRunThatFixesTheIndentPasses()
+    {
+        _h.AgentWrites(null, ".factory/plan.md", "p");
+        _h.AgentWrites(1, "specs/features/a.feature", Doc("\"\"\"", "  ", "x"));
+        _h.AgentWrites(2, "specs/features/a.feature", Doc("\"\"\"", "", "x"));
+        PlanPhaseResult result = await _h.RunAsync();
+        Assert.True(result.Passed, string.Join("; ", result.Failures));
+        Assert.Equal(2, _h.Prompts.Count);
+    }
+
+    [Fact]
+    public async Task ACorrectionRunThatKeepsTheIndentFails()
+    {
+        PlanPhaseResult result = await RunWithAsync(("specs/features/a.feature", Doc("\"\"\"", "  ", "x")));
+        AssertDeep(result, "specs/features/a.feature", 5);
+        Assert.Null(result.Pin);
+        Assert.Equal(2, _h.Prompts.Count);
+    }
 }
