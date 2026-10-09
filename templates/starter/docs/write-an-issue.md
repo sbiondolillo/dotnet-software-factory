@@ -9,8 +9,11 @@ The factory reads the labels, the title and the body of the issue, and nothing e
 | A feature, a bug fix, or a new test for behaviour the program already has | none | the story, `**Today.**`, `**What changes.**`, `## Acceptance criteria`, and `## Context` when a criterion needs a fact of the world |
 | A change to the structure of the code that adds no behaviour. Every test stays as it is | `refactor` | prose, then `## Check` when a command can tell the new structure from the old |
 | A fix to a test, a config file or a document. The program stays as it is | `cleanup` | prose, then `## Scope` and `## Check` |
+| A change to the code, the tests or the config that keeps the behaviour, such as a format sweep or a framework upgrade. Every passing test keeps passing, and the public API of `src/` stays as it is | `reframe` | prose, then `## Scope` and `## Check` |
 
-A bug fix changes the program, so it takes no label. A change that fits two rows is two issues. The label `behavior` beside `refactor` or `cleanup` gets a comment and no run.
+A bug fix changes the program, so it takes no label. A change that fits two rows is two issues. The label `behavior` beside `refactor` or `cleanup` gets a comment and no run. The label `reframe` beside `behavior`, `refactor` or `cleanup` gets a comment and no run.
+
+A refactor keeps every test as it is, and it can move a public type or member. A reframe can edit a test under `tests/` that its scope names, and it keeps the public API of `src/` as it is.
 
 ## The contributor test
 
@@ -34,7 +37,7 @@ The title states what the person can do after the change, or the end state, in t
 
 | Part | What it holds |
 |---|---|
-| the story | `As a <role>, I want to <ability>, so that <benefit>.` The role is a real user of the program: a repo owner, a person who runs the console program. A story with no real role is a sign that the change is a refactor or a cleanup. |
+| the story | `As a <role>, I want to <ability>, so that <benefit>.` The role is a real user of the program: a repo owner, a person who runs the console program. A story with no real role is a sign that the change is a refactor, a cleanup or a reframe. |
 | `**Today.**` | What `main` does now that stops that person, in 3 sentences or fewer. |
 | `**What changes.**` | Each file and each program that a criterion names, with the kind of each thing. Each scenario of `specs/features/` that the change removes or replaces, by name. Then each invariant. |
 | `## Acceptance criteria` | Plain bullets. Each bullet is one observable result. |
@@ -73,6 +76,12 @@ The body starts "Cleanup." and a plain imperative. It states the defect in the t
 
 `## Check` holds one fenced `sh` block, the check command. It fails on `main` and exits with the code 0 after the change. The factory runs it with `sh -c` in a copy of the work tree. Chain the lines with `&&`, so the status of every line counts. A command that runs `dotnet` restores its packages first: `dotnet restore --locked-mode`.
 
+## A reframe body
+
+The body starts "Reframe." and a plain imperative. It states the rule or the version that changes, and the paths on `main` that the change touches. It states the invariant: the program keeps its behaviour, and the public API of `src/` stays as it is. The public API is each public type and each public or protected member. A reframe adds none, removes none and changes none.
+
+`## Scope` and `## Check` take the form of a cleanup body. The scope can name `src/` and a test under `tests/`. Each feature file under `specs/features/` stays as it is.
+
 ## Before you file
 
 Read the draft once for each row. File it when every row passes. A person with Claude Code runs the skill `write-issue` in `.claude/skills/`, which makes this pass and two more with subagents.
@@ -93,4 +102,4 @@ Read the draft once for each row. File it when every row passes. A person with C
 | positive form | search for "not", "never", "don't", "later" | each sentence found states what holds |
 | result inputs | each bullet whose result is a count, an exit code or a summary line | the bullet states each input that result reads |
 | on `main` | read each bullet against the code on `main` | `main` fails each one. A bullet `main` meets leaves the issue |
-| scope and check | a `cleanup` body | `## Scope` holds a path, and `## Check` holds one fenced `sh` block |
+| scope and check | a `cleanup` or a `reframe` body | `## Scope` holds a path, and `## Check` holds one fenced `sh` block |
