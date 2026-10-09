@@ -8,7 +8,7 @@ using Polly.Retry;
 namespace Core;
 
 /// <summary>Sends requests to GitHub's REST API through an <see cref="HttpClient"/>.</summary>
-public sealed class GitHubClient(HttpClient httpClient, string token, TimeSpan? baseWait = null)
+public sealed class GitHubClient(HttpClient httpClient, string token, TimeSpan? baseWait = null, TimeSpan? timeout = null)
 {
     private const string Root = "https://api.github.com";
 
@@ -17,12 +17,20 @@ public sealed class GitHubClient(HttpClient httpClient, string token, TimeSpan? 
     /// <summary>The wait that the client's own retry builds on, 2 seconds when none was given.</summary>
     public TimeSpan BaseWait { get; } = baseWait ?? TimeSpan.FromSeconds(2);
 
-    /// <summary>Sends a request and gives back the JSON of the answer. A transient failure is sent again, up to 3 more times.</summary>
+    /// <summary>The time one request may take before it counts as failed, 30 seconds when none was given.</summary>
+    public TimeSpan Timeout { get; } = timeout ?? TimeSpan.FromSeconds(30);
+
+    /// <summary>Sends a request and gives back the JSON of the answer. A transient failure, or a request that times out, is sent again, up to 3 more times. When every attempt times out it throws <see cref="TimeoutException"/>.</summary>
     public async Task<JsonElement> SendAsync(HttpMethod method, string path, string? jsonBody = null, CancellationToken cancellationToken = default)
     {
         Answer answer = await _pipeline.ExecuteAsync(
             async token => await SendOnceAsync(method, path, jsonBody, token).ConfigureAwait(false),
             cancellationToken).ConfigureAwait(false);
+        if (answer.TimedOut)
+        {
+            throw new TimeoutException($"{method.Method} {path} got no answer within {Timeout.TotalSeconds.ToString(CultureInfo.InvariantCulture)} seconds, on each of 4 attempts.");
+        }
+
         if (answer.Status is < 200 or > 299)
         {
             throw new GitHubRequestException(method.Method, path, answer.Status, answer.Text);
@@ -33,7 +41,7 @@ public sealed class GitHubClient(HttpClient httpClient, string token, TimeSpan? 
     }
 
     private static bool IsTransient(Answer answer) =>
-        answer.Status >= 500 || answer.Status is 429 or 409 || (answer.Status is 403 && answer.RetryAfter is not null);
+        answer.TimedOut || answer.Status >= 500 || answer.Status is 429 or 409 || (answer.Status is 403 && answer.RetryAfter is not null);
 
     private static ResiliencePipeline<Answer> BuildPipeline(TimeSpan baseWait) =>
         new ResiliencePipelineBuilder<Answer>()
@@ -50,6 +58,20 @@ public sealed class GitHubClient(HttpClient httpClient, string token, TimeSpan? 
 
     private async Task<Answer> SendOnceAsync(HttpMethod method, string path, string? jsonBody, CancellationToken cancellationToken)
     {
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(Timeout);
+        try
+        {
+            return await SendRequestAsync(method, path, jsonBody, timeoutSource.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested && (timeoutSource.IsCancellationRequested || ex.InnerException is TimeoutException))
+        {
+            return new Answer(0, "", null, true);
+        }
+    }
+
+    private async Task<Answer> SendRequestAsync(HttpMethod method, string path, string? jsonBody, CancellationToken cancellationToken)
+    {
         using var request = new HttpRequestMessage(method, new Uri(Root + path, UriKind.Absolute));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Headers.TryAddWithoutValidation("User-Agent", "dotnet-software-factory");
@@ -62,10 +84,10 @@ public sealed class GitHubClient(HttpClient httpClient, string token, TimeSpan? 
         string text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         RetryConditionHeaderValue? header = response.Headers.RetryAfter;
         TimeSpan? retryAfter = header?.Delta ?? (header?.Date is { } date ? TimeSpan.FromTicks(Math.Max(0, (date - DateTimeOffset.UtcNow).Ticks)) : null);
-        return new Answer((int)response.StatusCode, text, retryAfter);
+        return new Answer((int)response.StatusCode, text, retryAfter, false);
     }
 
-    private sealed record Answer(int Status, string Text, TimeSpan? RetryAfter);
+    private sealed record Answer(int Status, string Text, TimeSpan? RetryAfter, bool TimedOut);
 
     /// <summary>Reads an issue: title, body, author and labels.</summary>
     public async Task<GitHubIssue> ReadIssueAsync(string owner, string repo, int number, CancellationToken cancellationToken = default)

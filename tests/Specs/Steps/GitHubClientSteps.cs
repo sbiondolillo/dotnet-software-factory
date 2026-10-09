@@ -135,7 +135,7 @@ public sealed class GitHubClientSteps(ExceptionState exceptionState, RecordingHa
             _returned = await state.Client!.SendAsync(new HttpMethod(method), path, body);
             state.Returned = _returned;
         }
-        catch (GitHubRequestException ex)
+        catch (Exception ex) when (ex is GitHubRequestException or TimeoutException)
         {
             exceptionState.Exception = ex;
         }
@@ -168,6 +168,12 @@ public sealed class RecordingHandler : HttpMessageHandler
 
     public Exception? Throw { get; set; }
 
+    /// <summary>How many requests, counted from the first, get no answer until their token is cancelled.</summary>
+    public int Stalls { get; set; }
+
+    /// <summary>Called with the number of each request as it arrives.</summary>
+    public Action<int>? OnRequest { get; set; }
+
     public void Answer(int status, string body, int? retryAfterSeconds = null)
     {
         _status = status;
@@ -183,6 +189,12 @@ public sealed class RecordingHandler : HttpMessageHandler
         var headers = request.Headers.ToDictionary(h => h.Key, h => string.Join(" ", h.Value));
         string? content = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
         Requests.Add(new RecordedRequest(request.Method.Method, request.RequestUri!.AbsoluteUri, headers, content));
+        OnRequest?.Invoke(Requests.Count);
+        if (Requests.Count <= Stalls)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+        }
+
         if (Throw is not null)
         {
             throw Throw;
