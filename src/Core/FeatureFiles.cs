@@ -51,6 +51,21 @@ public static class FeatureFiles
         return scenarios;
     }
 
+    /// <summary>Reads the 1-based line of the opening delimiter of each doc string of <paramref name="content"/> whose
+    /// non-blank text all sits deeper than that delimiter. Gherkin strips the delimiter's indent from each text line,
+    /// so such text still starts with a space. Throws <see cref="FeatureFileException"/> when the parser rejects the content.</summary>
+    public static IReadOnlyList<int> ReadOverIndentedDocStringLines(string path, string content)
+    {
+        GherkinDocument document = Parse(path, content);
+        var lines = new List<int>();
+        if (document.Feature is not null)
+        {
+            CollectDocStrings(document.Feature.Children, lines);
+        }
+
+        return lines;
+    }
+
     /// <summary>Computes the name Reqnroll generates for the test method of a scenario titled
     /// <paramref name="scenarioTitle"/>.</summary>
     public static string ComputeTestName(string scenarioTitle) => CodeFormattingExtensions.ToIdentifier(scenarioTitle);
@@ -95,6 +110,39 @@ public static class FeatureFiles
                     break;
             }
         }
+    }
+
+    private static void CollectDocStrings(IEnumerable<IHasLocation> children, List<int> lines)
+    {
+        foreach (IHasLocation child in children)
+        {
+            IEnumerable<Step> steps = child switch
+            {
+                Rule rule => CollectRule(rule, lines),
+                Scenario scenario => scenario.Steps,
+                Background background => background.Steps,
+                _ => [],
+            };
+            foreach (Step step in steps)
+            {
+                if (step.Argument is DocString doc)
+                {
+                    string[] texts = [.. doc.Content.Split('\n')
+                        .Select(line => line.TrimEnd('\r'))
+                        .Where(line => line.Trim().Length > 0)];
+                    if (texts.Length > 0 && texts.All(line => line[0] is ' ' or '\t'))
+                    {
+                        lines.Add(doc.Location.Line);
+                    }
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<Step> CollectRule(Rule rule, List<int> lines)
+    {
+        CollectDocStrings(rule.Children, lines);
+        return [];
     }
 
     private static string StepSignature(Step step) => step.Argument switch

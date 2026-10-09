@@ -77,6 +77,9 @@ public sealed class PlanPhaseSteps(IssueState issue) : IDisposable
     [Given("the agent on every run writes the file {string} with the text {string}")]
     public void GivenEveryWritesText(string path, string text) => _h.AgentWrites(null, path, text);
 
+    [Given("the agent on every run writes the file {string} with the text")]
+    public void GivenEveryWritesDocText(string path, string text) => _h.AgentWrites(null, path, text);
+
     [Given("the agent on every run writes the file {string} with no text")]
     public void GivenEveryWritesEmpty(string path) => _h.AgentWrites(null, path, "");
 
@@ -166,6 +169,13 @@ public sealed class PlanPhaseSteps(IssueState issue) : IDisposable
     [Then("the failure names {string}")]
     [Then("a failure holds {string}")]
     public void ThenFailureNames(string text) => Assert.Contains(Result.Failures, f => f.Contains(text, StringComparison.Ordinal));
+
+    [Then("the plan phase reports one failure")]
+    public void ThenReportsOneFailure() => Assert.Single(Result.Failures);
+
+    [Then("the failure names {string}, {string} and {string}")]
+    public void ThenFailureNamesThree(string a, string b, string c) =>
+        Assert.Contains(Result.Failures, f => new[] { a, b, c }.All(t => f.Contains(t, StringComparison.Ordinal)));
 
     [Then("the result holds {int} failure")]
     public void ThenHoldsFailures(int count) => Assert.Equal(count, Result.Failures.Count);
