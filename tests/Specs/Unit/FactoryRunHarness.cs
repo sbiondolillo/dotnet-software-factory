@@ -124,6 +124,9 @@ public sealed class FactoryRunHarness : IDisposable
     /// <summary>The files that the agent removes on its first plan prompt of a refactor run.</summary>
     public List<string> PlanRemoves { get; } = [];
 
+    /// <summary>The files that the agent changes on its first plan prompt, when the prompt asks for the plan alone.</summary>
+    public List<string> PlanChanges { get; } = [];
+
     /// <summary>The files that the first build of a refactor run adds.</summary>
     public List<string> FirstBuildAdds { get; } = [];
 
@@ -357,9 +360,10 @@ public sealed class FactoryRunHarness : IDisposable
 
         Prompts.Add(new SeenPrompt(kind, model, turns, text, _builds));
         bool refactor = Labels.Contains("refactor");
+        bool planOnly = refactor || text.Contains("Write no other file:", StringComparison.Ordinal);
         if (kind is "plan" && AgentWritesPlan)
         {
-            if (!refactor)
+            if (!planOnly)
             {
                 Write("specs/features/checkout.feature", PlanPhaseHarness.SoundFeature);
             }
@@ -367,7 +371,7 @@ public sealed class FactoryRunHarness : IDisposable
             Write(".factory/plan.md", PlanPhaseHarness.PlanText);
         }
 
-        if (kind is "plan" && refactor && Prompts.Count(p => p.Kind is "plan") is 1)
+        if (kind is "plan" && planOnly && Prompts.Count(p => p.Kind is "plan") is 1)
         {
             foreach (string path in PlanExtraFiles)
             {
@@ -377,6 +381,11 @@ public sealed class FactoryRunHarness : IDisposable
             foreach (string path in PlanRemoves)
             {
                 File.Delete(Path.Combine(_clone.FullName, path));
+            }
+
+            foreach (string path in PlanChanges)
+            {
+                File.AppendAllText(Path.Combine(_clone.FullName, path), "\n# changed by the plan\n");
             }
         }
 

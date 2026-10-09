@@ -16,6 +16,11 @@ public sealed class PlanPhaseSteps(IssueState issue) : IDisposable
 
     public void Dispose() => _h.Dispose();
 
+    /// <summary>The plan prompts of another run, so a feature of that run shares the prompt steps of this class.</summary>
+    public Func<IReadOnlyList<string>>? OtherPrompts { get; set; }
+
+    private IReadOnlyList<string> Prompts => OtherPrompts?.Invoke() ?? _h.Prompts;
+
     private PlanPhaseResult Result => _result ?? throw new InvalidOperationException("the plan phase did not run");
 
     [Given("an empty work tree")]
@@ -130,16 +135,16 @@ public sealed class PlanPhaseSteps(IssueState issue) : IDisposable
     }
 
     [Then("the first prompt holds {string}, {string}, {string} and {string}")]
-    public void ThenFirstHolds(string a, string b, string c, string d) => AssertHolds(_h.Prompts[0], a, b, c, d);
+    public void ThenFirstHolds(string a, string b, string c, string d) => AssertHolds(Prompts[0], a, b, c, d);
 
     [Then("the first prompt holds {string}")]
-    public void ThenFirstHoldsOne(string a) => AssertHolds(_h.Prompts[0], a);
+    public void ThenFirstHoldsOne(string a) => AssertHolds(Prompts[0], a);
 
     [Then("the pin holds only {string}")]
     public void ThenPinHoldsOnly(string path) => Assert.Equal([path], Result.Pin!.Hashes.Keys.Order(StringComparer.Ordinal));
 
     [Then("the second prompt holds {string}, {string} and {string}")]
-    public void ThenSecondHolds(string a, string b, string c) => AssertHolds(_h.Prompts[1], a, b, c);
+    public void ThenSecondHolds(string a, string b, string c) => AssertHolds(Prompts[1], a, b, c);
 
     [Then("the plan phase ran one prompt")]
     public void ThenOnePrompt() => Assert.Single(_h.Prompts);

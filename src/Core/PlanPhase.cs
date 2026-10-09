@@ -6,9 +6,12 @@ namespace Core;
 /// <summary>The outcome of <see cref="PlanPhase"/>: passed with a pin, or failed with failure sentences.</summary>
 public sealed record PlanPhaseResult(bool Passed, Pin? Pin, IReadOnlyList<string> Failures);
 
-/// <summary>Asks the agent for feature files and a plan, checks the work tree, and pins the scenarios.</summary>
-public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false)
+/// <summary>Asks the agent for feature files and a plan, checks the work tree, and pins the scenarios.
+/// With <c>scenarios</c>, the feature files the issue wrote, the agent writes the plan alone.</summary>
+public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false, IssueScenariosResult? scenarios = null)
 {
+    private bool PlanOnly => refactor || scenarios is not null;
+
     private const string FeatureDirectory = "specs/features/";
     private const string PlanPath = ".factory/plan.md";
 
@@ -21,7 +24,7 @@ public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false)
         string workTree,
         CancellationToken cancellationToken = default)
     {
-        Dictionary<string, string> baseline = Snapshot(workTree, refactor);
+        Dictionary<string, string> baseline = Snapshot(workTree, PlanOnly);
         string prompt = BuildPrompt(title, body);
 
         (List<string> failures, bool isError) = await RunOnceAsync(prompt, model, maxTurns, workTree, baseline, cancellationToken).ConfigureAwait(false);
@@ -49,7 +52,15 @@ public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false)
     }
 
     private string BuildPrompt(string title, string body) =>
-        refactor
+        scenarios is not null
+        ? "Plan the work of the issue below.\n\n"
+            + $"Issue title:\n{title}\n\nIssue body:\n{body}\n\n"
+            + Named("The issue wrote these feature files, and the build makes their scenarios pass: ", scenarios.Written)
+            + Named("The issue removed these feature files: ", scenarios.Removed)
+            + $"Write the plan to {PlanPath}, stating each result the build owes. "
+            + $"Write no other file: {PlanPath} is the only file the plan phase writes. "
+            + "Leave every other file as it is."
+        : refactor
         ? "Plan the work of the refactor issue below.\n\n"
             + $"Issue title:\n{title}\n\nIssue body:\n{body}\n\n"
             + $"Write the plan to {PlanPath}, stating the structure the build gives the code and the steps to get there. "
@@ -76,8 +87,11 @@ public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false)
             return ([string.IsNullOrWhiteSpace(answer.Result) ? "claude answered with an error and no text." : answer.Result], true);
         }
 
-        return (refactor ? RefactorGate(workTree, baseline) : Gate(workTree, baseline), false);
+        return (PlanOnly ? RefactorGate(workTree, baseline) : Gate(workTree, baseline), false);
     }
+
+    private static string Named(string lead, IReadOnlyList<string> paths) =>
+        paths.Count is 0 ? "" : lead + string.Join(", ", paths) + ". ";
 
     private static List<string> RefactorGate(string workTree, Dictionary<string, string> baseline)
     {

@@ -141,6 +141,18 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
             return new FactoryRunResult(null, 0);
         }
 
+        IssueScenariosResult? scenarios = null;
+        if (!reframe && !refactor && !cleanup && IssueScenarios.Holds(issue.Body))
+        {
+            scenarios = IssueScenarios.Apply(issue.Body, request.Directory);
+            if (scenarios.Faults.Count > 0)
+            {
+                await CommentAsync(request, "The scenarios of the issue are not sound, so there is no run:", scenarios.Faults, cancellationToken).ConfigureAwait(false);
+                await Say("scenarios: failed").ConfigureAwait(false);
+                return new FactoryRunResult(null, 0);
+            }
+        }
+
         await Say("sandbox: start").ConfigureAwait(false);
         Sandbox sandbox = await Sandbox.StartAsync(runner, request.ImageTag, request.RootDirectory, request.Directory, cancellationToken).ConfigureAwait(false);
         await using (sandbox.ConfigureAwait(false))
@@ -166,7 +178,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
             }
 
             await Say("plan: start").ConfigureAwait(false);
-            PlanPhaseResult plan = await new PlanPhase(agent)
+            PlanPhaseResult plan = await new PlanPhase(agent, scenarios: scenarios)
                 .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, request.Directory, cancellationToken).ConfigureAwait(false);
             if (!plan.Passed || plan.Pin is null)
             {
