@@ -57,16 +57,28 @@ public sealed partial class StarterIssueBodySteps(StarterState state)
         string text = File.ReadAllText(Path.Combine(state.Copy, file));
         Assert.EndsWith("\n\n" + scenario, text, StringComparison.Ordinal);
         Assert.False(text.EndsWith("\n\n\n" + scenario, StringComparison.Ordinal), $"{file} holds more than one blank line before the scenario");
+        AssertLastScenarioIndentedAsFirst(text);
     }
 
     [Then("the copy's {string} ends with the scenario {string}")]
     public void ThenTheFileEndsWithTheScenario(string file, string name)
     {
-        string? last = File.ReadAllLines(Path.Combine(state.Copy, file))
+        string text = File.ReadAllText(Path.Combine(state.Copy, file));
+        string? last = text.Split('\n')
             .Select(line => line.Trim())
             .LastOrDefault(line => line.StartsWith("Scenario:", StringComparison.Ordinal));
         Assert.Equal($"Scenario: {name}", last);
+        AssertLastScenarioIndentedAsFirst(text);
     }
+
+    // An appended scenario lands at the indent of the file's first scenario, so the file reads as one.
+    private static void AssertLastScenarioIndentedAsFirst(string text)
+    {
+        string[] heads = [.. text.Split('\n').Where(line => line.TrimStart().StartsWith("Scenario:", StringComparison.Ordinal))];
+        Assert.Equal(Indent(heads[0]), Indent(heads[^1]));
+    }
+
+    private static string Indent(string line) => line[..^line.TrimStart().Length];
 
     [GeneratedRegex(@"<[^<>\n]+>")]
     private static partial Regex Placeholder();
