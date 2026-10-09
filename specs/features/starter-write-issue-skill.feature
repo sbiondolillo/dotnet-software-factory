@@ -4,15 +4,15 @@ Feature: A repo made from the starter holds the skill write-issue
     Given the template is installed
     When I run dotnet new "factory-starter" into an empty directory
 
-  Scenario: The skill write-issue drafts the scenarios of a behaviour issue
-    Then the copy's file ".claude/skills/write-issue/SKILL.md" holds this text, with a line that holds "A behaviour draft writes its scenarios as blocks under `## Scenarios`"
+  Scenario: The skill write-issue proves the check of a draft before the judges read it
+    Then the copy's file ".claude/skills/write-issue/SKILL.md" holds this text, with a line that holds "## 4. Prove the check"
       """
       ---
       name: write-issue
       description: Write an issue that the factory builds, judge the draft, and file it. Use when a request is to become an issue for this repo, or when a draft or a filed issue is to be checked or revised.
       ---
 
-      `docs/write-an-issue.md` holds every rule a body follows. [`REVIEW.md`](REVIEW.md) holds the three angles that judge a draft. This skill ends when the issue is filed, with its URL in the handover. The repo's owner applies the label that starts a run.
+      `docs/write-an-issue.md` holds every rule a body follows. [`PROOF.md`](PROOF.md) holds the proof of a `## Check`. [`REVIEW.md`](REVIEW.md) holds the angles that judge a draft. This skill ends when the issue is filed, with its URL in the handover. The repo's owner applies the label that starts a run.
 
       ## 1. Pick the recipe
 
@@ -32,31 +32,41 @@ Feature: A repo made from the starter holds the skill write-issue
 
       ## 3. Write the draft
 
-      Read the section of `docs/write-an-issue.md` for the recipe, then write the title and the body to a file. A behaviour draft writes its scenarios as blocks under `## Scenarios`: open each feature file it names on `main` first, and reuse each step text that `tests/Specs/Steps/` binds when the step means the same. Done when every row of `## Before you file` passes on the file.
+      Read the section of `docs/write-an-issue.md` for the recipe, then write the title and the body to a file. A behaviour draft writes its scenarios as blocks under `## Scenarios`: open each feature file it names on `main` first, and reuse each step text that `tests/Specs/Steps/` binds when the step means the same. Done when every row of `## Before you file` passes on the file, the row `proof` aside: step 4 runs it.
 
-      ## 4. Judge the draft
+      ## 4. Prove the check
 
-      Run the three angles of [`REVIEW.md`](REVIEW.md) on the file, as three subagents in parallel. A harness with no subagents runs them one after another in this session. Apply every fix of the three verdicts in one pass, then run the three angles again. Done when each of the three verdicts is `accept`. A line that two rounds reject goes to the person with both findings.
+      A draft with no `## Check` skips this step. Run the check of the draft in a copy of `main`, once for each run of the table of [`PROOF.md`](PROOF.md) that fits the check, and write each exit status to a proof file. A run that gives another status than its row asks for is a fault of the check: fix the check, and run the whole table again. Done when each run gives the status its row asks for, on one `main` SHA.
+
+      ## 5. Judge the draft
+
+      Run the angles of [`REVIEW.md`](REVIEW.md) on the file, each as a subagent, in parallel: `Body rules`, `Claims against main` and `Testability`, and `Holes` too for a draft with `## Check`. A harness with no subagents runs them one after another in this session. Apply every fix of the verdicts in one pass. A fix to the check runs step 4 again, and each hole becomes a run of its table. Then run the angles again. Done when each verdict is `accept`. A line that two rounds reject goes to the person with both findings.
 
       A verdict that says `no rule` is a gap in `docs/write-an-issue.md`. Apply its fix, and name the finding in the handover with the rule it proposes.
 
-      ## 5. File it
+      ## 6. File it
 
       ```
       gh issue create --title '<title>' --body-file <file> --label <refactor|cleanup|reframe>
       ```
 
-      An issue with no recipe label takes no `--label`. Done when the handover holds the URL and each `no rule` finding.
+      An issue with no recipe label takes no `--label`. An issue with `## Check` gets the proof file of step 4 as a comment:
+
+      ```
+      gh issue comment <n> --body-file <proof file>
+      ```
+
+      Done when the handover holds the URL and each `no rule` finding, and an issue with `## Check` has its proof comment.
       """
 
   @bullet-2
   Scenario: The copy's REVIEW.md holds the angles that judge a draft
     # run: printf '%s\n' '.claude/skills/write-issue/REVIEW.md'
-    Then the copy's file ".claude/skills/write-issue/REVIEW.md" holds this text, with a line that holds "Read each scenario that the change adds or edits against `main`"
+    Then the copy's file ".claude/skills/write-issue/REVIEW.md" holds this text, with a line that holds "**Holes.**"
       """
       # Judge a draft
 
-      Reference for step 4 of [`write-issue`](SKILL.md). Each angle is one subagent. It gets the path of the draft, reads the repo at `main`, and writes one verdict.
+      Reference for step 5 of [`write-issue`](SKILL.md). Each angle is one subagent. It gets the path of the draft, reads the repo at `main`, and writes one verdict. The angle `Holes` also gets the proof file of step 4.
 
       ## The verdict
 
@@ -73,25 +83,110 @@ Feature: A repo made from the starter holds the skill write-issue
 
       ## The angles
 
-      **Body rules.** Read every rule of `docs/write-an-issue.md` and every row of its `## Before you file` table against the draft, one at a time. Done when each rule and each row has been read against every sentence it governs.
+      **Body rules.** Read every rule of `docs/write-an-issue.md` and every row of its `## Before you file` table against the draft, one at a time, the row `proof` aside: step 4 runs it. Done when each rule and each row has been read against every sentence it governs.
 
       **Claims against `main`.** Read each claim the draft makes about the code against the file on `main` that holds it. Read each scenario that the change adds or edits against `main`, and trace what `main` does after its `When`. A scenario that `main` already passes is a finding, unless the change is a new test for behaviour the program already has. Read each block against its feature file on `main`: it takes the form that the table of `docs/write-an-issue.md` picks, a whole-file block for a file on `main` holds each scenario of that file that the change keeps, and each name under `## Removed scenarios` is in its file. For each text the draft replaces or removes, run `git grep -n -F` over `specs` and `tests`, and check that the draft names each scenario a hit is in. For each stream or file a scenario adds lines to, find each test that counts its lines, and check that the draft names it. Done when each claim names its line on `main`, and each test the change makes false is named.
 
       **Testability.** Read each scenario as the test suite reads it. Each test of `tests/Specs/` answers every call to a service from a stub, so each scenario states a behaviour that a stub can show. Each canned answer a `Given` hands a stub names its source in `## Context`: a test of `tests/Integration/`, or the request that got it. An answer that no request can produce says so in `## Context`. Done when each scenario has a stub that can show it, and each answer has a source.
+
+      **Holes.** For a draft with `## Check`. Find each way a change exits with the code 0 on the check and misses a part of what the prose asks for: an element with no line of its own, a means that the check reads, a form that hides code from an analyzer, a count that a comment pads. Run each likely hole in a copy of `main` as [`PROOF.md`](PROOF.md) says, and give its exit status in the finding. Done when each likely hole has run, and each hole that exits with the code 0 is a finding whose `fix` holds the line of the check that closes it.
       """
 
-  @bullet-3
-  Scenario: The skill directory holds SKILL.md and REVIEW.md and no other file
-    # run: printf '%s\n' '.claude/skills/write-issue' 'SKILL.md' 'REVIEW.md'
-    Then the copy's directory ".claude/skills/write-issue" holds exactly the files "SKILL.md" and "REVIEW.md"
+  Scenario: The copy's PROOF.md holds the proof of a check
+    Then the copy's file ".claude/skills/write-issue/PROOF.md" holds this text, with a line that holds "## A check that raises an analyzer rule"
+      """
+      # Prove a check
 
-  @bullet-3
-  Scenario: The skill directory holds no file besides the two
-    # run: printf '%s\n' '.claude/skills/write-issue' 'SKILL.md' 'REVIEW.md'
-    Then the copy's directory ".claude/skills/write-issue" holds no file besides "SKILL.md" and "REVIEW.md"
+      Reference for step 4 of [`write-issue`](SKILL.md), and for the angle `Holes` of [`REVIEW.md`](REVIEW.md). The proof runs the check of the draft in a copy of `main`, once for each run of a table, and reads the exit status of each run. The rules of a check are `## A check` of `docs/write-an-issue.md`.
 
-  Scenario: The write-an-issue page holds the rules of a scenario block
-    Then the copy's file "docs/write-an-issue.md" holds this text, with a line that holds "**A block starts with the path of its feature file.**"
+      ## The copy
+
+      The factory runs the check with `sh -c` in a `git worktree` of the change, with the network on. A worktree holds the tracked files only. The proof uses the same shape. `<PROOF>`, `<CHECK>` and `<HOME>` are absolute paths outside the repo.
+
+      Save the check of the draft to `<CHECK>`. This program reads the first fenced block under `## Check` as the factory reads it:
+
+      ```
+      awk '{ sub(/\r$/, ""); t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t) }
+      m != "" { if (t ~ ("^" substr(m, 1, 1) "+$") && length(t) >= length(m)) { if (s) { if (c ~ /[^ \t\n]/) printf "%s", c; exit } m = "" } else if (s) c = c $0 "\n"; next }
+      t ~ /^#+[ \t]/ && t !~ /^#######/ { if (s) exit; s = (t == "## Check"); next }
+      match(t, /^(```+|~~~+)/) { m = substr(t, 1, RLENGTH); if (m ~ /^`/ && index(substr(t, RLENGTH + 1), "`")) m = "" }' <draft> > <CHECK>
+      ```
+
+      Read `<CHECK>`: it holds the lines of the block and nothing else. An empty `<CHECK>` tells that the factory reads no check: fix the block of the draft. Then make the home directory and the copy:
+
+      ```
+      mkdir -p <HOME> && git fetch -q origin && git worktree add --detach <PROOF> origin/main
+      ```
+
+      A `docker run` mounts a missing path as a directory that `root` owns. The restore is then refused, or the run prints nothing and exits with the code 0. So `<CHECK>` and `<HOME>` exist before the first run.
+
+      Reset the copy to the `main` SHA before each run:
+
+      ```
+      git -C <PROOF> reset -q --hard <main SHA> && git -C <PROOF> clean -qfdx
+      ```
+
+      Then make the change of the row. A change that runs `dotnet`, such as `dotnet format`, runs in the image:
+
+      ```
+      docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -v <HOME>:/tmp/home -v <PROOF>:<PROOF> -w <PROOF> mcr.microsoft.com/dotnet/sdk:<major.minor> dotnet format
+      ```
+
+      It leaves `obj/` and `bin/`, and the factory's copy has none. Remove them with `git -C <PROOF> clean -qfdX`, then plant the file of the row, if it has one.
+
+      Run the check in the SDK image of `global.json`: the tag is its major and minor version, such as `10.0`. The run mounts the git directory of the repo and the copy at their own paths, so `git` in the copy reads the repo. Each run uses the same `<HOME>`, so a restore reads the package cache of the run before it.
+
+      ```
+      docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -v <HOME>:/tmp/home -v "$(git rev-parse --path-format=absolute --git-common-dir):$(git rev-parse --path-format=absolute --git-common-dir)" -v <PROOF>:<PROOF> -v <CHECK>:/check.sh:ro -w <PROOF> mcr.microsoft.com/dotnet/sdk:<major.minor> sh -x /check.sh; echo "exit $?"
+      ```
+
+      The trace of `sh -x` ends at the command that stopped the run. Read it for each run that must fail. Remove the copy when the table is complete:
+
+      ```
+      git worktree remove --force <PROOF>
+      ```
+
+      ## The runs
+
+      | Run | The change in the copy | Must exit |
+      |---|---|---|
+      | `main` | none | not 0, and not 126 or 127, at the first line that reads the change |
+      | faked | the cheapest change that meets the prose: a move by cut and paste with no fix of a `using`, or the smallest edit of a test that meets the prose. The tests can fail | 0 |
+      | other means, one for each choice | the faked change with another helper, another form of an assertion or another form of a count, for each choice that the prose leaves to the build | 0 |
+      | partial, one for each element | the faked change minus one element, as bullet 1 of `## A check` lists them | not 0, at the line of that element |
+
+      The exit codes 126 and 127 tell that the check cannot run: fix the check. A partial run that exits with the code 0 is a hole: add a line to the check, and run the table again. An "other means" run that exits with a code other than 0 tells that the check reads a means: take that line out of the check.
+
+      ## A check that raises an analyzer rule
+
+      The check has the parts of `docs/write-an-issue.md` → `## A check`, and its proof takes this table in place of the table above:
+
+      | Run | The change in the copy | Must exit |
+      |---|---|---|
+      | `main` | none | not 0, at the `sha256sum -c` |
+      | before | the settings files as the prose states them, and no code changed | not 0, at the first count of part 7, or at the build when the check has no count |
+      | faked | before, with each finding fixed by `dotnet format` or by a script | 0 |
+      | hole, one for each form | faked, with one form planted: each hiding form of part 5, one generated name of part 6 in another case, such as `Greeter.Designer.cs`, one new settings file of part 4, such as `Directory.Build.rsp`, and one `*.props` file under an `obj/` of part 1 | not 0, at the line of its part |
+      | dodge, one for each pinned line | faked, with the pinned line rewritten to dodge the rule, and a comment that pads its count | not 0, at the line pin |
+
+      A build stops at the first project that fails, so the projects that depend on it give no findings. To list every finding of every project, run `dotnet build -p:TreatWarningsAsErrors=false` once in the copy with the change of the "before" row. The "before" run itself runs the check as written.
+
+      ## The proof file
+
+      The proof file is the comment that step 6 posts. It names the full `main` SHA and the image, and holds one row for each run:
+
+      | Run | The change | Exit | Stops at |
+      |---|---|---|---|
+      | `main` | none | 1 | `sha256sum -c` |
+
+      Done when each run of the table gives the status that its row asks for, on one `main` SHA.
+      """
+
+  Scenario: The skill directory holds SKILL.md, REVIEW.md and PROOF.md and no other file
+    Then the copy's directory ".claude/skills/write-issue" holds the files "SKILL.md", "REVIEW.md" and "PROOF.md" and no other file
+
+  Scenario: The write-an-issue page holds the rules of a check
+    Then the copy's file "docs/write-an-issue.md" holds this text, with a line that holds "## A check"
       """
       # Write an issue the factory builds
 
@@ -219,9 +314,29 @@ Feature: A repo made from the starter holds the skill write-issue
 
       `## Scope` and `## Check` take the form of a cleanup body. The scope can name `src/` and a test under `tests/`. Each feature file under `specs/features/` stays as it is.
 
+      ## A check
+
+      `## Check` passes the change that the prose asks for, and refuses each change that misses a part of it. The copy of the work tree that the check runs in holds the tracked files only, so it has an `obj/` or a `bin/` only when one is committed.
+
+      - Each element that the prose says must change has its own line in the check: each name, each file, each assertion. A change that misses one element fails at that line.
+      - The check reads results. A change that reaches the result by another means, such as another helper or another form of an assertion, passes.
+      - A scope names each file whole. A change to one section of a settings file names the file, and the check pins the whole file with `sha256sum -c`.
+      - The prose states each fix that the obvious tool gets wrong, with the tool and its wrong result: "`dotnet format` gives `output` the type `string?`, and its type is `string`."
+
+      **A check that raises an analyzer rule** chains these parts with `&&`, in this order:
+
+      1. A `test -z` of a `find` for `obj` and `bin`. A committed `obj/*.props` reaches the copy this way, and MSBuild imports it.
+      2. `dotnet restore --locked-mode`.
+      3. A `sha256sum -c` of each settings file and each project file, with the hash of its text after the change: `.editorconfig`, `Directory.Build.props`, `Directory.Packages.props` and each `*.csproj`.
+      4. A `test` that the list of each `.editorconfig`, `*.globalconfig`, `Directory.Build.*`, `*.props`, `*.targets`, `*.user` and `*.ruleset` file outside `obj/` and `bin/` equals the list on `main`. `dotnet build` reads a `Directory.Build.rsp` as its arguments, such as `-p:TreatWarningsAsErrors=false`. MSBuild imports a `*.csproj.user` with no reference, and `IDE000%38` is its escape of `IDE0008`.
+      5. A `! grep -rn -E` over `src` and `tests`, with `--exclude-dir=obj --exclude-dir=bin`, for each rule id and each form that hides code from an analyzer: `pragma`, `autogenerated`, `auto-generated`, `GeneratedCode`, `#[[:space:]]*line`, `#[[:space:]]*nullable`, `SuppressMessage` and `\\[uU][0-9A-Fa-f]{4}`. A C# Unicode escape spells each of these words past the grep.
+      6. A `! find` over `src` and `tests`, with `-iname`, for each generated name: `*.g.cs`, `*.g.i.cs`, `*.designer.cs`, `*.generated.cs` and `TemporaryGeneratedFile_*`. The analyzers skip generated code, and they match these names in any case.
+      7. For a rule with no code fix, the counts and the fixed lines. Each count reads the `*.cs` files outside `obj/` and `bin/`. The token of the fix, such as `StringComparison.Ordinal`, counts its uses on `main` plus one for each finding. The `Assert.` members under `tests/` count as on `main`, because a deleted assertion clears its finding. A comment pads a count, so the check pins each fixed line whole with `grep -qxE` when the findings are few. A pinned line inside an inactive `#if` or a raw string still matches, so the check refuses `/*`, `#[[:space:]]*if` and `"""` with `! grep -rnE --include='*.cs' --exclude-dir=obj --exclude-dir=bin` over `src` and `tests`.
+      8. `dotnet build --no-restore`.
+
       ## Before you file
 
-      Read the draft once for each row. File it when every row passes. A person with Claude Code runs the skill `write-issue` in `.claude/skills/`, which makes this pass and two more with subagents.
+      Read the draft once for each row. File it when every row passes. A person with Claude Code runs the skill `write-issue` in `.claude/skills/`, which makes this pass, proves the check, and judges the draft with subagents.
 
       | Row | How to read it | Pass |
       |---|---|---|
@@ -244,6 +359,7 @@ Feature: A repo made from the starter holds the skill write-issue
       | result inputs | each `Then` whose result is a count, an exit code or a summary line | its scenario states each input that result reads |
       | on `main` | read each scenario that the change adds or edits against the code on `main` | `main` fails each one, unless the change is a new test for behaviour the program already has. A scenario that a whole-file block keeps from the file on `main` passes on `main` |
       | scope and check | a `cleanup` or a `reframe` body | `## Scope` holds a path, and `## Check` holds one fenced `sh` block |
+      | proof | a body with `## Check`: run the check in a copy of `main`, then in that copy with the change faked | it exits with a code other than 0 on `main`, and with the code 0 on the faked change |
       """
 
   Scenario: The example body of the write-an-issue page applies to the copy
@@ -252,3 +368,266 @@ Feature: A repo made from the starter holds the skill write-issue
     Then the apply gives no fault
     And the copy holds "specs/features/farewell.feature"
     And the copy's "specs/features/greeting.feature" ends with the scenario "An empty name gets the greeting of the world"
+
+  Scenario: The awk program of PROOF.md saves the check of a body in the form of the template
+    Given the draft body
+      """
+      Cleanup. The step that reads the greeting compares it whole.
+
+      ## Scope
+
+      - `tests/Specs/Steps/GreetingSteps.cs`
+
+      ## Check
+
+      ```sh
+      dotnet restore --locked-mode &&
+      grep -qF 'Assert.Equal(expected, _greeting)' tests/Specs/Steps/GreetingSteps.cs
+      ```
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is this text
+      """
+      dotnet restore --locked-mode &&
+      grep -qF 'Assert.Equal(expected, _greeting)' tests/Specs/Steps/GreetingSteps.cs
+      """
+    And CleanupBody reads the same check from that body
+
+  Scenario: The awk program of PROOF.md saves the check of a body with CRLF line ends
+    Given the draft body, with CRLF line ends
+      """
+      Cleanup. The step that reads the greeting compares it whole.
+
+      ## Scope
+
+      - `tests/Specs/Steps/GreetingSteps.cs`
+
+      ## Check
+
+      ```sh
+      dotnet restore --locked-mode &&
+      grep -qF 'Assert.Equal(expected, _greeting)' tests/Specs/Steps/GreetingSteps.cs
+      ```
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is this text
+      """
+      dotnet restore --locked-mode &&
+      grep -qF 'Assert.Equal(expected, _greeting)' tests/Specs/Steps/GreetingSteps.cs
+      """
+    And CleanupBody reads the same check from that body
+
+  Scenario: The awk program of PROOF.md saves a check from an indented tilde fence
+    Given the draft body
+      """
+      Cleanup. The step that reads the greeting compares it whole.
+
+      ## Check
+
+        ~~~sh
+        dotnet restore --locked-mode &&
+        dotnet build --no-restore
+        ~~~
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is this text
+      """
+        dotnet restore --locked-mode &&
+        dotnet build --no-restore
+      """
+    And CleanupBody reads the same check from that body
+
+  Scenario: The awk program of PROOF.md saves a check whose fence holds a shorter fence and a heading line
+    Given the draft body
+      """
+      Reframe. Raise IDE0022.
+
+      ## Check
+
+      ````sh
+      ## 1. No obj and no bin
+      test -z "$(find . \( -name obj -o -name bin \) -print)" &&
+      cat > notes.md <<'EOF' &&
+      ```
+      EOF
+      printf '%s\n' '```' | grep -qx '```'
+      ````
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is this text
+      """
+      ## 1. No obj and no bin
+      test -z "$(find . \( -name obj -o -name bin \) -print)" &&
+      cat > notes.md <<'EOF' &&
+      ```
+      EOF
+      printf '%s\n' '```' | grep -qx '```'
+      """
+    And CleanupBody reads the same check from that body
+
+  Scenario: The awk program of PROOF.md saves the check under the heading, past a fenced example that holds the heading
+    Given the draft body
+      """
+      Cleanup. The page shows the form of a check:
+
+      ~~~markdown
+      ## Check
+
+      ```sh
+      false
+      ```
+      ~~~
+
+      ## Check
+
+      ```sh
+      true
+      ```
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is this text
+      """
+      true
+      """
+    And CleanupBody reads the same check from that body
+
+  Scenario: The awk program of PROOF.md saves no check from a body whose fence is not closed
+    Given the draft body
+      """
+      Refactor. Move the class Greeter to src/Core/Greeting.
+
+      ## Check
+
+      ```sh
+      test -f src/Core/Greeting/Greeter.cs
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is empty
+    And CleanupBody reads the same check from that body
+
+  Scenario: The awk program of PROOF.md saves a check past a trailing space, a tab, a longer closing fence and a backtick info string
+    Given the draft body, with each "<sp>" as a space and each "<tab>" as a tab
+      """
+      Cleanup. The step that reads the greeting compares it whole.
+
+      ## Check<sp>
+
+      ```sh `not a fence`
+      <tab>~~~sh
+      dotnet build --no-restore
+      <tab>~~~~<sp>
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is this text
+      """
+      dotnet build --no-restore
+      """
+    And CleanupBody reads the same check from that body
+
+  Scenario: The awk program of PROOF.md saves no check from a blank block
+    Given the draft body
+      """
+      ## Check
+
+      ```sh
+
+      ```
+
+      ```sh
+      true
+      ```
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is empty
+    And CleanupBody reads the same check from that body
+
+  Scenario: The awk program of PROOF.md saves no check when the first Check heading holds no block
+    Given the draft body
+      """
+      ## Check
+
+      No block here.
+
+      ## Check
+
+      ```sh
+      false
+      ```
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is empty
+    And CleanupBody reads the same check from that body
+
+  Scenario: The awk program of PROOF.md saves the first block under the heading and no later block
+    Given the draft body
+      """
+      ## Check
+
+      ```sh
+      true
+      ```
+
+      ```sh
+      false
+      ```
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is this text
+      """
+      true
+      """
+    And CleanupBody reads the same check from that body
+
+  Scenario: The awk program of PROOF.md saves no check from a block under a subheading
+    Given the draft body
+      """
+      ## Check
+
+      ### Note
+
+      ```sh
+      false
+      ```
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is empty
+    And CleanupBody reads the same check from that body
+
+  Scenario: The awk program of PROOF.md saves no check under a heading other than ## Check
+    Given the draft body
+      """
+      ## Checklist
+
+      ```sh
+      false
+      ```
+
+      ### Check
+
+      ```sh
+      false
+      ```
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is empty
+    And CleanupBody reads the same check from that body
+
+  Scenario: The awk program of PROOF.md reads a line that starts with a hash and is no heading as text
+    Given the draft body
+      """
+      ## Check
+
+      #242 holds the reason for this check.
+
+      ####### x
+
+      ```sh
+      true
+      ```
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is this text
+      """
+      true
+      """
+    And CleanupBody reads the same check from that body
