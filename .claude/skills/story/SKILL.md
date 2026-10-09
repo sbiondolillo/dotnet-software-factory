@@ -64,13 +64,17 @@ Scenario: <the name the feature file uses>
 
 The role is a real user: a repo owner, a person who runs the console program. Each scenario states what that person observes. A text the change pins in full, such as a template or a page, is named in a `Then` by its path and its key line. The design holds the full text.
 
-When another story must merge first, the body ends with the line `**After:** #<n>`.
-
 File the story, then post the design as a comment on it:
 
 ```
 gh issue create --title '<title>' --body-file <story file>
 gh issue comment <n> --body-file <design file>
+```
+
+When another story must merge first, mark the new story as blocked by it, in GitHub's issue relationships:
+
+```
+gh api repos/{owner}/{repo}/issues/<n>/dependencies/blocked_by -F issue_id=$(gh api repos/{owner}/{repo}/issues/<blocker> -q .id)
 ```
 
 A design that the owner's comment changes is posted again as a new `## Design` comment. The build reads the last one.
@@ -127,13 +131,13 @@ Done when the check above prints nothing, the pull request is open, and its chec
 
 ## Build a batch
 
-List the stories that are ready to build: the label `ready`, no label `building`, and no open `**After:**` story.
+List the stories that are ready to build: the label `ready`, no label `building`, and no open issue that blocks it.
 
 ```
-gh issue list --label ready --state open --json number,title,labels,body -q '.[] | select([.labels[].name] | index("building") | not) | "\(.number)\t\(.title)\t\([.body | scan("\\*\\*After:\\*\\* #([0-9]+)")[0]] | join(","))"'
+gh api graphql -F owner='{owner}' -F name='{repo}' -f query='query($owner:String!,$name:String!){repository(owner:$owner,name:$name){issues(states:OPEN,labels:["ready"],first:100){nodes{number title labels(first:20){nodes{name}} blockedBy(first:20){nodes{number state}}}}}}' -q '.data.repository.issues.nodes[] | select([.labels.nodes[].name] | index("building") | not) | select([.blockedBy.nodes[] | select(.state == "OPEN")] | length == 0) | "\(.number)\t\(.title)"'
 ```
 
-A story whose `**After:**` issue is still open waits for the next batch: check each one with `gh issue view <after> --json state -q .state`.
+The query reads each blocker's state, and leaves out a story that an open issue blocks. It waits for the next batch. `issueDependenciesSummary` lags a new relationship by some seconds, so the query reads the `blockedBy` list itself.
 
 Give each story that is ready to its own builder: a subagent with its own worktree, or a separate session. Give it one line, `Build #<n> with the story skill.`, and nothing more. The issue holds the rest. Two stories that change the same file are built one after the other, in the order of their numbers.
 
