@@ -6,7 +6,7 @@ namespace Integration;
 /// <summary>Proves the answers <c>tests/Specs</c> canned for <see cref="LintGate"/> and the change query of <see cref="Git"/> still hold.</summary>
 public sealed class LintGateIntegrationTests : IDisposable
 {
-    private const string Tag = "factory-sandbox:lintgate-integration";
+    private const string Tag = "factory-sandbox:integration";
     private static readonly CommandRunner Runner = new();
     private readonly DirectoryInfo _tree = Directory.CreateTempSubdirectory("factory-lintgate-tree-");
 

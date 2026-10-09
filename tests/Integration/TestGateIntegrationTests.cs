@@ -7,7 +7,7 @@ namespace Integration;
 /// real container over a work tree it writes, and runs the real program.</summary>
 public sealed class TestGateIntegrationTests : IDisposable
 {
-    private const string Tag = "factory-sandbox:testgate-integration";
+    private const string Tag = "factory-sandbox:integration";
     private static readonly CommandRunner Runner = new();
     private readonly DirectoryInfo _tree = Directory.CreateTempSubdirectory("factory-testgate-tree-");
 
