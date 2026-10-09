@@ -6,7 +6,7 @@ The factory reads the labels, the title and the body of the issue, and nothing e
 
 | The change | Label | The body holds |
 |---|---|---|
-| A feature, a bug fix, or a new test for behaviour the program already has | none | the story, `**Today.**`, `**What changes.**`, `## Acceptance criteria`, and `## Context` when a criterion needs a fact of the world |
+| A feature, a bug fix, or a new test for behaviour the program already has | none | the story, `**Today.**`, `**What changes.**`, `## Scenarios` when the change adds or edits a scenario, `## Removed scenarios` when it removes one, and `## Context` when a scenario needs a fact of the world |
 | A change to the structure of the code that adds no behaviour. Every test stays as it is | `refactor` | prose, then `## Check` when a command can tell the new structure from the old |
 | A fix to a test, a config file or a document. The program stays as it is | `cleanup` | prose, then `## Scope` and `## Check` |
 | A change to the code, the tests or the config that keeps the behaviour, such as a format sweep or a framework upgrade. Every passing test keeps passing, and the public API of `src/` stays as it is | `reframe` | prose, then `## Scope` and `## Check` |
@@ -26,8 +26,10 @@ The body states results, and the build chooses every means. A means is a package
 | The known text | The form |
 |---|---|
 | one value | "The base image of `sandbox/Dockerfile` is `node:24-bookworm-slim`." |
-| a small file, known in full | "`<path>` holds this text:", then the text as a fenced block under the bullet |
-| a paragraph of a document that replaces one on `main` | "`<path>`, in `<section>`, holds this paragraph in place of the paragraph that starts '<its first words>':", then the paragraph as a fenced block |
+| a small file, known in full | "`<path>` holds this text:", then the text as a block |
+| a paragraph of a document that replaces one on `main` | "`<path>`, in `<section>`, holds this paragraph in place of the paragraph that starts '<its first words>':", then the paragraph as a block |
+
+In a scenario, the sentence is a `Then` step and the block is its doc string. In prose, the block is a fenced block.
 
 Name what holds after the change. State an invariant as the state it keeps: "Every other existing test passes unchanged." `**Today.**` is the one place that states what `main` does now.
 
@@ -39,28 +41,68 @@ The title states what the person can do after the change, or the end state, in t
 |---|---|
 | the story | `As a <role>, I want to <ability>, so that <benefit>.` The role is a real user of the program: a repo owner, a person who runs the console program. A story with no real role is a sign that the change is a refactor, a cleanup or a reframe. |
 | `**Today.**` | What `main` does now that stops that person, in 3 sentences or fewer. |
-| `**What changes.**` | Each file and each program that a criterion names, with the kind of each thing. Each scenario of `specs/features/` that the change removes or replaces, by name. Then each invariant. |
-| `## Acceptance criteria` | Plain bullets. Each bullet is one observable result. |
-| `## Context` | Facts of the world that a criterion needs, each with its source. |
+| `**What changes.**` | Each file and each program that a scenario names, with the kind of each thing. Then each invariant. |
+| `## Scenarios` | One fenced block for each feature file that the change adds or edits. The scenarios are the tests, word for word. A change that only removes scenarios has no `## Scenarios`. |
+| `## Removed scenarios` | One list item for each scenario that the change removes. |
+| `## Context` | Facts of the world that a scenario needs, each with its source. |
 
-**A bullet has one of two forms, and its subject picks the form.**
+**A block starts with the path of its feature file.** The first line of each fenced block under `## Scenarios` is `# specs/features/<name>.feature`. The name starts with an ASCII letter or a digit, and holds ASCII letters, digits, `.`, `_` and `-`. Each feature file has one block. A fenced block that starts with this line sits under the heading `## Scenarios`, with no other heading between the two.
 
-| The bullet is about | Form | Example |
-|---|---|---|
-| an event and its result | the condition, the actor and the result | "When the argument `name` holds no letter, the console program writes `The name holds no letter.` to standard error and exits with the code 1." |
-| the static state of a file | the file and what it holds | "`README.md`, in `## Commands`, documents the argument `name`." |
+**The feature file on `main` picks the form of its block.**
 
-- A bullet names the real program and the real service: "When the exchange rate service answers the status 503, the console program writes the status to standard error." The stub is how the test builds that world.
-- A bullet states every input its result reads. A count, an exit code or a summary line names each input behind it.
-- A bullet states each input the program refuses, byte for byte.
-- A condition that picks one member of a set gets one bullet per member. A condition that holds for every member at once is one bullet.
-- Each sad path wanted is its own bullet. A failure is stated by kind, and the text of a program's error is a result the bullet states.
-- A document edit the change owes is a bullet in the static form: the file, the section and what it holds after the change.
-- A change to a scenario that `specs/features/` already holds states each `Then` of that scenario as a criterion, the unchanged ones too, and `**What changes.**` names the scenario.
-- Each requirement is stated once, in one criterion. A value in the prose that no criterion holds is a requirement the tests miss.
-- A bullet pins only what a consumer reads: a config value has its program, a file has its reader. An order, a sort or a path form that no caller reads is a means.
+| The feature file | The block holds |
+|---|---|
+| is new | the whole file: its `Feature:` line, then its scenarios |
+| is on `main`, and the change edits its `Feature:` line, its `Background:` or a `Rule:` | the whole file |
+| is on `main`, and holds a `Rule:` | the whole file |
+| is on `main`, and the change edits only scenarios | the scenarios that the change adds or edits, and no `Feature:` line |
 
-**`## Context` holds facts of the world.** A fact is what a real service answers, a value a stub reads, or a gap between a bullet and the test suite: a fixture the suite lacks, or a thing it cannot run, such as a workflow. Each fact names its source: a file on `main`, or the request that got the answer, with its date. A row states only what the probe printed, and only what a criterion reads. A sentence that says what the program must do is a requirement, and it goes in a criterion.
+A block that holds a `Feature:` line is a whole-file block. It replaces the file on `main`, so it holds every scenario that the file keeps.
+
+In a block of scenarios, each scenario goes into the file by its name. A scenario whose name the file holds replaces that scenario whole, with its tags, its comments and its `Examples:`. So the block holds every line of that scenario, the unchanged ones too. A scenario with a new name goes at the end of the file. So a renamed scenario is a new scenario, and its old name goes under `## Removed scenarios`. Each line between the path line and the first scenario is blank, a tag or a comment. Each block indents its scenarios as the feature files do: `Scenario:` at 2 spaces, and each step at 4.
+
+This body adds a scenario to `specs/features/greeting.feature` and adds the new file `specs/features/farewell.feature`:
+
+````markdown
+## Scenarios
+
+```gherkin
+# specs/features/greeting.feature
+  Scenario: An empty name gets the greeting of the world
+    Given the name ""
+    When the greeter greets
+    Then the greeting is "Hello, world!"
+```
+
+```gherkin
+# specs/features/farewell.feature
+Feature: Farewell
+
+  Scenario: The greeter says goodbye by name
+    Given the name "Ada"
+    When the greeter says goodbye
+    Then the farewell is "Goodbye, Ada!"
+```
+````
+
+**`## Removed scenarios` holds one list item for each scenario that the change removes.** The item is `- `, the path in backticks, a colon, and the name of the scenario: `` - `specs/features/greeting.feature`: An empty name gets the greeting of the world ``. Each line under the heading is such an item. A feature file whose last scenario is removed leaves the repo, and at least one feature file stays. A whole-file block leaves out each scenario that it removes, so `## Removed scenarios` names no scenario of that file. A name under `## Removed scenarios` is in no block.
+
+**Each scenario states one behaviour that a person observes.**
+
+- Each `Then` states one observable result.
+- A step names the real program and the real service: "Given the exchange rate service answers the status 503". The stub is how the test builds that world.
+- The `Given` and `When` steps state every input that a `Then` reads. A count, an exit code or a summary line names each input behind it.
+- A scenario states each input that the program refuses, byte for byte.
+- A condition that picks one member of a set gets one scenario per member, or a `Scenario Outline:` with one row of `Examples:` per member. A condition that holds for every member at once is one scenario.
+- Each sad path wanted is its own scenario. A failure is stated by kind, and the text of a program's error is a result that a `Then` states.
+- A document edit that the change owes is a scenario whose `Then` names the file, the section and what it holds after the change.
+- Each requirement is stated once, in one scenario. A value in the prose that no scenario holds is a requirement that the tests miss.
+- A `Then` pins only what a consumer reads: a config value has its program, a file has its reader. An order, a sort or a path form that no caller reads is a means.
+- A step text that a class of `tests/Specs/Steps/` already binds runs that binding. Use that text for the same meaning, and other words for a new meaning.
+- Each name of a scenario gives its own test name. Two names that differ only in case, punctuation or accents can give one: 'A name gets a greeting' and 'A name, gets a greeting' give one, and so do 'Café' and 'Cafe'.
+- A whole-file block parses as Gherkin, and a block of scenarios parses as Gherkin under a `Feature:` line. A doc string sits between two `"""` lines, and its text starts at the column of its opening `"""`.
+
+**`## Context` holds facts of the world.** A fact is what a real service answers, a value a stub reads, or a gap between a scenario and the test suite: a fixture the suite lacks, or a thing it cannot run, such as a workflow. Each fact names its source: a file on `main`, or the request that got the answer, with its date. A row states only what the probe printed, and only what a scenario reads. A sentence that says what the program must do is a requirement, and it goes in a scenario.
 
 ## A refactor body
 
@@ -91,15 +133,19 @@ Read the draft once for each row. File it when every row passes. A person with C
 | factory text | search for a label, a gate, a run, a phase, or a pointer at `AGENTS.md` | zero found |
 | story | read the first sentence | it holds a role, an ability and a benefit, and the role is a real user of the program |
 | today | read `**Today.**` | it states what `main` does now, in 3 sentences or fewer |
-| coverage | list each file and each program that a criterion names | `**What changes.**` names each one |
+| coverage | list each file and each program that a scenario names | `**What changes.**` names each one |
 | names | list each name of a part of the system | each one is the name that the repo or the tool uses |
 | pseudocode | list each sentence that names a step the code takes, a member it calls, a constructor, a test method, or a numbered sequence | the list is empty |
-| bullets | each one has one of the two forms, names the real program, and states one observable result | every bullet |
-| conditions | search the criteria for "When" | each clause found names an event that occurs |
-| known text | list each config value, workflow, pinned version and document paragraph that the issue already knows | each one is in a criterion as one value or as a block |
+| blocks | each fenced block under `## Scenarios` | it starts with the path line of one feature file, takes the form that the file on `main` picks, and parses as Gherkin, under a `Feature:` line for a block of scenarios. A whole-file block for a file on `main` holds each scenario of that file that the change keeps |
+| scenarios | each scenario | it names the real program, and each `Then` states one observable result |
+| placeholders | search the draft for each `<...>` placeholder of the template | none is left |
+| scenario names | list the names of the scenarios of each feature file after the change | no two give one test name, and no block holds one name twice |
+| removed | each line under `## Removed scenarios` | it is a list item: a path in backticks, a colon, and a name that the file on `main` holds |
+| conditions | search the scenarios for "When" | each `When` names an event that occurs |
+| known text | list each config value, workflow, pinned version and document paragraph that the issue already knows | each one is in a `Then` as one value or as a doc string |
 | context | list each sentence and each row of `## Context` | each one states a fact of the world and its source, and none states what the program must do |
-| stated once | list each requirement in the draft | each one is in one criterion, and nowhere else |
-| positive form | search for "not", "never", "don't", "later" | each sentence found states what holds |
-| result inputs | each bullet whose result is a count, an exit code or a summary line | the bullet states each input that result reads |
-| on `main` | read each bullet against the code on `main` | `main` fails each one. A bullet `main` meets leaves the issue |
+| stated once | list each requirement in the draft | each one is in one scenario, and nowhere else |
+| positive form | search the prose for "not", "never", "don't", "later" | each sentence found states what holds |
+| result inputs | each `Then` whose result is a count, an exit code or a summary line | its scenario states each input that result reads |
+| on `main` | read each scenario that the change adds or edits against the code on `main` | `main` fails each one, unless the change is a new test for behaviour the program already has. A scenario that a whole-file block keeps from the file on `main` passes on `main` |
 | scope and check | a `cleanup` or a `reframe` body | `## Scope` holds a path, and `## Check` holds one fenced `sh` block |

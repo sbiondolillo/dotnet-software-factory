@@ -1,4 +1,5 @@
 using Reqnroll;
+using Xunit;
 
 namespace Specs.Steps;
 
@@ -21,4 +22,12 @@ public sealed class StarterAgentsSteps(StarterState state)
     [Then("the copy's file {string} holds this text")]
     public void ThenTheCopysFileHolds(string file, string docString)
         => StarterChecks.TextEquals(Path.Combine(state.Copy, file), docString);
+
+    [Then("the copy's file {string} holds this text, with a line that holds {string}")]
+    public void ThenTheCopysFileHoldsWithLine(string file, string line, string docString)
+    {
+        string path = Path.Combine(state.Copy, file);
+        StarterChecks.TextEquals(path, docString);
+        Assert.Contains(File.ReadAllLines(path), have => have.Contains(line, StringComparison.Ordinal));
+    }
 }

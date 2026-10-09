@@ -9,13 +9,20 @@ As a <role>, I want to <ability>, so that <benefit>.
 
 **Today.** <What `main` does now that stops that person, in 3 sentences or fewer.>
 
-**What changes.** <Each file and each program that a criterion names, with the kind of each thing. Each scenario the change removes or replaces. Then each invariant.>
+**What changes.** <Each file and each program that a scenario names, with the kind of each thing. Then each invariant.>
 
-## Acceptance criteria
+## Scenarios
 
-- When <event>, <the actor> <result>.
-- `<path>`, in `<section>`, holds <text>.
+<One block for each feature file. A file on main: the scenarios that the change adds or edits. A new file: its Feature: line first, then its scenarios. The rules are docs/write-an-issue.md.>
+
+```gherkin
+# specs/features/<name>.feature
+  Scenario: <what the person observes>
+    Given <the state>
+    When <the event>
+    Then <the result>
+```
 
 ## Context
 
-<A fact of the world that a criterion needs, with its source.>
+<A fact of the world that a scenario needs, with its source.>
