@@ -6,10 +6,13 @@ namespace Core;
 public sealed record BuildPhaseResult(bool Passed, string Failure);
 
 /// <summary>Asks the agent to implement the plan and bind every pinned scenario.</summary>
-public sealed class BuildPhase(ClaudeCodeAgent agent, bool cleanup = false, bool refactor = false, bool readsPlan = true)
+public sealed class BuildPhase(ClaudeCodeAgent agent, bool cleanup = false, bool refactor = false, bool readsPlan = true, bool reframe = false)
 {
     private const int PromptLimit = 131071;
     private const string CutMarker = "[cut]";
+
+    /// <summary>The order of work that the build prompt of a reframe run states.</summary>
+    public const string ReframeText = "Make the change the issue asks for to its config files first, then run dotnet format --no-restore once from the repo root, before any edit to a source file. Edit by hand only what the build still reports.";
 
     /// <summary>Runs one build prompt built from the issue and the Redo texts.</summary>
     public async Task<BuildPhaseResult> RunAsync(
@@ -86,6 +89,20 @@ public sealed class BuildPhase(ClaudeCodeAgent agent, bool cleanup = false, bool
     private string Compose(string title, string body, IReadOnlyList<string> redoTexts)
     {
         var prompt = new StringBuilder();
+        if (reframe)
+        {
+            prompt.Append("Do the reframe of the issue below.\n\n")
+                .Append("Issue title:\n").Append(title).Append("\n\n")
+                .Append("Issue body:\n").Append(body).Append("\n\n")
+                .Append(ReframeText).Append(' ')
+                .Append("Change only the paths that the issue names under the heading ## Scope. ")
+                .Append("Make the command in the first fenced block under the heading ## Check exit with the code 0. ")
+                .Append("Keep every test that passes now passing, and keep every public type and every public or protected member of the code under src/ as it is. ")
+                .Append("Leave each feature file under specs/features/ as it is. Run dotnet build and dotnet test, and work until both pass.");
+            AppendRedos(prompt, redoTexts);
+            return prompt.ToString();
+        }
+
         if (cleanup)
         {
             prompt.Append("Do the cleanup of the issue below.\n\n")

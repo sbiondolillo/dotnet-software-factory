@@ -7,11 +7,14 @@ namespace Core;
 public sealed record ReviewPhaseResult(bool Approved, IReadOnlyList<string> Blocking, bool IsError = false);
 
 /// <summary>Asks the agent to review the build against the issue, the scenarios and the plan, and reads its verdict.</summary>
-public sealed class ReviewPhase(ClaudeCodeAgent agent, Git git, bool cleanup = false, bool refactor = false, bool readsPlan = true)
+public sealed class ReviewPhase(ClaudeCodeAgent agent, Git git, bool cleanup = false, bool refactor = false, bool readsPlan = true, bool reframe = false)
 {
     private const string VerdictPath = ".factory/review.json";
     private const string CutMarker = "[cut]";
     private const int PromptLimit = 131071;
+
+    /// <summary>The judgement that the review prompt of a reframe run states.</summary>
+    public const string ReframeText = "Judge the build against every sentence of the issue: it changes only the paths under ## Scope, keeps the behaviour of the program and makes the command under ## Check pass, and it keeps every test and every public type and member of the code under src/.";
 
     /// <summary>Runs one review prompt and gives back the verdict the agent wrote.</summary>
     public async Task<ReviewPhaseResult> RunAsync(
@@ -103,7 +106,10 @@ public sealed class ReviewPhase(ClaudeCodeAgent agent, Git git, bool cleanup = f
             + $"Base commit: {baseCommit}\n"
             + "Read every change since the base commit in the work tree.\n\n"
             + "Your job:\n"
-            + (refactor
+            + (reframe
+                ? "1. Read every feature file under specs/features/.\n"
+                    + "2. " + ReframeText + "\n"
+                : refactor
                 ? (readsPlan ? "1. Read the plan, .factory/plan.md.\n" : "1. Read every change since the base commit.\n")
                     + (readsPlan ? "2. Judge the build against the plan and every sentence of the issue. " : "2. Judge the build against every sentence of the issue. ")
                     + "Block a change to any file under specs/features/, tests/Specs/ or tests/Integration/.\n"

@@ -36,6 +36,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
     private long _started;
     private const string CleanupLabel = "cleanup";
     private const string RefactorLabel = "refactor";
+    private const string ReframeLabel = "reframe";
 
     private static readonly string[] LayoutFiles = ["Solution.slnx"];
     private static readonly string[] LayoutDirectories = ["specs/features/", "tests/Specs/", "tests/Integration/"];
@@ -61,6 +62,34 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         GitHubIssue issue = await client.ReadIssueAsync(request.Owner, request.Repo, request.IssueNumber, cancellationToken).ConfigureAwait(false);
         IReadOnlyList<string> scope = [];
         string check = "";
+        bool reframe = issue.Labels.Contains(ReframeLabel);
+        if (reframe)
+        {
+            string? refusal = null;
+            if (new[] { "behavior", CleanupLabel, RefactorLabel }.FirstOrDefault(issue.Labels.Contains) is string other)
+            {
+                refusal = $"The labels reframe and {other} exclude each other: each one names a kind of run. Keep one of the two labels.";
+            }
+            else if ((scope = CleanupBody.ReadScope(issue.Body)).Count is 0)
+            {
+                refusal = "The body of a reframe issue names its scope under the heading ## Scope, one path for each line. The body holds no such heading with a path under it.";
+            }
+            else if (CleanupBody.ReadCheck(issue.Body) is not string command)
+            {
+                refusal = "The body of a reframe issue holds its check command in the first fenced block under the heading ## Check. The body holds no such heading with a fenced block under it.";
+            }
+            else
+            {
+                check = command;
+            }
+
+            if (refusal is not null)
+            {
+                await CommentAsync(request, refusal, [], cancellationToken).ConfigureAwait(false);
+                return new FactoryRunResult(null, 0);
+            }
+        }
+
         bool refactor = issue.Labels.Contains(RefactorLabel);
         if (refactor && (issue.Labels.Contains("behavior") || issue.Labels.Contains(CleanupLabel)))
         {
@@ -121,6 +150,11 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
                 _spend += answer.CostUsd;
                 _summary.Prompt(elapsed, answer.NumTurns, answer.CostUsd);
             });
+            if (reframe)
+            {
+                return await RunReframeAsync(request, issue, scope, check, sandbox, agent, git, baseCommit, cancellationToken).ConfigureAwait(false);
+            }
+
             if (refactor)
             {
                 return await RunRefactorAsync(request, issue, sandbox, agent, git, baseCommit, cancellationToken).ConfigureAwait(false);
@@ -450,6 +484,141 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
             await Say($"redo: {redos}").ConfigureAwait(false);
         }
     }
+
+    private async Task<FactoryRunResult> RunReframeAsync(
+        FactoryRunRequest request,
+        GitHubIssue issue,
+        IReadOnlyList<string> scope,
+        string check,
+        Sandbox sandbox,
+        ClaudeCodeAgent agent,
+        Git git,
+        string baseCommit,
+        CancellationToken cancellationToken)
+    {
+        CommandResult first = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
+        await Say(first.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
+        if (first.ExitCode is 0)
+        {
+            await CommentAsync(request, "The check passes before the build, so there is nothing to reframe.", [], cancellationToken).ConfigureAwait(false);
+            return new FactoryRunResult(null, 0);
+        }
+
+        if (first.ExitCode is 126 or 127)
+        {
+            await CommentAsync(request, $"The check command exited with the code {first.ExitCode} before the build, so it did not run. Its standard error:", [first.StandardError], cancellationToken).ConfigureAwait(false);
+            return new FactoryRunResult(null, 0);
+        }
+
+        var buildPhase = new BuildPhase(agent, reframe: true);
+        var lintGate = new LintGate(sandbox, git, log);
+        var testGate = new TestGate(sandbox, log);
+        var reviewPhase = new ReviewPhase(agent, git, reframe: true);
+        var pin = Pin.Take(request.Directory);
+        IReadOnlySet<string> basePassed = await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false);
+        ApiListing baseApi = await ListApiAsync(sandbox, cancellationToken).ConfigureAwait(false);
+        if (baseApi.Lines is null)
+        {
+            await CommentAsync(request, "The public API of the base commit could not be listed, so there is no build:", [baseApi.Fault ?? ""], cancellationToken).ConfigureAwait(false);
+            return new FactoryRunResult(null, 0);
+        }
+
+        await Say("api: listed").ConfigureAwait(false);
+
+        int redos = 0;
+        string producer = "";
+        IReadOnlyList<string> redoTexts = [];
+        while (true)
+        {
+            await Say("build: start").ConfigureAwait(false);
+            long buildStart = _clock.GetTimestamp();
+            BuildPhaseResult built = await buildPhase.RunAsync(issue.Title, issue.Body, request.BuildModel, request.BuildTurns, redoTexts, cancellationToken).ConfigureAwait(false);
+            if (!built.Passed)
+            {
+                _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "failed");
+                return await StopAsync(request, built.Failure, redos, cancellationToken).ConfigureAwait(false);
+            }
+
+            await Say("lint: start").ConfigureAwait(false);
+            await lintGate.RunAsync(request.Directory, issue.Title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
+            producer = _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "passed");
+            redoTexts = await CleanupGate.ScopeFaultsAsync(git, baseCommit, request.Directory, scope, cancellationToken).ConfigureAwait(false);
+            TestGateResult? gate = null;
+            if (redoTexts.Count is 0)
+            {
+                long testStart = _clock.GetTimestamp();
+                await Say("test: start").ConfigureAwait(false);
+                gate = await testGate
+                    .RunAsync(request.Directory, pin, request.SecretNames, path => CleanupGate.PinExempt(scope, path), cancellationToken)
+                    .ConfigureAwait(false);
+                await Say(gate.Passed ? "test: passed" : "test: failed").ConfigureAwait(false);
+                producer = _summary.AddRow("test", _clock.GetElapsedTime(testStart), gate.Passed ? "passed" : "failed");
+                redoTexts = !gate.Passed ? gate.Evidence : CleanupGate.LostTests(basePassed, gate);
+            }
+
+            if (redoTexts.Count is 0)
+            {
+                long apiStart = _clock.GetTimestamp();
+                ApiListing api = await ListApiAsync(sandbox, cancellationToken).ConfigureAwait(false);
+                redoTexts = api.Lines is null ? [api.Fault ?? ""] : ApiGate.Compare(baseApi.Lines, api.Lines);
+                if (api.Lines is not null)
+                {
+                    await Say(redoTexts.Count is 0 ? "api: same" : "api: changed").ConfigureAwait(false);
+                }
+
+                producer = _summary.AddRow("api", _clock.GetElapsedTime(apiStart), redoTexts.Count is 0 ? "same" : "changed");
+            }
+
+            if (redoTexts.Count is 0 && gate is not null)
+            {
+                long checkStart = _clock.GetTimestamp();
+                CommandResult after = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
+                await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
+                producer = _summary.AddRow("check", _clock.GetElapsedTime(checkStart), after.ExitCode is 0 ? "green" : "red");
+                if (after.ExitCode is 0)
+                {
+                    await Say("review: start").ConfigureAwait(false);
+                    ReviewPhaseResult review = await reviewPhase
+                        .RunAsync(issue.Title, issue.Body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, cancellationToken).ConfigureAwait(false);
+                    string reviewRow = _summary.AddRow("review", null, review.IsError ? "failed" : review.Approved ? "approved" : "blocked");
+                    if (review.IsError)
+                    {
+                        return await StopAsync(request, review.Blocking[0], redos, cancellationToken).ConfigureAwait(false);
+                    }
+
+                    await Say(review.Approved ? "review: approved" : "review: blocked").ConfigureAwait(false);
+                    if (review.Approved)
+                    {
+                        await Say("deliver: start").ConfigureAwait(false);
+                        var deliver = new Deliver(git, new PullRequests(client), client, Facts(baseCommit, gate, true, redos));
+                        PullRequest pullRequest = await deliver
+                            .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
+                        return new FactoryRunResult(pullRequest, redos);
+                    }
+
+                    redoTexts = review.Blocking;
+                    producer = reviewRow;
+                }
+                else
+                {
+                    redoTexts = [CleanupGate.CheckRedo(after)];
+                }
+            }
+
+            if (redos >= RedoBudget)
+            {
+                await CommentAsync(request, $"The budget of {RedoBudget} Redos is spent. The last build still fails:", redoTexts, cancellationToken).ConfigureAwait(false);
+                return new FactoryRunResult(null, redos);
+            }
+
+            redos++;
+            _summary.AddRedos(redos, producer, redoTexts);
+            await Say($"redo: {redos}").ConfigureAwait(false);
+        }
+    }
+
+    private Task<ApiListing> ListApiAsync(Sandbox sandbox, CancellationToken cancellationToken) =>
+        ApiGate.ListAsync(sandbox, progress, log, cancellationToken);
 
     private DeliveryFacts Facts(string baseCommit, TestGateResult gate, bool checkGreen, int redos) => new(
         baseCommit,

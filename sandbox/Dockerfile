@@ -15,6 +15,15 @@ RUN npm install -g @anthropic-ai/claude-code
 
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
 
+# The public API printer of a reframe run, published on the image's own runtime.
+# A run lists the public API of the code under src/ with
+# `dotnet /opt/api-printer/ApiPrinter.dll src`.
+COPY sandbox/ApiPrinter /tmp/api-printer
+RUN cd /tmp/api-printer \
+    && dotnet publish -c Release -o /opt/api-printer \
+    && chmod -R a+rX /opt/api-printer \
+    && rm -rf /tmp/api-printer /root/.nuget /root/.local/share/NuGet
+
 USER node
 RUN mkdir -p /home/node/.config
 WORKDIR /home/node

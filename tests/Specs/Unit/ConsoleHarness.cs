@@ -122,6 +122,9 @@ public sealed class ConsoleHarness : IDisposable
     /// <summary>The answer of claude to a prompt kind: turns, the cost as written, and the seconds the answer takes.</summary>
     public Dictionary<string, (int Turns, string Cost, TimeSpan Elapsed)> Answers { get; } = [];
 
+    /// <summary>The lines the API printer prints after the build of that number (0 is before the first build); a number with no entry prints nothing.</summary>
+    public Dictionary<int, string> ApiOutputs { get; } = [];
+
     /// <summary>The exit code of a dotnet command in the container, by its program and words joined by one space.</summary>
     public Dictionary<string, int> DotnetExits { get; } = [];
 
@@ -258,6 +261,11 @@ public sealed class ConsoleHarness : IDisposable
         if (arguments[id + 1] is "git" && arguments[id + 2] is "worktree" && arguments[id + 3] is "add")
         {
             return new CommandResult { ExitCode = WorktreeAddExit, StandardError = "no worktree" };
+        }
+
+        if (arguments[id + 1] is "dotnet" && arguments[id + 2] is "/opt/api-printer/ApiPrinter.dll")
+        {
+            return new CommandResult { StandardOutput = ApiOutputs.GetValueOrDefault(_builds, "") };
         }
 
         if (arguments[id + 1] is "dotnet" && DotnetExits.TryGetValue(string.Join(' ', arguments.Skip(id + 1)), out int exit))
