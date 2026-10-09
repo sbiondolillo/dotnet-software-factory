@@ -67,6 +67,12 @@ public sealed class SandboxImageIntegrationTests
             Directory.CreateDirectory(Path.Combine(copy.FullName, "sandbox"));
             File.Copy(Path.Combine(root, "global.json"), Path.Combine(copy.FullName, "global.json"));
             File.Copy(Path.Combine(root, "sandbox", "Dockerfile"), Path.Combine(copy.FullName, "sandbox", "Dockerfile"));
+            Directory.CreateDirectory(Path.Combine(copy.FullName, "sandbox", "ApiPrinter"));
+            foreach (string file in Directory.EnumerateFiles(Path.Combine(root, "sandbox", "ApiPrinter")))
+            {
+                File.Copy(file, Path.Combine(copy.FullName, "sandbox", "ApiPrinter", Path.GetFileName(file)));
+            }
+
             using var document = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(root, "global.json"), TestContext.Current.CancellationToken));
             string version = document.RootElement.GetProperty("sdk").GetProperty("version").GetString()!;
 
@@ -93,6 +99,9 @@ public sealed class SandboxImageIntegrationTests
             CommandResult id = await DockerAsync("run", "--rm", tag, "id", "-u");
             Assert.NotEqual(0, int.Parse(id.StandardOutput.Trim(), System.Globalization.CultureInfo.InvariantCulture));
             Assert.Equal(0, (await DockerAsync("run", "--rm", tag, "sh", "-c", "test -d \"$HOME/.config\"")).ExitCode);
+            CommandResult printer = await DockerAsync("run", "--rm", tag, "dotnet", "/opt/api-printer/ApiPrinter.dll");
+            Assert.Equal(2, printer.ExitCode);
+            Assert.Equal("usage: ApiPrinter <directory>...", printer.StandardError.Trim());
         }
         finally
         {

@@ -133,6 +133,18 @@ public sealed class FactoryRunHarness : IDisposable
     /// <summary>The files the first build writes into the clone, for a run that is no refactor.</summary>
     public List<string> FirstBuildWrites { get; } = [];
 
+    /// <summary>The lines the API printer prints on the base commit.</summary>
+    public List<string> BaseApi { get; } = ["Core: Core.Greeter::method public static System.String Greet(System.String)", "Core: class static Core.Greeter"];
+
+    /// <summary>The lines the API printer prints after a build, or null for the lines of the base commit.</summary>
+    public List<string>? AfterApi { get; set; }
+
+    /// <summary>What the API printer answers after the build of that number (0 is before the first build) instead of a listing: its exit code and standard error.</summary>
+    public Dictionary<int, (int Code, string Err)> ApiResults { get; } = [];
+
+    /// <summary>What <c>dotnet build</c> in a copy of the head commit answers after the build of that number (0 is before the first build).</summary>
+    public Dictionary<int, (int Code, string Out)> CopyBuildResults { get; } = [];
+
     /// <summary>True when <c>git worktree add</c> in the container exits with the code 128.</summary>
     public bool WorktreeAddFails { get; set; }
 
@@ -278,6 +290,22 @@ public sealed class FactoryRunHarness : IDisposable
         if (program is "git" && subcommand is "worktree" && arguments[id + 3] is "add" && WorktreeAddFails)
         {
             return new CommandResult { ExitCode = 128, StandardError = "fatal: cannot add the worktree" };
+        }
+
+        if (program is "dotnet" && subcommand is "/opt/api-printer/ApiPrinter.dll")
+        {
+            if (ApiResults.TryGetValue(_builds, out (int Code, string Err) fault))
+            {
+                return new CommandResult { ExitCode = fault.Code, StandardError = fault.Err };
+            }
+
+            List<string> lines = _builds is 0 ? BaseApi : AfterApi ?? BaseApi;
+            return new CommandResult { StandardOutput = string.Concat(lines.Select(line => line + "\n")) };
+        }
+
+        if (program is "dotnet" && subcommand is "build" && arguments.Contains("--workdir") && CopyBuildResults.TryGetValue(_builds, out (int Code, string Out) copy))
+        {
+            return new CommandResult { ExitCode = copy.Code, StandardOutput = copy.Out };
         }
 
         if (subcommand is not "test")
