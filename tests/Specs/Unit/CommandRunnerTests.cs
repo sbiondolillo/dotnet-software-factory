@@ -20,7 +20,7 @@ public sealed class CommandRunnerTests
 
         Assert.Contains("sh", exception.Message, StringComparison.Ordinal);
         Assert.Contains("1 second", exception.Message, StringComparison.Ordinal);
-        await AssertProgramGone(["sleep", "11"]);
+        await ProcessScan.AssertGoneAsync(["sleep", "11"]);
     }
 
     [Fact]
@@ -35,7 +35,7 @@ public sealed class CommandRunnerTests
         cts.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => task);
-        await AssertProgramGone(["sleep", "14"]);
+        await ProcessScan.AssertGoneAsync(["sleep", "14"]);
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public sealed class CommandRunnerTests
         cts.Cancel();
 
         await Assert.ThrowsAsync<OperationCanceledException>(() => task);
-        await AssertProgramGone(["sleep", "15"]);
+        await ProcessScan.AssertGoneAsync(["sleep", "15"]);
     }
 
     [Fact]
@@ -82,15 +82,5 @@ public sealed class CommandRunnerTests
             () => runner.RunAsync(new CommandSpec { Command = "factory-unit-missing-xyz" }, TestContext.Current.CancellationToken));
 
         Assert.Contains("factory-unit-missing-xyz", exception.Message, StringComparison.Ordinal);
-    }
-
-    private static async Task AssertProgramGone(string[] argv)
-    {
-        for (int attempt = 0; attempt < 20 && ProcessScan.HasProcessWithExactArgv(argv); attempt++)
-        {
-            await Task.Delay(50);
-        }
-
-        Assert.False(ProcessScan.HasProcessWithExactArgv(argv));
     }
 }

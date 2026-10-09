@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 using Core;
@@ -23,6 +24,7 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState, ConsoleSta
     private CommandResult? _result;
     private CommandResult? _mockResult;
     private string? _mockedCommand;
+    private Task<CommandResult>? _leftRunningTask;
 
     [Given(@"^the command is (""[^""]*""|'[^']*')$")]
     public void GivenTheCommandIs(string command)
@@ -94,6 +96,27 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState, ConsoleSta
         {
             _result = null;
             exceptionState.Exception = ex;
+        }
+    }
+
+    [When("I start the command and wait until the {string} program runs")]
+    public async Task WhenIStartTheCommandAndWaitUntilTheProgramRuns(string program)
+    {
+        _leftRunningTask = _runner.RunAsync(BuildSpec());
+        var clock = Stopwatch.StartNew();
+        while (!ProcessScan.HasProcessWithExactArgv(program.Split(' ')))
+        {
+            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(5), $"The program {program} did not start within 5 s");
+            await Task.Delay(50);
+        }
+    }
+
+    [AfterScenario]
+    public async Task StopTheCommandLeftRunning()
+    {
+        if (_leftRunningTask is not null)
+        {
+            await Assert.ThrowsAsync<System.TimeoutException>(() => _leftRunningTask);
         }
     }
 
@@ -192,10 +215,10 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState, ConsoleSta
     }
 
     [Then("the {string} program is no longer running")]
-    public static Task ThenTheProgramIsNoLongerRunning(string program) => AssertProgramGone(program.Split(' '));
+    public static Task ThenTheProgramIsNoLongerRunning(string program) => ProcessScan.AssertGoneAsync(program.Split(' '));
 
     [Then("no program was started")]
-    public Task ThenNoProgramWasStarted() => AssertProgramGone((_mockedCommand ?? string.Empty).Split(' '));
+    public Task ThenNoProgramWasStarted() => ProcessScan.AssertGoneAsync((_mockedCommand ?? string.Empty).Split(' '));
 
     [Then("the caller sees the exit code {int}")]
     public void ThenTheCallerSeesTheExitCode(int expected)
@@ -224,14 +247,4 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState, ConsoleSta
     }
 
     private static string Unquote(string quoted) => quoted[1..^1];
-
-    private static async Task AssertProgramGone(string[] argv)
-    {
-        for (int attempt = 0; attempt < 20 && ProcessScan.HasProcessWithExactArgv(argv); attempt++)
-        {
-            await Task.Delay(50);
-        }
-
-        Assert.False(ProcessScan.HasProcessWithExactArgv(argv));
-    }
 }
