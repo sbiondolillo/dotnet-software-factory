@@ -37,7 +37,7 @@ Done when a contributor with no access to this session could build the change fr
 
 ### 3. Judge it
 
-Run the three angles of [`JUDGES.md`](JUDGES.md) on the design, as three subagents in parallel. Read each fault against `main` before you act on it. Apply every fix in one pass, and run step 1 again for a claim the fix changes.
+Run the three angles of [`JUDGES.md`](JUDGES.md) → "Judge a design" on the design, as three subagents in parallel. Read each fault against `main` before you act on it. Apply every fix in one pass, and run step 1 again for a claim the fix changes.
 
 Done when each fault is fixed in the design or refuted with its evidence.
 
@@ -105,7 +105,7 @@ git fetch origin && git worktree add .claude/worktrees/<n>-<a short slug> -b <n>
 
 Each scenario of the issue goes into a feature file under `specs/features/` by its name, with each of its `Given`, `When` and `Then` lines. The feature file adds the detail the issue names by path: a doc string with the full text, a table. Run `dotnet test` and see each new scenario fail. Then write the code until it passes.
 
-Done when every check of the `build` job of `.github/workflows/ci.yml` passes on the branch:
+Then run every check of the `build` job of `.github/workflows/ci.yml` on the branch:
 
 ```
 dotnet restore --locked-mode && dotnet build --no-restore && dotnet format --verify-no-changes --no-restore && dotnet test --no-restore
@@ -113,7 +113,28 @@ dotnet restore --locked-mode && dotnet build --no-restore && dotnet format --ver
 
 A change to code that calls GitHub, `docker` or Claude Code also runs `dotnet run --no-restore --project tests/Integration`, and the result goes in the pull request.
 
-### 7. Open the pull request
+Commit the branch, new files included, so that a reviewer reads every change by one SHA:
+
+```
+git add -- <each path of "Files that change"> && git commit -m '<the issue title>'
+```
+
+Done when every check above passes, the result of the integration suite is kept when that suite ran, and `git status --porcelain` lists no path of "Files that change".
+
+### 7. Review the branch
+
+Run the three angles of [`JUDGES.md`](JUDGES.md) → "Judge a branch" on the commit, as three subagents in parallel, on Opus. The branch is not pushed, so each reviewer clones this worktree into a scratch directory of its own and checks the SHA out there. Give each one:
+
+- the full SHA of the commit, from `git rev-parse HEAD`
+- the full SHA of the base, from `git fetch -q origin && git rev-parse origin/main`
+- the path of this worktree
+- the issue number, and the path of a file that holds its body and its last `## Design` comment
+
+Read each finding against the branch before you act on it. Each finding gets a fix on the branch or a refutation with its evidence. A fix is a new commit, and runs the checks of step 6 again.
+
+Done when each angle accepts, or each finding has a fix or a refutation.
+
+### 8. Open the pull request
 
 Check the link from the story to the code: each scenario name of the issue is in `specs/features/`.
 
@@ -121,13 +142,13 @@ Check the link from the story to the code: each scenario name of the issue is in
 gh issue view <n> --json body -q .body | tr -d '\r' | sed -nE 's/^ *Scenario( Outline)?: //p' | while read -r name; do grep -rhE '^ *Scenario( Outline)?: ' specs/features | sed -E 's/^ *Scenario( Outline)?: //' | grep -qxF -- "$name" || echo "missing: $name"; done
 ```
 
-Push the branch, and open the pull request with the issue's title. The body states what changed, the result of each suite, and the line `Closes #<n>`.
+Push the branch, and open the pull request with the issue's title. The body states what changed, the result of each suite, each reviewer's verdict, each finding with its fix or its refutation, and the line `Closes #<n>`.
 
 ```
 gh pr create --title '<the issue title>' --body-file <file>
 ```
 
-Done when the check above prints nothing, the pull request is open, and its checks are green. The owner merges it. The worktree stays until the merge, for a fix the review asks for. After the merge, `git worktree remove .claude/worktrees/<n>-<slug>` removes it.
+Done when the check above prints nothing, the pull request is open, its body holds each reviewer's verdict and each finding with its fix or its refutation, and its checks are green. The owner merges it. The worktree stays until the merge, for a fix the owner asks for. After the merge, `git worktree remove .claude/worktrees/<n>-<slug>` removes it.
 
 ## Build a batch
 
