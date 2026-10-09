@@ -34,7 +34,7 @@ A verdict that says `no rule` is a gap in `docs/write-an-issue.md`. Apply its fi
 ## 5. File it
 
 ```
-gh issue create --title '<title>' --body-file <file> --label <refactor|cleanup>
+gh issue create --title '<title>' --body-file <file> --label <refactor|cleanup|reframe>
 ```
 
 An issue with no recipe label takes no `--label`. Done when the handover holds the URL and each `no rule` finding.

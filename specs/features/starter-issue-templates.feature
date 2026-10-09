@@ -78,7 +78,28 @@ Feature: A repo made from the starter holds an issue template for each recipe
       ```
       """
 
-  @bullet-4
-  Scenario: The issue template directory holds the three templates and no other file
-    # run: printf '%s\n' '.github/ISSUE_TEMPLATE' 'behaviour.md' 'refactor.md' 'cleanup.md'
-    Then the copy's directory ".github/ISSUE_TEMPLATE" holds the files "behaviour.md", "refactor.md" and "cleanup.md" and no other file
+  Scenario: The reframe template holds the skeleton of a reframe issue
+    Then the copy's file ".github/ISSUE_TEMPLATE/reframe.md" holds this text
+      """
+      ---
+      name: Reframe
+      about: A change to the code, the tests or the config that keeps the behaviour, such as a format sweep or a framework upgrade. Every passing test keeps passing, and the public API of src/ stays as it is. The rules are docs/write-an-issue.md.
+      title: ''
+      labels: reframe
+      ---
+
+      Reframe. <The rule or the version that changes, the paths it touches, and the invariant.>
+
+      ## Scope
+
+      - `<path>`
+
+      ## Check
+
+      ```sh
+      <a command that fails on main and exits with the code 0 after the change>
+      ```
+      """
+
+  Scenario: The issue template directory holds the four templates and no other file
+    Then the copy's directory ".github/ISSUE_TEMPLATE" holds the files "behaviour.md", "refactor.md", "cleanup.md" and "reframe.md" and no other file
