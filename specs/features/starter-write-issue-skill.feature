@@ -447,6 +447,9 @@ Feature: A repo made from the starter holds the skill write-issue
       ````sh
       ## 1. No obj and no bin
       test -z "$(find . \( -name obj -o -name bin \) -print)" &&
+      cat > notes.md <<'EOF' &&
+      ```
+      EOF
       printf '%s\n' '```' | grep -qx '```'
       ````
       """
@@ -455,6 +458,9 @@ Feature: A repo made from the starter holds the skill write-issue
       """
       ## 1. No obj and no bin
       test -z "$(find . \( -name obj -o -name bin \) -print)" &&
+      cat > notes.md <<'EOF' &&
+      ```
+      EOF
       printf '%s\n' '```' | grep -qx '```'
       """
     And CleanupBody reads the same check from that body
@@ -526,6 +532,10 @@ Feature: A repo made from the starter holds the skill write-issue
       ```sh
 
       ```
+
+      ```sh
+      true
+      ```
       """
     When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
     Then the saved check is empty
@@ -583,10 +593,16 @@ Feature: A repo made from the starter holds the skill write-issue
     Then the saved check is empty
     And CleanupBody reads the same check from that body
 
-  Scenario: The awk program of PROOF.md saves no check from a heading that only starts with Check
+  Scenario: The awk program of PROOF.md saves no check under a heading other than ## Check
     Given the draft body
       """
       ## Checklist
+
+      ```sh
+      false
+      ```
+
+      ### Check
 
       ```sh
       false
@@ -596,10 +612,12 @@ Feature: A repo made from the starter holds the skill write-issue
     Then the saved check is empty
     And CleanupBody reads the same check from that body
 
-  Scenario: The awk program of PROOF.md reads a line of seven hashes as text, not as a heading
+  Scenario: The awk program of PROOF.md reads a line that starts with a hash and is no heading as text
     Given the draft body
       """
       ## Check
+
+      #242 holds the reason for this check.
 
       ####### x
 
