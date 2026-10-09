@@ -1,0 +1,77 @@
+Feature: Relock workflow for Dependabot pull requests
+
+  @bullet-1
+  Scenario: The relock workflow file holds the specified text
+    Given the repository checkout
+    # run: printf '.github/workflows/relock.yml'
+    Then the file ".github/workflows/relock.yml" holds this text
+      """
+      # Regenerates the packages.lock.json of each project in Solution.slnx on a
+      # Dependabot pull request, and pushes the result to the head branch of the
+      # pull request.
+      #
+      # Dependabot rewrites the lock file of the project that references the
+      # updated package, and no other. A project that references that project then
+      # fails `dotnet restore --locked-mode` with NU1004.
+      #
+      # RELOCK_TOKEN is a Dependabot secret: a fine-grained token with read and
+      # write access to Contents on this repo. A push with that token starts `ci`
+      # on the pushed commit. The owner of the token is the actor of that second
+      # event, so this job runs one time for each Dependabot commit.
+      name: relock
+
+      on:
+        pull_request:
+          paths:
+            - 'Directory.Packages.props'
+            - '**/packages.lock.json'
+
+      permissions:
+        contents: read
+
+      jobs:
+        relock:
+          if: github.actor == 'dependabot[bot]'
+          runs-on: ubuntu-latest
+          steps:
+            - uses: actions/checkout@v7
+              with:
+                ref: ${{ github.head_ref }}
+                token: ${{ secrets.RELOCK_TOKEN }}
+            - uses: actions/setup-dotnet@v6
+              with:
+                global-json-file: global.json
+            - name: Regenerate the lock files
+              run: dotnet restore --force-evaluate
+            - name: Push the lock files
+              run: |
+                if git diff --quiet; then
+                  exit 0
+                fi
+                git config user.name "github-actions[bot]"
+                git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                git add -- '*packages.lock.json'
+                git commit -m "Regenerate the lock files" -m "[dependabot skip]"
+                git push
+      """
+
+  @bullet-1
+  Scenario: The relock workflow does not push with the default token
+    Given the repository checkout
+    # run: printf '.github/workflows/relock.yml\nsecrets.GITHUB_TOKEN'
+    Then the file ".github/workflows/relock.yml" does not contain "secrets.GITHUB_TOKEN"
+
+  @bullet-2
+  Scenario: The README table holds the relock row directly after the ci row
+    Given the repository checkout
+    # run: printf '.github/workflows/ci.yml'
+    Then the README table row after the row of ".github/workflows/ci.yml" is this line
+      """
+      | `.github/workflows/relock.yml` | on a Dependabot pull request, regenerates the `packages.lock.json` of each project in `Solution.slnx` and pushes them with the Dependabot secret `RELOCK_TOKEN` |
+      """
+
+  @bullet-2
+  Scenario: The README holds the relock row only once
+    Given the repository checkout
+    # run: printf '1\n.github/workflows/relock.yml'
+    Then the README holds exactly 1 row for ".github/workflows/relock.yml"
