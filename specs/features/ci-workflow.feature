@@ -1,0 +1,70 @@
+Feature: CI workflow
+
+  Scenario: The integration job builds the sandbox image before the integration suite
+    Then the file ".github/workflows/ci.yml" of this repo holds this text
+      """
+      # The checks on every pull request and on main (homelab-factory
+      # docs/csharp-design.md -> The integration suite).
+      #
+      # `build` runs the four commands the factory's test gate runs, in the same
+      # order: restore from the locks, build with every warning an error, verify
+      # the format, and run the build suite. The build suite needs no network.
+      #
+      # `integration` runs tests/Integration against the real GitHub, docker and
+      # Claude Code. `dotnet test` never collects it, because its project sets
+      # IsTestProject false. A test fails, and never skips, when a service is
+      # unreachable. The two secrets are repo Actions secrets:
+      #   FACTORY_GITHUB_TOKEN  a fine-grained token on sbiondolillo/factory-scratch only
+      #   ANTHROPIC_API_KEY     the Anthropic workspace dotnet-software-factory
+      #
+      # `integration` builds the sandbox image one time, before the suite, with the
+      # tag `factory-sandbox:integration` and the arguments `SandboxImage` passes.
+      # Every integration test that starts a sandbox uses that tag, finds the image
+      # and builds nothing. So a run asks Docker Hub for the base image one time.
+      # When Docker Hub fails, the step `Sandbox image` fails, and the suite does
+      # not run.
+      name: ci
+
+      on:
+        pull_request:
+        push:
+          branches: [main]
+
+      permissions:
+        contents: read
+
+      jobs:
+        build:
+          runs-on: ubuntu-latest
+          steps:
+            - uses: actions/checkout@v7
+            - uses: actions/setup-dotnet@v6
+              with:
+                global-json-file: global.json
+            - name: Restore
+              run: dotnet restore --locked-mode
+            - name: Build
+              run: dotnet build --no-restore
+            - name: Format
+              run: dotnet format --verify-no-changes --no-restore
+            - name: Test
+              run: dotnet test --no-restore
+
+        integration:
+          needs: build
+          runs-on: ubuntu-latest
+          steps:
+            - uses: actions/checkout@v7
+            - uses: actions/setup-dotnet@v6
+              with:
+                global-json-file: global.json
+            - name: Restore
+              run: dotnet restore --locked-mode
+            - name: Sandbox image
+              run: docker build --tag factory-sandbox:integration --file sandbox/Dockerfile --build-arg DOTNET_SDK_VERSION="$(jq -r .sdk.version global.json)" .
+            - name: Integration suite
+              env:
+                FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_GITHUB_TOKEN }}
+                ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+              run: dotnet run --no-restore --project tests/Integration
+      """
