@@ -11,6 +11,13 @@
 # unreachable. The two secrets are repo Actions secrets:
 #   FACTORY_GITHUB_TOKEN  a fine-grained token on sbiondolillo/factory-scratch only
 #   ANTHROPIC_API_KEY     the Anthropic workspace dotnet-software-factory
+#
+# `integration` builds the sandbox image one time, before the suite, with the
+# tag `factory-sandbox:integration` and the arguments `SandboxImage` passes.
+# Every integration test that starts a sandbox uses that tag, finds the image
+# and builds nothing. So a run asks Docker Hub for the base image one time.
+# When Docker Hub fails, the step `Sandbox image` fails, and the suite does
+# not run.
 name: ci
 
 on:
@@ -48,6 +55,8 @@ jobs:
           global-json-file: global.json
       - name: Restore
         run: dotnet restore --locked-mode
+      - name: Sandbox image
+        run: docker build --tag factory-sandbox:integration --file sandbox/Dockerfile --build-arg DOTNET_SDK_VERSION="$(jq -r .sdk.version global.json)" .
       - name: Integration suite
         env:
           FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_GITHUB_TOKEN }}
