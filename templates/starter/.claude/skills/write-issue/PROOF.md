@@ -11,7 +11,7 @@ Save the check of the draft to `<CHECK>`. This program reads the first fenced bl
 ```
 awk '{ sub(/\r$/, ""); t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t) }
 m != "" { if (t ~ ("^" substr(m, 1, 1) "+$") && length(t) >= length(m)) { if (s) { if (c ~ /[^ \t\n]/) printf "%s", c; exit } m = "" } else if (s) c = c $0 "\n"; next }
-t ~ /^#+[ \t]/ { if (s) exit; s = (t == "## Check"); next }
+t ~ /^#+[ \t]/ && t !~ /^#######/ { if (s) exit; s = (t == "## Check"); next }
 match(t, /^(```+|~~~+)/) { m = substr(t, 1, RLENGTH); if (m ~ /^`/ && index(substr(t, RLENGTH + 1), "`")) m = "" }' <draft> > <CHECK>
 ```
 

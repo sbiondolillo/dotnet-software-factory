@@ -17,7 +17,7 @@ findings:
 
 ## The angles
 
-**Body rules.** Read every rule of `docs/write-an-issue.md` and every row of its `## Before you file` table against the draft, one at a time. Done when each rule and each row has been read against every sentence it governs.
+**Body rules.** Read every rule of `docs/write-an-issue.md` and every row of its `## Before you file` table against the draft, one at a time, the row `proof` aside: step 4 runs it. Done when each rule and each row has been read against every sentence it governs.
 
 **Claims against `main`.** Read each claim the draft makes about the code against the file on `main` that holds it. Read each scenario that the change adds or edits against `main`, and trace what `main` does after its `When`. A scenario that `main` already passes is a finding, unless the change is a new test for behaviour the program already has. Read each block against its feature file on `main`: it takes the form that the table of `docs/write-an-issue.md` picks, a whole-file block for a file on `main` holds each scenario of that file that the change keeps, and each name under `## Removed scenarios` is in its file. For each text the draft replaces or removes, run `git grep -n -F` over `specs` and `tests`, and check that the draft names each scenario a hit is in. For each stream or file a scenario adds lines to, find each test that counts its lines, and check that the draft names it. Done when each claim names its line on `main`, and each test the change makes false is named.
 

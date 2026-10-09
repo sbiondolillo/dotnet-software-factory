@@ -18,7 +18,11 @@ public sealed class StarterWriteIssueSkillSteps(StarterState state)
     public void GivenTheDraftBody(string docString) => _body = docString;
 
     [Given("the draft body, with CRLF line ends")]
-    public void GivenTheDraftBodyWithCrlf(string docString) => _body = docString.Replace("\n", "\r\n", StringComparison.Ordinal);
+    public void GivenTheDraftBodyWithCrlf(string docString)
+    {
+        _body = docString.ReplaceLineEndings("\r\n");
+        Assert.Contains("\r\n", _body, StringComparison.Ordinal);
+    }
 
     // The repo's .editorconfig trims a trailing space in a feature file, so the scenario names each space and tab.
     [Given("the draft body, with each {string} as a space and each {string} as a tab")]
@@ -31,7 +35,7 @@ public sealed class StarterWriteIssueSkillSteps(StarterState state)
     {
         string[] blocks = [.. FencedBlocks(File.ReadAllLines(Path.Combine(state.Copy, file)))
             .Where(block => block.StartsWith("awk '", StringComparison.Ordinal))];
-        Assert.True(blocks.Length == 1, $"{file} holds {blocks.Length} fenced blocks that start with awk ', and the step needs one");
+        Assert.True(blocks.Length is 1, $"{file} holds {blocks.Length} fenced blocks that start with awk ', and the step needs one");
         string program = blocks[0];
         Assert.True(program.Contains("<draft>", StringComparison.Ordinal) && program.Contains("<CHECK>", StringComparison.Ordinal),
             "the awk block lacks <draft> or <CHECK>");
@@ -39,15 +43,15 @@ public sealed class StarterWriteIssueSkillSteps(StarterState state)
         string directory = Path.GetDirectoryName(state.Copy)!;
         string draft = Path.Combine(directory, "draft.md");
         _check = Path.Combine(directory, "check.sh");
-        await File.WriteAllTextAsync(draft, _body);
+        await File.WriteAllTextAsync(draft, _body).ConfigureAwait(false);
 
         CommandResult result = await new CommandRunner().RunAsync(new CommandSpec
         {
             Command = "sh",
             Arguments = ["-c", program.Replace("<draft>", $"'{draft}'", StringComparison.Ordinal).Replace("<CHECK>", $"'{_check}'", StringComparison.Ordinal)],
             Timeout = TimeSpan.FromSeconds(30),
-        });
-        Assert.True(result.ExitCode == 0, $"the awk program exits with {result.ExitCode}: {result.StandardError}");
+        }).ConfigureAwait(false);
+        Assert.True(result.ExitCode is 0, $"the awk program exits with {result.ExitCode}: {result.StandardError}");
     }
 
     [Then("the saved check is this text")]
@@ -59,6 +63,7 @@ public sealed class StarterWriteIssueSkillSteps(StarterState state)
     [Then("CleanupBody reads the same check from that body")]
     public void ThenCleanupBodyReadsTheSameCheck()
     {
+        // The compare is exact, so a program that adds or drops a line feed fails it.
         string? check = CleanupBody.ReadCheck(_body);
         Assert.Equal(check is null ? "" : check + "\n", File.ReadAllText(_check));
     }

@@ -83,7 +83,7 @@ Feature: A repo made from the starter holds the skill write-issue
 
       ## The angles
 
-      **Body rules.** Read every rule of `docs/write-an-issue.md` and every row of its `## Before you file` table against the draft, one at a time. Done when each rule and each row has been read against every sentence it governs.
+      **Body rules.** Read every rule of `docs/write-an-issue.md` and every row of its `## Before you file` table against the draft, one at a time, the row `proof` aside: step 4 runs it. Done when each rule and each row has been read against every sentence it governs.
 
       **Claims against `main`.** Read each claim the draft makes about the code against the file on `main` that holds it. Read each scenario that the change adds or edits against `main`, and trace what `main` does after its `When`. A scenario that `main` already passes is a finding, unless the change is a new test for behaviour the program already has. Read each block against its feature file on `main`: it takes the form that the table of `docs/write-an-issue.md` picks, a whole-file block for a file on `main` holds each scenario of that file that the change keeps, and each name under `## Removed scenarios` is in its file. For each text the draft replaces or removes, run `git grep -n -F` over `specs` and `tests`, and check that the draft names each scenario a hit is in. For each stream or file a scenario adds lines to, find each test that counts its lines, and check that the draft names it. Done when each claim names its line on `main`, and each test the change makes false is named.
 
@@ -108,7 +108,7 @@ Feature: A repo made from the starter holds the skill write-issue
       ```
       awk '{ sub(/\r$/, ""); t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t) }
       m != "" { if (t ~ ("^" substr(m, 1, 1) "+$") && length(t) >= length(m)) { if (s) { if (c ~ /[^ \t\n]/) printf "%s", c; exit } m = "" } else if (s) c = c $0 "\n"; next }
-      t ~ /^#+[ \t]/ { if (s) exit; s = (t == "## Check"); next }
+      t ~ /^#+[ \t]/ && t !~ /^#######/ { if (s) exit; s = (t == "## Check"); next }
       match(t, /^(```+|~~~+)/) { m = substr(t, 1, RLENGTH); if (m ~ /^`/ && index(substr(t, RLENGTH + 1), "`")) m = "" }' <draft> > <CHECK>
       ```
 
@@ -515,5 +515,101 @@ Feature: A repo made from the starter holds the skill write-issue
     Then the saved check is this text
       """
       dotnet build --no-restore
+      """
+    And CleanupBody reads the same check from that body
+
+  Scenario: The awk program of PROOF.md saves no check from a blank block
+    Given the draft body
+      """
+      ## Check
+
+      ```sh
+
+      ```
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is empty
+    And CleanupBody reads the same check from that body
+
+  Scenario: The awk program of PROOF.md saves no check when the first Check heading holds no block
+    Given the draft body
+      """
+      ## Check
+
+      No block here.
+
+      ## Check
+
+      ```sh
+      false
+      ```
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is empty
+    And CleanupBody reads the same check from that body
+
+  Scenario: The awk program of PROOF.md saves the first block under the heading and no later block
+    Given the draft body
+      """
+      ## Check
+
+      ```sh
+      true
+      ```
+
+      ```sh
+      false
+      ```
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is this text
+      """
+      true
+      """
+    And CleanupBody reads the same check from that body
+
+  Scenario: The awk program of PROOF.md saves no check from a block under a subheading
+    Given the draft body
+      """
+      ## Check
+
+      ### Note
+
+      ```sh
+      false
+      ```
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is empty
+    And CleanupBody reads the same check from that body
+
+  Scenario: The awk program of PROOF.md saves no check from a heading that only starts with Check
+    Given the draft body
+      """
+      ## Checklist
+
+      ```sh
+      false
+      ```
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is empty
+    And CleanupBody reads the same check from that body
+
+  Scenario: The awk program of PROOF.md reads a line of seven hashes as text, not as a heading
+    Given the draft body
+      """
+      ## Check
+
+      ####### x
+
+      ```sh
+      true
+      ```
+      """
+    When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
+    Then the saved check is this text
+      """
+      true
       """
     And CleanupBody reads the same check from that body
