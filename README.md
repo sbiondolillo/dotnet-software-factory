@@ -47,6 +47,8 @@ The factory requests a Copilot code review of each pull request it watches, and 
 
 The repo's owner starts a run with the label `factory` on an issue. `factory.yml` names the tag `v0` of the factory.
 
+The body of an issue can hold its scenarios under the heading `## Scenarios`, and the factory then pins them as the owner wrote them. Each fenced block under the heading starts with the line `# specs/features/<name>.feature`. A whole-file block holds a `Feature:` line, and it becomes the file or replaces the file on `main`. Any other block is an upsert into the file on `main`. A scenario whose name the file holds replaces that scenario in place, and a scenario with a new name goes at the end of the file. Under the heading `## Removed scenarios`, each list item names one scenario to remove, as `` `specs/features/<name>.feature`: <scenario name> ``. The plan phase then writes only `.factory/plan.md`. A body whose scenarios are not sound gets a comment that names each fault, and no run.
+
 Create the label `review-feedback` in the new repo. The repo's owner starts a feedback run with the label `review-feedback` on a pull request. The run removes the label, so the owner applies it again for the next round.
 
 Create the label `cleanup` in the new repo. The repo's owner starts a cleanup run, a run with no plan, with the label `cleanup` on an issue that fixes a test, a config file or a document. The label `cleanup` and the label `behavior` on one issue get a comment and no run.

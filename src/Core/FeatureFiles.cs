@@ -4,6 +4,15 @@ using Reqnroll.Tracing;
 
 namespace Core;
 
+/// <summary>One scenario of a feature file's text: its name, and the first and the last 1-based line of its span.
+/// The span starts at the comment lines directly above the first tag line, or above the keyword line when there is
+/// no tag, and ends at the last line that is not blank and not a comment, before the next span.</summary>
+public sealed record ScenarioSpan(string Name, int FirstLine, int LastLine);
+
+/// <summary>The parts of a feature file's text that decide how its scenarios change: a <c>Feature:</c> line, a
+/// <c>Rule:</c>, a <c>Background:</c>, the description of the feature, and the span of each scenario in file order.</summary>
+public sealed record FeatureOutline(bool HasFeature, bool HasRule, bool HasBackground, bool HasDescription, IReadOnlyList<ScenarioSpan> Scenarios);
+
 /// <summary>Answers the two questions the factory's test-report step needs about a feature file:
 /// which scenarios it holds, and which test method Reqnroll generates for a scenario's title.
 /// Reads with Gherkin's own parser and names with Reqnroll's own identifier logic, so both
@@ -64,6 +73,85 @@ public static class FeatureFiles
         }
 
         return lines;
+    }
+
+    /// <summary>Reads the outline of <paramref name="content"/>, a feature file's text with LF line ends. A scenario's
+    /// name is the parser's name with the spaces trimmed, whatever its keyword. A scenario under a <c>Rule</c> is a
+    /// scenario of the file. Throws <see cref="FeatureFileException"/> when the parser rejects the content.</summary>
+    public static FeatureOutline ReadOutline(string path, string content)
+    {
+        GherkinDocument document = Parse(path, content);
+        if (document.Feature is null)
+        {
+            return new FeatureOutline(false, false, false, false, []);
+        }
+
+        string[] lines = content.Split('\n');
+        HashSet<int> comments = [.. document.Comments.Select(comment => comment.Location.Line)];
+        var scenarios = new List<Scenario>();
+        var bounds = new List<int>();
+        bool hasRule = false;
+        bool hasBackground = false;
+        foreach (IHasLocation child in document.Feature.Children)
+        {
+            switch (child)
+            {
+                case Rule rule:
+                    hasRule = true;
+                    bounds.Add(rule.Tags.Select(tag => tag.Location.Line).Append(rule.Location.Line).Min());
+                    foreach (IHasLocation inner in rule.Children)
+                    {
+                        if (inner is Scenario scenario)
+                        {
+                            scenarios.Add(scenario);
+                        }
+                        else if (inner is Background background)
+                        {
+                            hasBackground = true;
+                            bounds.Add(background.Location.Line);
+                        }
+                    }
+
+                    break;
+                case Background background:
+                    hasBackground = true;
+                    bounds.Add(background.Location.Line);
+                    break;
+                case Scenario scenario:
+                    scenarios.Add(scenario);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        bool IsBlankOrComment(int line) => comments.Contains(line) || lines[line - 1].Trim().Length is 0;
+
+        List<int> firsts = scenarios.ConvertAll(scenario =>
+        {
+            int first = scenario.Tags.Select(tag => tag.Location.Line).Append(scenario.Location.Line).Min();
+            while (first > 1 && comments.Contains(first - 1))
+            {
+                first--;
+            }
+
+            return first;
+        });
+        bounds.AddRange(firsts);
+        var spans = new List<ScenarioSpan>();
+        for (int i = 0; i < scenarios.Count; i++)
+        {
+            int keyword = scenarios[i].Location.Line;
+            int last = bounds.Where(bound => bound > keyword).Append(lines.Length + 1).Min() - 1;
+            while (last > keyword && IsBlankOrComment(last))
+            {
+                last--;
+            }
+
+            spans.Add(new ScenarioSpan(scenarios[i].Name.Trim(), firsts[i], last));
+        }
+
+        return new FeatureOutline(true, hasRule, hasBackground, !string.IsNullOrWhiteSpace(document.Feature.Description), spans);
     }
 
     /// <summary>Computes the name Reqnroll generates for the test method of a scenario titled
