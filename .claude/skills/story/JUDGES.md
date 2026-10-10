@@ -16,19 +16,19 @@ Done when each claim names its line on `main`, and each test the change makes fa
 
 ### Holes
 
-Find each way a build passes every scenario of the draft and still misses the request: a check that accepts too much, a text pinned in part where a reader reads all of it, a sad path the request implies and no scenario states. Prove a likely hole in a scratch worktree of `main` when a command can show it, and report the command and its output, not the code of the proof.
+Find each way a build passes every scenario of the draft and still misses the request: a check that accepts too much, a text pinned in part where a reader reads all of it, a sad path the request implies and no scenario states. A hole is proven in a scratch worktree of `main` only when the judge names three things: the scenario, the break that keeps it green, and the one command that settles it. Then report the command and its output, not the code of the proof. A hunch with no such command is reported as a sentence for `## Context`, marked `unproven`.
 
 Done when each hole names the scenario or the line of the draft that closes it.
 
 ### The story
 
-Read the draft as the owner reads it. The story asks for the change the request asks for, and no more. Each part of the body holds what step 2 of `SKILL.md` says it holds, and no more: `**What changes.**` names parts in 6 sentences or fewer, and `## Context` holds facts with their sources and no requirement. Each scenario states what a real user observes, in the names the code and the tools use. Each change of the body is reached by a scenario, or is named as an invariant. A file held whole in the body, or a block of source code, whole or in part, is a fault: the body names the path, the member and the behaviour, and the prototype holds the text.
+Read the draft as the owner reads it. The story asks for the change the request asks for, and no more. Each part of the body holds what step 2 of `SKILL.md` says it holds, and no more: `**What changes.**` names parts in 6 sentences or fewer, and `## Context` holds facts with their sources, or a hunch marked `unproven`, and no requirement. Each scenario states what a real user observes, in the names the code and the tools use. Each change of the body is reached by a scenario, or is named as an invariant. A file held whole in the body, or a block of source code, whole or in part, is a fault: the body names the path, the member and the behaviour, and the prototype holds the text.
 
 Done when each sentence of the body and each scenario has been read against the request.
 
 ## Judge a branch
 
-Give each reviewer the SHA of the commit, the SHA of the base, the path of the build worktree, and the path of the file that holds the issue's body. The reviewer works in a clone of its own, and edits nothing in the build worktree. `<scratch>` is an absolute path of its own, `<clone>` is `<scratch>/clone`, and `<HOME>` is `<scratch>/home`:
+Give each reviewer the SHA of the commit, the SHA of the base, the path of the build worktree, the path of the file that holds the issue's body, and the SHA of the prototype when `## Context` names one. The reviewer works in a clone of its own, and edits nothing in the build worktree. `<scratch>` is an absolute path of its own, `<clone>` is `<scratch>/clone`, and `<HOME>` is `<scratch>/home`:
 
 ```
 mkdir -p <scratch>/home && git clone -q <worktree> <scratch>/clone && cd <scratch>/clone && git checkout -q <SHA>
@@ -68,9 +68,11 @@ git reset -q --hard <SHA>
 
 A scenario that stays green with a file of the change put back is a finding: it pins nothing in that file.
 
+When `<SHA>` is the SHA of the prototype, the table of `## Context` stands for the runs with each file put back. The reviewer still makes the first run, to build `tests/Specs/obj` and read `<Class>`, and checks that its `Total` agrees with the table. Then it makes only the narrower mutations below. A file of `git diff --name-only <base>...<SHA>` with no row in the table gets the run with that file put back, as above.
+
 Then make two or more narrower mutations of the new code. Each one is an edit that the controls of the body do not cover: a bound off by one, a branch inverted, a line of a pinned text changed. Run the features for each, and restore the commit after each. A mutation that no scenario fails is a finding, with the scenario that should fail it.
 
-Done when the first run on `<SHA>` has its `Total`, each changed file has its list of scenarios that stay green, and two or more narrower mutations have theirs.
+Done when the first run on `<SHA>` has its `Total`, each changed file has its list of scenarios that stay green or its row in the table of `## Context`, and two or more narrower mutations have theirs.
 
 ### Regressions and style
 

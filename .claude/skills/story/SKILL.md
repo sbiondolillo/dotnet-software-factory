@@ -34,17 +34,17 @@ Write the title and the body to a file in the session's scratch directory. The t
 | `**What changes.**` | Each file and each program that a scenario names, with the kind of each thing and what it does after the change. Then each invariant, such as "Every other test passes unchanged". 6 sentences or fewer. |
 | `## Scenarios` | One fenced `gherkin` block for each feature file the change adds or edits, whose first line is `# specs/features/<name>.feature`. The scenarios are the tests, word for word, each with its steps. A doc string or a table that a step needs is in the block. |
 | `## Removed scenarios` | One list item for each scenario the change removes: its feature file's path, a colon, and its name. Absent when there is none. |
-| `## Context` | Its first line is `` `main` at `<full SHA>` ``. Then each fact of the world that a scenario or a build needs, with its source: a line on `main`, a probe with its date, a decision with its reason. The prototype's branch and its diff, when one exists. |
+| `## Context` | Its first line is `` `main` at `<full SHA>` ``. Then each fact of the world that a scenario or a build needs, with its source: a line on `main`, a probe with its date, a decision with its reason. The prototype's branch and its diff, when one exists. A hunch of a judge is marked `unproven`. |
 
 The body holds no file whole and no block of source code, whole or in part: not a file, a member or a line. A code change is named by its path, its member or its key, and what it does after the change. A string the code writes, such as a message or a line of output, is quoted. A change to a text that a scenario pins, such as a skill, a template or a page, goes on the prototype. The owner reads it there as a diff. A scenario that pins a file whole by a doc string is replaced by steps on its key lines, `the file {string} of this repo holds a line that holds {string}` and `holds no line that holds`, and the prototype holds the file. A doc string in a block is the text a step compares, not a file of the repo. Each scenario states what a real user observes. A step text that a class of `tests/Specs/Steps/` already binds runs that binding: use that text for the same meaning, and other words for a new meaning.
 
-When the draft needs proof, or changes a text that a scenario pins, this session builds the change in a scratch worktree of `main`, `git worktree add --detach <scratch dir> <main SHA>`: the **prototype**. `## Context` reports what it showed, in a table: each mutation, and the scenario that failed it or the word `pass`. The code of the prototype stays out of the body. Commit the prototype when it passes the checks of step 6, and keep its worktree for step 4. Discard it otherwise.
+A **prototype** is built for two reasons only: a change to a text that a scenario pins, so the owner reads a diff, or a hole that a judge named with its scenario, its break and its command. This session builds it in a scratch worktree of `main`, `git worktree add --detach <scratch dir> <main SHA>`. Any other draft has no prototype. Code is not such a text: a scenario pins what code does. `## Context` reports what it showed, in a table: each mutation, and the scenario that failed it or the word `pass`. The code of the prototype stays out of the body. The rows are the prototype as it is, each changed file of `main` put back on its own, and each narrower mutation. A prototype for a named hole has a row for the break the judge named, and a scenario of the draft fails it. Commit the prototype when it passes the checks of step 6, and keep its worktree for step 4. Discard it otherwise.
 
 Done when a contributor with no access to this session could build the change from the body and the prototype alone.
 
 ### 3. Judge the draft
 
-Run the three angles of [`JUDGES.md`](JUDGES.md) → "Judge a draft" on the file, as three subagents in parallel. Read each fault against `main` before you act on it. Apply every fix in one pass, and run step 1 again for a claim the fix changes. The judges' own proofs are not the prototype.
+Run the three angles of [`JUDGES.md`](JUDGES.md) → "Judge a draft" on the file, as three subagents in parallel. Read each fault against `main` before you act on it. Apply every fix in one pass. Run step 1 again for a claim the fix changes. Build the prototype of step 2 for a hole that a judge named with its scenario, its break and its command. A hunch marked `unproven` goes into `## Context` as it is, and gets no prototype. The judges' own proofs are not the prototype.
 
 Done when each fault is fixed in the draft or refuted with its evidence.
 
@@ -125,6 +125,7 @@ Run the three angles of [`JUDGES.md`](JUDGES.md) → "Judge a branch" on the com
 - the full SHA of the base, from `git fetch -q origin && git rev-parse origin/main`
 - the path of this worktree
 - the issue number, and the path of a file that holds its body
+- the full SHA of the prototype, from `git rev-parse origin/design/<n>`, when `## Context` names one
 
 Read each finding against the branch before you act on it. Each finding gets a fix on the branch or a refutation with its evidence. A fix is a new commit, and runs the checks of step 6 again.
 

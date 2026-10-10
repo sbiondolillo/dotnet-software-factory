@@ -14,5 +14,9 @@ public sealed class StorySkillSteps
     public static void ThenRepoFileHoldsNoLineThatHolds(string file, string text)
         => Assert.DoesNotContain(Lines(file), line => line.Contains(text, StringComparison.Ordinal));
 
+    [Then("the file {string} of this repo holds the line {string}")]
+    public static void ThenRepoFileHoldsTheLine(string file, string text)
+        => Assert.Contains(text, Lines(file));
+
     private static string[] Lines(string file) => File.ReadAllLines(Path.Combine(StarterChecks.RepoRoot(), file));
 }
