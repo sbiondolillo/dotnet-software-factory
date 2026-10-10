@@ -64,9 +64,8 @@ Feature: A repo made from the starter holds the factory's three workflows
 
   @bullet-18
   Scenario: The README names the secrets and the token's access
-    # run: printf '%s\n' '## Start a new repo' 'FACTORY_GITHUB_TOKEN' 'ANTHROPIC_API_KEY' 'FACTORY_GITHUB_TOKEN' 'Contents' 'Issues' 'Pull requests' 'Contents' 'sbiondolillo/dotnet-software-factory'
     Then the README section "## Start a new repo" names the Actions secrets "FACTORY_GITHUB_TOKEN" and "ANTHROPIC_API_KEY"
-    And it says that "FACTORY_GITHUB_TOKEN" is a fine-grained token with read and write access to "Contents", "Issues" and "Pull requests" on the new repo, and read access to "Contents" on "sbiondolillo/dotnet-software-factory"
+    And it says that "FACTORY_GITHUB_TOKEN" is a fine-grained token that selects the new repo with read and write access to "Contents", "Issues" and "Pull requests", and also selects "sbiondolillo/dotnet-software-factory" while that repo is private
 
   @bullet-20
   Scenario: The README says main is protected with two required checks
