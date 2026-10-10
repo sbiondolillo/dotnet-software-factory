@@ -30,4 +30,16 @@ public sealed class StarterAgentsSteps(StarterState state)
         StarterChecks.TextEquals(path, docString);
         Assert.Contains(File.ReadAllLines(path), have => have.Contains(line, StringComparison.Ordinal));
     }
+
+    [Then("the copy's file {string} holds the line {string}")]
+    public void ThenTheCopysFileHoldsTheLine(string file, string line)
+        => Assert.Contains(line, File.ReadAllLines(Path.Combine(state.Copy, file)));
+
+    [Then("the copy's file {string} holds a line that holds {string}")]
+    public void ThenTheCopysFileHoldsALineThatHolds(string file, string text)
+        => Assert.Contains(File.ReadAllLines(Path.Combine(state.Copy, file)), line => line.Contains(text, StringComparison.Ordinal));
+
+    [Then("the copy's file {string} holds no line that holds {string}")]
+    public void ThenTheCopysFileHoldsNoLineThatHolds(string file, string text)
+        => Assert.DoesNotContain(File.ReadAllLines(Path.Combine(state.Copy, file)), line => line.Contains(text, StringComparison.Ordinal));
 }

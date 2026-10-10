@@ -46,7 +46,9 @@ Done when a contributor with no access to this session could build the change fr
 
 Run the three angles of [`JUDGES.md`](JUDGES.md) → "Judge a draft" on the file, as three subagents in parallel. Read each fault against `main` before you act on it. Apply every fix in one pass. Run step 1 again for a claim the fix changes. Build the prototype of step 2 for a hole that a judge named with its scenario, its break and its command. A hunch marked `unproven` goes into `## Context` as it is, and gets no prototype. The judges' own proofs are not the prototype.
 
-Done when each fault is fixed in the draft or refuted with its evidence.
+The run above is round 1. When an angle of round 1 rejects, run the three angles again on the fixed draft. This is round 2, and the last round. Act on each fault of round 2 as above, except a hole. A hole of round 2 goes into `## Context` as a line with its scenario, its break, its command and the output, and gets no fix and no prototype. No round 3 runs, and the owner is not asked for one.
+
+Done when each fault of round 1 and of round 2 is fixed in the draft, refuted with its evidence, or, for a hole of round 2, in `## Context`.
 
 ### 4. File the story
 

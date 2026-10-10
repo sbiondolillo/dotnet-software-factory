@@ -6,7 +6,7 @@ Reference for [`story`](SKILL.md). "Judge a draft" is step 3, and "Judge a branc
 
 Give each judge the path of the draft, the request in the owner's words, the `main` SHA, and the path of the prototype worktree when one exists.
 
-Each judge reports each fault with the quoted text, the evidence as a path and a line, and the replacement text. Then it gives one line for each thing it found clean.
+Each judge reports `accept` or `reject`, and `accept` has no fault. Then it reports each fault with the quoted text, the evidence as a path and a line, and the replacement text. Then it gives one line for each thing it found clean.
 
 ### Claims against `main`
 
@@ -18,7 +18,9 @@ Done when each claim names its line on `main`, and each test the change makes fa
 
 Find each way a build passes every scenario of the draft and still misses the request: a check that accepts too much, a text pinned in part where a reader reads all of it, a sad path the request implies and no scenario states. A hole is proven in a scratch worktree of `main` only when the judge names three things: the scenario, the break that keeps it green, and the one command that settles it. Then report the command and its output, not the code of the proof. A hunch with no such command is reported as a sentence for `## Context`, marked `unproven`.
 
-Done when each hole names the scenario or the line of the draft that closes it.
+A check pins the claim of the story, not the program. A break that the build or the test suite catches is not a hole. `Holes` accepts when each remaining hole needs a change that no scenario of the request implies.
+
+Done when each hole names the scenario or the line of the draft that closes it, or the change it needs that no scenario of the request implies.
 
 ### The story
 
