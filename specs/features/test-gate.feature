@@ -15,7 +15,6 @@ Feature: Test gate
   Scenario: The integration command alone gets the secret names
     Given a passing run
     When a caller runs the test gate with the names "API_KEY" and "SERVICE_TOKEN"
-    # run: printf 'API_KEY\nSERVICE_TOKEN\n'
     Then the integration command ran with the names "API_KEY" and "SERVICE_TOKEN"
     And each of the other four commands ran with no name
 
@@ -25,7 +24,6 @@ Feature: Test gate
     When a caller runs the test gate
     Then no command ran
     And the test gate gives back a failed result
-    # run: printf 'specs/features/checkout.feature\nglobal.json\n'
     And the evidence names "specs/features/checkout.feature" and "global.json"
 
   @bullet-4
@@ -62,7 +60,6 @@ Feature: Test gate
     When a caller runs the test gate
     Then the test command was the last command
     And the test gate gives back a failed result
-    # run: printf '1'
     And the evidence names the test command and holds the code 1 and both reasons
 
   @bullet-8
@@ -79,7 +76,6 @@ Feature: Test gate
     When a caller runs the test gate
     Then the test command was the last command
     And the test gate gives back a failed result
-    # run: printf 'Specs.Unit.CheckoutTests\nAddsTwoPrices\nAssert.Equal() Failure: Values differ\n'
     And the evidence names "Specs.Unit.CheckoutTests" and "AddsTwoPrices" and holds 'Assert.Equal() Failure: Values differ'
 
   @bullet-10
@@ -89,7 +85,6 @@ Feature: Test gate
     When a caller runs the test gate
     Then the test command was the last command
     And the test gate gives back a failed result
-    # run: printf 'Specs.Unit.CheckoutTests\nAddsInFrench\n'
     And the evidence names "Specs.Unit.CheckoutTests" and "AddsInFrench"
 
   @bullet-11
@@ -98,7 +93,6 @@ Feature: Test gate
     And the test command exits with the code 0 and writes a TRX file with only the passed test "AddsTwoPrices" of the class "Specs.Unit.CheckoutTests"
     When a caller runs the test gate
     Then the test gate gives back a failed result
-    # run: printf 'specs/features/checkout.feature\nThe total is the sum of the prices\nTheTotalIsTheSumOfThePrices\n'
     And the evidence names "specs/features/checkout.feature", "The total is the sum of the prices" and "TheTotalIsTheSumOfThePrices"
 
   @bullet-12
@@ -107,7 +101,6 @@ Feature: Test gate
     And the test command exits with the code 1 and writes a TRX file with two results of the test "TheTotalIsTheSumOfThePrices" of the class "Specs.Features.CheckoutFeature", one passed and one failed
     When a caller runs the test gate
     Then the test gate gives back a failed result
-    # run: printf 'TheTotalIsTheSumOfThePrices\n'
     And the evidence names "TheTotalIsTheSumOfThePrices"
 
   @bullet-13
@@ -126,7 +119,6 @@ Feature: Test gate
     When a caller runs the test gate
     Then the test gate gives back a failed result
     And the evidence is one text
-    # run: printf '1'
     And the evidence names the test command and holds the code 1 and the reason
 
   @bullet-15
@@ -135,5 +127,4 @@ Feature: Test gate
     And the integration command exits with the code 1 and writes a summary to standard output
     When a caller runs the test gate
     Then the test gate gives back a failed result
-    # run: printf '1'
     And the evidence names the integration command and holds the code 1 and the summary

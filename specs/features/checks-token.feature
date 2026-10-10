@@ -8,9 +8,7 @@ Feature: The console program reads the check runs with FACTORY_CHECKS_TOKEN when
   Scenario: run reads the check runs with the checks token
     Given the environment holds "FACTORY_CHECKS_TOKEN" set to "checks-token-2"
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
-    # run: printf 'Authorization\nBearer checks-token-2'
     Then every read of the check runs holds the header "Authorization" with the value "Bearer checks-token-2"
-    # run: printf 'Authorization\nBearer github-token-1'
     And every other request to GitHub's API holds the header "Authorization" with the value "Bearer github-token-1"
 
   @bullet-2
@@ -18,19 +16,15 @@ Feature: The console program reads the check runs with FACTORY_CHECKS_TOKEN when
     Given the environment holds "FACTORY_CHECKS_TOKEN" set to "checks-token-2"
     And GitHub answers each read of the review threads with no thread
     When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10"
-    # run: printf 'Authorization\nBearer checks-token-2'
     Then every read of the check runs holds the header "Authorization" with the value "Bearer checks-token-2"
-    # run: printf 'Authorization\nBearer github-token-1'
     And every other request to GitHub's API holds the header "Authorization" with the value "Bearer github-token-1"
 
   @bullet-3
   Scenario: run without the checks token reads the check runs with the GitHub token
     Given the environment lacks "FACTORY_CHECKS_TOKEN"
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
-    # run: printf 'Authorization\nBearer github-token-1\nAuthorization\nBearer github-token-1'
     Then every read of the check runs holds the header "Authorization" with the value "Bearer github-token-1"
     And every other request to GitHub's API holds the header "Authorization" with the value "Bearer github-token-1"
-    # run: printf '0'
     And the exit code is 0
 
   @bullet-4
@@ -38,13 +32,10 @@ Feature: The console program reads the check runs with FACTORY_CHECKS_TOKEN when
     Given the environment lacks "FACTORY_CHECKS_TOKEN"
     And GitHub answers each read of the review threads with no thread
     When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10"
-    # run: printf 'Authorization\nBearer github-token-1\nAuthorization\nBearer github-token-1'
     Then every read of the check runs holds the header "Authorization" with the value "Bearer github-token-1"
     And every other request to GitHub's API holds the header "Authorization" with the value "Bearer github-token-1"
-    # run: printf '0'
     And the exit code is 0
 
   @bullet-7
   Scenario: The README says the job's own token is passed as FACTORY_CHECKS_TOKEN
-    # run: printf '%s\n' '## Start a new repo' '`factory.yml` and `review-feedback.yml` pass the job'"'"'s own token to the factory as `FACTORY_CHECKS_TOKEN`, with the permission `checks: read`. The factory reads the check runs of each pull request with it, on a public repo and on a private repo alike. A fine-grained token has no Checks permission, so `FACTORY_GITHUB_TOKEN` reads check runs on a public repo only.' '`FACTORY_GITHUB_TOKEN` is a fine-grained token'
     Then the README section "## Start a new repo" holds the line "`factory.yml` and `review-feedback.yml` pass the job's own token to the factory as `FACTORY_CHECKS_TOKEN`, with the permission `checks: read`. The factory reads the check runs of each pull request with it, on a public repo and on a private repo alike. A fine-grained token has no Checks permission, so `FACTORY_GITHUB_TOKEN` reads check runs on a public repo only." after the line that starts "`FACTORY_GITHUB_TOKEN` is a fine-grained token"

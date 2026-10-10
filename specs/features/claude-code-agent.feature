@@ -5,7 +5,6 @@ Feature: ClaudeCodeAgent runs one prompt in the sandbox and reads a JSON file th
     Given a ClaudeCodeAgent built over a Sandbox over a mock CommandRunner
     And docker exec exits with the code 0 and writes to standard output '{"is_error":false,"num_turns":1,"total_cost_usd":0.0098972,"result":"ok"}'
     When a caller runs the prompt "Reply with the single word ok and nothing else." with the model "claude-haiku-4-5-20251001" and the turn limit 4
-    # run: printf 'claude\n-p\nReply with the single word ok and nothing else.\n--model\nclaude-haiku-4-5-20251001\n--max-turns\n4'
     Then the docker exec arguments hold "claude" right after the container id, then "-p" and then "Reply with the single word ok and nothing else.", "--model" and then "claude-haiku-4-5-20251001", and "--max-turns" and then "4"
 
   @bullet-2
@@ -14,7 +13,6 @@ Feature: ClaudeCodeAgent runs one prompt in the sandbox and reads a JSON file th
     And docker exec exits with the code 0 and writes to standard output '{"type":"result","subtype":"success","is_error":false,"num_turns":1,"total_cost_usd":0.0098972,"result":"ok"}'
     When a caller runs the prompt "Reply with the single word ok and nothing else." with the model "claude-haiku-4-5-20251001" and the turn limit 1
     Then the result error flag is false
-    # run: printf '1\n0.0098972\nok'
     And the result has the turn count 1, the cost 0.0098972 and the result text "ok"
 
   @bullet-3
@@ -23,7 +21,6 @@ Feature: ClaudeCodeAgent runs one prompt in the sandbox and reads a JSON file th
     And docker exec exits with the code 1 and writes to standard output '{"type":"result","subtype":"error_max_turns","is_error":true,"num_turns":2,"total_cost_usd":0.0044689,"errors":[]}'
     When a caller runs the prompt "Write a file." with the model "claude-haiku-4-5-20251001" and the turn limit 1
     Then the result error flag is true
-    # run: printf '2\n0.0044689'
     And the result has the turn count 2, the cost 0.0044689 and an empty result text
 
   @bullet-4
@@ -32,7 +29,6 @@ Feature: ClaudeCodeAgent runs one prompt in the sandbox and reads a JSON file th
     And docker exec exits with the code 1 and writes to standard output '{"type":"result","is_error":true,"num_turns":1,"total_cost_usd":0,"result":"Invalid API key"}'
     When a caller runs the prompt "Say hi." with the model "claude-haiku-4-5-20251001" and the turn limit 1
     Then the result error flag is true
-    # run: printf '1\n0'
     And the result has the turn count 1 and the cost 0
     And the result text is the sentence the JSON object holds
 
@@ -42,7 +38,6 @@ Feature: ClaudeCodeAgent runs one prompt in the sandbox and reads a JSON file th
     And docker exec exits with the code 1, writes nothing to standard output and writes a reason to standard error
     When a caller runs the prompt "Say hi." with the model "claude-haiku-4-5-20251001" and the turn limit 1
     Then the run throws ClaudeCodeException
-    # run: printf '1'
     And the exception message holds "1" and the reason
 
   @bullet-6
@@ -50,7 +45,6 @@ Feature: ClaudeCodeAgent runs one prompt in the sandbox and reads a JSON file th
     Given a ClaudeCodeAgent built over a Sandbox over a mock CommandRunner
     And docker exec exits with the code 0 and writes to standard output '{"is_error":false,"num_turns":1,"total_cost_usd":0.001,"result":"ok"}'
     When a caller runs a prompt of 131071 characters, each one the letter "a", with the model "claude-haiku-4-5-20251001" and the turn limit 1
-    # run: printf -- '-p'
     Then the docker exec arguments hold "-p" and then that prompt
 
   @bullet-7
@@ -58,7 +52,6 @@ Feature: ClaudeCodeAgent runs one prompt in the sandbox and reads a JSON file th
     Given a ClaudeCodeAgent built over a Sandbox over a mock CommandRunner
     When a caller runs a prompt of 131072 characters, each one the letter "a", with the model "claude-haiku-4-5-20251001" and the turn limit 1
     Then the run throws ClaudeCodeException
-    # run: printf '131072'
     And the exception message holds "131072"
     And the runner runs no docker exec
 
@@ -67,7 +60,6 @@ Feature: ClaudeCodeAgent runs one prompt in the sandbox and reads a JSON file th
     Given a ClaudeCodeAgent built over a Sandbox over a mock CommandRunner
     And a file at a path holds '{"verdict":"approved","items":[]}'
     When the caller reads the JSON file at the path
-    # run: printf 'verdict\napproved\nitems\n0'
     Then the document root has the property "verdict" with the value "approved" and the property "items" with 0 elements
 
   @bullet-9

@@ -9,14 +9,12 @@ Feature: The factory requests the Copilot review of each pull request it watches
     Given a ReviewThreads built over a GitHub client
     And GitHub answers the read of reviews with one review with the author login "copilot-pull-request-reviewer", the state "COMMENTED" and the commit "d7d0afd495cc64aa2ac153de8d001ad8d86fe074"
     When a caller reads the reviews of pull request 30 of the repo "factory-scratch" of the owner "sbiondolillo"
-    # run: printf 'copilot-pull-request-reviewer\nCOMMENTED\nd7d0afd495cc64aa2ac153de8d001ad8d86fe074'
     Then ReviewThreads returns one review with the author "copilot-pull-request-reviewer", the state "COMMENTED" and the commit "d7d0afd495cc64aa2ac153de8d001ad8d86fe074"
 
   @bullet-2
   Scenario: A watch with no review of the head commit requests the Copilot review
     Given GitHub answers each read of the reviews with no review
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
-    # run: printf 'requestReviewsByLogin\ncopilot-pull-request-reviewer'
     Then GitHub gets one GraphQL request that names "requestReviewsByLogin" with the bot login "copilot-pull-request-reviewer"
 
   @bullet-2
@@ -24,7 +22,6 @@ Feature: The factory requests the Copilot review of each pull request it watches
     Given GitHub answers each read of the review threads with the thread A
     And GitHub answers each read of the reviews with no review
     When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10"
-    # run: printf 'requestReviewsByLogin\ncopilot-pull-request-reviewer'
     Then GitHub gets one GraphQL request that names "requestReviewsByLogin" with the bot login "copilot-pull-request-reviewer"
 
   @bullet-2
@@ -32,7 +29,6 @@ Feature: The factory requests the Copilot review of each pull request it watches
     Given GitHub answers each read of the reviews with one review with the author login "copilot-pull-request-reviewer", the state "COMMENTED" and the commit "9e107d9d372bb6826bd81d3542a419d6f0a3c1b2"
     And GitHub answers each read of the head commit of the pull request 10 with "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c"
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
-    # run: printf 'requestReviewsByLogin\ncopilot-pull-request-reviewer'
     Then GitHub gets one GraphQL request that names "requestReviewsByLogin" with the bot login "copilot-pull-request-reviewer"
 
   @bullet-2
@@ -48,7 +44,6 @@ Feature: The factory requests the Copilot review of each pull request it watches
     Given GitHub answers each read of the head commit of the pull request 10 with "9e107d9d372bb6826bd81d3542a419d6f0a3c1b2"
     And GitHub answers each read of the reviews with no review
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
-    # run: printf '10'
     Then the review request comes 10 seconds or more after the push
     And the review request comes before the first read of the check runs
 
@@ -73,7 +68,6 @@ Feature: The factory requests the Copilot review of each pull request it watches
     And GitHub answers the review request with a GraphQL error
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
     Then standard error holds a line with the message of the GraphQL error
-    # run: printf '1'
     And the exit code is 1
 
   @bullet-5
@@ -86,7 +80,6 @@ Feature: The factory requests the Copilot review of each pull request it watches
     And GitHub answers the read of the review threads with one unresolved thread with the id "PRRT_kwDOUpm1Qc6obG9o", the path "probe-m19-1790961068.txt", the line 2 and one comment by "sbiondolillo" with the body "Name the unit."
     When a caller starts the watch
     Then the watch gives back a green result
-    # run: printf '%s\n' 'PRRT_kwDOUpm1Qc6obG9o'
     And the watch result holds the one thread "PRRT_kwDOUpm1Qc6obG9o"
 
   @bullet-6

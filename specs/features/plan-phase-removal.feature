@@ -9,7 +9,6 @@ Feature: The plan phase removes each feature file whose behaviour the issue remo
   Scenario: The first prompt tells the agent to remove such a feature file
     Given the agent on the first run writes the sound feature file and the plan
     When I run the plan phase
-    # run: printf '%s' 'Remove each feature file whose behaviour the issue removes or replaces.'
     Then the first prompt holds "Remove each feature file whose behaviour the issue removes or replaces."
 
   @bullet-2
@@ -20,7 +19,6 @@ Feature: The plan phase removes each feature file whose behaviour the issue remo
     When I run the plan phase
     Then the plan phase ran one prompt
     And the result is passed
-    # run: printf '%s' 'specs/features/checkout.feature'
     And the pin holds only "specs/features/checkout.feature"
 
   @bullet-3
@@ -32,7 +30,6 @@ Feature: The plan phase removes each feature file whose behaviour the issue remo
     When I run the plan phase
     Then the plan phase ran one prompt
     And the result is passed
-    # run: printf '%s' 'specs/features/checkout.feature'
     And the pin holds only "specs/features/checkout.feature"
 
   @bullet-4
@@ -42,5 +39,4 @@ Feature: The plan phase removes each feature file whose behaviour the issue remo
     And the agent on every run writes the plan
     When I run the plan phase
     Then the result is failed
-    # run: printf '%s' 'specs/features/'
     And a failure names "specs/features/"

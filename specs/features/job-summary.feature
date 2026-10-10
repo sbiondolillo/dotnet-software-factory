@@ -38,7 +38,6 @@ Feature: A run writes a job summary with one row for each phase and the reason f
     And the first build answer comes 300 seconds after its prompt
     And the lint gate after the first build takes 15 seconds
     When the run delivers with 0 Redos
-    # run: python3 -c 'print("build 1");print(300+15)'
     Then the row "build 1" has the seconds 315
 
   @bullet-3
@@ -46,9 +45,7 @@ Feature: A run writes a job summary with one row for each phase and the reason f
     Given the issue has no recipe label
     And the first test gate is red with a Redo text of two lines, "dotnet test exited with the code 1" and "second line of the text"
     When the run delivers with 1 Redo
-    # run: printf '%s\n' '- Redo 1, after test 1: dotnet test exited with the code 1'
     Then the Redos list holds the item "- Redo 1, after test 1: dotnet test exited with the code 1"
-    # run: printf '%s\n' 'second line of the text'
     And the summary does not hold "second line of the text"
 
   @bullet-4
@@ -56,7 +53,6 @@ Feature: A run writes a job summary with one row for each phase and the reason f
     Given the issue has no recipe label
     And the first review blocks the first build with the item "The total ignores the second item of the cart."
     When the run delivers with 1 Redo
-    # run: printf '%s\n' 'review 1' 'blocked'
     Then the row "review 1" has the result "blocked"
 
   @bullet-5
@@ -64,7 +60,6 @@ Feature: A run writes a job summary with one row for each phase and the reason f
     Given the issue has no recipe label
     And the first review blocks the first build with the item "The total ignores the second item of the cart."
     When the run delivers with 1 Redo
-    # run: printf '%s\n' '- Redo 1, after review 1: The total ignores the second item of the cart.'
     Then the Redos list holds the item "- Redo 1, after review 1: The total ignores the second item of the cart."
 
   @bullet-6
@@ -88,7 +83,6 @@ Feature: A run writes a job summary with one row for each phase and the reason f
     And the first plan answer has 7 turns and the cost "0.4213", 31 seconds after its prompt
     And the second plan answer has 5 turns and the cost "0.2000", 20 seconds after its prompt
     When the run delivers with 0 Redos
-    # run: printf '%s\n' '| plan | 51 | 12 | $0.6213 | passed |'
     Then the summary holds the row "| plan | 51 | 12 | $0.6213 | passed |"
 
   @bullet-8
@@ -107,7 +101,6 @@ Feature: A run writes a job summary with one row for each phase and the reason f
     Given the issue has the label "cleanup"
     And the check exits with the code 0 after the first build
     When the run delivers with 0 Redos
-    # run: printf '%s\n' 'check 1' 'green'
     Then the row "check 1" has the result "green"
 
   @bullet-10
@@ -115,7 +108,6 @@ Feature: A run writes a job summary with one row for each phase and the reason f
     Given the issue has the label "cleanup"
     And the check exits with the code 1 after the first build
     When the run delivers with 1 Redo
-    # run: printf '%s\n' 'check 1' 'red'
     Then the row "check 1" has the result "red"
 
   @bullet-11
@@ -146,6 +138,5 @@ Feature: A run writes a job summary with one row for each phase and the reason f
     Given the environment variable GITHUB_STEP_SUMMARY names a file that holds the text "earlier step text"
     And the issue has no recipe label
     When the run delivers with 0 Redos
-    # run: printf '%s\n' 'earlier step text'
     Then the summary file starts with the text "earlier step text"
     And the summary file holds the summary after that text

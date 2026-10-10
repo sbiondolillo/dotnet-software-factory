@@ -9,9 +9,7 @@ Feature: The plan phase writes the scenarios and the plan, and the scenarios are
   Scenario: The first prompt carries the issue, the model and the turn limit
     Given the agent on the first run writes the sound feature file and the plan
     When I run the plan phase
-    # run: printf '%s\n' 'claude-haiku-4-5-20251001' 40
     Then the first prompt ran with the model "claude-haiku-4-5-20251001" and the turn limit 40
-    # run: printf '%s\n' 'Add a checkout total' 'The checkout shows the total of the cart.' 'specs/features/' '.factory/plan.md'
     And the first prompt holds "Add a checkout total", "The checkout shows the total of the cart.", "specs/features/" and ".factory/plan.md"
 
   @bullet-2
@@ -20,7 +18,6 @@ Feature: The plan phase writes the scenarios and the plan, and the scenarios are
     When I run the plan phase
     Then the plan phase ran one prompt
     And the result is passed
-    # run: printf 'specs/features/checkout.feature'
     And the pin holds "specs/features/checkout.feature" with the hash of its bytes
 
   @bullet-3
@@ -44,7 +41,6 @@ Feature: The plan phase writes the scenarios and the plan, and the scenarios are
     Given the agent on every run writes the plan
     When I run the plan phase
     Then the result is failed
-    # run: printf 'specs/features/'
     And a failure names "specs/features/"
 
   @bullet-6
@@ -52,7 +48,6 @@ Feature: The plan phase writes the scenarios and the plan, and the scenarios are
     Given the agent on every run writes the sound feature file
     When I run the plan phase
     Then the result is failed
-    # run: printf '.factory/plan.md'
     And a failure names ".factory/plan.md"
 
   @bullet-7
@@ -61,7 +56,6 @@ Feature: The plan phase writes the scenarios and the plan, and the scenarios are
     And the agent on every run writes the file "specs/features/broken.feature" with the text "This is not a feature file."
     When I run the plan phase
     Then the result is failed
-    # run: printf 'specs/features/broken.feature'
     And a failure names "specs/features/broken.feature"
 
   @bullet-8
@@ -70,7 +64,6 @@ Feature: The plan phase writes the scenarios and the plan, and the scenarios are
     And the agent on every run writes the file "specs/features/empty.feature" with no text
     When I run the plan phase
     Then the result is failed
-    # run: printf 'specs/features/empty.feature'
     And a failure names "specs/features/empty.feature"
 
   @bullet-9
@@ -79,7 +72,6 @@ Feature: The plan phase writes the scenarios and the plan, and the scenarios are
     And the agent on every run writes the file "src/Core/Extra.cs" with the text "class Extra {}"
     When I run the plan phase
     Then the result is failed
-    # run: printf 'src/Core/Extra.cs'
     And a failure names "src/Core/Extra.cs"
 
   @bullet-10
@@ -89,7 +81,6 @@ Feature: The plan phase writes the scenarios and the plan, and the scenarios are
     And the agent on every run changes one byte of "global.json"
     When I run the plan phase
     Then the result is failed
-    # run: printf 'global.json'
     And a failure names "global.json"
 
   @bullet-11
@@ -99,14 +90,12 @@ Feature: The plan phase writes the scenarios and the plan, and the scenarios are
     And the agent on every run removes "README.md"
     When I run the plan phase
     Then the result is failed
-    # run: printf 'README.md'
     And a failure names "README.md"
 
   @bullet-12
   Scenario: The second prompt holds the issue and the failure of the first run
     Given the agent on the first run writes the sound feature file, the plan and the file "src/Core/Extra.cs"
     When I run the plan phase
-    # run: printf '%s\n' 'Add a checkout total' 'The checkout shows the total of the cart.' 'src/Core/Extra.cs'
     Then the second prompt holds "Add a checkout total", "The checkout shows the total of the cart." and "src/Core/Extra.cs"
 
   @bullet-13
@@ -115,7 +104,6 @@ Feature: The plan phase writes the scenarios and the plan, and the scenarios are
     And the agent on the second run removes "src/Core/Extra.cs"
     When I run the plan phase
     Then the result is passed
-    # run: printf 'specs/features/checkout.feature'
     And the pin holds "specs/features/checkout.feature"
 
   @bullet-14
@@ -126,9 +114,7 @@ Feature: The plan phase writes the scenarios and the plan, and the scenarios are
     When I run the plan phase
     Then the plan phase ran two prompts
     And the result is failed
-    # run: printf '1'
     And the result holds 1 failure
-    # run: printf 'src/Core/Other.cs'
     And the failure names "src/Core/Other.cs"
 
   @bullet-15
@@ -136,7 +122,6 @@ Feature: The plan phase writes the scenarios and the plan, and the scenarios are
     Given claude answers each prompt with the error flag set and the result text "Invalid API key"
     When I run the plan phase
     Then the result is failed
-    # run: printf 'Invalid API key'
     And a failure holds "Invalid API key"
 
   @bullet-16

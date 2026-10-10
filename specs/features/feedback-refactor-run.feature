@@ -20,7 +20,6 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     And the issue 15 has the label "refactor"
     And the build changes "tests/Specs/Steps/GreetingSteps.cs"
     When a caller starts a feedback run
-    # run: printf '%s' 'pin: tests/Specs/Steps/GreetingSteps.cs'
     Then the next build prompt holds a Redo text that holds "pin: tests/Specs/Steps/GreetingSteps.cs"
     And no review prompt runs before it
 
@@ -30,7 +29,6 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     And the issue 15 has the label "refactor"
     And the build adds the file "tests/Specs/Unit/GreetingTests.cs"
     When a caller starts a feedback run
-    # run: printf '%s' 'pin: tests/Specs/Unit/GreetingTests.cs'
     Then the next build prompt holds a Redo text that holds "pin: tests/Specs/Unit/GreetingTests.cs"
     And no review prompt runs before it
 
@@ -40,7 +38,6 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     And the issue 15 has the label "refactor"
     And the build changes "tests/Integration/GreetingTests.cs"
     When a caller starts a feedback run
-    # run: printf '%s' 'pin: tests/Integration/GreetingTests.cs'
     Then the next build prompt holds a Redo text that holds "pin: tests/Integration/GreetingTests.cs"
     And no review prompt runs before it
 
@@ -50,7 +47,6 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     And the issue 15 has the label "refactor"
     And the build changes "specs/features/greeting.feature"
     When a caller starts a feedback run
-    # run: printf '%s' 'pin: specs/features/greeting.feature'
     Then the next build prompt holds a Redo text that holds "pin: specs/features/greeting.feature"
     And no review prompt runs before it
 
@@ -79,7 +75,6 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     And the issue 15 has the label "refactor" and the line "grep -q Greeting src/Core/Greeter.cs" in the first fenced block under "## Check"
     And the check command exits with the code 0 after the build
     When a caller starts a feedback run
-    # run: printf '%s' 'grep -q Greeting src/Core/Greeter.cs'
     Then the feedback run runs "grep -q Greeting src/Core/Greeter.cs" under sh in a copy of the work tree after the test gate passes
 
   @bullet-8
@@ -88,7 +83,6 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     And the issue 15 has the label "refactor" and the line "grep -q Greeting src/Core/Greeter.cs" under "## Check"
     And the check command exits with the code 1 after the build
     When a caller starts a feedback run
-    # run: printf '%s' 'The check command exited with the code 1'
     Then the next build prompt holds a Redo text that holds "The check command exited with the code 1"
 
   @bullet-9
@@ -105,7 +99,6 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     And the issue 15 has the label "refactor" and a "## Check"
     And each step passes
     When a caller starts a feedback run
-    # run: printf '%s\n' 'test: passed' 'check: start' 'check: green' 'review: start'
     Then standard output holds the lines in this order
       | line |
       | test: passed |
@@ -118,7 +111,6 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     Given GitHub answers the read of the pull request with the body "Closes #15"
     And the issue 15 has the label "refactor"
     When a caller starts a feedback run
-    # run: printf '%s' 'tests/Integration/'
     Then the build prompt holds "tests/Integration/"
 
   @bullet-12
@@ -126,13 +118,11 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     Given GitHub answers the read of the pull request with the body "Closes #15"
     And the issue 15 has the label "refactor"
     When a caller starts a feedback run
-    # run: printf '%s' 'tests/Integration/'
     Then the review prompt holds "tests/Integration/"
 
   @bullet-13
   Scenario: The README documents the feedback run of a refactor pull request
     When a reader reads the section "## Start a new repo" of README.md
-    # run: printf '%s' 'Create the label `refactor` in the new repo'
     Then the section holds this paragraph after the paragraph that starts 'Create the label `refactor` in the new repo'
       | paragraph |
       | A feedback run on the pull request of a `refactor` issue leaves every file under `specs/features/`, `tests/Specs/` and `tests/Integration/` as it is, and runs the issue's `## Check` after the tests pass. |

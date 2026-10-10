@@ -20,7 +20,6 @@ Feature: A feedback run on the pull request of a cleanup issue keeps that issue'
     And the issue 11 has the label "cleanup" and the scope "README.md"
     And the build changes only "src/Core/Greeter.cs"
     When a caller starts a feedback run
-    # run: printf '%s' 'outside the scope: src/Core/Greeter.cs'
     Then the next build prompt holds a Redo text that holds "outside the scope: src/Core/Greeter.cs"
 
   @bullet-2
@@ -38,7 +37,6 @@ Feature: A feedback run on the pull request of a cleanup issue keeps that issue'
     And the test "Specs.Unit.GreeterTests.Greets" passed on the head of the pull request
     And the TRX file after the build holds no test of the class "Specs.Unit.GreeterTests" and the method "Greets"
     When a caller starts a feedback run
-    # run: printf '%s\n' 'lost test: ' 'Specs.Unit.GreeterTests.Greets'
     Then the next build prompt holds a Redo text that holds "lost test: " and the name "Specs.Unit.GreeterTests.Greets"
 
   @bullet-4
@@ -47,7 +45,6 @@ Feature: A feedback run on the pull request of a cleanup issue keeps that issue'
     And the issue 11 has the label "cleanup" and the first fenced block under "## Check" holding the line "grep -q Feedback README.md"
     And the check command exits with the code 0 after the build
     When a caller starts a feedback run
-    # run: printf '%s' 'grep -q Feedback README.md'
     Then the feedback run runs "grep -q Feedback README.md" under sh in a copy of the work tree after the test gate passes
 
   @bullet-5
@@ -56,7 +53,6 @@ Feature: A feedback run on the pull request of a cleanup issue keeps that issue'
     And the issue 11 has the label "cleanup" and the line "grep -q Feedback README.md" under "## Check"
     And the check command exits with the code 1 after the build
     When a caller starts a feedback run
-    # run: printf '%s' 'The check command exited with the code 1'
     Then the next build prompt holds a Redo text that holds "The check command exited with the code 1"
 
   @bullet-6
@@ -73,7 +69,6 @@ Feature: A feedback run on the pull request of a cleanup issue keeps that issue'
     And the issue 11 has the label "cleanup" and the line "grep -q Feedback README.md" under "## Check"
     And the check command exits with the code 0 after the build
     When a caller starts a feedback run
-    # run: printf '%s\n' 'test: passed' 'check: start' 'check: green' 'review: start'
     Then standard output holds the lines in this order
       | line |
       | test: passed |
@@ -98,6 +93,5 @@ Feature: A feedback run on the pull request of a cleanup issue keeps that issue'
   @bullet-10
   Scenario: The README documents the feedback run of a cleanup pull request
     When a reader reads the section "## Start a new repo" of README.md
-    # run: printf '%s' 'The body of a `cleanup` issue names the paths'
     Then the section holds a sentence after the paragraph that starts 'The body of a `cleanup` issue names the paths'
     And the sentence states that a feedback run on the pull request of a `cleanup` issue holds the build to the issue's `## Scope` and runs its `## Check`

@@ -60,7 +60,6 @@ Feature: A Scope line of a cleanup issue can be a Markdown list item
   @bullet-6
   Scenario: The README documents the line forms of the Scope
     Given the README of the repo
-    # run: python3 -c 'print(r"""The body of a `cleanup` issue names the paths the build can change under the heading `## Scope`, one for each line. A line is a path, either bare or as a Markdown list item with the marker `-`, `*` or `+`, and the path can sit in backticks. A directory ends in `/`, and a path with `*` is a glob. The body holds under the heading `## Check` one fenced `sh` block, the check command, that fails before the change and exits with the code 0 after it. The factory runs the command with `sh -c` in a copy of the work tree, and a command that runs `dotnet` restores its packages itself first.""", end="")'
     Then the README holds the paragraph 'The body of a `cleanup` issue names the paths the build can change under the heading `## Scope`, one for each line. A line is a path, either bare or as a Markdown list item with the marker `-`, `*` or `+`, and the path can sit in backticks. A directory ends in `/`, and a path with `*` is a glob. The body holds under the heading `## Check` one fenced `sh` block, the check command, that fails before the change and exits with the code 0 after it. The factory runs the command with `sh -c` in a copy of the work tree, and a command that runs `dotnet` restores its packages itself first.'
 
   @bullet-1
@@ -69,6 +68,5 @@ Feature: A Scope line of a cleanup issue can be a Markdown list item
     And the check command exits with the code 1 before the build
     And the build changes only "src/Core/Greeter.cs"
     When a caller starts a run
-    # run: printf '%s' 'outside the scope: src/Core/Greeter.cs'
     Then the next build prompt holds a Redo text that holds "outside the scope: src/Core/Greeter.cs"
     And no review prompt runs before it

@@ -15,7 +15,6 @@ Feature: The lint gate formats the build and commits the result
     And git reports one change, the new file "Other.cs"
     When a caller runs the lint gate with the message "Add a checkout total", the author name "Ada Lovelace" and the author email "ada@example.com"
     Then LintGate made one commit of every change
-    # run: printf 'Add a checkout total\nAda Lovelace\nada@example.com'
     And the commit carries the message "Add a checkout total", the author name "Ada Lovelace" and the author email "ada@example.com"
     And the result says a commit was made
 
@@ -43,7 +42,6 @@ Feature: The lint gate formats the build and commits the result
     And dotnet format exits with the code 1 and writes to standard error "Unhandled exception: System.IO.FileNotFoundException: Could not find a MSBuild project file or solution file"
     When a caller runs the lint gate on a work tree
     Then the lint gate throws LintGateException
-    # run: printf '1\nUnhandled exception: System.IO.FileNotFoundException: Could not find a MSBuild project file or solution file'
     And the exception message holds "1" and "Unhandled exception: System.IO.FileNotFoundException: Could not find a MSBuild project file or solution file"
     And no git command ran
 

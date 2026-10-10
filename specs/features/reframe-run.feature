@@ -22,71 +22,58 @@ Feature: A reframe run keeps every test and every public type and member
   Scenario: The labels reframe and behavior get a comment
     Given the issue has the labels "reframe" and "behavior"
     When a caller starts a run
-    # run: printf '%s\n' 'reframe' 'behavior'
     Then FactoryRun posts one comment on the issue that holds "reframe" and "behavior"
     And FactoryRun starts no container
-    # run: printf 0
     And FactoryRun gives back a result with no pull request and 0 Redos
 
   @bullet-3
   Scenario: The labels reframe and cleanup get a comment
     Given the issue has the labels "reframe" and "cleanup"
     When a caller starts a run
-    # run: printf '%s\n' 'reframe' 'cleanup'
     Then FactoryRun posts one comment on the issue that holds "reframe" and "cleanup"
     And FactoryRun starts no container
-    # run: printf 0
     And FactoryRun gives back a result with no pull request and 0 Redos
 
   @bullet-4
   Scenario: The labels reframe and refactor get a comment
     Given the issue has the labels "reframe" and "refactor"
     When a caller starts a run
-    # run: printf '%s\n' 'reframe' 'refactor'
     Then FactoryRun posts one comment on the issue that holds "reframe" and "refactor"
     And FactoryRun starts no container
-    # run: printf 0
     And FactoryRun gives back a result with no pull request and 0 Redos
 
   @bullet-5
   Scenario: A body with no Scope heading gets a comment
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with no heading "## Scope"
     When a caller starts a run
-    # run: printf '%s' '## Scope'
     Then FactoryRun posts one comment on the issue that holds "## Scope"
     And FactoryRun starts no container
-    # run: printf 0
     And FactoryRun gives back a result with no pull request and 0 Redos
 
   @bullet-6
   Scenario: A body with no Check heading gets a comment
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with no heading "## Check"
     When a caller starts a run
-    # run: printf '%s' '## Check'
     Then FactoryRun posts one comment on the issue that holds "## Check"
     And FactoryRun starts no container
-    # run: printf 0
     And FactoryRun gives back a result with no pull request and 0 Redos
 
   @bullet-7
   Scenario: The check command runs under sh before the build prompt
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     When a caller starts a run
-    # run: printf '%s\n' 'sh -c' 'grep -q Install README.md'
     Then the container runs "sh -c" with the argument "grep -q Install README.md" before the build prompt
 
   @bullet-8
   Scenario: The check command runs in a detached worktree outside /work
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     When a caller starts a run
-    # run: printf '%s\n' 'git worktree add --detach' '/work'
     Then the container runs "git worktree add --detach" at a path outside "/work" and the check command runs in that path on the head commit
 
   @bullet-9
   Scenario: The copy is removed when the check command ends
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     When a caller starts a run
-    # run: printf '%s' 'git worktree remove --force'
     Then the container runs "git worktree remove --force" on the copy after the check command ends
 
   @bullet-10
@@ -94,10 +81,8 @@ Feature: A reframe run keeps every test and every public type and member
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 0 before the build
     When a caller starts a run
-    # run: printf '%s' 'The check passes before the build'
     Then FactoryRun posts one comment on the issue that holds "The check passes before the build"
     And FactoryRun runs no build prompt
-    # run: printf 0
     And FactoryRun gives back a result with no pull request and 0 Redos
 
   @bullet-11
@@ -105,10 +90,8 @@ Feature: A reframe run keeps every test and every public type and member
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 126 before the build and writes a standard error
     When a caller starts a run
-    # run: printf '%s' '126'
     Then FactoryRun posts one comment on the issue that holds "126" and the standard error of the command
     And FactoryRun runs no build prompt
-    # run: printf 0
     And FactoryRun gives back a result with no pull request and 0 Redos
 
   @bullet-12
@@ -116,10 +99,8 @@ Feature: A reframe run keeps every test and every public type and member
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 127 before the build and writes a standard error
     When a caller starts a run
-    # run: printf '%s' '127'
     Then FactoryRun posts one comment on the issue that holds "127" and the standard error of the command
     And FactoryRun runs no build prompt
-    # run: printf 0
     And FactoryRun gives back a result with no pull request and 0 Redos
 
   @bullet-13
@@ -127,7 +108,6 @@ Feature: A reframe run keeps every test and every public type and member
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
     When a caller starts a run
-    # run: printf '%s\n' '/opt/api-printer/ApiPrinter.dll' 'src'
     Then the container runs "dotnet" with the arguments "/opt/api-printer/ApiPrinter.dll" and "src" before the build prompt
 
   @bullet-14
@@ -135,7 +115,6 @@ Feature: A reframe run keeps every test and every public type and member
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
     When a caller starts a run
-    # run: printf '%s\n' 'git worktree add --detach' '/work' 'dotnet restore --locked-mode' 'dotnet build --no-restore'
     Then the container runs "git worktree add --detach" at a path outside "/work", and in that path "dotnet restore --locked-mode" and then "dotnet build --no-restore" run before the API printer
 
   @bullet-15
@@ -143,7 +122,6 @@ Feature: A reframe run keeps every test and every public type and member
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
     When a caller starts a run
-    # run: printf '%s' 'git worktree remove --force'
     Then the container runs "git worktree remove --force" on the copy after the API printer ends
 
   @bullet-16
@@ -152,11 +130,9 @@ Feature: A reframe run keeps every test and every public type and member
     And the check command exits with the code 1 before the build
     And dotnet build in the copy exits with the code 1 before the build and writes a standard output
     When a caller starts a run
-    # run: printf '%s' 'dotnet build'
     Then FactoryRun posts one comment on the issue that holds "dotnet build" and the standard output of the copy's build
     And FactoryRun runs no API printer
     And FactoryRun runs no build prompt
-    # run: printf 0
     And FactoryRun gives back a result with no pull request and 0 Redos
 
   @bullet-17
@@ -165,10 +141,8 @@ Feature: A reframe run keeps every test and every public type and member
     And the check command exits with the code 1 before the build
     And the API printer exits with the code 3 before the build and writes the standard error "no built assembly: no *.deps.json with a .dll beside it under /work/src"
     When a caller starts a run
-    # run: printf '%s' 'the code 3'
     Then FactoryRun posts one comment on the issue that holds "the code 3" and the standard error of the API printer
     And FactoryRun runs no build prompt
-    # run: printf 0
     And FactoryRun gives back a result with no pull request and 0 Redos
 
   @bullet-18
@@ -176,7 +150,6 @@ Feature: A reframe run keeps every test and every public type and member
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
     When a caller starts a run
-    # run: printf '%s\n' 'build-model' 60
     Then FactoryRun runs one prompt with the model "build-model" and the turn limit 60 that holds the title and the body of the issue
     And the build prompt holds this text
       """
@@ -188,7 +161,6 @@ Feature: A reframe run keeps every test and every public type and member
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
     When a caller starts a run
-    # run: printf '%s' '.factory/plan.md'
     Then the build prompt holds no ".factory/plan.md"
 
   @bullet-20
@@ -197,7 +169,6 @@ Feature: A reframe run keeps every test and every public type and member
     And the check command exits with the code 1 before the build
     And the build changes only "docs/README.md"
     When a caller starts a run
-    # run: printf '%s' 'outside the scope: docs/README.md'
     Then the next build prompt holds a Redo text that holds "outside the scope: docs/README.md"
     And no review prompt runs before it
 
@@ -211,7 +182,6 @@ Feature: A reframe run keeps every test and every public type and member
     And the check command then exits with the code 0
     When a caller starts a run
     Then FactoryRun runs the review prompt
-    # run: printf '%s' 'keeps every test and every public type and member'
     And the review prompt holds "keeps every test and every public type and member"
 
   @bullet-22
@@ -220,9 +190,7 @@ Feature: A reframe run keeps every test and every public type and member
     And the check command exits with the code 1 before the build
     And the build changes only "specs/features/greeting.feature"
     When a caller starts a run
-    # run: printf '%s' 'Make the change the issue asks for to its config files first'
     Then the next build prompt holds "Make the change the issue asks for to its config files first"
-    # run: printf '%s' 'pin: specs/features/greeting.feature'
     And the next build prompt holds a Redo text that holds "pin: specs/features/greeting.feature"
     And no review prompt runs before it
 
@@ -245,7 +213,6 @@ Feature: A reframe run keeps every test and every public type and member
     And the test "Specs.Unit.GreeterTests.Greets" passed on the base commit
     And the TRX file after the build holds no test of the class "Specs.Unit.GreeterTests" and the method "Greets"
     When a caller starts a run
-    # run: printf '%s' 'lost test: Specs.Unit.GreeterTests.Greets'
     Then the next build prompt holds a Redo text that holds "lost test: Specs.Unit.GreeterTests.Greets"
     And no review prompt runs before it
 
@@ -269,7 +236,6 @@ Feature: A reframe run keeps every test and every public type and member
     And each test that passed on the base commit passes
     And after the build the API printer prints every other line of the base commit and no such line
     When a caller starts a run
-    # run: printf '%s' 'lost symbol: Core: Core.Greeter::method public static System.String Greet(System.String)'
     Then the next build prompt holds a Redo text with "lost symbol:" once, in "lost symbol: Core: Core.Greeter::method public static System.String Greet(System.String)", and no "new symbol:"
     And no review prompt runs before it
 
@@ -281,7 +247,6 @@ Feature: A reframe run keeps every test and every public type and member
     And each test that passed on the base commit passes
     And after the build the API printer prints each line of the base commit and the line "Core: class static Core.Extra"
     When a caller starts a run
-    # run: printf '%s' 'new symbol: Core: class static Core.Extra'
     Then the next build prompt holds a Redo text with "new symbol:" once, in "new symbol: Core: class static Core.Extra", and no "lost symbol:"
     And no review prompt runs before it
 
@@ -292,7 +257,6 @@ Feature: A reframe run keeps every test and every public type and member
     And each test that passed on the base commit passes
     And the API printer exits with the code 3 after the build and writes the standard error "no built assembly: no *.deps.json with a .dll beside it under /work/src"
     When a caller starts a run
-    # run: printf '%s' 'the code 3'
     Then the next build prompt holds a Redo text that holds "the code 3" and the standard error of the API printer
     And no review prompt runs before it
 
@@ -304,7 +268,6 @@ Feature: A reframe run keeps every test and every public type and member
     And the API printer prints the same lines as on the base commit
     And the check command exits with the code 1 after the build and writes a standard output and a standard error
     When a caller starts a run
-    # run: printf '%s' '1'
     Then the next build prompt holds a Redo text that holds "1", the standard output and the standard error of the command
     And no review prompt runs before it
 
@@ -316,7 +279,6 @@ Feature: A reframe run keeps every test and every public type and member
     And the API printer prints the same lines as on the base commit
     And the check command then exits with the code 0
     When a caller starts a run
-    # run: printf '%s\n' 'review-model' 30
     Then FactoryRun runs one prompt with the model "review-model" and the turn limit 30 that holds the title of the issue, the body of the issue and the base commit
     And the review prompt holds this text
       """
@@ -329,7 +291,6 @@ Feature: A reframe run keeps every test and every public type and member
     And the check command exits with the code 1 before the build
     And the check command then exits with the code 0
     When a caller starts a run
-    # run: printf '%s' '.factory/plan.md'
     Then the review prompt holds no ".factory/plan.md"
 
   @bullet-32
@@ -338,9 +299,7 @@ Feature: A reframe run keeps every test and every public type and member
     And the check command exits with the code 1 before the build
     And the check command then exits with the code 0
     When a caller starts a run
-    # run: printf '%s\n' 'Sweep the format of src' 0
     Then FactoryRun opens a pull request with the title "Sweep the format of src" and gives back a result with that pull request and 0 Redos
-    # run: printf '%s' '- check: green'
     And the body of the pull request holds the line "- check: green"
 
   @bullet-33
@@ -353,7 +312,6 @@ Feature: A reframe run keeps every test and every public type and member
     When a caller starts a run
     Then FactoryRun posts one comment on the issue that holds the standard error of the command
     And FactoryRun pushes no branch
-    # run: printf '%s\n' 3
     And FactoryRun gives back a result with no pull request and 3 Redos
 
   @bullet-34
@@ -400,7 +358,6 @@ Feature: A reframe run keeps every test and every public type and member
   @bullet-36
   Scenario: The README documents the reframe run
     When a reader reads the section "## Start a new repo" of README.md
-    # run: printf '%s' 'reframe'
     Then the section mentions the label "reframe"
     And the section holds, after the paragraph that starts "A feedback run on the pull request of a `refactor` issue", this paragraph
       """
@@ -409,7 +366,6 @@ Feature: A reframe run keeps every test and every public type and member
 
   @bullet-37
   Scenario: The sandbox Dockerfile publishes the API printer
-    # run: printf '%s' 'sandbox/Dockerfile'
     Then the file "sandbox/Dockerfile" of this repo holds this text
       """
       FROM node:22-bookworm-slim
@@ -445,7 +401,6 @@ Feature: A reframe run keeps every test and every public type and member
 
   @bullet-38
   Scenario: The API printer project holds the pinned text
-    # run: printf '%s' 'sandbox/ApiPrinter/ApiPrinter.csproj'
     Then the file "sandbox/ApiPrinter/ApiPrinter.csproj" of this repo holds this text
       """
       <Project Sdk="Microsoft.NET.Sdk">
@@ -468,7 +423,6 @@ Feature: A reframe run keeps every test and every public type and member
 
   @bullet-39
   Scenario: The API printer program holds the pinned text
-    # run: printf '%s' 'sandbox/ApiPrinter/Program.cs'
     Then the file "sandbox/ApiPrinter/Program.cs" of this repo holds this text
       """
       // Prints the public API of every assembly a project built under the given

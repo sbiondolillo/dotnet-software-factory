@@ -5,7 +5,6 @@ Feature: A TRX file reads as a list of tests with their outcomes
     Given a TRX file with a passed test "TheGreeterGreetsByName" of the class "Specs.Features.GreetingFeature"
     When TestReport reads the TRX file
     Then TestReport returns one test
-    # run: printf 'Specs.Features.GreetingFeature\nTheGreeterGreetsByName'
     And the test has the class "Specs.Features.GreetingFeature" and the method "TheGreeterGreetsByName"
     And the test has the outcome passed
 
@@ -16,7 +15,6 @@ Feature: A TRX file reads as a list of tests with their outcomes
     When TestReport reads the TRX file
     Then TestReport returns one test
     And the test has the outcome failed
-    # run: printf 'Assert.Equal() Failure: Values differ\nExpected: 1\nActual:   2'
     And the test message is the three lines "Assert.Equal() Failure: Values differ", "Expected: 1" and "Actual:   2"
 
   @bullet-3
@@ -24,7 +22,6 @@ Feature: A TRX file reads as a list of tests with their outcomes
     Given a TRX file with a test "GreetsInFrench" of the class "Specs.Unit.GreeterTests" with the outcome "NotExecuted"
     When TestReport reads the TRX file
     Then TestReport returns one test
-    # run: printf 'Specs.Unit.GreeterTests\nGreetsInFrench'
     And the test has the class "Specs.Unit.GreeterTests" and the method "GreetsInFrench"
     And the test has the outcome skipped
 
@@ -41,7 +38,6 @@ Feature: A TRX file reads as a list of tests with their outcomes
     And one of the results passed and the other failed
     When TestReport reads the TRX file
     Then TestReport returns two tests
-    # run: printf 'TheGreeterGreetsWho'
     And each test has the method "TheGreeterGreetsWho"
     And one test has the outcome passed and one test has the outcome failed
 

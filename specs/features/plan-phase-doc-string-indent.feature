@@ -24,7 +24,6 @@ Feature: Plan phase doc string indent
     When I run the plan phase
     Then the result is failed
     And the plan phase reports one failure
-    # run: printf '%s\n' 'specs/features/config.feature' 'line 11' 'the column of its opening delimiter'
     And the failure names "specs/features/config.feature", "line 11" and "the column of its opening delimiter"
 
   @bullet-2
@@ -47,5 +46,4 @@ Feature: Plan phase doc string indent
     When I run the plan phase
     Then the result is failed
     And the plan phase reports one failure
-    # run: printf '%s\n' 'specs/features/ticks.feature' 'line 9' 'the column of its opening delimiter'
     And the failure names "specs/features/ticks.feature", "line 9" and "the column of its opening delimiter"

@@ -5,28 +5,24 @@ Feature: GitHub client
     Given a GitHub client built with the token "token-1"
     When I send a "GET" request for the path "/repos/sbiondolillo/factory-scratch/branches/main"
     Then the stand-in received one request
-    # run: printf 'GET\nhttps://api.github.com/repos/sbiondolillo/factory-scratch/branches/main'
     And the recorded request has the method "GET" and the address "https://api.github.com/repos/sbiondolillo/factory-scratch/branches/main"
 
   @bullet-2
   Scenario: A request carries the bearer token
     Given a GitHub client built with the token "token-1"
     When I send a "GET" request for the path "/repos/sbiondolillo/factory-scratch/branches/main"
-    # run: printf 'Authorization\nBearer token-1'
     Then the recorded request holds the header "Authorization" with the value "Bearer token-1"
 
   @bullet-3
   Scenario: A request carries the user agent
     Given a GitHub client built with the token "token-1"
     When I send a "GET" request for the path "/repos/sbiondolillo/factory-scratch/branches/main"
-    # run: printf 'User-Agent\ndotnet-software-factory'
     Then the recorded request holds the header "User-Agent" with the value "dotnet-software-factory"
 
   @bullet-4
   Scenario: A request body is sent as JSON
     Given a GitHub client built with the token "token-1"
     When I send a "POST" request for the path "/repos/sbiondolillo/factory-scratch/issues" with a JSON body whose "title" is "The greeter greets in French"
-    # run: printf 'title\nThe greeter greets in French'
     Then the content of the recorded request is JSON whose "title" is "The greeter greets in French"
 
   @bullet-5
@@ -34,14 +30,12 @@ Feature: GitHub client
     Given a GitHub client built with the token "token-1"
     And GitHub answers with the status code 200 and JSON whose "name" is "main"
     When I send a "GET" request for the path "/repos/sbiondolillo/factory-scratch/branches/main"
-    # run: printf 'name\nmain'
     Then the returned JSON has "name" equal to "main"
 
   @bullet-6
   Scenario: Reading an issue requests the issue address
     Given a GitHub client built with the token "token-1"
     When I read issue 4 of the repo "factory-scratch" of the owner "sbiondolillo"
-    # run: printf 'GET\nhttps://api.github.com/repos/sbiondolillo/factory-scratch/issues/4'
     Then the recorded request has the method "GET" and the address "https://api.github.com/repos/sbiondolillo/factory-scratch/issues/4"
 
   @bullet-7
@@ -49,9 +43,7 @@ Feature: GitHub client
     Given a GitHub client built with the token "token-1"
     And GitHub answers the read of an issue with the title "The greeter greets in French", the body "The greeter takes a name and a language.", the user login "sbiondolillo" and the labels "bug" and "question"
     When I read issue 4 of the repo "factory-scratch" of the owner "sbiondolillo"
-    # run: printf 'The greeter greets in French\nThe greeter takes a name and a language.\nsbiondolillo'
     Then the issue has the title "The greeter greets in French", the body "The greeter takes a name and a language." and the author "sbiondolillo"
-    # run: printf 'bug\nquestion'
     And the issue has the labels "bug" and "question"
 
   @bullet-8
@@ -72,9 +64,7 @@ Feature: GitHub client
   Scenario: A comment is posted on an issue
     Given a GitHub client built with the token "token-1"
     When I post the comment "The run is done." on issue 4 of the repo "factory-scratch" of the owner "sbiondolillo"
-    # run: printf 'POST\nhttps://api.github.com/repos/sbiondolillo/factory-scratch/issues/4/comments'
     Then the recorded request has the method "POST" and the address "https://api.github.com/repos/sbiondolillo/factory-scratch/issues/4/comments"
-    # run: printf 'body\nThe run is done.'
     And the content of the recorded request is JSON whose "body" is "The run is done."
 
   @bullet-11
@@ -83,7 +73,6 @@ Feature: GitHub client
     And GitHub answers with a status code outside 200 to 299 and a body
     When I send a "GET" request for the path "/repos/sbiondolillo/factory-scratch/branches/main"
     Then the send fails with a GitHubRequestException
-    # run: printf 'GET\n/repos/sbiondolillo/factory-scratch/branches/main'
     And the exception message names the method "GET" and the path "/repos/sbiondolillo/factory-scratch/branches/main"
     And the exception message holds the status code and the body of the answer
 
@@ -93,5 +82,4 @@ Feature: GitHub client
     And GitHub answers with the status code 404 and a body
     When I send a "GET" request for the path "/repos/sbiondolillo/factory-scratch/branches/main"
     Then the send fails with a GitHubRequestException
-    # run: printf '404'
     And the exception gives the status code 404

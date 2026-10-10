@@ -7,7 +7,6 @@ Feature: Sandbox image
   Scenario: The image is looked up by its tag
     Given docker image inspect exits with the code 0
     When a caller asks for the image with the tag "factory-sandbox:test"
-    # run: printf 'image\ninspect\nfactory-sandbox:test'
     Then the first command run is docker with the arguments "image", "inspect" and "factory-sandbox:test" in that order
 
   @bullet-2
@@ -22,7 +21,6 @@ Feature: Sandbox image
     Given docker image inspect exits with the code 1
     And docker build exits with the code 0
     When a caller asks for the image with the tag "factory-sandbox:test"
-    # run: printf 'build\n--tag\nfactory-sandbox:test'
     Then the second command run is docker with the first argument "build" and arguments holding "--tag" and then "factory-sandbox:test"
 
   @bullet-4
@@ -30,7 +28,6 @@ Feature: Sandbox image
     Given docker image inspect exits with the code 1
     And docker build exits with the code 0
     When a caller asks for the image with the tag "factory-sandbox:test"
-    # run: printf -- '--file'
     Then the build arguments hold "--file" and then the path of sandbox/Dockerfile under the given directory
 
   @bullet-5
@@ -38,7 +35,6 @@ Feature: Sandbox image
     Given docker image inspect exits with the code 1
     And docker build exits with the code 0
     When a caller asks for the image with the tag "factory-sandbox:test"
-    # run: printf -- '--build-arg\nDOTNET_SDK_VERSION=10.0.100'
     Then the build arguments hold "--build-arg" and then "DOTNET_SDK_VERSION=10.0.100"
 
   @bullet-6

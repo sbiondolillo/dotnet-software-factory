@@ -14,7 +14,6 @@ Feature: A repo made from the starter holds the skill write-issue
 
   @bullet-2
   Scenario: The copy's REVIEW.md holds the angles that judge a draft
-    # run: printf '%s\n' '.claude/skills/write-issue/REVIEW.md'
     Then the copy's file ".claude/skills/write-issue/REVIEW.md" holds the line "verdict: accept | reject"
     And the copy's file ".claude/skills/write-issue/REVIEW.md" holds a line that holds "**Body rules.**"
     And the copy's file ".claude/skills/write-issue/REVIEW.md" holds a line that holds "**Claims against `main`.**"

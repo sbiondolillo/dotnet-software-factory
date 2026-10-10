@@ -45,12 +45,10 @@ Feature: A repo made from the starter carries an AGENTS.md
   Scenario: The copy's integration project comment starts with the new line
     Given the template is installed
     When I run dotnet new "factory-starter" into an empty directory
-    # run: printf '%s\n' 'tests/Integration/Integration.csproj' 'The integration suite: tests against the real services that the program calls.'
     Then the comment in the copy's "tests/Integration/Integration.csproj" starts with the line "The integration suite: tests against the real services that the program calls."
 
   @bullet-2
   Scenario: The copy's integration project comment no longer names the old line
     Given the template is installed
     When I run dotnet new "factory-starter" into an empty directory
-    # run: printf '%s\n' 'tests/Integration/Integration.csproj' 'The integration suite: tests against real GitHub, docker and Claude Code.'
     Then the comment in the copy's "tests/Integration/Integration.csproj" does not hold the line "The integration suite: tests against real GitHub, docker and Claude Code."

@@ -112,7 +112,6 @@ Feature: A run stops at the first answer of claude that carries the error flag
     And GitHub answers the read of the issue with the title "Add a checkout total" and the body "The checkout shows the total of the cart."
     And the agent writes the feature file and the plan on the plan prompt
     When a caller starts a run
-    # run: printf '0'
     Then FactoryRun gives back a result with no pull request and 0 Redos
 
 
@@ -122,7 +121,6 @@ Feature: A run stops at the first answer of claude that carries the error flag
     And GitHub answers the read of the issue with the title "Add a checkout total" and the body "The checkout shows the total of the cart."
     And the agent writes the feature file and the plan on the plan prompt
     When a caller starts a run
-    # run: printf 'Invalid API key'
     Then FactoryRun posts one comment on the issue that holds "Invalid API key"
 
 
@@ -141,7 +139,6 @@ Feature: A run stops at the first answer of claude that carries the error flag
     And GitHub answers the read of the issue with the title "Add a checkout total" and the body "The checkout shows the total of the cart."
     And the agent writes the feature file and the plan on the plan prompt
     When a caller starts a run
-    # run: printf 'claude answered with an error and no text.'
     Then FactoryRun posts one comment on the issue that holds "claude answered with an error and no text."
 
 
