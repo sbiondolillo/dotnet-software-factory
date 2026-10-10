@@ -39,6 +39,28 @@ public sealed class SandboxTests : IDisposable
     private Task<Sandbox> StartAsync(CommandRunner runner, CancellationToken token = default) =>
         Sandbox.StartAsync(runner, "t:1", _directory.FullName, "/tree", token);
 
+    [Fact]
+    public async Task AWorkTreeWithNoGitDirectoryGetsOneVolumeAndNoGitDirectory()
+    {
+        DirectoryInfo tree = _directory.CreateSubdirectory("tree");
+
+        await Sandbox.StartAsync(Runner(), "t:1", _directory.FullName, tree.FullName, TestContext.Current.CancellationToken);
+
+        Assert.Equal(["--volume"], _recorded.Single(s => s.Arguments[0] == "run").Arguments.Where(a => a == "--volume"));
+        Assert.False(Path.Exists(Path.Combine(tree.FullName, ".git")));
+    }
+
+    [Fact]
+    public async Task AWorkTreeWhoseGitIsAFileGetsOneVolume()
+    {
+        DirectoryInfo tree = _directory.CreateSubdirectory("tree");
+        await File.WriteAllTextAsync(Path.Combine(tree.FullName, ".git"), "gitdir: /elsewhere\n", TestContext.Current.CancellationToken);
+
+        await Sandbox.StartAsync(Runner(), "t:1", _directory.FullName, tree.FullName, TestContext.Current.CancellationToken);
+
+        Assert.Equal(["--volume"], _recorded.Single(s => s.Arguments[0] == "run").Arguments.Where(a => a == "--volume"));
+    }
+
     [Theory]
     [InlineData(1, "boom")]
     [InlineData(125, "")]

@@ -291,6 +291,7 @@ public sealed class GitTests
             Directory.CreateDirectory(Path.Combine(tree.FullName, "a", "b", ".git"));
             Directory.CreateDirectory(locked);
             File.SetUnixFileMode(locked, UnixFileMode.UserExecute);
+            Assert.SkipWhen(Readable(locked), "The process reads a directory with no read permission, as root does.");
             var mock = new Mock<CommandRunner>(MockBehavior.Strict);
 
             GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
@@ -304,6 +305,19 @@ public sealed class GitTests
         {
             File.SetUnixFileMode(locked, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
             tree.Delete(recursive: true);
+        }
+    }
+
+    private static bool Readable(string directory)
+    {
+        try
+        {
+            Directory.GetFileSystemEntries(directory);
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 }

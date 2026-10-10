@@ -67,6 +67,10 @@ adds a git operation to `src/Core/Git.cs` follows them too.
   work tree with no change since the base gives an empty output and the exit code 0.
 - A git command that exits with a code other than 0 throws `GitCommandException`, whose
   message names the subcommand and holds the standard error.
+- Before each command after the clone, `Git` reads the work tree. A directory, file or
+  symlink named `.git` other than the work tree's own, or a directory that it cannot
+  read, throws `GitCommandException` with each path, and no command runs. Git runs the
+  hooks and the config of a nested repo on the runner, with the secrets of the job.
 - An integration test reads the git author of a branch from GitHub's branch API at
   `commit.commit.author`. The API's `commit.author` is the GitHub account, and it is
   `null` for an email that no account owns.
@@ -106,6 +110,11 @@ code 0, as `tests/Specs/Steps/LintGateSteps.cs` does.
 - The removal of a container is `docker rm --force`, and it ends every process in the
   container. A `docker exec` that stops before its command ends leaves the command alive
   in the container.
+- A work tree whose `.git` is a directory gets two more volumes: `.git` read-only, and
+  `.git/worktrees` writable over it. So `git worktree add` passes in the container, and
+  `git add`, `git commit` and each write to a hook or to `.git/config` fail with
+  `Read-only file system`. `Sandbox` creates `.git/worktrees` before `docker run`, which
+  makes a missing source owned by root.
 
 ## Claude Code
 

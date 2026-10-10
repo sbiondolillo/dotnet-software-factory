@@ -169,7 +169,7 @@ public sealed class Git(CommandRunner runner)
             if (nested.Count is not 0)
             {
                 throw new GitCommandException(
-                    spec.Arguments[0], $"the work tree holds a .git other than its own: {string.Join(", ", nested)}");
+                    spec.Arguments[0], $"the work tree holds a .git other than its own, or a directory that cannot be read: {string.Join(", ", nested)}");
             }
         }
 
