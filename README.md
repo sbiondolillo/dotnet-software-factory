@@ -65,7 +65,7 @@ Create the label `reframe` in the new repo. The repo's owner starts a reframe ru
 
 ## Run the demo
 
-Four issues on the greeter show the four kinds of run. Each body is a file under `docs/demo/` of this repo. Start from a repo that `## Start a new repo` made, with its secrets set and no other change. Run each command below in the checkout of the new repo. `<checkout>` is the checkout of this repo.
+Four issues on the greeter show the four kinds of run. Each body is a file under `docs/demo/` of this repo. Start from a repo that `## Start a new repo` made, with its secrets set and no other change. Run each command below in the checkout of the new repo, signed in to `gh` as the repo's owner. `<checkout>` is the checkout of this repo.
 
 | Step | Kind | Body | Label | What the pull request does |
 |---|---|---|---|---|
@@ -74,7 +74,7 @@ Four issues on the greeter show the four kinds of run. Each body is a file under
 | 3 | `refactor` | `docs/demo/3-refactor.md` | `refactor` | moves the upper-case rule into `Greeter`, and changes no test |
 | 4 | `reframe` | `docs/demo/4-reframe.md` | `reframe` | requires an SPDX license header on each C# file, and adds it |
 
-File the issues in this order. The second and the third issue use `--shout`, which the first adds. Merge each pull request before you file the next issue.
+File the issues in this order. The second and the third issue need the option `--shout`, which the first adds. Merge each pull request before you file the next issue.
 
 Create the labels. `--force` updates a label that exists:
 
@@ -118,7 +118,7 @@ After each step, add the label `factory`. It goes on last, because the run reads
 gh issue edit "$n" --add-label factory
 ```
 
-Watch the run. `gh run watch` lists the runs in progress: pick `factory`. The run ends when its pull request has green checks and a review.
+Watch the run. `gh run watch` lists the runs in progress: pick `factory`. The run ends when its pull request has green checks and a review. If `gh run watch` prints `found no in progress runs to watch`, the run is not queued yet: run it again after a few seconds.
 
 ```
 gh run watch
