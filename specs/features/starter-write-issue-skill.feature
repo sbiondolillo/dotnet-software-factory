@@ -5,92 +5,21 @@ Feature: A repo made from the starter holds the skill write-issue
     When I run dotnet new "factory-starter" into an empty directory
 
   Scenario: The skill write-issue proves the check of a draft before the judges read it
-    Then the copy's file ".claude/skills/write-issue/SKILL.md" holds this text, with a line that holds "## 4. Prove the check"
-      """
-      ---
-      name: write-issue
-      description: Write an issue that the factory builds, judge the draft, and file it. Use when a request is to become an issue for this repo, or when a draft or a filed issue is to be checked or revised.
-      ---
-
-      `docs/write-an-issue.md` holds every rule a body follows. [`PROOF.md`](PROOF.md) holds the proof of a `## Check`. [`REVIEW.md`](REVIEW.md) holds the angles that judge a draft. This skill ends when the issue is filed, with its URL in the handover. The repo's owner applies the label that starts a run.
-
-      ## 1. Pick the recipe
-
-      Read `## Pick the recipe` of `docs/write-an-issue.md`. Done when the change fits one row. A change that fits two rows is two issues.
-
-      ## 2. Read `main` for each claim
-
-      A claim is each fact the draft states about the code: a file, a name, a command, a text a document holds, a test that stays unchanged. Open the file on `main` that holds each one, and keep its path and line.
-
-      For each text the draft replaces or removes, find every test that reads it:
-
-      ```
-      git grep -n -F '<old text>' origin/main -- specs tests
-      ```
-
-      Done when each claim names its line on `main`. Each scenario a hit is in is under `## Removed scenarios`, or in a block of the draft with every line of its new text.
-
-      ## 3. Write the draft
-
-      Read the section of `docs/write-an-issue.md` for the recipe, then write the title and the body to a file. A behaviour draft writes its scenarios as blocks under `## Scenarios`: open each feature file it names on `main` first, and reuse each step text that `tests/Specs/Steps/` binds when the step means the same. Done when every row of `## Before you file` passes on the file, the row `proof` aside: step 4 runs it.
-
-      ## 4. Prove the check
-
-      A draft with no `## Check` skips this step. Run the check of the draft in a copy of `main`, once for each run of the table of [`PROOF.md`](PROOF.md) that fits the check, and write each exit status to a proof file. A run that gives another status than its row asks for is a fault of the check: fix the check, and run the whole table again. Done when each run gives the status its row asks for, on one `main` SHA.
-
-      ## 5. Judge the draft
-
-      Run the angles of [`REVIEW.md`](REVIEW.md) on the file, each as a subagent, in parallel: `Body rules`, `Claims against main` and `Testability`, and `Holes` too for a draft with `## Check`. A harness with no subagents runs them one after another in this session. Apply every fix of the verdicts in one pass. A fix to the check runs step 4 again, and each hole becomes a run of its table. Then run the angles again. Done when each verdict is `accept`. A line that two rounds reject goes to the person with both findings.
-
-      A verdict that says `no rule` is a gap in `docs/write-an-issue.md`. Apply its fix, and name the finding in the handover with the rule it proposes.
-
-      ## 6. File it
-
-      ```
-      gh issue create --title '<title>' --body-file <file> --label <refactor|cleanup|reframe>
-      ```
-
-      An issue with no recipe label takes no `--label`. An issue with `## Check` gets the proof file of step 4 as a comment:
-
-      ```
-      gh issue comment <n> --body-file <proof file>
-      ```
-
-      Done when the handover holds the URL and each `no rule` finding, and an issue with `## Check` has its proof comment.
-      """
+    Then the copy's file ".claude/skills/write-issue/SKILL.md" holds the line "name: write-issue"
+    And the copy's file ".claude/skills/write-issue/SKILL.md" holds a line that holds "description: Write an issue that the factory builds, judge the draft, and file it."
+    And the copy's file ".claude/skills/write-issue/SKILL.md" holds the line "## 4. Prove the check"
+    And the copy's file ".claude/skills/write-issue/SKILL.md" holds the line "A draft with no `## Check` skips this step. Run the check of the draft in a copy of `main`, once for each run of the table of [`PROOF.md`](PROOF.md) that fits the check, and write each exit status to a proof file. A run that gives another status than its row asks for is a fault of the check: fix the check, and run the whole table again. Done when each run gives the status its row asks for, on one `main` SHA."
+    And the copy's file ".claude/skills/write-issue/SKILL.md" holds the line "## 5. Judge the draft"
+    And the copy's file ".claude/skills/write-issue/SKILL.md" holds a line that holds "A fix to the check runs step 4 again, and each hole becomes a run of its table."
 
   @bullet-2
   Scenario: The copy's REVIEW.md holds the angles that judge a draft
     # run: printf '%s\n' '.claude/skills/write-issue/REVIEW.md'
-    Then the copy's file ".claude/skills/write-issue/REVIEW.md" holds this text, with a line that holds "**Holes.**"
-      """
-      # Judge a draft
-
-      Reference for step 5 of [`write-issue`](SKILL.md). Each angle is one subagent. It gets the path of the draft, reads the repo at `main`, and writes one verdict. The angle `Holes` also gets the proof file of step 4.
-
-      ## The verdict
-
-      ```
-      verdict: accept | reject
-      findings:
-      - line: <the line of the draft>
-        rule: <a heading or a row of docs/write-an-issue.md> | no rule
-        fault: <what is wrong, in one sentence>
-        fix: <the text that replaces the line>
-      ```
-
-      `accept` has zero findings. A finding with `no rule` names a fault that no rule of `docs/write-an-issue.md` covers, and its `fix` holds the rule it proposes beside the text.
-
-      ## The angles
-
-      **Body rules.** Read every rule of `docs/write-an-issue.md` and every row of its `## Before you file` table against the draft, one at a time, the row `proof` aside: step 4 runs it. Done when each rule and each row has been read against every sentence it governs.
-
-      **Claims against `main`.** Read each claim the draft makes about the code against the file on `main` that holds it. Read each scenario that the change adds or edits against `main`, and trace what `main` does after its `When`. A scenario that `main` already passes is a finding, unless the change is a new test for behaviour the program already has. Read each block against its feature file on `main`: it takes the form that the table of `docs/write-an-issue.md` picks, a whole-file block for a file on `main` holds each scenario of that file that the change keeps, and each name under `## Removed scenarios` is in its file. For each text the draft replaces or removes, run `git grep -n -F` over `specs` and `tests`, and check that the draft names each scenario a hit is in. For each stream or file a scenario adds lines to, find each test that counts its lines, and check that the draft names it. Done when each claim names its line on `main`, and each test the change makes false is named.
-
-      **Testability.** Read each scenario as the test suite reads it. Each test of `tests/Specs/` answers every call to a service from a stub, so each scenario states a behaviour that a stub can show. Each canned answer a `Given` hands a stub names its source in `## Context`: a test of `tests/Integration/`, or the request that got it. An answer that no request can produce says so in `## Context`. Done when each scenario has a stub that can show it, and each answer has a source.
-
-      **Holes.** For a draft with `## Check`. Find each way a change exits with the code 0 on the check and misses a part of what the prose asks for: an element with no line of its own, a means that the check reads, a form that hides code from an analyzer, a count that a comment pads. Run each likely hole in a copy of `main` as [`PROOF.md`](PROOF.md) says, and give its exit status in the finding. Done when each likely hole has run, and each hole that exits with the code 0 is a finding whose `fix` holds the line of the check that closes it.
-      """
+    Then the copy's file ".claude/skills/write-issue/REVIEW.md" holds the line "verdict: accept | reject"
+    And the copy's file ".claude/skills/write-issue/REVIEW.md" holds a line that holds "**Body rules.**"
+    And the copy's file ".claude/skills/write-issue/REVIEW.md" holds a line that holds "**Claims against `main`.**"
+    And the copy's file ".claude/skills/write-issue/REVIEW.md" holds a line that holds "**Testability.**"
+    And the copy's file ".claude/skills/write-issue/REVIEW.md" holds a line that holds "**Holes.** For a draft with `## Check`."
 
   Scenario: The copy's PROOF.md holds the proof of a check
     Then the copy's file ".claude/skills/write-issue/PROOF.md" holds this text, with a line that holds "## A check that raises an analyzer rule"
@@ -631,3 +560,13 @@ Feature: A repo made from the starter holds the skill write-issue
       true
       """
     And CleanupBody reads the same check from that body
+
+  Scenario: The Holes angle of the skill write-issue refuses a pin of the program, and names when it accepts
+    Then the copy's file ".claude/skills/write-issue/REVIEW.md" holds the line "**Holes.** For a draft with `## Check`. Find each way a change exits with the code 0 on the check and misses a part of what the prose asks for: an element with no line of its own, a means that the check reads, a form that hides code from an analyzer, a count that a comment pads. A check pins the claim of the story, not the program. A break that the build or the test suite catches is not a hole. `Holes` accepts when each remaining hole needs a change that no part of the prose implies. Run each likely hole in a copy of `main` as [`PROOF.md`](PROOF.md) says, and give its exit status in the finding. Done when each likely hole has run, and each hole that exits with the code 0 is a finding whose `fix` holds the line of the check that closes it, or, for a hole that needs a change no part of the prose implies, a line in the proof file and no finding."
+
+  Scenario: The skill write-issue stops the judges of a draft after round 2
+    Then the copy's file ".claude/skills/write-issue/SKILL.md" holds the line "Run the angles of [`REVIEW.md`](REVIEW.md) on the file, each as a subagent, in parallel: `Body rules`, `Claims against main` and `Testability`, and `Holes` too for a draft with `## Check`. A harness with no subagents runs them one after another in this session. Apply every fix of the verdicts in one pass. A fix to the check runs step 4 again, and each hole becomes a run of its table. This is round 1. When a verdict of round 1 is `reject`, run the angles again on the fixed draft. This is round 2, and the last round. Apply the fixes of round 2 the same way, except for a hole. A hole of round 2 goes into the proof file of step 4 with its command and its exit status, and gets no fix: a draft with `## Check` has a recipe label, so it has no `## Context`, and step 6 posts the proof file as a comment. No round 3 runs, and the person is not asked for one. Done when each verdict of the last round is `accept`, or each of its findings is fixed or, for a hole of round 2, in the proof file."
+    And the copy's file ".claude/skills/write-issue/SKILL.md" holds no line that holds "A line that two rounds reject goes to the person"
+    And the copy's file ".claude/skills/write-issue/SKILL.md" holds no line that holds "Then run the angles again."
+    And the copy's file ".claude/skills/write-issue/SKILL.md" holds a line that holds "An issue with `## Check` gets the proof file of step 4 as a comment:"
+    And the copy's file ".claude/skills/write-issue/SKILL.md" holds the line "gh issue comment <n> --body-file <proof file>"

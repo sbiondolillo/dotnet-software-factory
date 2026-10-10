@@ -31,7 +31,7 @@ A draft with no `## Check` skips this step. Run the check of the draft in a copy
 
 ## 5. Judge the draft
 
-Run the angles of [`REVIEW.md`](REVIEW.md) on the file, each as a subagent, in parallel: `Body rules`, `Claims against main` and `Testability`, and `Holes` too for a draft with `## Check`. A harness with no subagents runs them one after another in this session. Apply every fix of the verdicts in one pass. A fix to the check runs step 4 again, and each hole becomes a run of its table. Then run the angles again. Done when each verdict is `accept`. A line that two rounds reject goes to the person with both findings.
+Run the angles of [`REVIEW.md`](REVIEW.md) on the file, each as a subagent, in parallel: `Body rules`, `Claims against main` and `Testability`, and `Holes` too for a draft with `## Check`. A harness with no subagents runs them one after another in this session. Apply every fix of the verdicts in one pass. A fix to the check runs step 4 again, and each hole becomes a run of its table. This is round 1. When a verdict of round 1 is `reject`, run the angles again on the fixed draft. This is round 2, and the last round. Apply the fixes of round 2 the same way, except for a hole. A hole of round 2 goes into the proof file of step 4 with its command and its exit status, and gets no fix: a draft with `## Check` has a recipe label, so it has no `## Context`, and step 6 posts the proof file as a comment. No round 3 runs, and the person is not asked for one. Done when each verdict of the last round is `accept`, or each of its findings is fixed or, for a hole of round 2, in the proof file.
 
 A verdict that says `no rule` is a gap in `docs/write-an-issue.md`. Apply its fix, and name the finding in the handover with the rule it proposes.
 
