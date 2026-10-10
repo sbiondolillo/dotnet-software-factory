@@ -14,7 +14,6 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     And on a review prompt the agent writes an approving review
     And GitHub answers each reply and each resolve with the status code 200 and no errors
 
-  @bullet-1
   Scenario: A build that changes tests/Specs/Steps/GreetingSteps.cs gets a pin Redo
     Given GitHub answers the read of the pull request with the body "Closes #15"
     And the issue 15 has the label "refactor"
@@ -23,7 +22,6 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     Then the next build prompt holds a Redo text that holds "pin: tests/Specs/Steps/GreetingSteps.cs"
     And no review prompt runs before it
 
-  @bullet-2
   Scenario: A build that adds the file tests/Specs/Unit/GreetingTests.cs gets a pin Redo
     Given GitHub answers the read of the pull request with the body "Closes #15"
     And the issue 15 has the label "refactor"
@@ -32,7 +30,6 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     Then the next build prompt holds a Redo text that holds "pin: tests/Specs/Unit/GreetingTests.cs"
     And no review prompt runs before it
 
-  @bullet-3
   Scenario: A build that changes tests/Integration/GreetingTests.cs gets a pin Redo
     Given GitHub answers the read of the pull request with the body "Closes #15"
     And the issue 15 has the label "refactor"
@@ -41,7 +38,6 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     Then the next build prompt holds a Redo text that holds "pin: tests/Integration/GreetingTests.cs"
     And no review prompt runs before it
 
-  @bullet-4
   Scenario: A build that changes specs/features/greeting.feature gets a pin Redo
     Given GitHub answers the read of the pull request with the body "Closes #15"
     And the issue 15 has the label "refactor"
@@ -50,7 +46,6 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     Then the next build prompt holds a Redo text that holds "pin: specs/features/greeting.feature"
     And no review prompt runs before it
 
-  @bullet-5
   Scenario: A behavior issue keeps the feedback run of main
     Given GitHub answers the read of the pull request with the body "Closes #15"
     And the issue 15 has the label "behavior"
@@ -59,7 +54,6 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     When a caller starts a feedback run
     Then the feedback run starts the review
 
-  @bullet-6
   Scenario: A refactor issue with no check runs no check command
     Given GitHub answers the read of the pull request with the body "Closes #15"
     And the issue 15 has the label "refactor" and no "## Check"
@@ -69,7 +63,6 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     Then the feedback run runs no check command
     And the feedback run starts the review
 
-  @bullet-7
   Scenario: The check command runs under sh after the test gate passes
     Given GitHub answers the read of the pull request with the body "Closes #15"
     And the issue 15 has the label "refactor" and the line "grep -q Greeting src/Core/Greeter.cs" in the first fenced block under "## Check"
@@ -77,7 +70,6 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     When a caller starts a feedback run
     Then the feedback run runs "grep -q Greeting src/Core/Greeter.cs" under sh in a copy of the work tree after the test gate passes
 
-  @bullet-8
   Scenario: A failing check gets a Redo
     Given GitHub answers the read of the pull request with the body "Closes #15"
     And the issue 15 has the label "refactor" and the line "grep -q Greeting src/Core/Greeter.cs" under "## Check"
@@ -85,7 +77,6 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     When a caller starts a feedback run
     Then the next build prompt holds a Redo text that holds "The check command exited with the code 1"
 
-  @bullet-9
   Scenario: A passing check starts the review
     Given GitHub answers the read of the pull request with the body "Closes #15"
     And the issue 15 has the label "refactor" and the line "grep -q Greeting src/Core/Greeter.cs" under "## Check"
@@ -93,7 +84,6 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     When a caller starts a feedback run
     Then the feedback run starts the review
 
-  @bullet-10
   Scenario: Standard output shows the check between the test and the review
     Given GitHub answers the read of the pull request with the body "Closes #15"
     And the issue 15 has the label "refactor" and a "## Check"
@@ -106,21 +96,18 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
       | check: green |
       | review: start |
 
-  @bullet-11
   Scenario: The build prompt names the integration tests
     Given GitHub answers the read of the pull request with the body "Closes #15"
     And the issue 15 has the label "refactor"
     When a caller starts a feedback run
     Then the build prompt holds "tests/Integration/"
 
-  @bullet-12
   Scenario: The review prompt names the integration tests
     Given GitHub answers the read of the pull request with the body "Closes #15"
     And the issue 15 has the label "refactor"
     When a caller starts a feedback run
     Then the review prompt holds "tests/Integration/"
 
-  @bullet-13
   Scenario: The README documents the feedback run of a refactor pull request
     When a reader reads the section "## Start a new repo" of README.md
     Then the section holds this paragraph after the paragraph that starts 'Create the label `refactor` in the new repo'

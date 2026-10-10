@@ -3,7 +3,6 @@ Feature: A run writes a job summary with one row for each phase and the reason f
   Background:
     Given the environment variable GITHUB_STEP_SUMMARY names an empty file
 
-  @bullet-1
   Scenario: A run with one Redo ends its summary with the phase table and the Redo list
     Given the issue has no recipe label
     And the plan answer has 7 turns and the cost "0.4213", 31 seconds after its prompt
@@ -32,7 +31,6 @@ Feature: A run writes a job summary with one row for each phase and the reason f
       - Redo 1, after test 1: failed test: Specs.Unit.CheckoutTests.AddsTwoPrices: Assert.Equal() Failure: Values differ
       """
 
-  @bullet-2
   Scenario: The seconds of a build row run to the end of the lint gate after it
     Given the issue has no recipe label
     And the first build answer comes 300 seconds after its prompt
@@ -40,7 +38,6 @@ Feature: A run writes a job summary with one row for each phase and the reason f
     When the run delivers with 0 Redos
     Then the row "build 1" has the seconds 315
 
-  @bullet-3
   Scenario: A Redo text of several lines lists its first line
     Given the issue has no recipe label
     And the first test gate is red with a Redo text of two lines, "dotnet test exited with the code 1" and "second line of the text"
@@ -48,21 +45,18 @@ Feature: A run writes a job summary with one row for each phase and the reason f
     Then the Redos list holds the item "- Redo 1, after test 1: dotnet test exited with the code 1"
     And the summary does not hold "second line of the text"
 
-  @bullet-4
   Scenario: A blocking review gives its row the result blocked
     Given the issue has no recipe label
     And the first review blocks the first build with the item "The total ignores the second item of the cart."
     When the run delivers with 1 Redo
     Then the row "review 1" has the result "blocked"
 
-  @bullet-5
   Scenario: A blocking review adds a Redo item after the review
     Given the issue has no recipe label
     And the first review blocks the first build with the item "The total ignores the second item of the cart."
     When the run delivers with 1 Redo
     Then the Redos list holds the item "- Redo 1, after review 1: The total ignores the second item of the cart."
 
-  @bullet-6
   Scenario: A failed plan phase gives a summary of the plan row alone
     Given the issue has no recipe label
     And the plan phase fails after one prompt with 7 turns and the cost "0.4213", 31 seconds after the prompt
@@ -76,7 +70,6 @@ Feature: A run writes a job summary with one row for each phase and the reason f
       | plan | 31 | 7 | $0.4213 | failed |
       """
 
-  @bullet-7
   Scenario: A plan phase with a second prompt adds the seconds, turns and spend of both
     Given the issue has no recipe label
     And the plan phase sends two prompts
@@ -85,7 +78,6 @@ Feature: A run writes a job summary with one row for each phase and the reason f
     When the run delivers with 0 Redos
     Then the summary holds the row "| plan | 51 | 12 | $0.6213 | passed |"
 
-  @bullet-8
   Scenario: A cleanup run has the rows build, test, check and review
     Given the issue has the label "cleanup"
     When the run delivers with 0 Redos
@@ -96,21 +88,18 @@ Feature: A run writes a job summary with one row for each phase and the reason f
       | check 1  |
       | review 1 |
 
-  @bullet-9
   Scenario: A cleanup check that exits with the code 0 is green
     Given the issue has the label "cleanup"
     And the check exits with the code 0 after the first build
     When the run delivers with 0 Redos
     Then the row "check 1" has the result "green"
 
-  @bullet-10
   Scenario: A cleanup check that exits with the code 1 is red
     Given the issue has the label "cleanup"
     And the check exits with the code 1 after the first build
     When the run delivers with 1 Redo
     Then the row "check 1" has the result "red"
 
-  @bullet-11
   Scenario: A refactor run with a Check has the rows plan, build, test, check and review
     Given the issue has the label "refactor" and a "## Check"
     When the run delivers with 0 Redos
@@ -122,7 +111,6 @@ Feature: A run writes a job summary with one row for each phase and the reason f
       | check 1  |
       | review 1 |
 
-  @bullet-12
   Scenario: A refactor run with no Check has no check row
     Given the issue has the label "refactor" and no "## Check"
     When the run delivers with 0 Redos
@@ -133,7 +121,6 @@ Feature: A run writes a job summary with one row for each phase and the reason f
       | test 1   |
       | review 1 |
 
-  @bullet-13
   Scenario: A summary follows the text that the file already holds
     Given the environment variable GITHUB_STEP_SUMMARY names a file that holds the text "earlier step text"
     And the issue has no recipe label

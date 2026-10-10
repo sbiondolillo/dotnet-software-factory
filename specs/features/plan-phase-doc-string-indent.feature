@@ -1,6 +1,5 @@
 Feature: Plan phase doc string indent
 
-  @bullet-1
   Scenario: A doc string indented past its delimiter fails with its line
     Given the agent on every run writes the plan
     And the agent on every run writes the file "specs/features/config.feature" with the text
@@ -26,7 +25,6 @@ Feature: Plan phase doc string indent
     And the plan phase reports one failure
     And the failure names "specs/features/config.feature", "line 11" and "the column of its opening delimiter"
 
-  @bullet-2
   Scenario: A backtick doc string indented past its delimiter fails with its line
     Given the agent on every run writes the plan
     And the agent on every run writes the file "specs/features/ticks.feature" with the text

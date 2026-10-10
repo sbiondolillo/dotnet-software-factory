@@ -4,7 +4,6 @@ Feature: The starter's review-feedback workflow answers the review threads of a 
     Given the template is installed
     When I run dotnet new "factory-starter" into an empty directory
 
-  @bullet-6
   Scenario: The copy's review-feedback workflow holds the pinned text
     Then the copy's workflow "review-feedback.yml" holds this text
       """
@@ -48,19 +47,15 @@ Feature: The starter's review-feedback workflow answers the review threads of a 
               run: dotnet run --project src/App -c Release -- feedback --repo ${{ github.repository }} --pr ${{ github.event.pull_request.number }} --pass-env EXAMPLE_API_KEY
       """
 
-  @bullet-2
   Scenario: The copy's workflows directory holds exactly the three workflow files
     Then the copy's ".github/workflows/" holds the files "factory.yml", "ci.yml" and "review-feedback.yml"
     And the copy's ".github/workflows/" holds no other file
 
-  @bullet-3
   Scenario: The README says to replace the example secret in three workflows
     Then the README section "## Start a new repo" holds the line "Replace `EXAMPLE_API_KEY` in `factory.yml`, in `review-feedback.yml` and in `ci.yml` with the name of each secret the integration tests of the new repo read."
 
-  @bullet-3
   Scenario: The README no longer holds the line that names only two workflows
     Then the README section "## Start a new repo" does not hold the line "Replace `EXAMPLE_API_KEY` in `factory.yml` and in `ci.yml` with the name of each secret the integration tests of the new repo read."
 
-  @bullet-4
   Scenario: The README documents the review-feedback label after the factory label line
     Then the README section "## Start a new repo" holds the line "Create the label `review-feedback` in the new repo. The repo's owner starts a feedback run with the label `review-feedback` on a pull request. The run removes the label, so the owner applies it again for the next round." after the line about the label "factory"

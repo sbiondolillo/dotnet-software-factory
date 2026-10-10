@@ -4,7 +4,6 @@ Feature: A repo made from the starter holds the rules of an issue the factory bu
     Given the template is installed
     When I run dotnet new "factory-starter" into an empty directory
 
-  @bullet-2
   Scenario: The copy's AGENTS.md points at the write-an-issue page
     Then the copy's AGENTS.md at its root holds this text
       """

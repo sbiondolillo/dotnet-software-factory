@@ -14,7 +14,6 @@ Feature: A feedback run on the pull request of a cleanup issue keeps that issue'
     And on a review prompt the agent writes an approving review
     And GitHub answers each reply and each resolve with the status code 200 and no errors
 
-  @bullet-1
   Scenario: A change outside the scope gets a Redo
     Given GitHub answers the read of the pull request with the body "Closes #11"
     And the issue 11 has the label "cleanup" and the scope "README.md"
@@ -22,7 +21,6 @@ Feature: A feedback run on the pull request of a cleanup issue keeps that issue'
     When a caller starts a feedback run
     Then the next build prompt holds a Redo text that holds "outside the scope: src/Core/Greeter.cs"
 
-  @bullet-2
   Scenario: A change to a build settings file that the scope names passes the test gate
     Given GitHub answers the read of the pull request with the body "Closes #11"
     And the issue 11 has the label "cleanup" and the scope ".editorconfig"
@@ -30,7 +28,6 @@ Feature: A feedback run on the pull request of a cleanup issue keeps that issue'
     When a caller starts a feedback run
     Then the test gate of the feedback run passes
 
-  @bullet-3
   Scenario: A lost test gets a Redo
     Given GitHub answers the read of the pull request with the body "Closes #11"
     And the issue 11 has the label "cleanup"
@@ -39,7 +36,6 @@ Feature: A feedback run on the pull request of a cleanup issue keeps that issue'
     When a caller starts a feedback run
     Then the next build prompt holds a Redo text that holds "lost test: " and the name "Specs.Unit.GreeterTests.Greets"
 
-  @bullet-4
   Scenario: The check command runs under sh after the test gate passes
     Given GitHub answers the read of the pull request with the body "Closes #11"
     And the issue 11 has the label "cleanup" and the first fenced block under "## Check" holding the line "grep -q Feedback README.md"
@@ -47,7 +43,6 @@ Feature: A feedback run on the pull request of a cleanup issue keeps that issue'
     When a caller starts a feedback run
     Then the feedback run runs "grep -q Feedback README.md" under sh in a copy of the work tree after the test gate passes
 
-  @bullet-5
   Scenario: A failing check gets a Redo
     Given GitHub answers the read of the pull request with the body "Closes #11"
     And the issue 11 has the label "cleanup" and the line "grep -q Feedback README.md" under "## Check"
@@ -55,7 +50,6 @@ Feature: A feedback run on the pull request of a cleanup issue keeps that issue'
     When a caller starts a feedback run
     Then the next build prompt holds a Redo text that holds "The check command exited with the code 1"
 
-  @bullet-6
   Scenario: A passing check starts the review
     Given GitHub answers the read of the pull request with the body "Closes #11"
     And the issue 11 has the label "cleanup" and the line "grep -q Feedback README.md" under "## Check"
@@ -63,7 +57,6 @@ Feature: A feedback run on the pull request of a cleanup issue keeps that issue'
     When a caller starts a feedback run
     Then the feedback run starts the review
 
-  @bullet-7
   Scenario: Standard output shows the check between the test and the review
     Given GitHub answers the read of the pull request with the body "Closes #11"
     And the issue 11 has the label "cleanup" and the line "grep -q Feedback README.md" under "## Check"
@@ -76,21 +69,18 @@ Feature: A feedback run on the pull request of a cleanup issue keeps that issue'
       | check: green |
       | review: start |
 
-  @bullet-8
   Scenario: An issue with no label cleanup gets no check
     Given GitHub answers the read of the pull request with the body "Closes #11"
     And the issue 11 has no label "cleanup" and the line "grep -q Feedback README.md" under "## Check"
     When a caller starts a feedback run
     Then the feedback run runs no check command
 
-  @bullet-9
   Scenario: A body with no closing line reads no issue
     Given GitHub answers the read of the pull request with a body that holds no closing line
     When a caller starts a feedback run
     Then the feedback run reads no issue
     And the feedback run runs no check command
 
-  @bullet-10
   Scenario: The README documents the feedback run of a cleanup pull request
     When a reader reads the section "## Start a new repo" of README.md
     Then the section holds a sentence after the paragraph that starts 'The body of a `cleanup` issue names the paths'

@@ -12,13 +12,11 @@ Feature: A cleanup run fixes a test, a config file or a document
     And the agent approves on the review prompt
     And GitHub answers the open of the pull request with the number 10 and the web address "https://github.com/sbiondolillo/factory-scratch/pull/10"
 
-  @bullet-1
   Scenario: A cleanup run runs no plan prompt
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     When a caller starts a run
     Then FactoryRun runs no prompt with the plan model
 
-  @bullet-2
   Scenario: The labels cleanup and behavior get a comment
     Given the issue has the labels "cleanup" and "behavior"
     When a caller starts a run
@@ -26,7 +24,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     And FactoryRun starts no container
     And FactoryRun gives back a result with no pull request and 0 Redos
 
-  @bullet-3
   Scenario: A body with no Scope heading gets a comment
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with no heading "## Scope"
     When a caller starts a run
@@ -34,7 +31,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     And FactoryRun starts no container
     And FactoryRun gives back a result with no pull request and 0 Redos
 
-  @bullet-4
   Scenario: A Scope heading with only blank lines gets a comment
     Given the issue has the label "cleanup", the title "Fix the install test" and a body whose heading "## Scope" holds only blank lines before the next heading
     When a caller starts a run
@@ -42,7 +38,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     And FactoryRun starts no container
     And FactoryRun gives back a result with no pull request and 0 Redos
 
-  @bullet-5
   Scenario: A body with no Check heading gets a comment
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with no heading "## Check"
     When a caller starts a run
@@ -50,7 +45,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     And FactoryRun starts no container
     And FactoryRun gives back a result with no pull request and 0 Redos
 
-  @bullet-6
   Scenario: A Check heading with no fenced block gets a comment
     Given the issue has the label "cleanup", the title "Fix the install test" and a body whose heading "## Check" holds no fenced block before the next heading
     When a caller starts a run
@@ -58,25 +52,21 @@ Feature: A cleanup run fixes a test, a config file or a document
     And FactoryRun starts no container
     And FactoryRun gives back a result with no pull request and 0 Redos
 
-  @bullet-7
   Scenario: The check command runs under sh before the build prompt
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     When a caller starts a run
     Then the container runs "sh -c" with the argument "grep -q Install README.md" before the build prompt
 
-  @bullet-8
   Scenario: The check command runs in a detached worktree outside /work
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     When a caller starts a run
     Then the container runs "git worktree add --detach" at a path outside "/work" and the check command runs in that path on the head commit
 
-  @bullet-9
   Scenario: The copy is removed when the check command ends
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     When a caller starts a run
     Then the container runs "git worktree remove --force" on the copy after the check command ends
 
-  @bullet-10
   Scenario: A check that passes before the build gets a comment
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 0 before the build
@@ -85,7 +75,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     And FactoryRun runs no build prompt
     And FactoryRun gives back a result with no pull request and 0 Redos
 
-  @bullet-11
   Scenario: A check that exits with 126 gets a comment with its standard error
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 126 before the build and writes a standard error
@@ -94,7 +83,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     And FactoryRun runs no build prompt
     And FactoryRun gives back a result with no pull request and 0 Redos
 
-  @bullet-12
   Scenario: A check that exits with 127 gets a comment with its standard error
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 127 before the build and writes a standard error
@@ -103,21 +91,18 @@ Feature: A cleanup run fixes a test, a config file or a document
     And FactoryRun runs no build prompt
     And FactoryRun gives back a result with no pull request and 0 Redos
 
-  @bullet-13
   Scenario: A red check starts the build prompt with the issue
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
     When a caller starts a run
     Then FactoryRun runs one prompt with the model "build-model" and the turn limit 60 that holds the title and the body of the issue
 
-  @bullet-14
   Scenario: The cleanup build prompt names no plan
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
     When a caller starts a run
     Then the build prompt holds no ".factory/plan.md"
 
-  @bullet-15
   Scenario: A change outside the scope gets a Redo
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -126,7 +111,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     Then the next build prompt holds a Redo text that holds "outside the scope: src/Core/Greeter.cs"
     And no review prompt runs before it
 
-  @bullet-16
   Scenario: A directory entry covers the paths below it
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "tests/Specs/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -135,7 +119,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     When a caller starts a run
     Then FactoryRun runs the review prompt
 
-  @bullet-17
   Scenario: A glob entry covers the matching paths
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "tests/Specs/Steps/*Steps.cs" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -144,7 +127,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     When a caller starts a run
     Then FactoryRun runs the review prompt
 
-  @bullet-18
   Scenario: A file entry covers that file
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -153,7 +135,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     When a caller starts a run
     Then FactoryRun runs the review prompt
 
-  @bullet-19
   Scenario: A file entry does not cover a file of the same name elsewhere
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -161,7 +142,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     When a caller starts a run
     Then the next build prompt holds a Redo text that holds "outside the scope: docs/README.md"
 
-  @bullet-20
   Scenario: A change to a feature file gets a pin Redo
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "specs/features/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -170,7 +150,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     Then the next build prompt holds a Redo text that holds "pin: specs/features/greeting.feature"
     And no review prompt runs before it
 
-  @bullet-21
   Scenario: An entry for a settings file covers it
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope ".editorconfig" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -179,7 +158,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     When a caller starts a run
     Then FactoryRun runs the review prompt
 
-  @bullet-22
   Scenario: A lost test gets a Redo
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -189,7 +167,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     Then the next build prompt holds a Redo text that holds "lost test: Specs.Unit.GreeterTests.Greets"
     And no review prompt runs before it
 
-  @bullet-23
   Scenario: A new passed test with no lost test reaches the review
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -199,7 +176,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     When a caller starts a run
     Then FactoryRun runs the review prompt
 
-  @bullet-24
   Scenario: A red check after a build gets a Redo with its output
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -208,7 +184,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     Then the next build prompt holds a Redo text that holds "1", the standard output and the standard error of the command
     And no review prompt runs before it
 
-  @bullet-25
   Scenario: A green check after a build starts the review prompt
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -216,7 +191,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     When a caller starts a run
     Then FactoryRun runs one prompt with the model "review-model" and the turn limit 30 that holds the title of the issue, the body of the issue and the base commit
 
-  @bullet-26
   Scenario: The cleanup review prompt names no plan
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -224,7 +198,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     When a caller starts a run
     Then the review prompt holds no ".factory/plan.md"
 
-  @bullet-27
   Scenario: An approved cleanup build opens a pull request
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -232,7 +205,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     When a caller starts a run
     Then FactoryRun opens a pull request with the title "Fix the install test" and gives back a result with that pull request and 0 Redos
 
-  @bullet-28
   Scenario: Four red builds give a comment and no pull request
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -242,7 +214,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     And FactoryRun pushes no branch
     And FactoryRun gives back a result with no pull request and 3 Redos
 
-  @bullet-29
   Scenario: The program writes one progress line for each cleanup step
     Given the environment holds "FACTORY_GITHUB_TOKEN" and "ANTHROPIC_API_KEY"
     And the issue 12 has the label "cleanup" and each step passes
@@ -266,7 +237,6 @@ Feature: A cleanup run fixes a test, a config file or a document
       | watch: start |
       | checks: green, unresolved threads: 0 |
 
-  @bullet-30
   Scenario: A redo line sits between the red check and the next build
     Given the environment holds "FACTORY_GITHUB_TOKEN" and "ANTHROPIC_API_KEY"
     And the issue 12 has the label "cleanup"
@@ -278,7 +248,6 @@ Feature: A cleanup run fixes a test, a config file or a document
       | redo: 1 |
       | build: start |
 
-  @bullet-31
   Scenario: The README documents the cleanup run
     When a reader reads the section "## Start a new repo" of README.md
     Then the section mentions the label "cleanup"

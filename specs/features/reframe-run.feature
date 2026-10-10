@@ -12,13 +12,11 @@ Feature: A reframe run keeps every test and every public type and member
     And the agent approves on the review prompt
     And GitHub answers the open of the pull request with the number 10 and the web address "https://github.com/sbiondolillo/factory-scratch/pull/10"
 
-  @bullet-1
   Scenario: A reframe run runs no plan prompt
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     When a caller starts a run
     Then FactoryRun runs no prompt with the plan model
 
-  @bullet-2
   Scenario: The labels reframe and behavior get a comment
     Given the issue has the labels "reframe" and "behavior"
     When a caller starts a run
@@ -26,7 +24,6 @@ Feature: A reframe run keeps every test and every public type and member
     And FactoryRun starts no container
     And FactoryRun gives back a result with no pull request and 0 Redos
 
-  @bullet-3
   Scenario: The labels reframe and cleanup get a comment
     Given the issue has the labels "reframe" and "cleanup"
     When a caller starts a run
@@ -34,7 +31,6 @@ Feature: A reframe run keeps every test and every public type and member
     And FactoryRun starts no container
     And FactoryRun gives back a result with no pull request and 0 Redos
 
-  @bullet-4
   Scenario: The labels reframe and refactor get a comment
     Given the issue has the labels "reframe" and "refactor"
     When a caller starts a run
@@ -42,7 +38,6 @@ Feature: A reframe run keeps every test and every public type and member
     And FactoryRun starts no container
     And FactoryRun gives back a result with no pull request and 0 Redos
 
-  @bullet-5
   Scenario: A body with no Scope heading gets a comment
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with no heading "## Scope"
     When a caller starts a run
@@ -50,7 +45,6 @@ Feature: A reframe run keeps every test and every public type and member
     And FactoryRun starts no container
     And FactoryRun gives back a result with no pull request and 0 Redos
 
-  @bullet-6
   Scenario: A body with no Check heading gets a comment
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with no heading "## Check"
     When a caller starts a run
@@ -58,25 +52,21 @@ Feature: A reframe run keeps every test and every public type and member
     And FactoryRun starts no container
     And FactoryRun gives back a result with no pull request and 0 Redos
 
-  @bullet-7
   Scenario: The check command runs under sh before the build prompt
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     When a caller starts a run
     Then the container runs "sh -c" with the argument "grep -q Install README.md" before the build prompt
 
-  @bullet-8
   Scenario: The check command runs in a detached worktree outside /work
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     When a caller starts a run
     Then the container runs "git worktree add --detach" at a path outside "/work" and the check command runs in that path on the head commit
 
-  @bullet-9
   Scenario: The copy is removed when the check command ends
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     When a caller starts a run
     Then the container runs "git worktree remove --force" on the copy after the check command ends
 
-  @bullet-10
   Scenario: A check that passes before the build gets a comment
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 0 before the build
@@ -85,7 +75,6 @@ Feature: A reframe run keeps every test and every public type and member
     And FactoryRun runs no build prompt
     And FactoryRun gives back a result with no pull request and 0 Redos
 
-  @bullet-11
   Scenario: A check that exits with 126 gets a comment with its standard error
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 126 before the build and writes a standard error
@@ -94,7 +83,6 @@ Feature: A reframe run keeps every test and every public type and member
     And FactoryRun runs no build prompt
     And FactoryRun gives back a result with no pull request and 0 Redos
 
-  @bullet-12
   Scenario: A check that exits with 127 gets a comment with its standard error
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 127 before the build and writes a standard error
@@ -103,28 +91,24 @@ Feature: A reframe run keeps every test and every public type and member
     And FactoryRun runs no build prompt
     And FactoryRun gives back a result with no pull request and 0 Redos
 
-  @bullet-13
   Scenario: A red check runs the API printer before the build prompt
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
     When a caller starts a run
     Then the container runs "dotnet" with the arguments "/opt/api-printer/ApiPrinter.dll" and "src" before the build prompt
 
-  @bullet-14
   Scenario: The API printer runs in a built detached worktree outside /work
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
     When a caller starts a run
     Then the container runs "git worktree add --detach" at a path outside "/work", and in that path "dotnet restore --locked-mode" and then "dotnet build --no-restore" run before the API printer
 
-  @bullet-15
   Scenario: The copy is removed when the API printer ends
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
     When a caller starts a run
     Then the container runs "git worktree remove --force" on the copy after the API printer ends
 
-  @bullet-16
   Scenario: A copy that does not build gets a comment with the build output
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -135,7 +119,6 @@ Feature: A reframe run keeps every test and every public type and member
     And FactoryRun runs no build prompt
     And FactoryRun gives back a result with no pull request and 0 Redos
 
-  @bullet-17
   Scenario: An API printer that finds no assembly before the build gets a comment
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -145,7 +128,6 @@ Feature: A reframe run keeps every test and every public type and member
     And FactoryRun runs no build prompt
     And FactoryRun gives back a result with no pull request and 0 Redos
 
-  @bullet-18
   Scenario: A listed API starts the build prompt with the issue
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -156,14 +138,12 @@ Feature: A reframe run keeps every test and every public type and member
       Make the change the issue asks for to its config files first, then run dotnet format --no-restore once from the repo root, before any edit to a source file. Edit by hand only what the build still reports.
       """
 
-  @bullet-19
   Scenario: The reframe build prompt names no plan
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
     When a caller starts a run
     Then the build prompt holds no ".factory/plan.md"
 
-  @bullet-20
   Scenario: A change outside the scope gets a Redo
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -172,7 +152,6 @@ Feature: A reframe run keeps every test and every public type and member
     Then the next build prompt holds a Redo text that holds "outside the scope: docs/README.md"
     And no review prompt runs before it
 
-  @bullet-21
   Scenario: A change under src with the same tests and API reaches the review
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -184,7 +163,6 @@ Feature: A reframe run keeps every test and every public type and member
     Then FactoryRun runs the review prompt
     And the review prompt holds "keeps every test and every public type and member"
 
-  @bullet-22
   Scenario: A change to a feature file gets a pin Redo
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "specs/features/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -194,7 +172,6 @@ Feature: A reframe run keeps every test and every public type and member
     And the next build prompt holds a Redo text that holds "pin: specs/features/greeting.feature"
     And no review prompt runs before it
 
-  @bullet-23
   Scenario: An entry for a settings file covers it
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope ".editorconfig" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -206,7 +183,6 @@ Feature: A reframe run keeps every test and every public type and member
     Then FactoryRun runs the review prompt
     And the review prompt holds "keeps every test and every public type and member"
 
-  @bullet-24
   Scenario: A lost test gets a Redo
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -216,7 +192,6 @@ Feature: A reframe run keeps every test and every public type and member
     Then the next build prompt holds a Redo text that holds "lost test: Specs.Unit.GreeterTests.Greets"
     And no review prompt runs before it
 
-  @bullet-25
   Scenario: A new passed test with no lost test reaches the review
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -228,7 +203,6 @@ Feature: A reframe run keeps every test and every public type and member
     Then FactoryRun runs the review prompt
     And the review prompt holds "keeps every test and every public type and member"
 
-  @bullet-26
   Scenario: A lost symbol gets a Redo
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -239,7 +213,6 @@ Feature: A reframe run keeps every test and every public type and member
     Then the next build prompt holds a Redo text with "lost symbol:" once, in "lost symbol: Core: Core.Greeter::method public static System.String Greet(System.String)", and no "new symbol:"
     And no review prompt runs before it
 
-  @bullet-27
   Scenario: A new symbol gets a Redo
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -250,7 +223,6 @@ Feature: A reframe run keeps every test and every public type and member
     Then the next build prompt holds a Redo text with "new symbol:" once, in "new symbol: Core: class static Core.Extra", and no "lost symbol:"
     And no review prompt runs before it
 
-  @bullet-28
   Scenario: An API printer that finds no assembly after the build gets a Redo
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -260,7 +232,6 @@ Feature: A reframe run keeps every test and every public type and member
     Then the next build prompt holds a Redo text that holds "the code 3" and the standard error of the API printer
     And no review prompt runs before it
 
-  @bullet-29
   Scenario: A red check after a build gets a Redo with its output
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -271,7 +242,6 @@ Feature: A reframe run keeps every test and every public type and member
     Then the next build prompt holds a Redo text that holds "1", the standard output and the standard error of the command
     And no review prompt runs before it
 
-  @bullet-30
   Scenario: A green check after a build starts the review prompt
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -285,7 +255,6 @@ Feature: A reframe run keeps every test and every public type and member
       Judge the build against every sentence of the issue: it changes only the paths under ## Scope, keeps the behaviour of the program and makes the command under ## Check pass, and it keeps every test and every public type and member of the code under src/.
       """
 
-  @bullet-31
   Scenario: The reframe review prompt names no plan
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -293,7 +262,6 @@ Feature: A reframe run keeps every test and every public type and member
     When a caller starts a run
     Then the review prompt holds no ".factory/plan.md"
 
-  @bullet-32
   Scenario: An approved reframe build opens a pull request
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -302,7 +270,6 @@ Feature: A reframe run keeps every test and every public type and member
     Then FactoryRun opens a pull request with the title "Sweep the format of src" and gives back a result with that pull request and 0 Redos
     And the body of the pull request holds the line "- check: green"
 
-  @bullet-33
   Scenario: Four red builds give a comment and no pull request
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -314,7 +281,6 @@ Feature: A reframe run keeps every test and every public type and member
     And FactoryRun pushes no branch
     And FactoryRun gives back a result with no pull request and 3 Redos
 
-  @bullet-34
   Scenario: The program writes one progress line for each reframe step
     Given the environment holds "FACTORY_GITHUB_TOKEN" and "ANTHROPIC_API_KEY"
     And the issue 12 has the label "reframe" and each step passes
@@ -342,7 +308,6 @@ Feature: A reframe run keeps every test and every public type and member
       | watch: start |
       | checks: green, unresolved threads: 0 |
 
-  @bullet-35
   Scenario: A redo line sits between the changed API and the next build
     Given the environment holds "FACTORY_GITHUB_TOKEN" and "ANTHROPIC_API_KEY"
     And the issue 12 has the label "reframe"
@@ -355,7 +320,6 @@ Feature: A reframe run keeps every test and every public type and member
       | redo: 1 |
       | build: start |
 
-  @bullet-36
   Scenario: The README documents the reframe run
     When a reader reads the section "## Start a new repo" of README.md
     Then the section mentions the label "reframe"
@@ -364,7 +328,6 @@ Feature: A reframe run keeps every test and every public type and member
       Create the label `reframe` in the new repo. The repo's owner starts a reframe run, a run with no plan, with the label `reframe` on an issue. A reframe issue keeps the behaviour of the program and changes the code, the tests or the config. A format sweep and a framework upgrade are reframe issues. The body names the paths the build can change under the heading `## Scope`, as a `cleanup` issue does. The scope can name `src/`. The body holds under the heading `## Check` one fenced `sh` block that fails before the change and exits with the code 0 after it. The run records the tests that pass on the base commit. It also records the public API of the code under `src/`: one line per public type and per public or protected member. The build runs again when it loses a test or changes a line of that API. The label `reframe` with the label `behavior`, `cleanup` or `refactor` on one issue gets a comment and no run.
       """
 
-  @bullet-37
   Scenario: The sandbox Dockerfile publishes the API printer
     Then the file "sandbox/Dockerfile" of this repo holds this text
       """
@@ -399,7 +362,6 @@ Feature: A reframe run keeps every test and every public type and member
       WORKDIR /home/node
       """
 
-  @bullet-38
   Scenario: The API printer project holds the pinned text
     Then the file "sandbox/ApiPrinter/ApiPrinter.csproj" of this repo holds this text
       """
@@ -421,7 +383,6 @@ Feature: A reframe run keeps every test and every public type and member
       </Project>
       """
 
-  @bullet-39
   Scenario: The API printer program holds the pinned text
     Then the file "sandbox/ApiPrinter/Program.cs" of this repo holds this text
       """
