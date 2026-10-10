@@ -1,13 +1,13 @@
 ---
 name: story
-description: Turn a requested change to this repo into a story issue, judge its draft, and build it once the owner approves. Use when a change to this repo is requested, or when an issue with the label ready is to be built.
+description: Turn a requested change to this repo into a story issue, judge its draft, and build it once the owner approves, or build a change the owner states exactly and approves in chat. Use when a change to this repo is requested, or when an issue with the label ready is to be built.
 ---
 
 A change to this repo that needs a **story** goes through two gates. The owner approves the story on GitHub before a build starts. The owner merges the pull request after it is built. The story says what the system does after the change, at the level of behaviour. The full detail lives in the branch, one time.
 
 The body of the issue is the **handoff**. It holds everything a build needs: the story, what changes, the scenarios, and `## Context` for each fact of the world and for the branch of a prototype. So a session builds from the issue number alone, in any worktree, on any machine. The owner reads one body, with no comment under it.
 
-A change that the owner states exactly and approves in chat builds in that session, with no story and no draft judges. The branch review of step 7 reads the owner's request text as the spec, in place of a body. A story is filed when the owner states a behaviour and wants to read its scenarios before code, or when another session or a batch builds it.
+A change that the owner states exactly and approves in chat builds in that session, with no story and no draft judges. The branch review of step 7 reads the owner's request text as the spec, in place of a body. A story is filed when the owner states a behaviour and wants to read its scenarios before code, or when another session or a batch builds it. On the no-story path, a file that holds the owner's request stands in for the body and the title, the worktree and the branch take a short slug with no number, step 7 gets that file in place of the issue number and the body, and step 8 skips the two scenario-name checks and the line `Closes #<n>`.
 
 Start at **Draft** for a new request that needs a story. Start at **Build** at step 6 for a change the owner stated exactly and approved in chat. Start at **Build** for one issue that has the label `ready`. Start at **Build a batch** to build every story that is ready.
 
@@ -46,7 +46,7 @@ Done when a contributor with no access to this session could build the change fr
 
 ### 3. Judge the draft
 
-Run the angles of [`JUDGES.md`](JUDGES.md) → "Judge a draft" on the file, as subagents in parallel. `Holes` runs only on a draft that holds a check or a text that a scenario pins whole. A plain behaviour draft gets `Claims against main` and `The story`, and no `Holes`. Each round below runs the same angles. Read each fault against `main` before you act on it. Apply every fix in one pass. Run step 1 again for a claim the fix changes. Build the prototype of step 2 for a hole that a judge named with its scenario, its break and its command. A hunch marked `unproven` goes into `## Context` as it is, and gets no prototype. The judges' own proofs are not the prototype.
+Run the angles of [`JUDGES.md`](JUDGES.md) → "Judge a draft" on the file, as subagents in parallel. `Holes` runs only on a draft that holds a check, or a change to a text that a scenario pins. A plain behaviour draft gets `Claims against main` and `The story`, and no `Holes`. Each round below runs the same angles. Read each fault against `main` before you act on it. Apply every fix in one pass. Run step 1 again for a claim the fix changes. Build the prototype of step 2 for a hole that a judge named with its scenario, its break and its command. A hunch marked `unproven` goes into `## Context` as it is, and gets no prototype. The judges' own proofs are not the prototype.
 
 The run above is round 1. When an angle of round 1 rejects, run the angles again on the fixed draft. This is round 2, and the last round. Act on each fault of round 2 as above, except a hole. A hole of round 2 goes into `## Context` as a line with its scenario, its break, its command and the output, and gets no fix and no prototype. No round 3 runs, and the owner is not asked for one.
 

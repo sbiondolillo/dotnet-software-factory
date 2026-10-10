@@ -43,7 +43,7 @@ Feature: Story skill
 
   Scenario: Each draft judge of the story skill ends on a verdict, and Holes refuses a pin of the program
     Then the file ".claude/skills/story/JUDGES.md" of this repo holds the line "Each judge reports `accept` or `reject`, and `accept` has no fault. Then it reports each fault with the quoted text, the evidence as a path and a line, and the replacement text. Then it gives one line for each thing it found clean."
-    And the file ".claude/skills/story/JUDGES.md" of this repo holds the line "A check pins the claim of the story, not the program. A break that the build or the test suite catches is not a hole. `Holes` accepts when each remaining hole needs a change that no scenario of the request implies."
+    And the file ".claude/skills/story/JUDGES.md" of this repo holds the line "A check pins the claim of the story, not the program. A break that the build or the test suite catches is not a hole. `Holes` accepts when each remaining hole needs a change that no scenario of the request implies. Such a hole is reported as a line for `## Context`, not as a fault."
     And the file ".claude/skills/story/JUDGES.md" of this repo holds the line "Done when each hole names the scenario or the line of the draft that closes it, or the change it needs that no scenario of the request implies."
 
   Scenario: The story skill stops the judges of a draft after round 2
@@ -52,11 +52,11 @@ Feature: Story skill
     And the file ".claude/skills/story/SKILL.md" of this repo holds no line that holds "Done when each fault is fixed in the draft or refuted with its evidence."
 
   Scenario: A change the owner states exactly and approves in chat builds with no story
-    Then the file ".claude/skills/story/SKILL.md" of this repo holds the line "A change that the owner states exactly and approves in chat builds in that session, with no story and no draft judges. The branch review of step 7 reads the owner's request text as the spec, in place of a body. A story is filed when the owner states a behaviour and wants to read its scenarios before code, or when another session or a batch builds it."
+    Then the file ".claude/skills/story/SKILL.md" of this repo holds the line "A change that the owner states exactly and approves in chat builds in that session, with no story and no draft judges. The branch review of step 7 reads the owner's request text as the spec, in place of a body. A story is filed when the owner states a behaviour and wants to read its scenarios before code, or when another session or a batch builds it. On the no-story path, a file that holds the owner's request stands in for the body and the title, the worktree and the branch take a short slug with no number, step 7 gets that file in place of the issue number and the body, and step 8 skips the two scenario-name checks and the line `Closes #<n>`."
     And the file ".claude/skills/story/SKILL.md" of this repo holds a line that holds "Start at **Draft** for a new request that needs a story. Start at **Build** at step 6 for a change the owner stated exactly and approved in chat."
     And the file ".claude/skills/story/SKILL.md" of this repo holds a line that holds "A change to this repo that needs a **story** goes through two gates."
     And the file ".claude/skills/story/SKILL.md" of this repo holds no line that holds "A change to this repo goes through two gates."
 
   Scenario: Holes judges only a draft that holds a check or a pinned text
-    Then the file ".claude/skills/story/SKILL.md" of this repo holds a line that holds "`Holes` runs only on a draft that holds a check or a text that a scenario pins whole. A plain behaviour draft gets `Claims against main` and `The story`, and no `Holes`."
-    And the file ".claude/skills/story/JUDGES.md" of this repo holds the line "This angle runs only on a draft that holds a check or a text that a scenario pins whole. A plain behaviour draft does not get it: its sad paths are the owner's to state, and a builder that can read the repo asks."
+    Then the file ".claude/skills/story/SKILL.md" of this repo holds a line that holds "`Holes` runs only on a draft that holds a check, or a change to a text that a scenario pins. A plain behaviour draft gets `Claims against main` and `The story`, and no `Holes`."
+    And the file ".claude/skills/story/JUDGES.md" of this repo holds the line "This angle runs only on a draft that holds a check, or a change to a text that a scenario pins. A plain behaviour draft does not get it: its sad paths are the owner's to state, and a builder that can read the repo asks."
