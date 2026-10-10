@@ -6,7 +6,7 @@ using Xunit;
 namespace Specs.Steps;
 
 [Binding]
-public sealed class GitSteps(ExceptionState exceptionState)
+public sealed class GitSteps(ExceptionState exceptionState, WorkTreeState workTree)
 {
     private readonly List<CommandSpec> _recorded = [];
     private readonly Dictionary<string, CommandResult> _results = [];
@@ -106,6 +106,17 @@ public sealed class GitSteps(ExceptionState exceptionState)
             exceptionState.Exception = ex;
         }
     }
+
+    [When("Git reads the head SHA in that work tree")]
+    public Task WhenGitReadsTheHeadShaInThatWorkTree() => WhenGitReadsTheHeadSha(workTree.Path);
+
+    [When("Git reads the diff since {string} in that work tree")]
+    public Task WhenGitReadsTheDiffSinceInThatWorkTree(string baseCommit)
+        => RunAsync(() => _git!.ReadDiffAsync(baseCommit, workTree.Path));
+
+    [When("Git pushes the branch {string} from that work tree with the token {string}")]
+    public Task WhenGitPushesTheBranchFromThatWorkTree(string branch, string token)
+        => WhenGitPushesTheBranch(branch, workTree.Path, token);
 
     [When("Git lists the files changed since {string} in {string}")]
     public async Task WhenGitListsTheFilesChangedSince(string baseCommit, string directory)
@@ -254,6 +265,13 @@ public sealed class GitSteps(ExceptionState exceptionState)
         Assert.IsType<GitCommandException>(exceptionState.Exception);
         Assert.Contains(text, exceptionState.Exception.Message, StringComparison.Ordinal);
     }
+
+    [Then("Git throws a GitCommandException whose message holds {string}")]
+    public void ThenGitThrowsAGitCommandExceptionWhoseMessageHolds(string text)
+        => ThenGitThrowsAGitCommandExceptionWhoseMessageContains(text);
+
+    [Then("the mock CommandRunner recorded no CommandSpec")]
+    public void ThenTheMockCommandRunnerRecordedNoCommandSpec() => Assert.Empty(_recorded);
 
     [Then("every call the mock CommandRunner recorded received the cancellation token named {string}")]
     public void ThenEveryCallTheMockCommandRunnerRecordedReceivedTheCancellationTokenNamed(string tokenName)

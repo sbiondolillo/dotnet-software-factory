@@ -68,3 +68,21 @@ Feature: Git
     When Git checks out the new branch "feature-10" in "/tmp/factory-clone-10"
     Then Git throws a GitCommandException whose message contains "checkout"
     And the exception message contains "fatal: reference already exists"
+
+  Scenario: A nested git directory stops a git command before it runs
+    Given a work tree in a new directory that holds a directory "sub/.git"
+    When Git reads the head SHA in that work tree
+    Then Git throws a GitCommandException whose message holds "sub/.git"
+    And the mock CommandRunner recorded no CommandSpec
+
+  Scenario: A nested git file stops a git command before it runs
+    Given a work tree in a new directory that holds a file "lib/.git"
+    When Git reads the diff since "main" in that work tree
+    Then Git throws a GitCommandException whose message holds "lib/.git"
+    And the mock CommandRunner recorded no CommandSpec
+
+  Scenario: A nested git symlink stops a git command before it runs
+    Given a work tree in a new directory that holds a symlink "vendor/.git"
+    When Git pushes the branch "feature-1" from that work tree with the token "token-1"
+    Then Git throws a GitCommandException whose message holds "vendor/.git"
+    And the mock CommandRunner recorded no CommandSpec

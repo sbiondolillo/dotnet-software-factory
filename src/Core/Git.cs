@@ -163,6 +163,16 @@ public sealed class Git(CommandRunner runner)
 
     private async Task<CommandResult> RunAsync(CommandSpec spec, CancellationToken cancellationToken)
     {
+        if (spec.WorkingDirectory is not null)
+        {
+            List<string> nested = NestedGitEntries(spec.WorkingDirectory);
+            if (nested.Count is not 0)
+            {
+                throw new GitCommandException(
+                    spec.Arguments[0], $"the work tree holds a .git other than its own, or a directory that cannot be read: {string.Join(", ", nested)}");
+            }
+        }
+
         CommandResult result = await runner.RunAsync(spec, cancellationToken).ConfigureAwait(false);
         if (result.ExitCode is not 0)
         {
@@ -170,6 +180,55 @@ public sealed class Git(CommandRunner runner)
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Lists each directory, file or symlink named <c>.git</c> under <paramref name="workTree"/> other than its own,
+    /// and each directory that cannot be read. Git runs the hooks and the config of a nested repo, outside the sandbox.
+    /// </summary>
+    private static List<string> NestedGitEntries(string workTree)
+    {
+        List<string> found = [];
+        if (!Directory.Exists(workTree))
+        {
+            return found;
+        }
+
+        var options = new EnumerationOptions { AttributesToSkip = 0, IgnoreInaccessible = false };
+        var root = new DirectoryInfo(workTree);
+        Stack<DirectoryInfo> pending = new([root]);
+        while (pending.Count is not 0)
+        {
+            DirectoryInfo directory = pending.Pop();
+            FileSystemInfo[] entries;
+            try
+            {
+                entries = directory.GetFileSystemInfos("*", options);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                found.Add($"{Path.GetRelativePath(workTree, directory.FullName)} (unreadable)");
+                continue;
+            }
+
+            foreach (FileSystemInfo entry in entries)
+            {
+                if (entry.Name is ".git")
+                {
+                    if (!ReferenceEquals(directory, root))
+                    {
+                        found.Add(Path.GetRelativePath(workTree, entry.FullName));
+                    }
+                }
+                else if (entry is DirectoryInfo subdirectory && !entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                {
+                    pending.Push(subdirectory);
+                }
+            }
+        }
+
+        found.Sort(StringComparer.Ordinal);
+        return found;
     }
 
     private static Dictionary<string, string> CredentialEnvironment(string token) => new()
