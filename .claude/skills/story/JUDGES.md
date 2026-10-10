@@ -16,7 +16,7 @@ Done when each claim names its line on `main`, and each test the change makes fa
 
 ### Holes
 
-Find each way a build passes every scenario of the draft and still misses the request: a check that accepts too much, a text pinned in part where a reader reads all of it, a sad path the request implies and no scenario states. Prove a likely hole in a scratch worktree of `main` when a command can show it, and report the command and its output, not the code of the proof.
+Find each way a build passes every scenario of the draft and still misses the request: a check that accepts too much, a text pinned in part where a reader reads all of it, a sad path the request implies and no scenario states. A hole is proven in a scratch worktree of `main` only when the judge names three things: the scenario, the break that keeps it green, and the one command that settles it. Then report the command and its output, not the code of the proof. A hunch with no such command is reported as a sentence for `## Context`, marked `unproven`.
 
 Done when each hole names the scenario or the line of the draft that closes it.
 
@@ -68,9 +68,11 @@ git reset -q --hard <SHA>
 
 A scenario that stays green with a file of the change put back is a finding: it pins nothing in that file.
 
+When `<SHA>` is the prototype's SHA that the caller gives, the table of `## Context` stands for the first run and for the runs with each file put back. The reviewer reads the table, and makes only the narrower mutations below. A file of `git diff --name-only <base>...<SHA>` with no row in the table gets its put-back run as above.
+
 Then make two or more narrower mutations of the new code. Each one is an edit that the controls of the body do not cover: a bound off by one, a branch inverted, a line of a pinned text changed. Run the features for each, and restore the commit after each. A mutation that no scenario fails is a finding, with the scenario that should fail it.
 
-Done when the first run on `<SHA>` has its `Total`, each changed file has its list of scenarios that stay green, and two or more narrower mutations have theirs.
+Done when the first run on `<SHA>` has its `Total` or the table of `## Context` stands for it, each changed file has its list of scenarios that stay green, and two or more narrower mutations have theirs.
 
 ### Regressions and style
 

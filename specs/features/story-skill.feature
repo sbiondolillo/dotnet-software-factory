@@ -22,3 +22,26 @@ Feature: Story skill
     And the file ".claude/skills/story/JUDGES.md" of this repo holds a line that holds "report the command and its output, not the code of the proof"
     And the file ".claude/skills/story/JUDGES.md" of this repo holds a line that holds "Read each text a scenario pins as `git diff <base>...<SHA> -- <path>`, against `**What changes.**`."
     And the file ".claude/skills/story/JUDGES.md" of this repo holds no line that holds "cmp <saved> <path>"
+
+  Scenario: A prototype is built for a pinned text or a named hole, and for nothing else
+    Then the file ".claude/skills/story/SKILL.md" of this repo holds a line that holds "A **prototype** is built for two reasons only: a change to a text that a scenario pins, so the owner reads a diff, or a hole that a judge named with its scenario, its break and its command."
+    And the file ".claude/skills/story/SKILL.md" of this repo holds a line that holds "Any other draft has no prototype. Code is not such a text: a scenario pins what code does."
+    And the file ".claude/skills/story/SKILL.md" of this repo holds a line that holds "Run step 1 again for a claim the fix changes. Build the prototype of step 2 for a hole that a judge named with its command."
+    And the file ".claude/skills/story/SKILL.md" of this repo holds a line that holds "A prototype for a named hole has a row for the break the judge named, and a scenario of the draft fails it."
+    And the file ".claude/skills/story/SKILL.md" of this repo holds no line that holds "needs proof"
+    And the file ".claude/skills/story/SKILL.md" of this repo holds no line that holds "needs a proof"
+
+  Scenario: The Holes judge proves a hole only with its scenario, its break and one command
+    Then the file ".claude/skills/story/JUDGES.md" of this repo holds a line that holds "only when the judge names three things: the scenario, the break that keeps it green, and the one command that settles it"
+    And the file ".claude/skills/story/JUDGES.md" of this repo holds a line that holds "A hunch with no such command is reported as a sentence for `## Context`, marked `unproven`."
+    And the file ".claude/skills/story/JUDGES.md" of this repo holds no line that holds "when a command can show it"
+    And the file ".claude/skills/story/SKILL.md" of this repo holds a line that holds "A hunch of a judge is marked `unproven`."
+    And the file ".claude/skills/story/SKILL.md" of this repo holds a line that holds "A hunch marked `unproven` goes into `## Context` as it is, and gets no prototype."
+
+  Scenario: The mutation reviewer takes the table of the prototype for its first run and its put-back runs
+    Then the file ".claude/skills/story/SKILL.md" of this repo holds a line that holds "The rows are the prototype as it is, each changed file of the base put back on its own, and each narrower mutation."
+    And the file ".claude/skills/story/SKILL.md" of this repo holds a line that holds "the full SHA of the prototype, from `git rev-parse origin/design/<n>`, when `## Context` names one"
+    And the file ".claude/skills/story/JUDGES.md" of this repo holds a line that holds "When `<SHA>` is the prototype's SHA that the caller gives, the table of `## Context` stands for the first run and for the runs with each file put back."
+    And the file ".claude/skills/story/JUDGES.md" of this repo holds a line that holds "The reviewer reads the table, and makes only the narrower mutations below."
+    And the file ".claude/skills/story/JUDGES.md" of this repo holds a line that holds "with no row in the table gets its put-back run as above"
+    And the file ".claude/skills/story/JUDGES.md" of this repo holds a line that holds "or the table of `## Context` stands for it"
