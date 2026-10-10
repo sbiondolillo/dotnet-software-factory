@@ -50,3 +50,12 @@ Feature: Story skill
     Then the file ".claude/skills/story/SKILL.md" of this repo holds the line "The run above is round 1. When an angle of round 1 rejects, run the three angles again on the fixed draft. This is round 2, and the last round. Act on each fault of round 2 as above, except a hole. A hole of round 2 goes into `## Context` as a line with its scenario, its break, its command and the output, and gets no fix and no prototype. No round 3 runs, and the owner is not asked for one."
     And the file ".claude/skills/story/SKILL.md" of this repo holds the line "Done when each fault of round 1 and of round 2 is fixed in the draft, refuted with its evidence, or, for a hole of round 2, in `## Context`."
     And the file ".claude/skills/story/SKILL.md" of this repo holds no line that holds "Done when each fault is fixed in the draft or refuted with its evidence."
+
+  Scenario: A change the owner states exactly and approves in chat builds with no story
+    Then the file ".claude/skills/story/SKILL.md" of this repo holds the line "A change that the owner states exactly and approves in chat builds in that session, with no story and no draft judges. The branch review of step 7 reads the owner's request text as the spec, in place of a body. A story is filed when the owner states a behaviour and wants to read its scenarios before code, or when another session or a batch builds it."
+    And the file ".claude/skills/story/SKILL.md" of this repo holds the line "Start at **Draft** for a new request that needs a story. Start at **Build** at step 6 for a change the owner stated exactly and approved in chat."
+    And the file ".claude/skills/story/SKILL.md" of this repo holds no line that holds "A change to this repo goes through two gates."
+
+  Scenario: Holes judges only a draft that holds a check or a pinned text
+    Then the file ".claude/skills/story/SKILL.md" of this repo holds a line that holds "`Holes` runs only on a draft that holds a check or a text that a scenario pins whole. A plain behaviour draft gets `Claims against main` and `The story`, and no `Holes`."
+    And the file ".claude/skills/story/JUDGES.md" of this repo holds the line "This angle runs only on a draft that holds a check or a text that a scenario pins whole. A plain behaviour draft does not get it: its sad paths are the owner's to state, and a builder that can read the repo asks."
