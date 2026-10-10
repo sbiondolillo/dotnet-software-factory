@@ -54,6 +54,7 @@ Feature: Story skill
   Scenario: A change the owner states exactly and approves in chat builds with no story
     Then the file ".claude/skills/story/SKILL.md" of this repo holds the line "A change that the owner states exactly and approves in chat builds in that session, with no story and no draft judges. The branch review of step 7 reads the owner's request text as the spec, in place of a body. A story is filed when the owner states a behaviour and wants to read its scenarios before code, or when another session or a batch builds it."
     And the file ".claude/skills/story/SKILL.md" of this repo holds a line that holds "Start at **Draft** for a new request that needs a story. Start at **Build** at step 6 for a change the owner stated exactly and approved in chat."
+    And the file ".claude/skills/story/SKILL.md" of this repo holds a line that holds "A change to this repo that needs a **story** goes through two gates."
     And the file ".claude/skills/story/SKILL.md" of this repo holds no line that holds "A change to this repo goes through two gates."
 
   Scenario: Holes judges only a draft that holds a check or a pinned text
