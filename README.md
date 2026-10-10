@@ -63,6 +63,81 @@ A feedback run on the pull request of a `refactor` issue leaves every file under
 
 Create the label `reframe` in the new repo. The repo's owner starts a reframe run, a run with no plan, with the label `reframe` on an issue. A reframe issue keeps the behaviour of the program and changes the code, the tests or the config. A format sweep and a framework upgrade are reframe issues. The body names the paths the build can change under the heading `## Scope`, as a `cleanup` issue does. The scope can name `src/`. The body holds under the heading `## Check` one fenced `sh` block that fails before the change and exits with the code 0 after it. The run records the tests that pass on the base commit. It also records the public API of the code under `src/`: one line per public type and per public or protected member. The build runs again when it loses a test or changes a line of that API. The label `reframe` with the label `behavior`, `cleanup` or `refactor` on one issue gets a comment and no run.
 
+## Run the demo
+
+Four issues on the greeter show the four kinds of run. Each body is a file under `docs/demo/` of this repo. Start from a repo that `## Start a new repo` made, with its secrets set and no other change. Run each command below in the checkout of the new repo, signed in to `gh` as the repo's owner. `<checkout>` is the checkout of this repo.
+
+| Step | Kind | Body | Label | What the pull request does |
+|---|---|---|---|---|
+| 1 | `behavior` | `docs/demo/1-behavior.md` | none | adds the option `--shout`, and three scenarios |
+| 2 | `cleanup` | `docs/demo/2-cleanup.md` | `cleanup` | adds `README.md`, byte for byte with the text in the body |
+| 3 | `refactor` | `docs/demo/3-refactor.md` | `refactor` | moves the upper-case rule into `Greeter`, and changes no test |
+| 4 | `reframe` | `docs/demo/4-reframe.md` | `reframe` | requires an SPDX license header on each C# file, and adds it |
+
+File the issues in this order. The second and the third issue need the option `--shout`, which the first adds. Merge each pull request before you file the next issue.
+
+Create the labels. `--force` updates a label that exists:
+
+```
+for label in factory cleanup refactor reframe; do gh label create "$label" --force; done
+```
+
+### File each issue
+
+Step 1:
+
+```
+n=$(gh issue create --title 'A person can print the greeting in upper case with the option `--shout`' --body-file <checkout>/docs/demo/1-behavior.md | sed 's|.*/||')
+```
+
+Step 2:
+
+```
+n=$(gh issue create --title 'The repo has a `README.md` that says what the program does and how to run and test it' --body-file <checkout>/docs/demo/2-cleanup.md --label cleanup | sed 's|.*/||')
+```
+
+Step 3:
+
+```
+n=$(gh issue create --title 'The upper-case rule of the greeting lives in `Greeter`' --body-file <checkout>/docs/demo/3-refactor.md --label refactor | sed 's|.*/||')
+```
+
+Step 4:
+
+```
+n=$(gh issue create --title 'Each C# file starts with an SPDX license header, and `.editorconfig` requires it' --body-file <checkout>/docs/demo/4-reframe.md --label reframe | sed 's|.*/||')
+```
+
+Each title is in single quotes, because it holds backticks. The shell runs the text between backticks in double quotes. `gh` prints the URL of the new issue, and `sed` keeps its number in `n`.
+
+### Run and merge each issue
+
+After each step, add the label `factory`. It goes on last, because the run reads the other labels when it starts.
+
+```
+gh issue edit "$n" --add-label factory
+```
+
+Watch the run. `gh run watch` lists the runs in progress: pick `factory`. The run ends when its pull request has green checks and a review. If `gh run watch` prints `found no in progress runs to watch`, the run is not queued yet: run it again after a few seconds.
+
+```
+gh run watch
+```
+
+The pull request holds the line `Closes #<n>`. Merge it:
+
+```
+gh pr merge "$(gh issue view "$n" --json closedByPullRequestsReferences --jq '.closedByPullRequestsReferences[0].number')" --squash --delete-branch
+```
+
+After step 1, the console program shouts:
+
+```
+git pull && dotnet run --project src/App -- Ada --shout
+```
+
+It prints `HELLO, ADA!`.
+
 ## Commands
 
 ```
