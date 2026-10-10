@@ -1,6 +1,5 @@
 Feature: Plan phase doc string indent
 
-  @bullet-1
   Scenario: A doc string indented past its delimiter fails with its line
     Given the agent on every run writes the plan
     And the agent on every run writes the file "specs/features/config.feature" with the text
@@ -24,10 +23,8 @@ Feature: Plan phase doc string indent
     When I run the plan phase
     Then the result is failed
     And the plan phase reports one failure
-    # run: printf '%s\n' 'specs/features/config.feature' 'line 11' 'the column of its opening delimiter'
     And the failure names "specs/features/config.feature", "line 11" and "the column of its opening delimiter"
 
-  @bullet-2
   Scenario: A backtick doc string indented past its delimiter fails with its line
     Given the agent on every run writes the plan
     And the agent on every run writes the file "specs/features/ticks.feature" with the text
@@ -47,5 +44,4 @@ Feature: Plan phase doc string indent
     When I run the plan phase
     Then the result is failed
     And the plan phase reports one failure
-    # run: printf '%s\n' 'specs/features/ticks.feature' 'line 9' 'the column of its opening delimiter'
     And the failure names "specs/features/ticks.feature", "line 9" and "the column of its opening delimiter"

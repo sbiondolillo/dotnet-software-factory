@@ -12,9 +12,7 @@ Feature: A repo made from the starter holds the skill write-issue
     And the copy's file ".claude/skills/write-issue/SKILL.md" holds the line "## 5. Judge the draft"
     And the copy's file ".claude/skills/write-issue/SKILL.md" holds a line that holds "A fix to the check runs step 4 again, and each hole becomes a run of its table."
 
-  @bullet-2
   Scenario: The copy's REVIEW.md holds the angles that judge a draft
-    # run: printf '%s\n' '.claude/skills/write-issue/REVIEW.md'
     Then the copy's file ".claude/skills/write-issue/REVIEW.md" holds the line "verdict: accept | reject"
     And the copy's file ".claude/skills/write-issue/REVIEW.md" holds a line that holds "**Body rules.**"
     And the copy's file ".claude/skills/write-issue/REVIEW.md" holds a line that holds "**Claims against `main`.**"

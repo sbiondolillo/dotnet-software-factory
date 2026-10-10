@@ -4,9 +4,7 @@ Feature: A repo made from the starter holds an issue template for each recipe
     Given the template is installed
     When I run dotnet new "factory-starter" into an empty directory
 
-  @bullet-1
   Scenario: The behaviour template holds the skeleton of a behaviour issue
-    # run: printf '%s' '.github/ISSUE_TEMPLATE/behaviour.md'
     Then the copy's file ".github/ISSUE_TEMPLATE/behaviour.md" holds this text, with a line that holds "# specs/features/<name>.feature"
       """
       ---
@@ -49,9 +47,7 @@ Feature: A repo made from the starter holds an issue template for each recipe
     When the scenarios of the copy's ".github/ISSUE_TEMPLATE/behaviour.md" are applied to the copy
     Then the apply gives the one fault "Each fenced block under the heading ## Scenarios starts with the line # specs/features/<name>.feature. A block starts with '# specs/features/<name>.feature'."
 
-  @bullet-2
   Scenario: The refactor template holds the skeleton of a refactor issue
-    # run: printf '%s' '.github/ISSUE_TEMPLATE/refactor.md'
     Then the copy's file ".github/ISSUE_TEMPLATE/refactor.md" holds this text
       """
       ---
@@ -70,9 +66,7 @@ Feature: A repo made from the starter holds an issue template for each recipe
       ```
       """
 
-  @bullet-3
   Scenario: The cleanup template holds the skeleton of a cleanup issue
-    # run: printf '%s' '.github/ISSUE_TEMPLATE/cleanup.md'
     Then the copy's file ".github/ISSUE_TEMPLATE/cleanup.md" holds this text
       """
       ---

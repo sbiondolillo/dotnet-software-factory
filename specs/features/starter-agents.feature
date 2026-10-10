@@ -1,6 +1,5 @@
 Feature: A repo made from the starter carries an AGENTS.md
 
-  @bullet-1
   Scenario: The copy's AGENTS.md holds the layout and the rules
     Given the template is installed
     When I run dotnet new "factory-starter" into an empty directory
@@ -41,16 +40,12 @@ Feature: A repo made from the starter carries an AGENTS.md
       Before writing or revising an issue, read `docs/write-an-issue.md`, and file the issue only when every row of its `## Before you file` table passes.
       """
 
-  @bullet-2
   Scenario: The copy's integration project comment starts with the new line
     Given the template is installed
     When I run dotnet new "factory-starter" into an empty directory
-    # run: printf '%s\n' 'tests/Integration/Integration.csproj' 'The integration suite: tests against the real services that the program calls.'
     Then the comment in the copy's "tests/Integration/Integration.csproj" starts with the line "The integration suite: tests against the real services that the program calls."
 
-  @bullet-2
   Scenario: The copy's integration project comment no longer names the old line
     Given the template is installed
     When I run dotnet new "factory-starter" into an empty directory
-    # run: printf '%s\n' 'tests/Integration/Integration.csproj' 'The integration suite: tests against real GitHub, docker and Claude Code.'
     Then the comment in the copy's "tests/Integration/Integration.csproj" does not hold the line "The integration suite: tests against real GitHub, docker and Claude Code."

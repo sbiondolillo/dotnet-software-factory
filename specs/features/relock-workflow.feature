@@ -1,9 +1,7 @@
 Feature: Relock workflow for Dependabot pull requests
 
-  @bullet-1
   Scenario: The relock workflow file holds the specified text
     Given the repository checkout
-    # run: printf '.github/workflows/relock.yml'
     Then the file ".github/workflows/relock.yml" holds this text
       """
       # Regenerates the packages.lock.json of each project in Solution.slnx on a
@@ -55,23 +53,17 @@ Feature: Relock workflow for Dependabot pull requests
                 git push
       """
 
-  @bullet-1
   Scenario: The relock workflow does not push with the default token
     Given the repository checkout
-    # run: printf '.github/workflows/relock.yml\nsecrets.GITHUB_TOKEN'
     Then the file ".github/workflows/relock.yml" does not contain "secrets.GITHUB_TOKEN"
 
-  @bullet-2
   Scenario: The README table holds the relock row directly after the ci row
     Given the repository checkout
-    # run: printf '.github/workflows/ci.yml'
     Then the README table row after the row of ".github/workflows/ci.yml" is this line
       """
       | `.github/workflows/relock.yml` | on a Dependabot pull request, regenerates the `packages.lock.json` of each project in `Solution.slnx` and pushes them with the Dependabot secret `RELOCK_TOKEN` |
       """
 
-  @bullet-2
   Scenario: The README holds the relock row only once
     Given the repository checkout
-    # run: printf '1\n.github/workflows/relock.yml'
     Then the README holds exactly 1 row for ".github/workflows/relock.yml"
