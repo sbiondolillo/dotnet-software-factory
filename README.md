@@ -33,7 +33,7 @@ The repo's owner starts a trial run of the factory at another ref with the comma
 
 Add two Actions secrets to the new repo: `FACTORY_GITHUB_TOKEN` and `ANTHROPIC_API_KEY`.
 
-`FACTORY_GITHUB_TOKEN` is a fine-grained token. Make it after the new repo exists, because a fine-grained token can select only a repo that exists. Under Repository access, select the new repo, and give the token read and write access to Contents, Issues and Pull requests. While `sbiondolillo/dotnet-software-factory` is private, the token also selects it, so that `factory.yml` can check the factory out. A fine-grained token gives each repo it selects the same permissions.
+`FACTORY_GITHUB_TOKEN` is a fine-grained token. Make it after the new repo exists, because a fine-grained token can select only a repo that exists. Under Repository access, select the new repo, and give the token read and write access to Contents, Issues and Pull requests. While `sbiondolillo/dotnet-software-factory` is private, the token also selects it, so that `factory.yml` and `review-feedback.yml` can check the factory out. A fine-grained token gives each repo it selects the same permissions.
 
 `factory.yml` and `review-feedback.yml` pass the job's own token to the factory as `FACTORY_CHECKS_TOKEN`, with the permission `checks: read`. The factory reads the check runs of each pull request with it, on a public repo and on a private repo alike. A fine-grained token has no Checks permission, so `FACTORY_GITHUB_TOKEN` reads check runs on a public repo only.
 
@@ -43,15 +43,15 @@ Replace `EXAMPLE_API_KEY` in `factory.yml`, in `review-feedback.yml` and in `ci.
 
 A repo whose integration tests read no secret keeps `EXAMPLE_API_KEY` as it is. The secret is not set, and each step gets an empty value.
 
-Protect the branch `main`, with the checks `build` and `integration` required. This command sets it:
+Protect the branch `main`, with the checks `build` and `integration` required. Run this command in the checkout of the new repo, and `gh` fills in `{owner}` and `{repo}`:
 
 ```
-gh api -X PUT repos/<owner>/<repo>/branches/main/protection --input - <<'JSON'
+gh api -X PUT repos/{owner}/{repo}/branches/main/protection --input - <<'JSON'
 {"required_status_checks":{"strict":false,"contexts":["build","integration"]},"enforce_admins":false,"required_pull_request_reviews":null,"restrictions":null}
 JSON
 ```
 
-GitHub enforces the protection on a public repo, and on a private repo of a paid plan. See `## A private target repo`.
+GitHub applies the protection on a public repo, and on a private repo of a paid plan. The command sets `enforce_admins` to `false`, so an admin of the repo, such as its owner, can still merge a pull request with red checks. See `## A private target repo`.
 
 The factory requests a Copilot code review of each pull request it watches, and waits for that review on the head commit. This needs a Copilot plan that includes Copilot code review. With no such plan, add `--copilot-review off` to the run command in `factory.yml` and in `review-feedback.yml`. The factory then requests no review and waits for the checks alone. The review prompt of the factory reviews each build with either value.
 
@@ -79,8 +79,8 @@ Create the label `reframe` in the new repo. The repo's owner starts a reframe ru
 
 The factory runs on a private repo, with these limits:
 
-- GitHub enforces branch protection on a private repo only on a paid plan. On the free plan of a personal account, GitHub shows "Your rules won't be enforced on this private repository until you move to a GitHub Team or Enterprise organization account". The factory still waits for green checks, but GitHub lets the owner merge a pull request with red checks.
-- `FACTORY_GITHUB_TOKEN` must select each private repo. A new private repo needs a new token, or an edit to the repository list of the token.
+- GitHub enforces branch protection on a private repo only on a paid plan. On the free plan of a personal account, GitHub shows "Your rules won't be enforced on this private repository until you move to a GitHub Team or Enterprise organization account". The factory still waits for green checks, but GitHub lets each person with write access merge a pull request with red checks.
+- `FACTORY_GITHUB_TOKEN` must select each target repo, public or private. A new repo needs a new token, or an edit to the repository list of the token.
 - An organization can require approval of each fine-grained token. Until an administrator approves it, the token reads only public resources.
 - GitHub never shows a secret again after you save it. Keep each value in a store outside GitHub, such as a password manager.
 - The job's own token reads the check runs, as `FACTORY_CHECKS_TOKEN` above. The repo's owner sets nothing for it.
@@ -141,7 +141,7 @@ After each step, add the label `factory`. It goes on last, because the run reads
 gh issue edit "$n" --add-label factory
 ```
 
-Watch the run. `gh run watch` lists the runs in progress: pick `factory`. The run ends when its pull request has green checks and a review. If `gh run watch` prints `found no in progress runs to watch`, the run is not queued yet: run it again after a few seconds.
+Watch the run. `gh run watch` lists the runs in progress: pick `factory`. The run ends when its pull request has green checks, and a review when `--copilot-review` is on. If `gh run watch` prints `found no in progress runs to watch`, the run is not queued yet: run it again after a few seconds.
 
 ```
 gh run watch
@@ -163,12 +163,13 @@ It prints `HELLO, ADA!`.
 
 ## When a run fails
 
-A run that delivers no pull request says why in a comment on the issue.
+A run that stops at a gate or at an answer of the agent says why in a comment on the issue. A failure of `dotnet format`, and an answer of the agent that is not JSON, fail the job with no comment: read the job log.
 
-- A failed gate is a Redo: the build runs again, with the failure text in its prompt. A test that fails, a blocking finding of the factory's own review, a check of the body that fails, a change outside the scope, and a change to the public API of a `reframe` issue each start a Redo. After 3 Redos, the run comments "The budget of 3 Redos is spent. The last build still fails:" with the text of each Redo, and stops.
+- A failed gate is a Redo: the build runs again, with the failure text in its prompt. A test that fails, a blocking finding of the factory's own review, a check of the body that fails, a change outside the scope, and a change to the public API of a `reframe` issue each start a Redo. After 3 Redos, the run comments "The budget of 3 Redos is spent. The last build still fails:" with the failure text of the last build, and stops.
 - An agent call that ends with an error stops the run. The comment holds the error text of the agent.
-- A body that the factory cannot run gets a comment that names each fault, and no run. Two labels that exclude each other get a comment, and no run.
-- Each watch of a pull request waits up to 60 minutes for the checks and the review. Then the run prints `checks: red`, and the job fails. The pull request stays open. Add `--timeout <minutes>` to the run command in `factory.yml` to change the wait.
+- A body that the factory cannot run gets a comment, and no run. The comment names each fault of the scenarios, or the first fault of a `cleanup` or `reframe` body. Two labels that exclude each other get a comment, and no run.
+- Each watch of a pull request waits up to 60 minutes for the checks, and for the review when `--copilot-review` is on. After that time, the checks count as red. Add `--timeout <minutes>` to the run command in `factory.yml` to change the wait.
+- The job fails when the checks are red, or when review threads stay unresolved after the review rounds. The last line of the run is `checks: <green|red>, unresolved threads: <n>`. The pull request stays open.
 - The job log holds a line for the start and the end of each agent call, with its turns, spend and time. The job summary holds one row for each phase, with its time, turns, spend and result, and one item for each Redo text.
 
 To run an issue again, remove the label `factory` and add it again.
@@ -178,8 +179,9 @@ To run an issue again, remove the label `factory` and add it again.
 Claude Code runs with `--dangerously-skip-permissions`, in a docker container on the GitHub runner. The container holds the work tree of the target repo at `/work`, and it has network access.
 
 - The agent gets `ANTHROPIC_API_KEY`, and no other secret.
-- `FACTORY_GITHUB_TOKEN` stays on the runner, outside the container. Only `git` and the GitHub client of the factory use it. `git` reads it from a credential helper in its environment, so the token is never written to the work tree.
-- The agent cannot push. The factory commits and pushes after the gates pass.
+- `FACTORY_GITHUB_TOKEN` never enters the container. Only the workflows, `git` and the GitHub client of the factory use it, on the runner. `git` reads it from a credential helper in its environment, so the token is never written to the work tree.
+- The agent has no credential to push. The lint gate commits the change on the runner, and the factory pushes it after the tests and the review pass.
+- A known limit: a git hook or a config line that the agent writes runs on the runner during the git commands of the factory, with the secrets of the job. The agent can write to `.git/` in the work tree.
 - Each name of `--pass-env`, such as `EXAMPLE_API_KEY`, reaches the test gate and not the agent. The tests run the code that the agent wrote, so that code can read those secrets.
 - `factory.yml` and `review-feedback.yml` set `permissions` to `checks: read`, and `ci.yml` sets `contents: read`. The job's own token can do nothing more.
 
