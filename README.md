@@ -181,7 +181,7 @@ Claude Code runs with `--dangerously-skip-permissions`, in a docker container on
 - The agent gets `ANTHROPIC_API_KEY`, and no other secret.
 - `FACTORY_GITHUB_TOKEN` never enters the container. Only the workflows, `git` and the GitHub client of the factory use it, on the runner. `git` reads it from a credential helper in its environment, so the token is never written to the work tree.
 - The agent has no credential to push. The lint gate commits the change on the runner, and the factory pushes it after the tests and the review pass.
-- A known limit: a git hook or a config line that the agent writes runs on the runner during the git commands of the factory, with the secrets of the job. The agent can write to `.git/` in the work tree.
+- The container mounts `.git/` of the work tree read-only, except `.git/worktrees/`, and `Git` refuses a work tree with a nested `.git`. No git hook or git config line of the agent reaches the git commands of the factory.
 - Each name of `--pass-env`, such as `EXAMPLE_API_KEY`, reaches the test gate and not the agent. The tests run the code that the agent wrote, so that code can read those secrets.
 - `factory.yml` and `review-feedback.yml` set `permissions` to `checks: read`, and `ci.yml` sets `contents: read`. The job's own token can do nothing more.
 

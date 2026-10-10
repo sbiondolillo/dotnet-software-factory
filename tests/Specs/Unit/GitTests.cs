@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using Core;
 using Moq;
 using Xunit;
@@ -256,5 +257,53 @@ public sealed class GitTests
             () => new Git(mock.Object).HasChangesAsync("/tmp/dir", TestContext.Current.CancellationToken));
 
         Assert.Contains("status", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HasChangesRunsInAWorkTreeWhoseOnlyGitIsItsOwn()
+    {
+        DirectoryInfo tree = Directory.CreateTempSubdirectory("factory-git-tests-");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(tree.FullName, ".git", "modules", "lib", ".git"));
+            Directory.CreateDirectory(Path.Combine(tree.FullName, "src", ".github"));
+            await File.WriteAllTextAsync(Path.Combine(tree.FullName, ".gitignore"), "bin/\n", TestContext.Current.CancellationToken);
+            var mock = new Mock<CommandRunner>(MockBehavior.Strict);
+            mock.Setup(runner => runner.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new CommandResult { ExitCode = 0 });
+
+            Assert.False(await new Git(mock.Object).HasChangesAsync(tree.FullName, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            tree.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    [SupportedOSPlatform("linux")]
+    public async Task ANestedGitAndAnUnreadableDirectoryAreEachNamedAndNoCommandRuns()
+    {
+        DirectoryInfo tree = Directory.CreateTempSubdirectory("factory-git-tests-");
+        string locked = Path.Combine(tree.FullName, "locked");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(tree.FullName, "a", "b", ".git"));
+            Directory.CreateDirectory(locked);
+            File.SetUnixFileMode(locked, UnixFileMode.UserExecute);
+            var mock = new Mock<CommandRunner>(MockBehavior.Strict);
+
+            GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
+                () => new Git(mock.Object).HasChangesAsync(tree.FullName, TestContext.Current.CancellationToken));
+
+            Assert.Contains("status", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("a/b/.git", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("locked (unreadable)", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.SetUnixFileMode(locked, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            tree.Delete(recursive: true);
+        }
     }
 }

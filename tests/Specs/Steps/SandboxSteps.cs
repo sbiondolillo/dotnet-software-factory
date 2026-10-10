@@ -6,7 +6,7 @@ using Xunit;
 namespace Specs.Steps;
 
 [Binding]
-public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext scenarioContext) : IDisposable
+public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext scenarioContext, WorkTreeState workTree) : IDisposable
 {
     private const string ContainerId = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     private readonly List<CommandSpec> _recorded = [];
@@ -16,6 +16,7 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
     private Sandbox? _sandbox;
     private CommandResult? _result;
     private Mock<CommandRunner>? _mock;
+    private HashSet<string> _directoriesAtRun = [];
 
     public void Dispose() => _directory.Delete(recursive: true);
 
@@ -28,6 +29,12 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
                 .Returns((CommandSpec spec, CancellationToken _) =>
                 {
                     _recorded.Add(spec);
+                    if (spec.Arguments[0] is "run" && workTree.InUse)
+                    {
+                        _directoriesAtRun = [.. Directory.EnumerateDirectories(workTree.Path, "*", SearchOption.AllDirectories)
+                            .Select(directory => Path.GetRelativePath(workTree.Path, directory))];
+                    }
+
                     return Task.FromResult(spec.Arguments[0] switch
                     {
                         "image" => new CommandResult { ExitCode = scenarioContext.TryGetValue("inspectExit", out int code) ? code : 0 },
@@ -91,6 +98,9 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
         }
     }
 
+    [When("a caller starts a sandbox with the image tag {string} over that work tree")]
+    public Task WhenStartsOverWorkTree(string tag) => WhenStarts(tag, workTree.Path);
+
     [When("a caller runs {string} with the argument {string} and an empty list of names")]
     public async Task WhenRunsWithArgument(string program, string argument) =>
         _result = await _sandbox!.RunAsync(program, [argument], [], TestContext.Current.CancellationToken);
@@ -140,6 +150,12 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
 
     [Then("the arguments of the docker run hold {string} and then {string}")]
     public void ThenRunHolds(string flag, string value) => AssertFollows(Docker("run"), flag, value);
+
+    [Then("the arguments of the docker run hold {string} and then the path of that work tree followed by {string}")]
+    public void ThenRunHoldsWorkTreePath(string flag, string suffix) => AssertFollows(Docker("run"), flag, workTree.Path + suffix);
+
+    [Then("the directory {string} of that work tree existed when the docker run started")]
+    public void ThenExistedAtRun(string relativePath) => Assert.Contains(relativePath, _directoriesAtRun);
 
     [Then("the start throws a SandboxException whose message holds the standard error of docker run")]
     public void ThenThrows()

@@ -27,6 +27,17 @@ public sealed class Sandbox : IAsyncDisposable
         await new SandboxImage(runner).EnsureAsync(tag, rootDirectory, cancellationToken).ConfigureAwait(false);
 
         string user = string.Create(CultureInfo.InvariantCulture, $"{GetUid()}:{GetGid()}");
+        List<string> volumes = ["--volume", $"{workTree}:/work"];
+        string gitDirectory = Path.Combine(workTree, ".git");
+        if (Directory.Exists(gitDirectory))
+        {
+            // The agent cannot write a hook or a config line that the git commands of the factory read on the runner.
+            // `git worktree add` in the container still writes .git/worktrees, which docker would create as root.
+            string worktrees = Path.Combine(gitDirectory, "worktrees");
+            Directory.CreateDirectory(worktrees);
+            volumes.AddRange(["--volume", $"{gitDirectory}:/work/.git:ro", "--volume", $"{worktrees}:/work/.git/worktrees"]);
+        }
+
         CommandResult run = await runner.RunAsync(
             new CommandSpec
             {
@@ -37,7 +48,7 @@ public sealed class Sandbox : IAsyncDisposable
                     "--detach",
                     "--init",
                     "--user", user,
-                    "--volume", $"{workTree}:/work",
+                    .. volumes,
                     "--workdir", "/work",
                     "--tmpfs", $"{Home}:uid={GetUid()},gid={GetGid()},mode=0755",
                     "--env", $"HOME={Home}",

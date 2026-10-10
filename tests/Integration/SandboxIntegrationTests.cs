@@ -32,6 +32,26 @@ public sealed class SandboxIntegrationTests : IDisposable
     private Task<Sandbox> StartAsync() =>
         Sandbox.StartAsync(Runner, Tag, RepoRoot(), _tree.FullName, TestContext.Current.CancellationToken);
 
+    private static async Task GitAsync(string directory, params string[] arguments)
+    {
+        CommandResult result = await Runner.RunAsync(
+            new CommandSpec
+            {
+                Command = "git",
+                Arguments = arguments,
+                WorkingDirectory = directory,
+                EnvironmentVariables = new Dictionary<string, string>
+                {
+                    ["GIT_AUTHOR_NAME"] = "t",
+                    ["GIT_AUTHOR_EMAIL"] = "t@example.com",
+                    ["GIT_COMMITTER_NAME"] = "t",
+                    ["GIT_COMMITTER_EMAIL"] = "t@example.com",
+                },
+            },
+            TestContext.Current.CancellationToken);
+        Assert.Equal(0, result.ExitCode);
+    }
+
     private static Task<CommandResult> ExecAsync(Sandbox sandbox, string program, string[] arguments, string[]? names = null) =>
         sandbox.RunAsync(program, arguments, names ?? [], TestContext.Current.CancellationToken);
 
@@ -104,6 +124,41 @@ public sealed class SandboxIntegrationTests : IDisposable
         Assert.Equal(127, missing.ExitCode);
         Assert.NotEmpty(missing.StandardOutput);
         Assert.Empty(missing.StandardError);
+    }
+
+    [Fact]
+    public async Task TheGitDirectoryOfACloneIsReadOnlyInTheContainerExceptItsWorktrees()
+    {
+        CancellationToken token = TestContext.Current.CancellationToken;
+        string origin = Path.Combine(_tree.FullName, "origin");
+        string clone = Path.Combine(_tree.FullName, "clone");
+        Directory.CreateDirectory(origin);
+        await GitAsync(origin, "init", "--quiet");
+        await File.WriteAllTextAsync(Path.Combine(origin, "tracked.txt"), "head", token);
+        await GitAsync(origin, "add", "-A");
+        await GitAsync(origin, "commit", "--quiet", "-m", "head");
+        await GitAsync(_tree.FullName, "clone", "--quiet", origin, clone);
+        string config = await File.ReadAllTextAsync(Path.Combine(clone, ".git", "config"), token);
+
+        await using Sandbox sandbox = await Sandbox.StartAsync(Runner, Tag, RepoRoot(), clone, token);
+
+        CommandResult hook = await ExecAsync(sandbox, "sh", ["-c", "printf 'exit 0' > .git/hooks/pre-push"]);
+        Assert.NotEqual(0, hook.ExitCode);
+        Assert.Contains("Read-only file system", hook.StandardError, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(clone, ".git", "hooks", "pre-push")));
+
+        CommandResult fsmonitor = await ExecAsync(sandbox, "git", ["config", "core.fsmonitor", "true"]);
+        Assert.NotEqual(0, fsmonitor.ExitCode);
+        Assert.Equal(config, await File.ReadAllTextAsync(Path.Combine(clone, ".git", "config"), token));
+
+        CommandResult tree = await ExecAsync(sandbox, "sh", ["-c", "printf made > /work/written"]);
+        Assert.Equal(0, tree.ExitCode);
+
+        string copy = $"/tmp/check-{Guid.NewGuid():N}";
+        CommandResult add = await ExecAsync(sandbox, "git", ["worktree", "add", "--detach", copy, "HEAD"]);
+        Assert.Equal(0, add.ExitCode);
+        Assert.Equal("head", (await ExecAsync(sandbox, "cat", [$"{copy}/tracked.txt"])).StandardOutput);
+        Assert.Equal(0, (await ExecAsync(sandbox, "git", ["worktree", "remove", "--force", copy])).ExitCode);
     }
 
     [Fact]
