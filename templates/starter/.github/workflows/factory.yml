@@ -12,7 +12,7 @@ on:
         type: number
       ref:
         description: The branch, tag or commit of the factory
-        default: v0
+        default: v1
 
 # The job's own token reads the check runs of the pull request. A fine-grained token has no Checks permission on a private repo.
 permissions:
@@ -26,8 +26,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: sbiondolillo/dotnet-software-factory
-          ref: ${{ inputs.ref || 'v0' }}
-          token: ${{ secrets.FACTORY_GITHUB_TOKEN }}
+          ref: ${{ inputs.ref || 'v1' }}
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
