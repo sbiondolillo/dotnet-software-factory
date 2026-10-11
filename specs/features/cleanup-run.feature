@@ -247,8 +247,3 @@ Feature: A cleanup run fixes a test, a config file or a document
       | check: red |
       | redo: 1 |
       | build: start |
-
-  Scenario: The README documents the cleanup run
-    When a reader reads the section "## Start a new repo" of README.md
-    Then the section mentions the label "cleanup"
-    And the section mentions the headings "## Scope" and "## Check"

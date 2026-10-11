@@ -72,44 +72,6 @@ public static partial class StarterChecks
         }
     }
 
-    /// <summary>The lines of the first XML comment of a file, trimmed.</summary>
-    private static string[] CommentLines(string path)
-    {
-        if (!File.Exists(path))
-        {
-            throw new InvalidOperationException($"{path} does not exist");
-        }
-
-        string text = File.ReadAllText(path);
-        int start = text.IndexOf("<!--", StringComparison.Ordinal);
-        int end = start < 0 ? -1 : text.IndexOf("-->", start, StringComparison.Ordinal);
-        if (end < 0)
-        {
-            throw new InvalidOperationException($"{Path.GetFileName(path)} holds no comment");
-        }
-
-        return [.. text[(start + 4)..end].Split('\n').Select(line => line.Trim())];
-    }
-
-    /// <summary>Fails when the first line of the file's first comment is not the line.</summary>
-    public static void CommentStarts(string path, string line)
-    {
-        string first = CommentLines(path)[0];
-        if (first != line)
-        {
-            throw new InvalidOperationException($"{Path.GetFileName(path)}: the comment starts with '{first}', not '{line}'");
-        }
-    }
-
-    /// <summary>Fails when a line of the file's first comment is the line.</summary>
-    public static void CommentLacks(string path, string line)
-    {
-        if (CommentLines(path).Contains(line))
-        {
-            throw new InvalidOperationException($"{Path.GetFileName(path)}: the comment holds the line '{line}'");
-        }
-    }
-
     /// <summary>Fails when a file of the starter is missing from the copy or differs in a byte.</summary>
     public static void EveryFileEqual(string starter, string copy)
     {

@@ -247,8 +247,3 @@ Feature: A refactor run changes the structure of the code and leaves every test 
       | https://github.com/sbiondolillo/factory-scratch/pull/10 |
       | watch: start |
       | checks: green, unresolved threads: 0 |
-
-  Scenario: The README documents the refactor run
-    When a reader reads the section "## Start a new repo" of README.md
-    Then the section mentions the label "refactor"
-    And the section mentions the heading "## Check" and the paths "specs/features/", "tests/Specs/" and "tests/Integration/"

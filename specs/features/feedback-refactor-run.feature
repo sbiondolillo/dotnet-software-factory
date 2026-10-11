@@ -107,9 +107,3 @@ Feature: A feedback run on the pull request of a refactor issue keeps every test
     And the issue 15 has the label "refactor"
     When a caller starts a feedback run
     Then the review prompt holds "tests/Integration/"
-
-  Scenario: The README documents the feedback run of a refactor pull request
-    When a reader reads the section "## Start a new repo" of README.md
-    Then the section holds this paragraph after the paragraph that starts 'Create the label `refactor` in the new repo'
-      | paragraph |
-      | A feedback run on the pull request of a `refactor` issue leaves every file under `specs/features/`, `tests/Specs/` and `tests/Integration/` as it is, and runs the issue's `## Check` after the tests pass. |

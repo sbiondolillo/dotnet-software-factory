@@ -81,9 +81,3 @@ Feature: A sandbox container starts, runs commands on the work tree, and is remo
     And a work tree in a new directory that holds a directory ".git" with no directory "worktrees" in it
     When a caller starts a sandbox with the image tag "factory-sandbox:test" over that work tree
     Then the directory ".git/worktrees" of that work tree existed when the docker run started
-
-  Scenario: The README says the git directory of the work tree is read-only in the container
-    Then the README section "## What the agent can touch" holds the line "- The container mounts `.git/` of the work tree read-only, except `.git/worktrees/`, and `Git` refuses a work tree with a nested `.git`. No git hook or git config line of the agent reaches the git commands of the factory."
-
-  Scenario: The README no longer names the git directory as a known limit
-    Then the README section "## What the agent can touch" does not hold the line "- A known limit: a git hook or a config line that the agent writes runs on the runner during the git commands of the factory, with the secrets of the job. The agent can write to `.git/` in the work tree."

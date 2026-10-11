@@ -10,9 +10,6 @@ public sealed class FeedbackCleanupScopeSteps(FactoryRunSteps factory, FeedbackR
 {
     private FeedbackRunHarness H => feedback.Harness;
 
-    private static string ReadmeSection(string heading) =>
-        WorkflowChecks.Section(Path.Combine(StarterChecks.RepoRoot(), "README.md"), heading);
-
     private IEnumerable<string> StdoutLines => H.Out.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
     private IEnumerable<string[]> ShellCommands() =>
@@ -107,28 +104,6 @@ public sealed class FeedbackCleanupScopeSteps(FactoryRunSteps factory, FeedbackR
 
     [Then("the feedback run reads no issue")]
     public void ThenNoIssue() => Assert.DoesNotContain(H.Requests, r => r.Uri.Contains("/issues/", StringComparison.Ordinal));
-
-    [Then("the section holds a sentence after the paragraph that starts {string}")]
-    public static void ThenSentenceAfter(string start)
-    {
-        string[] paragraphs = ReadmeSection("## Start a new repo").Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-        int at = Array.FindIndex(paragraphs, p => p.StartsWith(start, StringComparison.Ordinal));
-        Assert.True(at >= 0);
-        Assert.True(at + 1 < paragraphs.Length);
-        Assert.False(string.IsNullOrWhiteSpace(paragraphs[at + 1]));
-    }
-
-    [Then("the sentence states that a feedback run on the pull request of a `cleanup` issue holds the build to the issue's `## Scope` and runs its `## Check`")]
-    public static void ThenSentenceStates()
-    {
-        string[] paragraphs = ReadmeSection("## Start a new repo").Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-        int at = Array.FindIndex(paragraphs, p => p.StartsWith("The body of a `cleanup` issue names the paths", StringComparison.Ordinal));
-        string sentence = paragraphs[at + 1];
-        Assert.Contains("feedback run", sentence, StringComparison.Ordinal);
-        Assert.Contains("pull request of a `cleanup` issue", sentence, StringComparison.Ordinal);
-        Assert.Contains("issue's `## Scope`", sentence, StringComparison.Ordinal);
-        Assert.Contains("`## Check`", sentence, StringComparison.Ordinal);
-    }
 
     private void SetCheck(int number, string label, string heading, string line)
     {

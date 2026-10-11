@@ -80,8 +80,3 @@ Feature: A feedback run on the pull request of a cleanup issue keeps that issue'
     When a caller starts a feedback run
     Then the feedback run reads no issue
     And the feedback run runs no check command
-
-  Scenario: The README documents the feedback run of a cleanup pull request
-    When a reader reads the section "## Start a new repo" of README.md
-    Then the section holds a sentence after the paragraph that starts 'The body of a `cleanup` issue names the paths'
-    And the sentence states that a feedback run on the pull request of a `cleanup` issue holds the build to the issue's `## Scope` and runs its `## Check`

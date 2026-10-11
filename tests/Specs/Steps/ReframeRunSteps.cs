@@ -160,16 +160,6 @@ public sealed class ReframeRunSteps(FactoryRunSteps factory, IObjectContainer co
         Assert.Contains(line + "\n", json.RootElement.GetProperty("body").GetString(), StringComparison.Ordinal);
     }
 
-    [Then("the section holds, after the paragraph that starts {string}, this paragraph")]
-    public static void ThenParagraph(string start, string docString)
-    {
-        string section = WorkflowChecks.Section(Path.Combine(StarterChecks.RepoRoot(), "README.md"), "## Start a new repo");
-        string[] paragraphs = section.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-        int at = Array.FindIndex(paragraphs, p => p.StartsWith(start, StringComparison.Ordinal));
-        Assert.True(at >= 0);
-        Assert.Equal(docString.Trim(), paragraphs[at + 1].Trim());
-    }
-
     [Then("the file {string} of this repo holds this text")]
     public static void ThenRepoFile(string file, string docString) =>
         StarterChecks.TextEquals(Path.Combine(StarterChecks.RepoRoot(), file), docString);

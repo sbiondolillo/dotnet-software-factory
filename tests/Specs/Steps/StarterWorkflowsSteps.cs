@@ -10,10 +10,6 @@ public sealed class StarterWorkflowsSteps(StarterState state)
 
     private string Workflow(string name) => Path.Combine(state.Copy, ".github", "workflows", name);
 
-    private static string Readme() => Path.Combine(StarterChecks.RepoRoot(), "README.md");
-
-    private static string Section(string heading) => WorkflowChecks.Section(Readme(), heading);
-
     [Then("the copy's {string} holds the files {string}, {string} and {string}")]
     public void ThenTheCopyHoldsTheFiles(string directory, string first, string second, string third)
         => WorkflowChecks.HoldsFiles(Path.Combine(state.Copy, directory), first, second, third);
@@ -73,34 +69,4 @@ public sealed class StarterWorkflowsSteps(StarterState state)
 
     [Then("the step with the integration command in {string} has {string} in its environment, from the secret of the same name")]
     public void ThenIntegrationStepEnvironment(string file, string name) => WorkflowChecks.RunStepEnvironment(Workflow(file), IntegrationRun, name);
-
-    [Then("the README section {string} holds the commands {string} and {string} in that order")]
-    public static void ThenReadmeHoldsCommands(string heading, string first, string second) => WorkflowChecks.HoldsCommands(Section(heading), first, second);
-
-    [Then("the README section {string} says, after the two commands, that the person pushes the copy to the branch {string} of a new GitHub repo")]
-    public static void ThenReadmePushes(string heading, string branch)
-        => WorkflowChecks.PushesTo(Section(heading), "dotnet new factory-starter -o <directory>", branch);
-
-    [Then("the README section {string} names the Actions secrets {string} and {string}")]
-    public static void ThenReadmeNamesSecrets(string heading, string first, string second)
-        => WorkflowChecks.SaysAll(Section(heading), $"`{first}`", $"`{second}`", "secrets");
-
-    [Then("it says that {string} is a fine-grained token that selects the new repo alone, with read and write access to {string}, {string}, {string} and {string}")]
-    public static void ThenReadmeSaysToken(string token, string a, string b, string c, string d)
-        => WorkflowChecks.SaysAll(Section("## Start a new repo"), $"`{token}`", "fine-grained token", "select the new repo alone, and give the token read and write access to " + a + ", " + b + ", " + c + " and " + d);
-
-    [Then("it says that {string} and {string} check the factory out with no token, because the factory is public")]
-    public static void ThenReadmeSaysNoToken(string first, string second)
-        => WorkflowChecks.SaysAll(Section("## Start a new repo"), $"`{first}` and `{second}` check the factory out with no token, because the factory is public");
-
-    [Then("the README section {string} says that the branch {string} is protected, with the checks {string} and {string} required")]
-    public static void ThenReadmeProtects(string heading, string branch, string first, string second)
-        => WorkflowChecks.SaysAll(Section(heading), "Protect the branch", $"`{branch}`", $"`{first}`", $"`{second}`", "required");
-
-    [Then("the README section {string} says that Copilot code review is requested on every pull request")]
-    public static void ThenReadmeCopilot(string heading) => WorkflowChecks.SaysAll(Section(heading), "requests a Copilot code review of each pull request it watches");
-
-    [Then("the README section {string} says that the repo's owner starts a run with the label {string} on an issue, and that {string} names the tag {string} of the factory")]
-    public static void ThenReadmeRunStart(string heading, string label, string file, string tag)
-        => WorkflowChecks.SaysAll(Section(heading), "owner starts a run with the label `" + label + "` on an issue", $"`{file}` names the tag `{tag}` of the factory");
 }

@@ -144,14 +144,4 @@ public sealed class FeedbackCleanupScopeTests
         Assert.DoesNotContain(h.Commands, RunsCheck);
         Assert.Contains(h.Prompts, p => p.Kind is "review");
     }
-
-    [Fact]
-    public void TheReadmeHoldsTheSentenceAfterTheCleanupParagraph()
-    {
-        string[] paragraphs = WorkflowChecks.Section(Path.Combine(StarterChecks.RepoRoot(), "README.md"), "## Start a new repo")
-            .Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-        int at = Array.FindIndex(paragraphs, p => p.StartsWith("The body of a `cleanup` issue names the paths", StringComparison.Ordinal));
-        Assert.True(at >= 0);
-        Assert.Contains("feedback run on the pull request of a `cleanup` issue holds the build to the issue's `## Scope` and runs its `## Check`", paragraphs[at + 1], StringComparison.Ordinal);
-    }
 }

@@ -7,9 +7,6 @@ public sealed class WorkflowChecksTests : IDisposable
     private const string Run = "dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --pass-env EXAMPLE_API_KEY";
     private const string Condition = "github.event_name == 'workflow_dispatch' || (github.event.label.name == 'factory' && github.event.sender.login == github.repository_owner)";
     private const string Dispatch = "workflow_dispatch:\n    inputs:\n      issue:\n        required: true\n        type: number\n      ref:\n        default: v1";
-    private const string Heading = "## Start a new repo";
-    private const string Second = "dotnet new factory-starter -o <directory>";
-
     private readonly string _root = Directory.CreateTempSubdirectory("workflow-checks-").FullName;
 
     public void Dispose() => Directory.Delete(_root, true);
@@ -112,25 +109,6 @@ public sealed class WorkflowChecksTests : IDisposable
     }
 
     [Fact]
-    public void ALineCheckNeedsAWholeLine()
-    {
-        const string Section = "a\nuse `x` here\nb";
-        WorkflowChecks.HoldsLine(Section, "b");
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsLine(Section, "use `x`"));
-        WorkflowChecks.HoldsNoLine(Section, "use `x`");
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsNoLine(Section, "a"));
-    }
-
-    [Fact]
-    public void TheAfterTheLabelCheckFailsOnAWrongOrderOrAMissingLabelLine()
-    {
-        WorkflowChecks.HoldsLineAfterLabel("about `x`\nnew", "new", "x");
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsLineAfterLabel("new\nabout `x`", "new", "x"));
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsLineAfterLabel("new", "new", "x"));
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsLineAfterLabel("about `x`", "new", "x"));
-    }
-
-    [Fact]
     public void AMissingTriggerOrAnotherTypeFailsTheTriggerChecks()
     {
         Assert.Throws<InvalidOperationException>(() => WorkflowChecks.Trigger(Wf(Factory(on: "issues:\n    types: [labeled]")), "workflow_dispatch"));
@@ -159,15 +137,6 @@ public sealed class WorkflowChecksTests : IDisposable
     [InlineData("workflow_dispatch:")]
     public void AnotherRefInputFailsTheDefaultCheck(string dispatch)
         => Assert.Throws<InvalidOperationException>(() => WorkflowChecks.InputDefault(Wf(Factory(on: "issues:\n    types: [labeled]\n  " + dispatch)), "workflow_dispatch", "ref", "v1"));
-
-    [Fact]
-    public void AReadmeWithoutTheTrialRunSentenceOrCommandFailsTheCheck()
-    {
-        const string command = "gh workflow run factory -f issue=<number> -f ref=<ref>";
-        WorkflowChecks.SaysTrialRun($"The repo's owner starts a trial run of the factory at another ref with the command `{command}`.", command);
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.SaysTrialRun("The repo's owner starts a trial run of the factory at another ref.", command));
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.SaysTrialRun($"Run `{command}`.\n\nThe repo's owner starts a trial run of the factory at another ref.", command));
-    }
 
     [Fact]
     public void WrongPermissionsFailTheCheck()
@@ -280,62 +249,4 @@ public sealed class WorkflowChecksTests : IDisposable
     public void AnIntegrationStepWithoutTheSecretFailsTheEnvironmentCheck()
         => Assert.Throws<InvalidOperationException>(() => WorkflowChecks.RunStepEnvironment(
             Wf(Ci(integrationRuns: "- run: dotnet run --no-restore --project tests/Integration")), "dotnet run --no-restore --project tests/Integration", "EXAMPLE_API_KEY"));
-
-    private string Readme(string text) => Write("README.md", text);
-
-    private const string Good = $"""
-        # T
-
-        {Heading}
-
-        ```
-        dotnet new install <checkout>/templates/starter
-        {Second}
-        ```
-
-        Push the copy to the branch `main` of a new GitHub repo.
-
-        Add `FACTORY_GITHUB_TOKEN` and `ANTHROPIC_API_KEY` secrets.
-
-        ## Next
-
-        other
-        """;
-
-    [Fact]
-    public void ASectionIsReadUpToTheNextLevelTwoHeading()
-    {
-        string readme = Readme(Good);
-        Assert.DoesNotContain("other", WorkflowChecks.Section(readme, Heading), StringComparison.Ordinal);
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.Section(readme, "## Missing"));
-    }
-
-    [Fact]
-    public void CommandsInTheOtherOrderOrMissingFailTheCommandsCheck()
-    {
-        string section = WorkflowChecks.Section(Readme(Good), Heading);
-        WorkflowChecks.HoldsCommands(section, "dotnet new install <checkout>/templates/starter", Second);
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsCommands(section, Second, "dotnet new install <checkout>/templates/starter"));
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsCommands(section, "dotnet new install <checkout>/templates/starter", "x"));
-    }
-
-    [Fact]
-    public void APushSentenceBeforeTheCommandsDoesNotCount()
-    {
-        string good = WorkflowChecks.Section(Readme(Good), Heading);
-        WorkflowChecks.PushesTo(good, Second, "main");
-        string before = WorkflowChecks.Section(Readme($"{Heading}\n\nPush the copy to the branch `main` of a new GitHub repo.\n\n{Second}\n\nDone.\n"), Heading);
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.PushesTo(before, Second, "main"));
-    }
-
-    [Fact]
-    public void ASaysAllTermMissingFromTheSectionFailsTheCheck()
-    {
-        string section = WorkflowChecks.Section(Readme(Good), Heading);
-        WorkflowChecks.SaysAll(section, "`FACTORY_GITHUB_TOKEN`", "`ANTHROPIC_API_KEY`");
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.SaysAll(section, "`FACTORY_GITHUB_TOKEN`", "Pull requests"));
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.SaysAll(section, "other"));
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.SaysAll(section, "Copilot"));
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.SaysAll(section, "`v0`"));
-    }
 }

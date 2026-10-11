@@ -14,6 +14,10 @@ Where things are in this repo, for an agent about to read or write code here.
 | `src/Core/` | the library, where the behaviour lives | the test project references it |
 | `src/App/` | the console program, a thin shell over the library | it builds the Generic Host, `Microsoft.Extensions.Hosting`, and parses its arguments with `System.CommandLine`. A new option or argument is a `System.CommandLine` symbol, and `--help` lists it |
 
+## What a scenario tests
+
+A scenario tests what a program does. No scenario reads the words of a prose file: the README, an `AGENTS.md`, a skill, an issue template, a page under `docs/`. Such a pin fails only when the file is edited, so it taxes each edit and catches nothing. A document that a program reads is tested through that program: a template goes through `IssueScenarios.Apply`, and a script in a fenced block runs. A change to prose is read in the diff of the pull request.
+
 ## How a scenario reaches the code
 
 Reqnroll compiles each linked feature into a test class under `obj/`, named after the feature title with `Feature` added, and one test method per scenario. A step class marked `[Binding]` answers the steps. It calls the library in process.

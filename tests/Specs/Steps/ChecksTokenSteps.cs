@@ -25,9 +25,5 @@ public sealed class ChecksTokenSteps(ConsoleProgramSteps console)
     public void ThenOthersHold(string header, string value) =>
         WorkflowChecks.HoldsHeader(console.Harness.Requests.Where(r => !IsCheckRead(r)), header, value);
 
-    [Then("the README section {string} holds the line {string} after the line that starts {string}")]
-    public static void ThenReadmeAfterStart(string heading, string line, string prefix) =>
-        WorkflowChecks.HoldsLineAfterStart(WorkflowChecks.Section(Path.Combine(StarterChecks.RepoRoot(), "README.md"), heading), line, prefix);
-
     private static bool IsCheckRead(TimedRequest r) => r.Path.EndsWith("/check-runs", StringComparison.Ordinal);
 }

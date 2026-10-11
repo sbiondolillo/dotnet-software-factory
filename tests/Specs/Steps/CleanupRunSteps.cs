@@ -284,19 +284,5 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
             at => lines.Skip(at).Take(wanted.Count).SequenceEqual(wanted));
     }
 
-    [Then("the section mentions the label {string}")]
-    public static void ThenLabel(string label) => Assert.Contains($"`{label}`", Readme(), StringComparison.Ordinal);
-
-    [Then("the section mentions the headings {string} and {string}")]
-    public static void ThenHeadings(string first, string second)
-    {
-        string section = Readme();
-        Assert.Contains(first, section, StringComparison.Ordinal);
-        Assert.Contains(second, section, StringComparison.Ordinal);
-    }
-
-    private static string Readme() =>
-        WorkflowChecks.Section(Path.Combine(StarterChecks.RepoRoot(), "README.md"), "## Start a new repo");
-
     private FactoryRunResult FactoryResult() => factory.LastResult;
 }
