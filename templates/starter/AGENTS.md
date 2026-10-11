@@ -12,6 +12,10 @@ The rules for an agent that reads, writes or reviews code in this repo.
 | `src/Core/` | the library, where the behaviour lives, and the `System.CommandLine` command tree | the tree holds every command, option, argument and action. A new option or argument is a symbol in the tree, and `--help` lists it |
 | `src/App/` | the console program, a thin shell over the library | `Program.cs` builds the Generic Host, `Microsoft.Extensions.Hosting`, and parses its arguments with the command tree from `src/Core` |
 
+## What a scenario tests
+
+A scenario tests what the program does. No scenario reads the words of a prose file: the README, this file, a skill, an issue template, a page under `docs/`. Such a pin fails only when the file is edited, so it taxes each edit and catches nothing. A document that the program reads is tested through the program. A change to prose is read in the diff of the pull request.
+
 ## How a scenario reaches the code
 
 Reqnroll compiles each linked feature into a test class under `obj/`, named after the feature title with `Feature` added, and one test method per scenario. A class name that ends `Feature` belongs to that generated code. A step class marked `[Binding]` answers the steps, and it calls the library in process.

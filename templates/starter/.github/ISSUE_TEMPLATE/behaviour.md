@@ -9,7 +9,7 @@ As a <role>, I want to <ability>, so that <benefit>.
 
 **Today.** <What `main` does now that stops that person, in 3 sentences or fewer.>
 
-**What changes.** <Each file and each program that a scenario names, with the kind of each thing. Then each invariant.>
+**What changes.** <Each file and each program that a scenario names, with the kind of each thing. Then each change to a document. Then each invariant.>
 
 ## Scenarios
 
