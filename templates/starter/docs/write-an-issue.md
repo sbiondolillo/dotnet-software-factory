@@ -21,13 +21,12 @@ The body describes the program, and only the program. A sentence belongs when a 
 
 Each name in the title and the body is the name that the repo or the tool uses: `workflow_dispatch`, `Directory.Packages.props`, the argument `name`. A term the repo lacks is replaced by what it means.
 
-The body states results, and the build chooses every means. A means is a package, a class of a library, an algorithm, an argument that no caller reads, or the steps of an operation. Text that the user of the repo gets is a result: a config value, a workflow, a pinned version, a paragraph of a document. State such a text in one of three forms:
+The body states results, and the build chooses every means. A means is a package, a class of a library, an algorithm, an argument that no caller reads, or the steps of an operation. Text that the user of the repo gets is a result: a config value, a workflow, a pinned version. State such a text in one of two forms:
 
 | The known text | The form |
 |---|---|
 | one value | "The base image of `sandbox/Dockerfile` is `node:24-bookworm-slim`." |
 | a small file, known in full | "`<path>` holds this text:", then the text as a block |
-| a paragraph of a document that replaces one on `main` | "`<path>`, in `<section>`, holds this paragraph in place of the paragraph that starts '<its first words>':", then the paragraph as a block |
 
 In a scenario, the sentence is a `Then` step and the block is its doc string. In prose, the block is a fenced block.
 
@@ -41,7 +40,7 @@ The title states what the person can do after the change, or the end state, in t
 |---|---|
 | the story | `As a <role>, I want to <ability>, so that <benefit>.` The role is a real user of the program: a repo owner, a person who runs the console program. A story with no real role is a sign that the change is a refactor, a cleanup or a reframe. |
 | `**Today.**` | What `main` does now that stops that person, in 3 sentences or fewer. |
-| `**What changes.**` | Each file and each program that a scenario names, with the kind of each thing. Then each invariant. |
+| `**What changes.**` | Each file and each program that a scenario names, with the kind of each thing. Then each change to a document. Then each invariant. |
 | `## Scenarios` | One fenced block for each feature file that the change adds or edits. The scenarios are the tests, word for word. A change that only removes scenarios has no `## Scenarios`. |
 | `## Removed scenarios` | One list item for each scenario that the change removes. |
 | `## Context` | Facts of the world that a scenario needs, each with its source. |
@@ -95,8 +94,8 @@ Feature: Farewell
 - A scenario states each input that the program refuses, byte for byte.
 - A condition that picks one member of a set gets one scenario per member, or a `Scenario Outline:` with one row of `Examples:` per member. A condition that holds for every member at once is one scenario.
 - Each sad path wanted is its own scenario. A failure is stated by kind, and the text of a program's error is a result that a `Then` states.
-- A document edit that the change owes is a scenario whose `Then` names the file, the section and what it holds after the change.
-- Each requirement is stated once, in one scenario. A value in the prose that no scenario holds is a requirement that the tests miss.
+- A change to a document is named in `**What changes.**`: the file, the section and what it holds after the change. No scenario reads the words of a document, and the owner reads the change in the diff of the pull request.
+- Each requirement of the program is stated once, in one scenario. A value of the program in the prose that no scenario holds is a requirement that the tests miss.
 - A `Then` pins only what a consumer reads: a config value has its program, a file has its reader. An order, a sort or a path form that no caller reads is a means.
 - A step text that a class of `tests/Specs/Steps/` already binds runs that binding. Use that text for the same meaning, and other words for a new meaning.
 - Each name of a scenario gives its own test name. Two names that differ only in case, punctuation or accents can give one: 'A name gets a greeting' and 'A name, gets a greeting' give one, and so do 'Café' and 'Cafe'.
@@ -162,9 +161,9 @@ Read the draft once for each row. File it when every row passes. A person with C
 | scenario names | list the names of the scenarios of each feature file after the change | no two give one test name, and no block holds one name twice |
 | removed | each line under `## Removed scenarios` | it is a list item: a path in backticks, a colon, and a name that the file on `main` holds |
 | conditions | search the scenarios for "When" | each `When` names an event that occurs |
-| known text | list each config value, workflow, pinned version and document paragraph that the issue already knows | each one is in a `Then` as one value or as a doc string |
+| known text | list each config value, workflow and pinned version that the issue already knows | each one is in a `Then` as one value or as a doc string |
 | context | list each sentence and each row of `## Context` | each one states a fact of the world and its source, and none states what the program must do |
-| stated once | list each requirement in the draft | each one is in one scenario, and nowhere else |
+| stated once | list each requirement of the program in the draft | each one is in one scenario, and nowhere else |
 | positive form | search the prose for "not", "never", "don't", "later" | each sentence found states what holds |
 | result inputs | each `Then` whose result is a count, an exit code or a summary line | its scenario states each input that result reads |
 | on `main` | read each scenario that the change adds or edits against the code on `main` | `main` fails each one, unless the change is a new test for behaviour the program already has. A scenario that a whole-file block keeps from the file on `main` passes on `main` |
