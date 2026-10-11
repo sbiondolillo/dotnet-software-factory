@@ -25,7 +25,7 @@ Before the first command, you have:
 
 - a GitHub account, on any plan
 - `gh` signed in as that account: `gh auth status` names it
-- the .NET SDK that the starter's `global.json` pins, 10.0
+- the .NET SDK that the starter's `global.json` pins, 10.0.401 or a later patch
 - an Anthropic API key
 - a clone of this repo at the tag `v1`: `git clone --branch v1 https://github.com/sbiondolillo/dotnet-software-factory.git`
 
@@ -84,7 +84,7 @@ JSON
 
 GitHub applies the protection on a public repo, and on a private repo of a paid plan. The command sets `enforce_admins` to `false`, so an admin of the repo, such as its owner, can still merge a pull request with red checks. See `## A private target repo`.
 
-Create the five labels that the factory reads. `--force` updates a label that exists:
+Create the five labels that the demo and the review loop use. `--force` updates a label that exists:
 
 ```
 for label in factory cleanup refactor reframe review-feedback; do gh label create "$label" --force; done
@@ -107,7 +107,7 @@ The factory runs on a private repo, with these limits:
 
 Four issues on the greeter show the four kinds of run. Each body is a file under `docs/demo/` of the factory, and `$factory` from `## Start a new repo` names it. Each step below says what its issue asks for, then gives three blocks: file the issue and label it `factory`, watch the run, then merge the pull request and pull `main`. Run the steps in order. The second and the third issue need the option `--shout`, which the first adds.
 
-Each title is in single quotes, because it holds backticks. `gh` prints the URL of the new issue, and `sed` keeps its number in `n`. The label `factory` goes on last, because the run reads the other labels when it starts.
+Each title is in single quotes, because it holds backticks. The shell runs the text between backticks in double quotes. `gh` prints the URL of the new issue, and `sed` keeps its number in `n`. The label `factory` goes on last, because the run reads the other labels when it starts.
 
 `gh run watch` lists the runs in progress: pick `factory`. The run ends when its pull request has green checks. If `gh run watch` prints `found no in progress runs to watch`, the run is not queued yet: run it again after a few seconds.
 
@@ -191,9 +191,11 @@ With a Copilot plan, add `--copilot-review on` to the run command in `factory.ym
 sed -i 's/--pass-env EXAMPLE_API_KEY$/--pass-env EXAMPLE_API_KEY --copilot-review on/' .github/workflows/factory.yml .github/workflows/review-feedback.yml && git add .github/workflows && git commit -m "Run the factory with --copilot-review on" && git push
 ```
 
-The second is a fifth demo step, a `cleanup` issue that the factory builds. Its body names the two workflow files as its scope, and its check greps both for the flag:
+The second is a fifth demo step, a `cleanup` issue that the factory builds.
 
 ### Step 5: a `cleanup` issue on the workflows
+
+The issue asks for `--copilot-review on` in the run command of `factory.yml` and of `review-feedback.yml`. Its body is `docs/demo/5-copilot-on.md`, and it carries the label `cleanup`. Its `## Scope` names the two workflow files, and its `## Check` greps both for the flag.
 
 ```
 n=$(gh issue create --title 'The factory requests a Copilot code review of each pull request' --body-file "$factory/docs/demo/5-copilot-on.md" --label cleanup | sed 's|.*/||') && gh issue edit "$n" --add-label factory && echo "issue $n"
@@ -313,4 +315,3 @@ dotnet test --no-restore                 # the test suite, no network needed
 dotnet run --project tests/Integration   # the integration suite, network needed
 dotnet run --project src/App -- Ada      # the console program
 ```
-
