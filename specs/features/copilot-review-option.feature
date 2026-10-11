@@ -1,4 +1,4 @@
-Feature: The option --copilot-review turns the Copilot code review request off
+Feature: The option --copilot-review turns the Copilot code review request on
 
   Background:
     Given the environment holds "FACTORY_GITHUB_TOKEN" and "ANTHROPIC_API_KEY"
@@ -6,12 +6,12 @@ Feature: The option --copilot-review turns the Copilot code review request off
 
   Scenario: run help lists the option
     When the program starts with the arguments "run --help"
-    Then standard output holds "--copilot-review", "off" and "[default: on]"
+    Then standard output holds "--copilot-review", "on or off" and "[default: off]"
     And the exit code is 0
 
   Scenario: feedback help lists the option
     When the program starts with the arguments "feedback --help"
-    Then standard output holds "--copilot-review", "off" and "[default: on]"
+    Then standard output holds "--copilot-review", "on or off" and "[default: off]"
     And the exit code is 0
 
   Scenario: run refuses a value that is neither on nor off
@@ -55,13 +55,19 @@ Feature: The option --copilot-review turns the Copilot code review request off
     Then claude gets the review prompt
     And standard error holds the line "agent: review start"
 
-  Scenario: run with the review on requests the review
-    Given GitHub answers each read of the reviews with no review
-    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --copilot-review on"
-    Then GitHub gets one GraphQL request that names "requestReviewsByLogin" with the bot login "copilot-pull-request-reviewer"
-
-  Scenario: feedback with the review on requests the review
-    Given GitHub answers each read of the review threads with the thread A
+  Scenario: run with no review option requests no review and ends on green checks
+    Given GitHub answers each read of the check runs with the check run "build" with the status "completed" and the conclusion "success"
     And GitHub answers each read of the reviews with no review
-    When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10 --copilot-review on"
-    Then GitHub gets one GraphQL request that names "requestReviewsByLogin" with the bot login "copilot-pull-request-reviewer"
+    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
+    Then GitHub gets no review request
+    And standard output holds the line "checks: green, unresolved threads: 0"
+    And the exit code is 0
+
+  Scenario: feedback with no review option requests no review and ends on green checks
+    Given GitHub answers each read of the check runs with the check run "build" with the status "completed" and the conclusion "success"
+    And GitHub answers each read of the reviews with no review
+    And GitHub answers each read of the review threads with no thread
+    When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10"
+    Then GitHub gets no review request
+    And standard output holds the line "checks: green, unresolved threads: 0"
+    And the exit code is 0

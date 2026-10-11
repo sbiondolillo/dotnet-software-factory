@@ -75,7 +75,7 @@ public static class ConsoleCommands
         var copilotReview = new Option<string>("--copilot-review")
         {
             Description = "Whether the factory requests a Copilot code review and waits for it: on or off.",
-            DefaultValueFactory = _ => "on",
+            DefaultValueFactory = _ => "off",
         };
         copilotReview.Validators.Add(result =>
         {
