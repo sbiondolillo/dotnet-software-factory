@@ -8,5 +8,5 @@ Cleanup. The factory requests a Copilot code review of each pull request it watc
 ## Check
 
 ```sh
-grep -q -- '--copilot-review on' .github/workflows/factory.yml && grep -q -- '--copilot-review on' .github/workflows/review-feedback.yml
+grep -q -- '--pass-env EXAMPLE_API_KEY --copilot-review on$' .github/workflows/factory.yml && grep -q -- '--pass-env EXAMPLE_API_KEY --copilot-review on$' .github/workflows/review-feedback.yml
 ```
