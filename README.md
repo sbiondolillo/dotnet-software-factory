@@ -241,7 +241,14 @@ The repo's owner starts a reframe run, a run with no plan, with the label `refra
 
 ### `review-feedback`
 
-The repo's owner starts a feedback run with the label `review-feedback` on a pull request. The run removes the label, so the owner applies it again for the next round.
+A feedback run answers the review of a pull request that the factory opened. The loop starts with you:
+
+1. Read the pull request on GitHub. Leave each remark as a review comment on a line of the diff, so it is a thread.
+2. Add the label `review-feedback` to the pull request. Only the repo's owner starts the run.
+3. The run removes the label first, reads every unresolved thread, builds the change on the pull request's branch, and pushes a commit. It replies to each thread with what it changed, or why it disputes the remark, and then reviews its own change and waits for the checks.
+4. Read the replies and the new commit. Resolve the threads that satisfy you, leave new remarks on the ones that do not, and add the label again for the next round.
+
+A pull request with no unresolved thread gets no build. A `cleanup` or `refactor` pull request keeps its rules through a feedback run, as the sections above say.
 
 ## A trial run at another ref
 
