@@ -320,14 +320,6 @@ Feature: A reframe run keeps every test and every public type and member
       | redo: 1 |
       | build: start |
 
-  Scenario: The README documents the reframe run
-    When a reader reads the section "## Start a new repo" of README.md
-    Then the section mentions the label "reframe"
-    And the section holds, after the paragraph that starts "A feedback run on the pull request of a `refactor` issue", this paragraph
-      """
-      Create the label `reframe` in the new repo. The repo's owner starts a reframe run, a run with no plan, with the label `reframe` on an issue. A reframe issue keeps the behaviour of the program and changes the code, the tests or the config. A format sweep and a framework upgrade are reframe issues. The body names the paths the build can change under the heading `## Scope`, as a `cleanup` issue does. The scope can name `src/`. The body holds under the heading `## Check` one fenced `sh` block that fails before the change and exits with the code 0 after it. The run records the tests that pass on the base commit. It also records the public API of the code under `src/`: one line per public type and per public or protected member. The build runs again when it loses a test or changes a line of that API. The label `reframe` with the label `behavior`, `cleanup` or `refactor` on one issue gets a comment and no run.
-      """
-
   Scenario: The sandbox Dockerfile publishes the API printer
     Then the file "sandbox/Dockerfile" of this repo holds this text
       """

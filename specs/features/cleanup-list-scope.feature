@@ -52,10 +52,6 @@ Feature: A Scope line of a cleanup issue can be a Markdown list item
     When a caller starts a run
     Then FactoryRun runs the review prompt
 
-  Scenario: The README documents the line forms of the Scope
-    Given the README of the repo
-    Then the README holds the paragraph 'The body of a `cleanup` issue names the paths the build can change under the heading `## Scope`, one for each line. A line is a path, either bare or as a Markdown list item with the marker `-`, `*` or `+`, and the path can sit in backticks. A directory ends in `/`, and a path with `*` is a glob. The body holds under the heading `## Check` one fenced `sh` block, the check command, that fails before the change and exits with the code 0 after it. The factory runs the command with `sh -c` in a copy of the work tree, and a command that runs `dotnet` restores its packages itself first.'
-
   Scenario: A list item for a file outside the scope still gets a Redo
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "- README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build

@@ -25,6 +25,3 @@ Feature: A repo made from the starter starts a trial run of the factory at a cho
 
   Scenario: The factory job's last step runs the run command with the chosen issue
     Then the last step of the job in "factory.yml" runs "dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --pass-env EXAMPLE_API_KEY"
-
-  Scenario: The README says the owner starts a trial run at another ref
-    Then the README section "## Start a new repo" says that the repo's owner starts a trial run of the factory at another ref with the command "gh workflow run factory -f issue=<number> -f ref=<ref>"

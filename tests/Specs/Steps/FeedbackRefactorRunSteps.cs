@@ -10,9 +10,6 @@ public sealed class FeedbackRefactorRunSteps(FactoryRunSteps factory, FeedbackRu
 {
     private FeedbackRunHarness H => feedback.Harness;
 
-    private static string ReadmeSection(string heading) =>
-        WorkflowChecks.Section(Path.Combine(StarterChecks.RepoRoot(), "README.md"), heading);
-
     private void SetIssue(int number, string label, string body)
     {
         Assert.Equal(15, number);
@@ -61,13 +58,4 @@ public sealed class FeedbackRefactorRunSteps(FactoryRunSteps factory, FeedbackRu
 
     [Then("the build prompt holds {string}")]
     public void ThenBuildHolds(string text) => Assert.Contains(text, H.BuildPrompts.First().Text, StringComparison.Ordinal);
-
-    [Then("the section holds this paragraph after the paragraph that starts {string}")]
-    public static void ThenParagraph(string start, Table table)
-    {
-        string[] paragraphs = ReadmeSection("## Start a new repo").Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-        int at = Array.FindIndex(paragraphs, p => p.StartsWith(start, StringComparison.Ordinal));
-        Assert.True(at >= 0);
-        Assert.Equal(table.Rows[0][0], paragraphs[at + 1].Trim());
-    }
 }

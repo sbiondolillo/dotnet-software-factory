@@ -59,14 +59,6 @@ public sealed class ChecksTokenTests : IDisposable
     }
 
     [Fact]
-    public void TheReadmeCheckFailsWhenTheLineIsAbsentOrBeforeTheStart()
-    {
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsLineAfterStart("a\nb", "new", "a"));
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsLineAfterStart("new\nstart here", "new", "start"));
-        WorkflowChecks.HoldsLineAfterStart("start here\nnew", "new", "start");
-    }
-
-    [Fact]
     public void TheHeaderCheckFailsOnNoRequestAndOnAnotherValue()
     {
         Assert.Throws<InvalidOperationException>(() => WorkflowChecks.HoldsHeader([], "Authorization", "Bearer a"));

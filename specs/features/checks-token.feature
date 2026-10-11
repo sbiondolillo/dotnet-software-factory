@@ -31,6 +31,3 @@ Feature: The console program reads the check runs with FACTORY_CHECKS_TOKEN when
     Then every read of the check runs holds the header "Authorization" with the value "Bearer github-token-1"
     And every other request to GitHub's API holds the header "Authorization" with the value "Bearer github-token-1"
     And the exit code is 0
-
-  Scenario: The README says the job's own token is passed as FACTORY_CHECKS_TOKEN
-    Then the README section "## Start a new repo" holds the line "`factory.yml` and `review-feedback.yml` pass the job's own token to the factory as `FACTORY_CHECKS_TOKEN`, with the permission `checks: read`. The factory reads the check runs of each pull request with it, on a public repo and on a private repo alike. A fine-grained token has no Checks permission, so `FACTORY_GITHUB_TOKEN` reads check runs on a public repo only." after the line that starts "`FACTORY_GITHUB_TOKEN` is a fine-grained token"

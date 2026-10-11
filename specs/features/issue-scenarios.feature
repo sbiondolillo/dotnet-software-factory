@@ -129,9 +129,3 @@ Feature: The factory pins the scenarios of an issue as the owner wrote them
     Given an issue body with a block with no closing fence and a removed scenario in a file that the clone lacks
     When the factory runs the issue
     Then the issue gets one comment that holds both faults
-
-  Scenario: The README documents the two headings
-    Given the README section "## Start a new repo"
-    Then it holds a paragraph after the line that starts "The repo's owner starts a run with the label `factory`"
-    And the paragraph names `## Scenarios`, `## Removed scenarios`, the whole-file block and the upsert
-    And the section holds no new line that starts "## "

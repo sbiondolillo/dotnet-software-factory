@@ -28,48 +28,6 @@ public static partial class WorkflowChecks
         }
     }
 
-    /// <summary>Fails when no line of the section equals the text.</summary>
-    public static void HoldsLine(string section, string line)
-    {
-        if (!section.Split('\n').Contains(line))
-        {
-            throw new InvalidOperationException($"the section lacks the line {line}");
-        }
-    }
-
-    /// <summary>Fails when a line of the section equals the text.</summary>
-    public static void HoldsNoLine(string section, string line)
-    {
-        if (section.Split('\n').Contains(line))
-        {
-            throw new InvalidOperationException($"the section holds the line {line}");
-        }
-    }
-
-    /// <summary>Fails when the line does not come after the line that names the label in backticks.</summary>
-    public static void HoldsLineAfterLabel(string section, string line, string label)
-    {
-        string[] lines = section.Split('\n');
-        int labelLine = Array.FindIndex(lines, l => l.Contains($"`{label}`", StringComparison.Ordinal) && l != line);
-        int at = Array.IndexOf(lines, line);
-        if (labelLine < 0 || at < 0 || at < labelLine)
-        {
-            throw new InvalidOperationException($"the section lacks the line {line} after the line about the label {label}");
-        }
-    }
-
-    /// <summary>Fails when the line is absent, or does not come after a line that starts with the prefix.</summary>
-    public static void HoldsLineAfterStart(string section, string line, string prefix)
-    {
-        string[] lines = section.Split('\n');
-        int start = Array.FindIndex(lines, l => l.StartsWith(prefix, StringComparison.Ordinal));
-        int at = Array.IndexOf(lines, line);
-        if (start < 0 || at < 0 || at < start)
-        {
-            throw new InvalidOperationException($"the section lacks the line {line} after the line that starts {prefix}");
-        }
-    }
-
     /// <summary>Fails when there is no request, or when a request does not carry the value in the Authorization header.</summary>
     public static void HoldsHeader(IEnumerable<TimedRequest> requests, string header, string value)
     {
@@ -136,10 +94,6 @@ public static partial class WorkflowChecks
         => (Map(Root(file), "on", file).GetValueOrDefault(eventName) as Dictionary<string, object?>)?.GetValueOrDefault("inputs") is Dictionary<string, object?> inputs
             ? inputs.GetValueOrDefault(input) as Dictionary<string, object?>
             : null;
-
-    /// <summary>Fails when no paragraph of the section says the owner starts a trial run at another ref and holds the command in backticks.</summary>
-    public static void SaysTrialRun(string section, string command)
-        => SaysAll(section, "owner starts a trial run of the factory at another ref", $"`{command}`");
 
     /// <summary>Fails when the workflow's triggers are not the first event and the second event on the branch.</summary>
     public static void TwoTriggers(string file, string first, string second, string branch)
@@ -295,57 +249,6 @@ public static partial class WorkflowChecks
             throw new InvalidOperationException($"the job {job} of {file} does not run {first} and then {second}");
         }
     }
-
-    /// <summary>The lines of a README section, from its heading to the next level-two heading.</summary>
-    public static string Section(string readme, string heading)
-    {
-        string[] lines = File.ReadAllText(readme).Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
-        int start = Array.FindIndex(lines, line => line == heading);
-        if (start < 0)
-        {
-            throw new InvalidOperationException($"{readme} has no section {heading}");
-        }
-
-        IEnumerable<string> rest = lines.Skip(start + 1).TakeWhile(line => !line.StartsWith("## ", StringComparison.Ordinal));
-        return string.Join('\n', rest);
-    }
-
-    /// <summary>Fails when the section lacks either command or holds them out of order.</summary>
-    public static void HoldsCommands(string section, string first, string second)
-    {
-        int one = section.IndexOf(first, StringComparison.Ordinal);
-        if (one < 0 || section.IndexOf(second, one + first.Length, StringComparison.Ordinal) < 0)
-        {
-            throw new InvalidOperationException($"the section does not hold {first} and then {second}");
-        }
-    }
-
-    /// <summary>Fails when no sentence after the second command says to push the copy to the branch of a new GitHub repo.</summary>
-    public static void PushesTo(string section, string second, string branch)
-    {
-        int at = section.IndexOf(second, StringComparison.Ordinal);
-        string after = at < 0 ? "" : section[(at + second.Length)..];
-        if (!Paragraphs(after).Any(p => p.Contains("push", StringComparison.OrdinalIgnoreCase) && Has(p, $"`{branch}`", "new GitHub repo")))
-        {
-            throw new InvalidOperationException($"the section does not say, after the commands, to push to {branch} of a new GitHub repo");
-        }
-    }
-
-    /// <summary>Fails when no paragraph of the section holds every term (a name in backticks is a term with its backticks).</summary>
-    public static void SaysAll(string section, params string[] terms)
-    {
-        if (!Paragraphs(section).Any(p => Has(p, terms)))
-        {
-            throw new InvalidOperationException($"no paragraph of the section holds all of: {string.Join(", ", terms)}");
-        }
-    }
-
-    private static bool Has(string text, params string[] terms) => terms.All(term => text.Contains(term, StringComparison.Ordinal));
-
-    private static string[] Paragraphs(string text) => BlankLine().Split(text);
-
-    [GeneratedRegex(@"\n\s*\n")]
-    private static partial Regex BlankLine();
 
     private static List<string> Runs(string file, string job)
         => [.. Steps(Job(file, job)).Select(step => step.GetValueOrDefault("run")).OfType<string>()];

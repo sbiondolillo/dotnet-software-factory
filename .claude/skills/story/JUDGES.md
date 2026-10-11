@@ -16,9 +16,9 @@ Done when each claim names its line on `main`, and each test the change makes fa
 
 ### Holes
 
-This angle runs only on a draft that holds a check, or a change to a text that a scenario pins. A plain behaviour draft does not get it: its sad paths are the owner's to state, and a builder that can read the repo asks.
+This angle runs only on a draft that holds a check. A plain behaviour draft does not get it: its sad paths are the owner's to state, and a builder that can read the repo asks.
 
-Find each way a build passes every scenario of the draft and still misses the request: a check that accepts too much, a text pinned in part where a reader reads all of it, a sad path the request implies and no scenario states. A hole is proven in a scratch worktree of `main` only when the judge names three things: the scenario, the break that keeps it green, and the one command that settles it. Then report the command and its output, not the code of the proof. A hunch with no such command is reported as a sentence for `## Context`, marked `unproven`.
+Find each way a build passes every scenario of the draft and still misses the request: a check that accepts too much, a sad path the request implies and no scenario states. A hole is proven in a scratch worktree of `main` only when the judge names three things: the scenario, the break that keeps it green, and the one command that settles it. Then report the command and its output, not the code of the proof. A hunch with no such command is reported as a sentence for `## Context`, marked `unproven`.
 
 A check pins the claim of the story, not the program. A break that the build or the test suite catches is not a hole. `Holes` accepts when each remaining hole needs a change that no scenario of the request implies. Such a hole is reported as a line for `## Context`, not as a fault.
 
@@ -44,7 +44,7 @@ Each reviewer reports `accept` or `reject`. Then it reports each finding with th
 
 ### Conformance
 
-Read each sentence of `**What changes.**` of the issue against the clone, and give the line of the branch that makes it true. Read each text a scenario pins as `git diff <base>...<SHA> -- <path>`, against `**What changes.**`. Read each scenario of the issue against its feature file: the same name, and the same steps in the same order.
+Read each sentence of `**What changes.**` of the issue against the clone, and give the line of the branch that makes it true. Read each prose file that `**What changes.**` names as `git diff <base>...<SHA> -- <path>`, against its sentence there. Read each scenario of the issue against its feature file: the same name, and the same steps in the same order.
 
 Done when each sentence, each text and each scenario has its line in the branch or its finding.
 
@@ -74,7 +74,7 @@ A scenario that stays green with a file of the change put back is a finding: it 
 
 When `<SHA>` is the SHA of the prototype, the table of `## Context` stands for the runs with each file put back. The reviewer still makes the first run, to build `tests/Specs/obj` and read `<Class>`, and checks that its `Total` agrees with the table. Then it makes only the narrower mutations below. A file of `git diff --name-only <base>...<SHA>` with no row in the table gets the run with that file put back, as above.
 
-Then make two or more narrower mutations of the new code. Each one is an edit that the controls of the body do not cover: a bound off by one, a branch inverted, a line of a pinned text changed. Run the features for each, and restore the commit after each. A mutation that no scenario fails is a finding, with the scenario that should fail it.
+Then make two or more narrower mutations of the new code. Each one is an edit that the controls of the body do not cover: a bound off by one, a branch inverted. Run the features for each, and restore the commit after each. A mutation that no scenario fails is a finding, with the scenario that should fail it.
 
 Done when the first run on `<SHA>` has its `Total`, each changed file has its list of scenarios that stay green or its row in the table of `## Context`, and two or more narrower mutations have theirs.
 

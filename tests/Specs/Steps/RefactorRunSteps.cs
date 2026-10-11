@@ -132,16 +132,6 @@ public sealed class RefactorRunSteps(FactoryRunSteps factory, IObjectContainer c
     [Then("the second plan prompt holds {string}")]
     public void ThenSecondPlan(string text) => Assert.Contains(text, H.Prompts.Where(p => p.Kind is "plan").ElementAt(1).Text, StringComparison.Ordinal);
 
-    [Then("the section mentions the heading {string} and the paths {string}, {string} and {string}")]
-    public static void ThenReadme(string heading, string first, string second, string third)
-    {
-        string section = WorkflowChecks.Section(Path.Combine(StarterChecks.RepoRoot(), "README.md"), "## Start a new repo");
-        foreach (string text in new[] { heading, first, second, third })
-        {
-            Assert.Contains(text, section, StringComparison.Ordinal);
-        }
-    }
-
     private void SetConsoleIssue(int number, string label, string body)
     {
         Assert.Equal(12, number);

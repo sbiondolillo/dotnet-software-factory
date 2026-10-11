@@ -26,8 +26,4 @@ public sealed class StarterTrialRunSteps(StarterState state)
 
     [Then("it has the input {string} with the default {string}")]
     public void ThenInputDefault(string input, string value) => WorkflowChecks.InputDefault(Workflow(_file), _event, input, value);
-
-    [Then("the README section {string} says that the repo's owner starts a trial run of the factory at another ref with the command {string}")]
-    public static void ThenReadmeTrialRun(string heading, string command)
-        => WorkflowChecks.SaysTrialRun(WorkflowChecks.Section(Path.Combine(StarterChecks.RepoRoot(), "README.md"), heading), command);
 }

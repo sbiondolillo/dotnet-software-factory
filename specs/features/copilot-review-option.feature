@@ -65,7 +65,3 @@ Feature: The option --copilot-review turns the Copilot code review request off
     And GitHub answers each read of the reviews with no review
     When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10 --copilot-review on"
     Then GitHub gets one GraphQL request that names "requestReviewsByLogin" with the bot login "copilot-pull-request-reviewer"
-
-  Scenario: The README states the review option in its Copilot paragraph
-    When a reader reads the section "## Start a new repo" of README.md
-    Then the section holds the line 'The factory requests a Copilot code review of each pull request it watches, and waits for that review on the head commit. This needs a Copilot plan that includes Copilot code review. With no such plan, add `--copilot-review off` to the run command in `factory.yml` and in `review-feedback.yml`. The factory then requests no review and waits for the checks alone. The review prompt of the factory reviews each build with either value.'

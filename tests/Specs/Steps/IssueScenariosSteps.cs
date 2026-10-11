@@ -57,9 +57,6 @@ public sealed class IssueScenariosSteps(FactoryRunSteps factory, PlanPhaseSteps 
     private string? _body;
     private string _blockText = "";
     private FactoryRunResult? _result;
-    private string? _readmeSection;
-    private string? _paragraph;
-
     private FactoryRunHarness H => factory.Harness;
 
     private FactoryRunResult Result => _result ?? throw new InvalidOperationException("the run gave no result");
@@ -488,35 +485,5 @@ public sealed class IssueScenariosSteps(FactoryRunSteps factory, PlanPhaseSteps 
         string body = Assert.Single(H.CommentBodies);
         Assert.Contains("A fenced block under the heading ## Scenarios has no closing fence.", body, StringComparison.Ordinal);
         Assert.Contains("The file specs/features/gone.feature, under ## Removed scenarios, is not on main.", body, StringComparison.Ordinal);
-    }
-
-    [Given("the README section {string}")]
-    public void GivenReadmeSection(string heading) =>
-        _readmeSection = WorkflowChecks.Section(Path.Combine(StarterChecks.RepoRoot(), "README.md"), heading);
-
-    [Then("it holds a paragraph after the line that starts {string}")]
-    public void ThenParagraphAfter(string start)
-    {
-        string[] paragraphs = (_readmeSection ?? "").Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-        int at = Array.FindIndex(paragraphs, p => p.StartsWith(start, StringComparison.Ordinal));
-        Assert.True(at >= 0 && at + 1 < paragraphs.Length);
-        _paragraph = paragraphs[at + 1];
-    }
-
-    [Then("the paragraph names `## Scenarios`, `## Removed scenarios`, the whole-file block and the upsert")]
-    public void ThenParagraphNames()
-    {
-        foreach (string text in new[] { "`## Scenarios`", "`## Removed scenarios`", "whole-file block", "upsert" })
-        {
-            Assert.Contains(text, _paragraph, StringComparison.Ordinal);
-        }
-    }
-
-    [Then("the section holds no new line that starts {string}")]
-    public void ThenNoNewHeading(string start)
-    {
-        Assert.NotNull(_paragraph);
-        Assert.DoesNotContain(_paragraph.Split('\n'), line => line.StartsWith(start, StringComparison.Ordinal));
-        Assert.Contains("Create the label `review-feedback` in the new repo.", _readmeSection, StringComparison.Ordinal);
     }
 }
