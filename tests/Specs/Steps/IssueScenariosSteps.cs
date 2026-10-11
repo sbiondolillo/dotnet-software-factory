@@ -57,6 +57,7 @@ public sealed class IssueScenariosSteps(FactoryRunSteps factory, PlanPhaseSteps 
     private string? _body;
     private string _blockText = "";
     private FactoryRunResult? _result;
+
     private FactoryRunHarness H => factory.Harness;
 
     private FactoryRunResult Result => _result ?? throw new InvalidOperationException("the run gave no result");

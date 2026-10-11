@@ -46,7 +46,7 @@ Each reviewer reports `accept` or `reject`. Then it reports each finding with th
 
 Read each sentence of `**What changes.**` of the issue against the clone, and give the line of the branch that makes it true. Read each prose file that `**What changes.**` names as `git diff <base>...<SHA> -- <path>`, against its sentence there. Read each scenario of the issue against its feature file: the same name, and the same steps in the same order.
 
-Done when each sentence, each text and each scenario has its line in the branch or its finding.
+Done when each sentence, each prose file and each scenario has its line in the branch or its finding.
 
 ### Test strength, by mutation
 
