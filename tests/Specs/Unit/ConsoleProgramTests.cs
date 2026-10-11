@@ -315,7 +315,7 @@ public sealed class ConsoleProgramTests : IDisposable
     [Fact]
     public async Task AReviewOfTheHeadCommitByTheReviewerSendsNoRequest()
     {
-        Assert.Equal(0, await StartAsync($"run {Repo} --issue 1"));
+        Assert.Equal(0, await StartAsync($"run {Repo} --issue 1 --copilot-review on"));
         Assert.Empty(ReviewRequests);
     }
 
@@ -323,7 +323,7 @@ public sealed class ConsoleProgramTests : IDisposable
     public async Task AReviewOfAnEarlierCommitSendsOneRequest()
     {
         _h.Reviews = ConsoleHarness.ReviewsJson("copilot-pull-request-reviewer", "9e107d9d372bb6826bd81d3542a419d6f0a3c1b2");
-        await StartAsync($"run {Repo} --issue 1 --timeout 0");
+        await StartAsync($"run {Repo} --issue 1 --timeout 0 --copilot-review on");
         Assert.Single(ReviewRequests);
     }
 
@@ -331,7 +331,7 @@ public sealed class ConsoleProgramTests : IDisposable
     public async Task AReviewOfTheHeadCommitByAnotherLoginSendsOneRequest()
     {
         _h.Reviews = ConsoleHarness.ReviewsJson("someone");
-        await StartAsync($"run {Repo} --issue 1 --timeout 0");
+        await StartAsync($"run {Repo} --issue 1 --timeout 0 --copilot-review on");
         Assert.Single(ReviewRequests);
     }
 
@@ -340,7 +340,7 @@ public sealed class ConsoleProgramTests : IDisposable
     {
         _h.Reviews = ConsoleHarness.NoReviewsJson();
         _h.ReviewRequestError = "not available";
-        Assert.Equal(1, await StartAsync($"run {Repo} --issue 1"));
+        Assert.Equal(1, await StartAsync($"run {Repo} --issue 1 --copilot-review on"));
         Assert.Contains(ConsoleHarness.Lines(_h.Error), l => l.Contains("not available", StringComparison.Ordinal));
         Assert.DoesNotContain(_h.Requests, r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal));
     }
@@ -350,7 +350,7 @@ public sealed class ConsoleProgramTests : IDisposable
     {
         _h.Reviews = ConsoleHarness.NoReviewsJson();
         _h.Threads = "none";
-        await StartAsync($"feedback {Repo} --pr 10 --timeout 0");
+        await StartAsync($"feedback {Repo} --pr 10 --timeout 0 --copilot-review on");
         int request = _h.Requests.FindIndex(r => r.Path.EndsWith("/graphql", StringComparison.Ordinal) && r.Content!.Contains("requestReviewsByLogin", StringComparison.Ordinal));
         Assert.True(request >= 0);
         Assert.True(request < _h.Requests.FindIndex(r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal)));
@@ -361,7 +361,7 @@ public sealed class ConsoleProgramTests : IDisposable
     {
         _h.Reviews = ConsoleHarness.NoReviewsJson();
         _h.Threads = "always";
-        await StartAsync($"run {Repo} --issue 1 --timeout 0");
+        await StartAsync($"run {Repo} --issue 1 --timeout 0 --copilot-review on");
         Assert.Equal(2, ReviewRequests.Count());
         Assert.Equal(2, _h.Requests.Count(r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal)));
     }

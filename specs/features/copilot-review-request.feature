@@ -1,4 +1,4 @@
-Feature: The factory requests the Copilot review of each pull request it watches
+Feature: With --copilot-review on, the factory requests the Copilot review of each pull request it watches
 
   Background:
     Given the environment holds "FACTORY_GITHUB_TOKEN" and "ANTHROPIC_API_KEY"
@@ -12,52 +12,52 @@ Feature: The factory requests the Copilot review of each pull request it watches
 
   Scenario: A watch with no review of the head commit requests the Copilot review
     Given GitHub answers each read of the reviews with no review
-    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
+    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --copilot-review on"
     Then GitHub gets one GraphQL request that names "requestReviewsByLogin" with the bot login "copilot-pull-request-reviewer"
 
   Scenario: A feedback watch with no review of the head commit requests the Copilot review
     Given GitHub answers each read of the review threads with the thread A
     And GitHub answers each read of the reviews with no review
-    When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10"
+    When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10 --copilot-review on"
     Then GitHub gets one GraphQL request that names "requestReviewsByLogin" with the bot login "copilot-pull-request-reviewer"
 
   Scenario: A review of an earlier commit only still gets a request
     Given GitHub answers each read of the reviews with one review with the author login "copilot-pull-request-reviewer", the state "COMMENTED" and the commit "9e107d9d372bb6826bd81d3542a419d6f0a3c1b2"
     And GitHub answers each read of the head commit of the pull request 10 with "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c"
-    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
+    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --copilot-review on"
     Then GitHub gets one GraphQL request that names "requestReviewsByLogin" with the bot login "copilot-pull-request-reviewer"
 
   Scenario: The request comes after GitHub's head equals the pushed head and before the first read of the check runs
     Given GitHub answers the first read of the head commit of the pull request 10 with "9e107d9d372bb6826bd81d3542a419d6f0a3c1b2" and each later read with "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c"
     And GitHub answers each read of the reviews with no review
-    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
+    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --copilot-review on"
     Then the review request comes after the read of the head commit that gives the head of the work tree
     And the review request comes before the first read of the check runs
 
   Scenario: With GitHub's head never equal to the pushed head the request comes after the 10-second grace
     Given GitHub answers each read of the head commit of the pull request 10 with "9e107d9d372bb6826bd81d3542a419d6f0a3c1b2"
     And GitHub answers each read of the reviews with no review
-    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
+    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --copilot-review on"
     Then the review request comes 10 seconds or more after the push
     And the review request comes before the first read of the check runs
 
   Scenario: A watch with a review of the head commit sends no review request
     Given GitHub answers each read of the head commit of the pull request 10 with "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c"
     And GitHub answers each read of the reviews with one review with the author login "copilot-pull-request-reviewer", the state "COMMENTED" and the commit "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c"
-    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
+    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --copilot-review on"
     Then GitHub gets no review request
 
   Scenario: A feedback watch with a review of the head commit sends no review request
     Given GitHub answers each read of the review threads with the thread A
     And GitHub answers each read of the head commit of the pull request 10 with "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c"
     And GitHub answers each read of the reviews with one review with the author login "copilot-pull-request-reviewer", the state "COMMENTED" and the commit "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c"
-    When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10"
+    When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10 --copilot-review on"
     Then GitHub gets no review request
 
   Scenario: A GraphQL error on the review request gives a line on standard error and the exit code 1
     Given GitHub answers each read of the reviews with no review
     And GitHub answers the review request with a GraphQL error
-    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
+    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --copilot-review on"
     Then standard error holds a line with the message of the GraphQL error
     And the exit code is 1
 
