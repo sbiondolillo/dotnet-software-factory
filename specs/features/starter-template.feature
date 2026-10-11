@@ -81,5 +81,6 @@ Feature: A new repo starts from the starter template
     When I run dotnet new "factory-starter" into an empty directory
     Then the file "LICENSE" of this repo holds the line "MIT License"
     And the file "LICENSE" of this repo holds a line that holds "Copyright (c) 2026 Sam Biondolillo"
-    And the copy's file "LICENSE" holds the line "MIT License"
-    And the copy's file "LICENSE" holds a line that holds "Copyright (c) 2026 Sam Biondolillo"
+    And the file "LICENSE" of this repo holds a line that holds "Permission is hereby granted, free of charge, to any person obtaining a copy"
+    And the file "LICENSE" of this repo holds a line that holds "WITHOUT WARRANTY OF ANY KIND, EXPRESS OR"
+    And the copy's file "LICENSE" is byte-equal to the file "LICENSE" of this repo

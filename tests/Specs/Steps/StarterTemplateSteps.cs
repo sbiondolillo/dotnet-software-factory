@@ -52,6 +52,10 @@ public sealed class StarterTemplateSteps(StarterState state)
     [Then("the copy holds no other file")]
     public void ThenTheCopyHoldsNoOtherFile() => StarterChecks.NoOtherFile(StarterState.Starter, state.Copy);
 
+    [Then("the copy's file {string} is byte-equal to the file {string} of this repo")]
+    public void ThenTheCopysFileIsByteEqual(string file, string repoFile)
+        => Assert.Equal(File.ReadAllBytes(Path.Combine(StarterChecks.RepoRoot(), repoFile)), File.ReadAllBytes(Path.Combine(state.Copy, file)));
+
     [Then("the copy holds no file under {string}")]
     public void ThenTheCopyHoldsNoFileUnder(string directory) => StarterChecks.NoFileUnder(state.Copy, directory);
 
