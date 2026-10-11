@@ -186,14 +186,14 @@ public static partial class WorkflowChecks
     }
 
     /// <summary>Fails when the first step of the one job is not the checkout of the repo at the ref with the token.</summary>
-    public static void FirstStepChecksOut(string file, string repository, string reference, string token)
+    public static void FirstStepChecksOut(string file, string repository, string reference)
     {
         Dictionary<string, object?> step = Steps(OnlyJob(file)).FirstOrDefault() ?? throw new InvalidOperationException($"{file} has no step");
         Dictionary<string, object?> with = With(step);
         if (!IsUses(step, Checkout) || (with.GetValueOrDefault("repository") as string) != repository
-            || (with.GetValueOrDefault("ref") as string) != reference || (with.GetValueOrDefault("token") as string) != token)
+            || (with.GetValueOrDefault("ref") as string) != reference || with.ContainsKey("token"))
         {
-            throw new InvalidOperationException($"the first step of {file} is not the checkout of {repository} at {reference} with {token}");
+            throw new InvalidOperationException($"the first step of {file} is not the checkout of {repository} at {reference} with no token");
         }
     }
 

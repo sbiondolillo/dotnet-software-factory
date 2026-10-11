@@ -33,8 +33,7 @@ Feature: The starter's review-feedback workflow answers the review threads of a 
             - uses: actions/checkout@v7
               with:
                 repository: sbiondolillo/dotnet-software-factory
-                ref: v0
-                token: ${{ secrets.FACTORY_GITHUB_TOKEN }}
+                ref: v1
             - uses: actions/setup-dotnet@v6
               with:
                 global-json-file: global.json

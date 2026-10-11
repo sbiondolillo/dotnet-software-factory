@@ -47,6 +47,7 @@ Feature: A repo made from the starter holds the factory's three workflows
     And it says that "FACTORY_GITHUB_TOKEN" is a fine-grained token that selects the new repo alone, with read and write access to "Contents", "Issues", "Pull requests" and "Workflows"
     And the file "README.md" of this repo holds no line that holds "is private, the token also selects it"
     And the file "README.md" of this repo holds no line that holds "a run cannot push a change under"
+    And it says that "factory.yml" and "review-feedback.yml" check the factory out with no token, because the factory is public
 
   Scenario: The README says main is protected with two required checks
     Then the README section "## Start a new repo" says that the branch "main" is protected, with the checks "build" and "integration" required
@@ -55,7 +56,7 @@ Feature: A repo made from the starter holds the factory's three workflows
     Then the README section "## Start a new repo" says that Copilot code review is requested on every pull request
 
   Scenario: The README says how a run starts and which tag the workflow names
-    Then the README section "## Start a new repo" says that the repo's owner starts a run with the label "factory" on an issue, and that "factory.yml" names the tag "v0" of the factory
+    Then the README section "## Start a new repo" says that the repo's owner starts a run with the label "factory" on an issue, and that "factory.yml" names the tag "v1" of the factory
 
   Scenario: The copy's factory workflow holds the pinned text
     Then the copy's workflow "factory.yml" holds this text
@@ -74,7 +75,7 @@ Feature: A repo made from the starter holds the factory's three workflows
               type: number
             ref:
               description: The branch, tag or commit of the factory
-              default: v0
+              default: v1
 
       # The job's own token reads the check runs of the pull request. A fine-grained token has no Checks permission on a private repo.
       permissions:
@@ -88,8 +89,7 @@ Feature: A repo made from the starter holds the factory's three workflows
             - uses: actions/checkout@v7
               with:
                 repository: sbiondolillo/dotnet-software-factory
-                ref: ${{ inputs.ref || 'v0' }}
-                token: ${{ secrets.FACTORY_GITHUB_TOKEN }}
+                ref: ${{ inputs.ref || 'v1' }}
             - uses: actions/setup-dotnet@v6
               with:
                 global-json-file: global.json
