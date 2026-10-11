@@ -58,9 +58,14 @@ git init -b main && git add -A && git commit -m "Start from dotnet-software-fact
 gh repo create "$name" --public --source . --remote origin --push
 ```
 
-Add two Actions secrets to the new repo: `FACTORY_GITHUB_TOKEN` and `ANTHROPIC_API_KEY`. `ANTHROPIC_API_KEY` is your Anthropic API key.
+Make `FACTORY_GITHUB_TOKEN` in your browser, at https://github.com/settings/personal-access-tokens/new. Make it after the new repo exists, because a fine-grained token can select only a repo that exists. Under Repository access, select the new repo alone, and give the token read and write access to Contents, Issues, Pull requests and Workflows. Workflows lets a run push a change under `.github/workflows/`.
 
-`FACTORY_GITHUB_TOKEN` is a fine-grained token. Make it after the new repo exists, because a fine-grained token can select only a repo that exists. Under Repository access, select the new repo alone, and give the token read and write access to Contents, Issues, Pull requests and Workflows. Workflows lets a run push a change under `.github/workflows/`.
+Add it and your Anthropic API key as the two Actions secrets of the new repo. Each command asks for the value and reads it hidden, so the value stays out of the shell history:
+
+```
+gh secret set FACTORY_GITHUB_TOKEN
+gh secret set ANTHROPIC_API_KEY
+```
 
 Protect the branch `main`, with the checks `build` and `integration` required. Run this command in the checkout of the new repo, and `gh` fills in `{owner}` and `{repo}`:
 
