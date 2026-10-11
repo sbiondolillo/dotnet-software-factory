@@ -29,32 +29,33 @@ Before the first command, you have:
 - an Anthropic API key
 - a clone of this repo at the tag `v1`: `git clone --branch v1 https://github.com/sbiondolillo/dotnet-software-factory.git`
 
-Set the one value the commands below read, the path of that clone:
+Set the two values the commands below read: the path of that clone, and the name of the new repo:
 
 ```
 factory=/path/to/dotnet-software-factory
+name=my-factory-repo
 ```
 
-The variable lives in this terminal. A new terminal runs this block again. Every command below runs in this terminal, in order.
+The variables live in this terminal. A new terminal runs this block again. Every command below runs in this terminal, in order.
 
-Make a new repo from the starter template. `<name>` is the name of the new repo:
+Make a new repo from the starter template:
 
 ```
 dotnet new install "$factory/templates/starter"
-dotnet new factory-starter -o <name>
+dotnet new factory-starter -o "$name"
 ```
 
 Go into it. Every command below runs there:
 
 ```
-cd <name>
+cd "$name"
 ```
 
 Push it to the branch `main` of a new GitHub repo. `--public` makes a public repo, and `--private` a private one. See `## A private target repo` for what differs on a private repo:
 
 ```
 git init -b main && git add -A && git commit -m "Start from dotnet-software-factory v1"
-gh repo create <name> --public --source . --remote origin --push
+gh repo create "$name" --public --source . --remote origin --push
 ```
 
 Add two Actions secrets to the new repo: `FACTORY_GITHUB_TOKEN` and `ANTHROPIC_API_KEY`. `ANTHROPIC_API_KEY` is your Anthropic API key.
