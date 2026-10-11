@@ -155,10 +155,10 @@ public sealed class WorkflowChecksTests : IDisposable
     [Theory]
     [InlineData("workflow_dispatch:\n    inputs:\n      ref:\n        default: main")]
     [InlineData("workflow_dispatch:\n    inputs:\n      ref:\n        required: false")]
-    [InlineData("workflow_dispatch:\n    inputs:\n      other:\n        default: v0")]
+    [InlineData("workflow_dispatch:\n    inputs:\n      other:\n        default: v1")]
     [InlineData("workflow_dispatch:")]
     public void AnotherRefInputFailsTheDefaultCheck(string dispatch)
-        => Assert.Throws<InvalidOperationException>(() => WorkflowChecks.InputDefault(Wf(Factory(on: "issues:\n    types: [labeled]\n  " + dispatch)), "workflow_dispatch", "ref", "v0"));
+        => Assert.Throws<InvalidOperationException>(() => WorkflowChecks.InputDefault(Wf(Factory(on: "issues:\n    types: [labeled]\n  " + dispatch)), "workflow_dispatch", "ref", "v1"));
 
     [Fact]
     public void AReadmeWithoutTheTrialRunSentenceOrCommandFailsTheCheck()
