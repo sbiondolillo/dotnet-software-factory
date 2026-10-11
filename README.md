@@ -60,10 +60,17 @@ gh repo create "$name" --public --source . --remote origin --push
 
 Make `FACTORY_GITHUB_TOKEN` in your browser, at https://github.com/settings/personal-access-tokens/new. Make it after the new repo exists, because a fine-grained token can select only a repo that exists. Under Repository access, select the new repo alone, and give the token read and write access to Contents, Issues, Pull requests and Workflows. Workflows lets a run push a change under `.github/workflows/`.
 
-Add it and your Anthropic API key as the two Actions secrets of the new repo. Each command asks for the value and reads it hidden, so the value stays out of the shell history:
+Set it as the Actions secret `FACTORY_GITHUB_TOKEN` of the new repo. The command asks for the value and reads it hidden, so the value stays out of the shell history:
 
 ```
 gh secret set FACTORY_GITHUB_TOKEN
+```
+
+Make an Anthropic API key in your browser, at https://console.anthropic.com/settings/keys. The factory spends it on each run.
+
+Set it as the Actions secret `ANTHROPIC_API_KEY`, the same way:
+
+```
 gh secret set ANTHROPIC_API_KEY
 ```
 
