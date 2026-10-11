@@ -105,14 +105,7 @@ The factory runs on a private repo, with these limits:
 
 ## Run the demo
 
-Four issues on the greeter show the four kinds of run. Each body is a file under `docs/demo/` of the factory, and `$factory` from `## Start a new repo` names it. Each step files an issue and labels it `factory`, watches the run, then merges the pull request and pulls `main`. Run the steps in order. The second and the third issue need the option `--shout`, which the first adds.
-
-| Step | Kind | Body | What the pull request does |
-|---|---|---|---|
-| 1 | `behavior` | `docs/demo/1-behavior.md` | adds the option `--shout`, and three scenarios |
-| 2 | `cleanup` | `docs/demo/2-cleanup.md` | adds `README.md`, byte for byte with the text in the body |
-| 3 | `refactor` | `docs/demo/3-refactor.md` | moves the upper-case rule into `Greeter`, and changes no test |
-| 4 | `reframe` | `docs/demo/4-reframe.md` | requires an SPDX license header on each C# file, and adds it |
+Four issues on the greeter show the four kinds of run. Each body is a file under `docs/demo/` of the factory, and `$factory` from `## Start a new repo` names it. Each step below says what its issue asks for, then gives three blocks: file the issue and label it `factory`, watch the run, then merge the pull request and pull `main`. Run the steps in order. The second and the third issue need the option `--shout`, which the first adds.
 
 Each title is in single quotes, because it holds backticks. `gh` prints the URL of the new issue, and `sed` keeps its number in `n`. The label `factory` goes on last, because the run reads the other labels when it starts.
 
@@ -120,7 +113,9 @@ Each title is in single quotes, because it holds backticks. `gh` prints the URL 
 
 The pull request holds the line `Closes #<n>`, and the merge command finds it from the issue.
 
-### Step 1
+### Step 1: a `behavior` issue
+
+The issue asks for the option `--shout`, which prints the greeting in upper case. Its body is `docs/demo/1-behavior.md`, and it carries no label besides `factory`: an issue with no other label is a behavior run. The pull request adds the option and three scenarios that pin it.
 
 ```
 n=$(gh issue create --title 'A person can print the greeting in upper case with the option `--shout`' --body-file "$factory/docs/demo/1-behavior.md" | sed 's|.*/||') && gh issue edit "$n" --add-label factory && echo "issue $n"
@@ -136,7 +131,9 @@ gh pr merge "$(gh issue view "$n" --json closedByPullRequestsReferences --jq '.c
 
 The last command prints `HELLO, ADA!`.
 
-### Step 2
+### Step 2: a `cleanup` issue
+
+The issue asks for a `README.md` that says what the program does and how to run and test it, and its body holds the text of that file. Its body is `docs/demo/2-cleanup.md`, and it carries the label `cleanup`. The pull request adds `README.md`, byte for byte with the text in the body, and the body's `## Check` proves it with a hash.
 
 ```
 n=$(gh issue create --title 'The repo has a `README.md` that says what the program does and how to run and test it' --body-file "$factory/docs/demo/2-cleanup.md" --label cleanup | sed 's|.*/||') && gh issue edit "$n" --add-label factory && echo "issue $n"
@@ -150,7 +147,9 @@ gh run watch
 gh pr merge "$(gh issue view "$n" --json closedByPullRequestsReferences --jq '.closedByPullRequestsReferences[0].number')" --squash --delete-branch && git pull
 ```
 
-### Step 3
+### Step 3: a `refactor` issue
+
+The issue asks for the upper-case rule to live in `Greeter`, where the greeting is built, instead of in the command. Its body is `docs/demo/3-refactor.md`, and it carries the label `refactor`. The pull request moves the rule and changes no test: the tests of step 1 pass as they are.
 
 ```
 n=$(gh issue create --title 'The upper-case rule of the greeting lives in `Greeter`' --body-file "$factory/docs/demo/3-refactor.md" --label refactor | sed 's|.*/||') && gh issue edit "$n" --add-label factory && echo "issue $n"
@@ -164,7 +163,9 @@ gh run watch
 gh pr merge "$(gh issue view "$n" --json closedByPullRequestsReferences --jq '.closedByPullRequestsReferences[0].number')" --squash --delete-branch && git pull
 ```
 
-### Step 4
+### Step 4: a `reframe` issue
+
+The issue asks for an SPDX license header on each C# file, with `.editorconfig` set to require it. Its body is `docs/demo/4-reframe.md`, and it carries the label `reframe`. The run records the tests and the public API on `main` first, and the pull request adds the header to every file with both unchanged.
 
 ```
 n=$(gh issue create --title 'Each C# file starts with an SPDX license header, and `.editorconfig` requires it' --body-file "$factory/docs/demo/4-reframe.md" --label reframe | sed 's|.*/||') && gh issue edit "$n" --add-label factory && echo "issue $n"
@@ -192,7 +193,7 @@ sed -i 's/--pass-env EXAMPLE_API_KEY$/--pass-env EXAMPLE_API_KEY --copilot-revie
 
 The second is a fifth demo step, a `cleanup` issue that the factory builds. Its body names the two workflow files as its scope, and its check greps both for the flag:
 
-### Step 5
+### Step 5: a `cleanup` issue on the workflows
 
 ```
 n=$(gh issue create --title 'The factory requests a Copilot code review of each pull request' --body-file "$factory/docs/demo/5-copilot-on.md" --label cleanup | sed 's|.*/||') && gh issue edit "$n" --add-label factory && echo "issue $n"
