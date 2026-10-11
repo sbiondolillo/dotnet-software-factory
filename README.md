@@ -17,6 +17,7 @@ A software factory for C# repos. A repo made from its starter gets one pull requ
 | `specs/features/` | the pinned `.feature` files. One ships here, so the first build has a binding to follow |
 | `tests/Specs/` | the test project: Reqnroll under xUnit v3, with the step class for that feature |
 | `tests/Integration/` | the integration suite: xUnit v3 tests against the real GitHub, `docker` and Claude Code. `dotnet test` skips it |
+| `LICENSE` | the MIT license. The starter holds the same file, so a repo made from it is MIT too |
 
 ## Start a new repo
 
@@ -33,11 +34,9 @@ The repo's owner starts a trial run of the factory at another ref with the comma
 
 Add two Actions secrets to the new repo: `FACTORY_GITHUB_TOKEN` and `ANTHROPIC_API_KEY`.
 
-`FACTORY_GITHUB_TOKEN` is a fine-grained token. Make it after the new repo exists, because a fine-grained token can select only a repo that exists. Under Repository access, select the new repo, and give the token read and write access to Contents, Issues and Pull requests. While `sbiondolillo/dotnet-software-factory` is private, the token also selects it, so that `factory.yml` and `review-feedback.yml` can check the factory out. A fine-grained token gives each repo it selects the same permissions.
+`FACTORY_GITHUB_TOKEN` is a fine-grained token. Make it after the new repo exists, because a fine-grained token can select only a repo that exists. Under Repository access, select the new repo alone, and give the token read and write access to Contents, Issues, Pull requests and Workflows. Workflows lets a run push a change under `.github/workflows/`.
 
 `factory.yml` and `review-feedback.yml` pass the job's own token to the factory as `FACTORY_CHECKS_TOKEN`, with the permission `checks: read`. The factory reads the check runs of each pull request with it, on a public repo and on a private repo alike. A fine-grained token has no Checks permission, so `FACTORY_GITHUB_TOKEN` reads check runs on a public repo only.
-
-The token holds no Workflows permission, so a run cannot push a change under `.github/workflows/`. GitHub refuses the push with "refusing to allow a Personal Access Token to create or update workflow ... without `workflow` scope". The repo's owner makes such a change by hand.
 
 Replace `EXAMPLE_API_KEY` in `factory.yml`, in `review-feedback.yml` and in `ci.yml` with the name of each secret the integration tests of the new repo read.
 
@@ -80,7 +79,7 @@ Create the label `reframe` in the new repo. The repo's owner starts a reframe ru
 The factory runs on a private repo, with these limits:
 
 - GitHub enforces branch protection on a private repo only on a paid plan. On the free plan of a personal account, GitHub shows "Your rules won't be enforced on this private repository until you move to a GitHub Team or Enterprise organization account". The factory still waits for green checks, but GitHub lets each person with write access merge a pull request with red checks.
-- `FACTORY_GITHUB_TOKEN` must select each target repo, public or private. A new repo needs a new token, or an edit to the repository list of the token.
+- `FACTORY_GITHUB_TOKEN` must select each target repo, public or private. A new repo needs a new token.
 - An organization can require approval of each fine-grained token. Until an administrator approves it, the token reads only public resources.
 - GitHub never shows a secret again after you save it. Keep each value in a store outside GitHub, such as a password manager.
 - The job's own token reads the check runs, as `FACTORY_CHECKS_TOKEN` above. The repo's owner sets nothing for it.

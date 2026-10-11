@@ -85,9 +85,9 @@ public sealed class StarterWorkflowsSteps(StarterState state)
     public static void ThenReadmeNamesSecrets(string heading, string first, string second)
         => WorkflowChecks.SaysAll(Section(heading), $"`{first}`", $"`{second}`", "secrets");
 
-    [Then("it says that {string} is a fine-grained token that selects the new repo with read and write access to {string}, {string} and {string}, and also selects {string} while that repo is private")]
-    public static void ThenReadmeSaysToken(string token, string a, string b, string c, string repo)
-        => WorkflowChecks.SaysAll(Section("## Start a new repo"), $"`{token}`", "fine-grained token", "select the new repo, and give the token read and write access to " + a + ", " + b + " and " + c, "While `" + repo + "` is private, the token also selects it");
+    [Then("it says that {string} is a fine-grained token that selects the new repo alone, with read and write access to {string}, {string}, {string} and {string}")]
+    public static void ThenReadmeSaysToken(string token, string a, string b, string c, string d)
+        => WorkflowChecks.SaysAll(Section("## Start a new repo"), $"`{token}`", "fine-grained token", "select the new repo alone, and give the token read and write access to " + a + ", " + b + ", " + c + " and " + d);
 
     [Then("the README section {string} says that the branch {string} is protected, with the checks {string} and {string} required")]
     public static void ThenReadmeProtects(string heading, string branch, string first, string second)
