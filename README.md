@@ -212,6 +212,8 @@ gh pr merge "$(gh issue view "$n" --json closedByPullRequestsReferences --jq '.c
 
 The repo's owner starts a run with the label `factory` on an issue. `factory.yml` names the tag `v1` of the factory. The other labels on the issue select the kind of run. An issue with none of them is a `behavior` run.
 
+The new repo ships two helpers for writing an issue. `docs/write-an-issue.md` holds every rule a body follows, and picks the kind for a change. The Claude Code skill `write-issue`, under `.claude/skills/`, drafts an issue from a request, judges the draft against those rules, and files it. The sections below are the rules in brief, and the demo bodies under `docs/demo/` of the factory are one example of each kind.
+
 ### `behavior`
 
 A behavior run adds behaviour and the tests that pin it. The plan phase writes the feature file and the plan, and the build makes the scenarios pass.
