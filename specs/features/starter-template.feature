@@ -75,3 +75,11 @@ Feature: A new repo starts from the starter template
     Given the template is installed
     When I run dotnet new "factory-starter" into an empty directory
     Then the copy's Directory.Packages.props gives "Microsoft.Extensions.Hosting" the version "10.0.12" and "System.CommandLine" the version "2.0.12"
+
+  Scenario: The repo and the copy hold the MIT license
+    Given the template is installed
+    When I run dotnet new "factory-starter" into an empty directory
+    Then the file "LICENSE" of this repo holds the line "MIT License"
+    And the file "LICENSE" of this repo holds a line that holds "Copyright (c) 2026 Sam Biondolillo"
+    And the copy's file "LICENSE" holds the line "MIT License"
+    And the copy's file "LICENSE" holds a line that holds "Copyright (c) 2026 Sam Biondolillo"
