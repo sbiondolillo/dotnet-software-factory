@@ -21,28 +21,58 @@ A software factory for C# repos. A repo made from its starter gets one pull requ
 
 ## Start a new repo
 
+Before the first command, you have:
+
+- a GitHub account, on any plan
+- `gh` signed in as that account: `gh auth status` names it
+- the .NET SDK that the starter's `global.json` pins, 10.0.401 or a later patch
+- an Anthropic API key
+- a clone of this repo at the tag `v1`: `git clone --branch v1 https://github.com/sbiondolillo/dotnet-software-factory.git`
+
+Set the two values the commands below read: the path of that clone, and the name of the new repo:
+
+```
+factory=/path/to/dotnet-software-factory
+name=my-factory-repo
+```
+
+The variables live in this terminal. A new terminal runs this block again. Every command below runs in this terminal, in order.
+
 Make a new repo from the starter template:
 
 ```
-dotnet new install <checkout>/templates/starter
-dotnet new factory-starter -o <directory>
+dotnet new install "$factory/templates/starter"
+dotnet new factory-starter -o "$name"
 ```
 
-Push the copy to the branch `main` of a new GitHub repo.
+Go into it. Every command below runs there:
 
-The repo's owner starts a trial run of the factory at another ref with the command `gh workflow run factory -f issue=<number> -f ref=<ref>`. The ref is a branch, a tag or a commit.
+```
+cd "$name"
+```
 
-Add two Actions secrets to the new repo: `FACTORY_GITHUB_TOKEN` and `ANTHROPIC_API_KEY`.
+Push it to the branch `main` of a new GitHub repo. `--public` makes a public repo, and `--private` a private one. See `## A private target repo` for what differs on a private repo:
 
-`FACTORY_GITHUB_TOKEN` is a fine-grained token. Make it after the new repo exists, because a fine-grained token can select only a repo that exists. Under Repository access, select the new repo alone, and give the token read and write access to Contents, Issues, Pull requests and Workflows. Workflows lets a run push a change under `.github/workflows/`.
+```
+git init -b main && git add -A && git commit -m "Start from dotnet-software-factory v1"
+gh repo create "$name" --public --source . --remote origin --push
+```
 
-`factory.yml` and `review-feedback.yml` check the factory out with no token, because the factory is public.
+Make `FACTORY_GITHUB_TOKEN` in your browser, at https://github.com/settings/personal-access-tokens/new. Make it after the new repo exists, because a fine-grained token can select only a repo that exists. Under Repository access, select the new repo alone, and give the token read and write access to Contents, Issues, Pull requests and Workflows. Workflows lets a run push a change under `.github/workflows/`.
 
-`factory.yml` and `review-feedback.yml` pass the job's own token to the factory as `FACTORY_CHECKS_TOKEN`, with the permission `checks: read`. The factory reads the check runs of each pull request with it, on a public repo and on a private repo alike. A fine-grained token has no Checks permission, so `FACTORY_GITHUB_TOKEN` reads check runs on a public repo only.
+Set it as the Actions secret `FACTORY_GITHUB_TOKEN` of the new repo. The command asks for the value and reads it hidden, so the value stays out of the shell history:
 
-Replace `EXAMPLE_API_KEY` in `factory.yml`, in `review-feedback.yml` and in `ci.yml` with the name of each secret the integration tests of the new repo read.
+```
+gh secret set FACTORY_GITHUB_TOKEN
+```
 
-A repo whose integration tests read no secret keeps `EXAMPLE_API_KEY` as it is. The secret is not set, and each step gets an empty value.
+Make an Anthropic API key in your browser, at https://console.anthropic.com/settings/keys. The factory spends it on each run.
+
+Set it as the Actions secret `ANTHROPIC_API_KEY`, the same way:
+
+```
+gh secret set ANTHROPIC_API_KEY
+```
 
 Protect the branch `main`, with the checks `build` and `integration` required. Run this command in the checkout of the new repo, and `gh` fills in `{owner}` and `{repo}`:
 
@@ -54,27 +84,13 @@ JSON
 
 GitHub applies the protection on a public repo, and on a private repo of a paid plan. The command sets `enforce_admins` to `false`, so an admin of the repo, such as its owner, can still merge a pull request with red checks. See `## A private target repo`.
 
-The factory requests a Copilot code review of each pull request it watches, and waits for that review on the head commit. This needs a Copilot plan that includes Copilot code review. With no such plan, add `--copilot-review off` to the run command in `factory.yml` and in `review-feedback.yml`. The factory then requests no review and waits for the checks alone. The review prompt of the factory reviews each build with either value.
+Create the five labels that the demo and the review loop use. `--force` updates a label that exists:
 
-Create the label `factory` in the new repo. A new GitHub repo has no label of that name.
+```
+for label in factory cleanup refactor reframe review-feedback; do gh label create "$label" --force; done
+```
 
-The repo's owner starts a run with the label `factory` on an issue. `factory.yml` names the tag `v1` of the factory.
-
-The body of an issue can hold its scenarios under the heading `## Scenarios`, and the factory then pins them as the owner wrote them. Each fenced block under the heading starts with the line `# specs/features/<name>.feature`. A whole-file block holds a `Feature:` line, and it becomes the file or replaces the file on `main`. Any other block is an upsert into the file on `main`. A scenario whose name the file holds replaces that scenario in place, and a scenario with a new name goes at the end of the file. Under the heading `## Removed scenarios`, each list item names one scenario to remove, as `` `specs/features/<name>.feature`: <scenario name> ``. The plan phase then writes only `.factory/plan.md`. A body whose scenarios are not sound gets a comment that names each fault, and no run.
-
-Create the label `review-feedback` in the new repo. The repo's owner starts a feedback run with the label `review-feedback` on a pull request. The run removes the label, so the owner applies it again for the next round.
-
-Create the label `cleanup` in the new repo. The repo's owner starts a cleanup run, a run with no plan, with the label `cleanup` on an issue that fixes a test, a config file or a document. The label `cleanup` and the label `behavior` on one issue get a comment and no run.
-
-The body of a `cleanup` issue names the paths the build can change under the heading `## Scope`, one for each line. A line is a path, either bare or as a Markdown list item with the marker `-`, `*` or `+`, and the path can sit in backticks. A directory ends in `/`, and a path with `*` is a glob. The body holds under the heading `## Check` one fenced `sh` block, the check command, that fails before the change and exits with the code 0 after it. The factory runs the command with `sh -c` in a copy of the work tree, and a command that runs `dotnet` restores its packages itself first.
-
-A feedback run on the pull request of a `cleanup` issue holds the build to the issue's `## Scope` and runs its `## Check` after the tests pass.
-
-Create the label `refactor` in the new repo. The repo's owner starts a refactor run with the label `refactor` on an issue that changes the structure of the code and adds no behaviour. The plan of a refactor run writes no feature file, and the build leaves every file under `specs/features/`, `tests/Specs/` and `tests/Integration/` as it is. The body can hold under the heading `## Check` one fenced `sh` block that fails before the change and exits with the code 0 after it, and the factory runs it as it runs the check of a `cleanup` issue. The label `refactor` with the label `behavior` or the label `cleanup` on one issue gets a comment and no run.
-
-A feedback run on the pull request of a `refactor` issue leaves every file under `specs/features/`, `tests/Specs/` and `tests/Integration/` as it is, and runs the issue's `## Check` after the tests pass.
-
-Create the label `reframe` in the new repo. The repo's owner starts a reframe run, a run with no plan, with the label `reframe` on an issue. A reframe issue keeps the behaviour of the program and changes the code, the tests or the config. A format sweep and a framework upgrade are reframe issues. The body names the paths the build can change under the heading `## Scope`, as a `cleanup` issue does. The scope can name `src/`. The body holds under the heading `## Check` one fenced `sh` block that fails before the change and exits with the code 0 after it. The run records the tests that pass on the base commit. It also records the public API of the code under `src/`: one line per public type and per public or protected member. The build runs again when it loses a test or changes a line of that API. The label `reframe` with the label `behavior`, `cleanup` or `refactor` on one issue gets a comment and no run.
+The repo is ready. `## Run the demo` is its first run.
 
 ## A private target repo
 
@@ -84,83 +100,171 @@ The factory runs on a private repo, with these limits:
 - `FACTORY_GITHUB_TOKEN` must select each target repo, public or private. A new repo needs a new token.
 - An organization can require approval of each fine-grained token. Until an administrator approves it, the token reads only public resources.
 - GitHub never shows a secret again after you save it. Keep each value in a store outside GitHub, such as a password manager.
-- The job's own token reads the check runs, as `FACTORY_CHECKS_TOKEN` above. The repo's owner sets nothing for it.
+- The job's own token reads the check runs, as `FACTORY_CHECKS_TOKEN` in `## Tokens and secrets`. The repo's owner sets nothing for it.
 - A Copilot code review on a private repo is not tested. The trial on a private repo ran with `--copilot-review off`.
 
 ## Run the demo
 
-Four issues on the greeter show the four kinds of run. Each body is a file under `docs/demo/` of this repo. Start from a repo that `## Start a new repo` made, with its secrets set and no other change. Run each command below in the checkout of the new repo, signed in to `gh` as the repo's owner. `<checkout>` is the checkout of this repo.
+Four issues on the greeter show the four kinds of run. Each body is a file under `docs/demo/` of the factory, and `$factory` from `## Start a new repo` names it. Each step below says what its issue asks for, then gives three blocks: file the issue and label it `factory`, watch the run, then merge the pull request and pull `main`. Run the steps in order. The second and the third issue need the option `--shout`, which the first adds.
 
-| Step | Kind | Body | Label | What the pull request does |
-|---|---|---|---|---|
-| 1 | `behavior` | `docs/demo/1-behavior.md` | none | adds the option `--shout`, and three scenarios |
-| 2 | `cleanup` | `docs/demo/2-cleanup.md` | `cleanup` | adds `README.md`, byte for byte with the text in the body |
-| 3 | `refactor` | `docs/demo/3-refactor.md` | `refactor` | moves the upper-case rule into `Greeter`, and changes no test |
-| 4 | `reframe` | `docs/demo/4-reframe.md` | `reframe` | requires an SPDX license header on each C# file, and adds it |
+Each title is in single quotes, because it holds backticks. The shell runs the text between backticks in double quotes. `gh` prints the URL of the new issue, and `sed` keeps its number in `n`. The label `factory` goes on last, because the run reads the other labels when it starts.
 
-File the issues in this order. The second and the third issue need the option `--shout`, which the first adds. Merge each pull request before you file the next issue.
+`gh run watch` lists the runs in progress: pick `factory`. The run ends when its pull request has green checks. If `gh run watch` prints `found no in progress runs to watch`, the run is not queued yet: run it again after a few seconds.
 
-Create the labels. `--force` updates a label that exists:
+The pull request holds the line `Closes #<n>`, and the merge command finds it from the issue.
 
-```
-for label in factory cleanup refactor reframe; do gh label create "$label" --force; done
-```
+### Step 1: a `behavior` issue
 
-### File each issue
-
-Step 1:
+The issue asks for the option `--shout`, which prints the greeting in upper case. Its body is `docs/demo/1-behavior.md`, and it carries no label besides `factory`: an issue with no other label is a behavior run. The pull request adds the option and three scenarios that pin it.
 
 ```
-n=$(gh issue create --title 'A person can print the greeting in upper case with the option `--shout`' --body-file <checkout>/docs/demo/1-behavior.md | sed 's|.*/||')
+n=$(gh issue create --title 'A person can print the greeting in upper case with the option `--shout`' --body-file "$factory/docs/demo/1-behavior.md" | sed 's|.*/||') && gh issue edit "$n" --add-label factory && echo "issue $n"
 ```
-
-Step 2:
-
-```
-n=$(gh issue create --title 'The repo has a `README.md` that says what the program does and how to run and test it' --body-file <checkout>/docs/demo/2-cleanup.md --label cleanup | sed 's|.*/||')
-```
-
-Step 3:
-
-```
-n=$(gh issue create --title 'The upper-case rule of the greeting lives in `Greeter`' --body-file <checkout>/docs/demo/3-refactor.md --label refactor | sed 's|.*/||')
-```
-
-Step 4:
-
-```
-n=$(gh issue create --title 'Each C# file starts with an SPDX license header, and `.editorconfig` requires it' --body-file <checkout>/docs/demo/4-reframe.md --label reframe | sed 's|.*/||')
-```
-
-Each title is in single quotes, because it holds backticks. The shell runs the text between backticks in double quotes. `gh` prints the URL of the new issue, and `sed` keeps its number in `n`.
-
-### Run and merge each issue
-
-After each step, add the label `factory`. It goes on last, because the run reads the other labels when it starts.
-
-```
-gh issue edit "$n" --add-label factory
-```
-
-Watch the run. `gh run watch` lists the runs in progress: pick `factory`. The run ends when its pull request has green checks, and a review when `--copilot-review` is on. If `gh run watch` prints `found no in progress runs to watch`, the run is not queued yet: run it again after a few seconds.
 
 ```
 gh run watch
 ```
 
-The pull request holds the line `Closes #<n>`. Merge it:
-
 ```
-gh pr merge "$(gh issue view "$n" --json closedByPullRequestsReferences --jq '.closedByPullRequestsReferences[0].number')" --squash --delete-branch
+gh pr merge "$(gh issue view "$n" --json closedByPullRequestsReferences --jq '.closedByPullRequestsReferences[0].number')" --squash --delete-branch && git pull && dotnet run --project src/App -- Ada --shout
 ```
 
-After step 1, the console program shouts:
+The last command prints `HELLO, ADA!`.
+
+### Step 2: a `cleanup` issue
+
+The issue asks for a `README.md` that says what the program does and how to run and test it, and its body holds the text of that file. Its body is `docs/demo/2-cleanup.md`, and it carries the label `cleanup`. The pull request adds `README.md`, byte for byte with the text in the body, and the body's `## Check` proves it with a hash.
 
 ```
-git pull && dotnet run --project src/App -- Ada --shout
+n=$(gh issue create --title 'The repo has a `README.md` that says what the program does and how to run and test it' --body-file "$factory/docs/demo/2-cleanup.md" --label cleanup | sed 's|.*/||') && gh issue edit "$n" --add-label factory && echo "issue $n"
 ```
 
-It prints `HELLO, ADA!`.
+```
+gh run watch
+```
+
+```
+gh pr merge "$(gh issue view "$n" --json closedByPullRequestsReferences --jq '.closedByPullRequestsReferences[0].number')" --squash --delete-branch && git pull
+```
+
+### Step 3: a `refactor` issue
+
+The issue asks for the upper-case rule to live in `Greeter`, where the greeting is built, instead of in the command. Its body is `docs/demo/3-refactor.md`, and it carries the label `refactor`. The pull request moves the rule and changes no test: the tests of step 1 pass as they are.
+
+```
+n=$(gh issue create --title 'The upper-case rule of the greeting lives in `Greeter`' --body-file "$factory/docs/demo/3-refactor.md" --label refactor | sed 's|.*/||') && gh issue edit "$n" --add-label factory && echo "issue $n"
+```
+
+```
+gh run watch
+```
+
+```
+gh pr merge "$(gh issue view "$n" --json closedByPullRequestsReferences --jq '.closedByPullRequestsReferences[0].number')" --squash --delete-branch && git pull
+```
+
+### Step 4: a `reframe` issue
+
+The issue asks for an SPDX license header on each C# file, with `.editorconfig` set to require it. Its body is `docs/demo/4-reframe.md`, and it carries the label `reframe`. The run records the tests and the public API on `main` first, and the pull request adds the header to every file with both unchanged.
+
+```
+n=$(gh issue create --title 'Each C# file starts with an SPDX license header, and `.editorconfig` requires it' --body-file "$factory/docs/demo/4-reframe.md" --label reframe | sed 's|.*/||') && gh issue edit "$n" --add-label factory && echo "issue $n"
+```
+
+```
+gh run watch
+```
+
+```
+gh pr merge "$(gh issue view "$n" --json closedByPullRequestsReferences --jq '.closedByPullRequestsReferences[0].number')" --squash --delete-branch && git pull
+```
+
+After step 4, every C# file starts with `// SPDX-License-Identifier: MIT`. You have run the four kinds. `## The kinds of run` says what each one asks of an issue.
+
+## Turn on Copilot code review
+
+The factory can request a Copilot code review of each pull request it watches, and wait for that review on the head commit as well as the checks. A review round that leaves threads unresolved fails the job, and `review-feedback` runs answer the threads. This needs a plan that includes Copilot code review, with credit on it. A repo made from the starter runs with no review: its workflows pass no `--copilot-review`, and the factory then waits for the checks alone.
+
+With a Copilot plan, add `--copilot-review on` to the run command in `factory.yml` and in `review-feedback.yml`. Two ways do it. The first is a direct edit and push, as the repo's owner:
+
+```
+sed -i 's/--pass-env EXAMPLE_API_KEY$/--pass-env EXAMPLE_API_KEY --copilot-review on/' .github/workflows/factory.yml .github/workflows/review-feedback.yml && git add .github/workflows && git commit -m "Run the factory with --copilot-review on" && git push
+```
+
+The second is a fifth demo step, a `cleanup` issue that the factory builds.
+
+### Step 5: a `cleanup` issue on the workflows
+
+The issue asks for `--copilot-review on` in the run command of `factory.yml` and of `review-feedback.yml`. Its body is `docs/demo/5-copilot-on.md`, and it carries the label `cleanup`. Its `## Scope` names the two workflow files, and its `## Check` greps both for the flag.
+
+```
+n=$(gh issue create --title 'The factory requests a Copilot code review of each pull request' --body-file "$factory/docs/demo/5-copilot-on.md" --label cleanup | sed 's|.*/||') && gh issue edit "$n" --add-label factory && echo "issue $n"
+```
+
+```
+gh run watch
+```
+
+```
+gh pr merge "$(gh issue view "$n" --json closedByPullRequestsReferences --jq '.closedByPullRequestsReferences[0].number')" --squash --delete-branch && git pull
+```
+
+❗ With `on` and no Copilot on the account, the request to the reviewer returns no error, and the run watches for the review to the 60-minute timeout. The checks then count as red, and the job fails with the pull request open. Turn the review on only on an account that has it.
+
+## The kinds of run
+
+The repo's owner starts a run with the label `factory` on an issue. `factory.yml` names the tag `v1` of the factory. The other labels on the issue select the kind of run. An issue with none of them is a `behavior` run.
+
+The new repo ships two helpers for writing an issue. `docs/write-an-issue.md` holds every rule a body follows, and picks the kind for a change. The Claude Code skill `write-issue`, under `.claude/skills/`, drafts an issue from a request, judges the draft against those rules, and files it. The sections below are the rules in brief, and the demo bodies under `docs/demo/` of the factory are one example of each kind.
+
+### `behavior`
+
+A behavior run adds behavior and the tests that pin it. The plan phase writes the feature file and the plan, and the build makes the scenarios pass.
+
+The body of an issue can hold its scenarios under the heading `## Scenarios`, and the factory then pins them as the owner wrote them. Each fenced block under the heading starts with the line `# specs/features/<name>.feature`. A whole-file block holds a `Feature:` line, and it becomes the file or replaces the file on `main`. Any other block is an upsert into the file on `main`. A scenario whose name the file holds replaces that scenario in place, and a scenario with a new name goes at the end of the file. Under the heading `## Removed scenarios`, each list item names one scenario to remove, as `` `specs/features/<name>.feature`: <scenario name> ``. The plan phase then writes only `.factory/plan.md`. A body whose scenarios are not sound gets a comment that names each fault, and no run.
+
+### `cleanup`
+
+The repo's owner starts a cleanup run, a run with no plan, with the label `cleanup` on an issue that fixes a test, a config file or a document. The label `cleanup` and the label `behavior` on one issue get a comment and no run.
+
+The body of a `cleanup` issue names the paths the build can change under the heading `## Scope`, one for each line. A line is a path, either bare or as a Markdown list item with the marker `-`, `*` or `+`, and the path can sit in backticks. A directory ends in `/`, and a path with `*` is a glob. The body holds under the heading `## Check` one fenced `sh` block, the check command, that fails before the change and exits with the code 0 after it. The factory runs the command with `sh -c` in a copy of the work tree, and a command that runs `dotnet` restores its packages itself first.
+
+A feedback run on the pull request of a `cleanup` issue holds the build to the issue's `## Scope` and runs its `## Check` after the tests pass.
+
+### `refactor`
+
+The repo's owner starts a refactor run with the label `refactor` on an issue that changes the structure of the code and adds no behavior. The plan of a refactor run writes no feature file, and the build leaves every file under `specs/features/`, `tests/Specs/` and `tests/Integration/` as it is. The body can hold under the heading `## Check` one fenced `sh` block that fails before the change and exits with the code 0 after it, and the factory runs it as it runs the check of a `cleanup` issue. The label `refactor` with the label `behavior` or the label `cleanup` on one issue gets a comment and no run.
+
+A feedback run on the pull request of a `refactor` issue leaves every file under `specs/features/`, `tests/Specs/` and `tests/Integration/` as it is, and runs the issue's `## Check` after the tests pass.
+
+### `reframe`
+
+The repo's owner starts a reframe run, a run with no plan, with the label `reframe` on an issue. A reframe issue keeps the behavior of the program and changes the code, the tests or the config. A format sweep and a framework upgrade are reframe issues. The body names the paths the build can change under the heading `## Scope`, as a `cleanup` issue does. The scope can name `src/`. The body holds under the heading `## Check` one fenced `sh` block that fails before the change and exits with the code 0 after it. The run records the tests that pass on the base commit. It also records the public API of the code under `src/`: one line per public type and per public or protected member. The build runs again when it loses a test or changes a line of that API. The label `reframe` with the label `behavior`, `cleanup` or `refactor` on one issue gets a comment and no run.
+
+### `review-feedback`
+
+A feedback run answers the review of a pull request that the factory opened. The loop starts with you:
+
+1. Read the pull request on GitHub. Leave each remark as a review comment on a line of the diff, so it is a thread.
+2. Add the label `review-feedback` to the pull request. Only the repo's owner starts the run.
+3. The run removes the label first, reads every unresolved thread, builds the change on the pull request's branch, and pushes a commit. It replies to each thread with what it changed, or why it disputes the remark, and then reviews its own change and waits for the checks.
+4. Read the replies and the new commit. Resolve the threads that satisfy you, leave new remarks on the ones that do not, and add the label again for the next round.
+
+A pull request with no unresolved thread gets no build. A `cleanup` or `refactor` pull request keeps its rules through a feedback run, as the sections above say.
+
+## A trial run at another ref
+
+The repo's owner starts a trial run of the factory at another ref with the command `gh workflow run factory -f issue=<number> -f ref=<ref>`. The ref is a branch, a tag or a commit.
+
+## Tokens and secrets
+
+`factory.yml` and `review-feedback.yml` check the factory out with no token, because the factory is public.
+
+`factory.yml` and `review-feedback.yml` pass the job's own token to the factory as `FACTORY_CHECKS_TOKEN`, with the permission `checks: read`. The factory reads the check runs of each pull request with it, on a public repo and on a private repo alike. A fine-grained token has no Checks permission, so `FACTORY_GITHUB_TOKEN` reads check runs on a public repo only.
+
+Replace `EXAMPLE_API_KEY` in `factory.yml`, in `review-feedback.yml` and in `ci.yml` with the name of each secret the integration tests of the new repo read.
+
+A repo whose integration tests read no secret keeps `EXAMPLE_API_KEY` as it is. The secret is not set, and each step gets an empty value.
 
 ## When a run fails
 
