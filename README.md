@@ -206,7 +206,7 @@ gh run watch
 gh pr merge "$(gh issue view "$n" --json closedByPullRequestsReferences --jq '.closedByPullRequestsReferences[0].number')" --squash --delete-branch && git pull
 ```
 
-With `on` and no Copilot on the account, the request to the reviewer returns no error, and the run watches for the review to the 60-minute timeout. The checks then count as red, and the job fails with the pull request open. Turn the review on only on an account that has it.
+❗ With `on` and no Copilot on the account, the request to the reviewer returns no error, and the run watches for the review to the 60-minute timeout. The checks then count as red, and the job fails with the pull request open. Turn the review on only on an account that has it.
 
 ## The kinds of run
 
