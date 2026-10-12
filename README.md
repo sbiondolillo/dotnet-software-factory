@@ -101,7 +101,7 @@ The factory runs on a private repo, with these limits:
 - An organization can require approval of each fine-grained token. Until an administrator approves it, the token reads only public resources.
 - GitHub never shows a secret again after you save it. Keep each value in a store outside GitHub, such as a password manager.
 - The job's own token reads the check runs, as `FACTORY_CHECKS_TOKEN` in `## Tokens and secrets`. The repo's owner sets nothing for it.
-- A Copilot code review on a private repo is not tested. The trial on a private repo ran with `--copilot-review off`.
+- A Copilot code review needs a plan that includes Copilot code review, with credit on it, as on a public repo. The trial on a private repo of a personal account ran with `--copilot-review on`, and Copilot reviewed each pull request.
 
 ## Run the demo
 
