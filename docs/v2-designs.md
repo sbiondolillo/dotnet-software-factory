@@ -2,7 +2,7 @@
 
 Moved from `sam/homelab` `docs/TODO.md` on 2026-10-13, when the map [DSF v2: the factory builds its own repo from a GitHub-hosted runner](https://github.com/sbiondolillo/dotnet-software-factory/issues/273) was charted. The map's Not yet specified and Out of scope sections point here. A link of the form `sam/homelab` `docs/...` names a file in that repo, on the homelab's own Gitea.
 
-A section here is one of three things. A capability or a fault is fog: it becomes a ticket or a map when the owner picks it. A design input is out of scope for the map: it is a settled or half-settled design that waits for a later effort. DSF work with no map is a story, filed with `/change` when the owner picks it.
+A section here is one of three things. A capability or a fault is fog: it becomes a ticket or a map when the owner picks it. A design input is out of scope for the map: it is a settled or half-settled design that waits for a later effort. DSF work with no map is a story filed with `/change` when the owner picks it, or a direct change, as `.claude/skills/change/SKILL.md` routes it.
 
 ## The capabilities the homelab factory is the template for
 

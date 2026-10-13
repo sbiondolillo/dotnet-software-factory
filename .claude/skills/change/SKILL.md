@@ -41,7 +41,7 @@ Build an issue that has `ready`. An issue with no `ready` waits for the owner's 
 gh issue edit <n> --add-label building
 ```
 
-**The run of an issue with `factory`.** List the runs: `gh run list --workflow factory.yml -L 200 --json databaseId,displayTitle,event,status,conclusion,attempt,createdAt`. Its run is the newest whose `displayTitle` is the title of the issue and whose `conclusion` is not `skipped`. Each label on the issue starts a run, and a run for a label other than `factory` is `skipped`. A run by hand has the `displayTitle` `factory`: find it by its time against the issue's comments. Then read its log, `gh run view <databaseId> --log-failed`, and act on the run:
+**The run of an issue with `factory`.** List the runs: `gh run list --workflow factory.yml -L 200 --json databaseId,displayTitle,event,status,conclusion,attempt,createdAt`. Each label on the issue starts a run, and a run for a label other than `factory` is `skipped`. Its run is the newest whose `conclusion` is not `skipped` and whose log holds the issue's number: `gh run view <databaseId> --log | grep -Ew -- '--issue <n>'`. Runs created before the issue are not its runs. A title is not the key, since a title can change and two issues can share one. A run whose `status` is not `completed` has no log yet, and `gh run view --log` fails for it. When such a run has the issue's title or `factory` as its `displayTitle`, stop, and say so. A run from the label has the `displayTitle` of the issue, and a run by hand has the `displayTitle` `factory`. Then read its failed log, `gh run view <databaseId> --log-failed`, and act on the run:
 
 | The run | Action |
 |---|---|
@@ -80,7 +80,7 @@ dotnet restore --locked-mode && dotnet build --no-restore && dotnet format --ver
 
 A change to code that calls GitHub, `docker` or Claude Code also runs `dotnet run --no-restore --project tests/Integration`, and the result goes in the pull request.
 
-Commit the branch, new files included, so that a reviewer reads every change by one SHA. The message, in the file `<scratch>/message`, is the title of the issue, or a Conventional Commits line for a change with no issue:
+Commit the branch, new files included, so that a reviewer reads every change by one SHA. The commit runs only when `git status --porcelain` prints a line, since `git commit` with no change exits with the code 1. A failed run's pull request that needs only replies keeps its head commit, and step 3 reviews that head. The message, in the file `<scratch>/message`, is the title of the issue, or a Conventional Commits line for a change with no issue:
 
 ```
 git add -- <each changed path> && git commit -F <scratch>/message
