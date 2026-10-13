@@ -9,6 +9,7 @@ namespace Specs.Steps;
 public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext scenarioContext, WorkTreeState workTree) : IDisposable
 {
     private const string ContainerId = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    private const string HomeSuffix = ":/tmp/sandbox-home";
     private readonly List<CommandSpec> _recorded = [];
     private readonly DirectoryInfo _directory = Directory.CreateTempSubdirectory("factory-sandbox-steps-");
     private CommandResult _run = new() { StandardOutput = ContainerId + "\n" };
@@ -37,9 +38,10 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
                             .Select(directory => Path.GetRelativePath(workTree.Path, directory))];
                     }
 
-                    if (spec.Arguments[0] is "run" && Directory.Exists(MountedHome(spec)))
+                    string mountedHome = spec.Arguments[0] is "run" ? MountedHome(spec) : "";
+                    if (Directory.Exists(mountedHome))
                     {
-                        _homesAtRun.Add(MountedHome(spec));
+                        _homesAtRun.Add(mountedHome);
                     }
 
                     if (spec.Arguments[0] is "exec" && _fileExecWrites is not null)
@@ -73,8 +75,8 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
     private static string MountedHome(CommandSpec run)
     {
         List<string> arguments = [.. run.Arguments];
-        int index = arguments.FindIndex(argument => argument.EndsWith(":/tmp/sandbox-home", StringComparison.Ordinal));
-        return index > 0 && arguments[index - 1] is "--volume" ? arguments[index][..^":/tmp/sandbox-home".Length] : "";
+        int index = arguments.FindIndex(argument => argument.EndsWith(HomeSuffix, StringComparison.Ordinal));
+        return index > 0 && arguments[index - 1] is "--volume" ? arguments[index][..^HomeSuffix.Length] : "";
     }
 
     private static void AssertFollows(CommandSpec spec, string flag, string value)
@@ -181,6 +183,7 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
     [Then("the arguments of the docker run hold {string} and then the path of a directory under {string} of the root directory followed by {string}")]
     public void ThenRunHoldsRootPath(string flag, string parent, string suffix)
     {
+        Assert.Equal(HomeSuffix, suffix);
         string home = MountedHome(Docker("run"));
         AssertFollows(Docker("run"), flag, home + suffix);
         Assert.StartsWith(Path.Combine(_directory.FullName, parent), home, StringComparison.Ordinal);
