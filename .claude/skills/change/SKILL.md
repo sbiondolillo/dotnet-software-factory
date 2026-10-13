@@ -41,13 +41,14 @@ Build an issue that has `ready`. An issue with no `ready` waits for the owner's 
 gh issue edit <n> --add-label building
 ```
 
-**The run of an issue with `factory`.** List the runs: `gh run list --workflow factory.yml -L 200 --json databaseId,displayTitle,event,status,conclusion,createdAt`. Its run is the newest whose `displayTitle` is the title of the issue and whose `conclusion` is not `skipped`. Each label on the issue starts a run, and a run for a label other than `factory` is `skipped`. A run by hand has the `displayTitle` `factory`: find it by its time against the issue's comments. Then read its log, `gh run view <databaseId> --log-failed`, and act on the run:
+**The run of an issue with `factory`.** List the runs: `gh run list --workflow factory.yml -L 200 --json databaseId,displayTitle,event,status,conclusion,attempt,createdAt`. Its run is the newest whose `displayTitle` is the title of the issue and whose `conclusion` is not `skipped`. Each label on the issue starts a run, and a run for a label other than `factory` is `skipped`. A run by hand has the `displayTitle` `factory`: find it by its time against the issue's comments. Then read its log, `gh run view <databaseId> --log-failed`, and act on the run:
 
 | The run | Action |
 |---|---|
 | `status` is not `completed` | the factory's: stop, and say so |
 | `conclusion` is `success` | it delivered a green pull request: stop, and say so |
-| `conclusion` is `cancelled`, or `failure` with no line `build: start` in the log | no build ran: stop, and give the owner the log line, unless the owner sent it direct |
+| `conclusion` is `failure` with no line `build: start` in the log, and `attempt` is 1 | no build ran: relaunch it once, `gh run rerun <databaseId>`, and stop, unless the owner sent it direct |
+| `conclusion` is `failure` with no line `build: start` in the log, and `attempt` is 2 or more | the relaunch failed too: stop, and give the owner the log line, unless the owner sent it direct |
 | `conclusion` is `failure`, with a line `build: start` in the log | a failed run: read its comments on the issue, and go on |
 | any other conclusion | stop, and say so |
 
@@ -55,11 +56,11 @@ A failed run that delivered a pull request commented `Opened <url>` on the issue
 
 Read the issue and its comments with `gh issue view <n> --comments`. The body is the spec. A comment of the owner's that the body does not hold yet changes the spec.
 
-Done when the spec is in one file in `<scratch>`, the session's scratch directory, and matches every comment of the owner's.
+Done when the spec is in the file `<scratch>/spec`, where `<scratch>` is the session's scratch directory, and matches every comment of the owner's.
 
 ### 2. Write the scenarios, then the code
 
-For a change the owner states in chat, the request text in a file in `<scratch>`, the session's scratch directory, is the spec.
+For a change the owner states in chat, the request text in the file `<scratch>/spec`, where `<scratch>` is the session's scratch directory, is the spec.
 
 Work in a worktree of your own, and run every later command there. `<slug>` is a short slug of the issue's title, or of the request for a change stated in chat. The branch depends on the case:
 
@@ -69,7 +70,7 @@ Work in a worktree of your own, and run every later command there. `<slug>` is a
 | a change stated in chat | `git worktree add .claude/worktrees/<slug> -b <slug> origin/main` |
 | a failed run with an open pull request | `git worktree add .claude/worktrees/<n>-<slug> factory/<run id>`, which tracks the head branch, so the push of step 4 updates that pull request |
 
-Each block of `## Scenarios` goes into its feature file under `specs/features/`, word for word. A block that holds a `Feature:` line replaces its feature file. Any other block edits the file on `main`. A scenario whose name the file holds is replaced whole, and a new name goes at the end. Each name under `## Removed scenarios` is removed from its feature file. Run `dotnet test` and see each new scenario fail. Then write the code until it passes. On the branch of a failed run, the blocks of `## Scenarios` are in their feature files already. Read each against the issue, then fix the code until the checks below pass. A spec that changes behaviour and holds no `## Scenarios`, such as a request in chat, gets its blocks from the session. They follow `templates/starter/docs/write-an-issue.md`. The spec file holds them before the code. A spec with no scenario, such as a prose change, skips to the code. `AGENTS.md` → "What a scenario tests" states that no scenario reads a prose file. A body with `## Scope` changes no path outside it.
+Each block of `## Scenarios` goes into its feature file under `specs/features/`, word for word. A block that holds a `Feature:` line replaces its feature file. Any other block edits the file on `main`. A scenario whose name the file holds is replaced whole, and a new name goes at the end. Each name under `## Removed scenarios` is removed from its feature file. Run `dotnet test` and see each new scenario fail. Then write the code until it passes. On the branch of a failed run, the blocks of `## Scenarios` are in their feature files already. Read each against the issue, then fix the code until the checks below pass. A spec that changes behaviour and holds no `## Scenarios`, such as a request in chat, gets its blocks from the session. They follow `templates/starter/docs/write-an-issue.md`. `<scratch>/spec` holds them before the code. A spec with no scenario, such as a prose change, skips to the code. `AGENTS.md` → "What a scenario tests" states that no scenario reads a prose file. A body with `## Scope` changes no path outside it.
 
 Then run every check of the `build` job of `.github/workflows/ci.yml` on the branch:
 
@@ -96,7 +97,7 @@ Run the three angles of [`JUDGES.md`](JUDGES.md) on the commit, as three subagen
 - the full SHA of the commit, from `git rev-parse HEAD`
 - the full SHA of the base, from `git fetch -q origin && git rev-parse origin/main`
 - the path of this worktree
-- the path of the spec file, and the issue number when one exists
+- the path of `<scratch>/spec`, and the issue number when one exists
 
 A spec with no scenario gets `Conformance` and `Regressions and style`, and no `Test strength, by mutation`.
 
@@ -106,11 +107,11 @@ Done when each angle accepts, or each finding has a fix or a refutation.
 
 ### 4. Deliver the branch
 
-For an issue, check the link from the spec to the code. Each scenario name of the issue is in `specs/features/`, and each name under `## Removed scenarios` is in no file there.
+For an issue, check the link from the spec to the code. Each scenario name of `<scratch>/spec` is in `specs/features/`, and each name under its `## Removed scenarios` is in no file there.
 
 ```
-gh issue view <n> --json body -q .body | tr -d '\r' | sed -nE 's/^ *Scenario( Outline)?: //p' | while read -r name; do grep -rhE '^ *Scenario( Outline)?: ' specs/features | sed -E 's/^ *Scenario( Outline)?: //' | grep -qxF -- "$name" || echo "missing: $name"; done
-gh issue view <n> --json body -q .body | tr -d '\r' | sed -n '/^## Removed scenarios/,/^## /p' | sed -nE 's/^- `[^`]*`: //p' | while read -r name; do grep -rhE '^ *Scenario( Outline)?: ' specs/features | sed -E 's/^ *Scenario( Outline)?: //' | grep -qxF -- "$name" && echo "still present: $name"; done
+tr -d '\r' < <scratch>/spec | sed -nE 's/^ *Scenario( Outline)?: //p' | while read -r name; do grep -rhE '^ *Scenario( Outline)?: ' specs/features | sed -E 's/^ *Scenario( Outline)?: //' | grep -qxF -- "$name" || echo "missing: $name"; done
+tr -d '\r' < <scratch>/spec | sed -n '/^## Removed scenarios/,/^## /p' | sed -nE 's/^- `[^`]*`: //p' | while read -r name; do grep -rhE '^ *Scenario( Outline)?: ' specs/features | sed -E 's/^ *Scenario( Outline)?: //' | grep -qxF -- "$name" && echo "still present: $name"; done
 ```
 
 Write the report to a file: what changed, the result of each suite, each reviewer's verdict, and each finding with its fix or its refutation. Then push the branch, `git push -u origin HEAD`. For a failed run with an open pull request, each open review thread then gets a reply, as `## Review threads` says: the SHA of its pushed fix, or the evidence that refutes it. Deliver the report by the case:
