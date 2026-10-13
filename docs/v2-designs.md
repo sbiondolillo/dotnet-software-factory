@@ -2,7 +2,7 @@
 
 Moved from `sam/homelab` `docs/TODO.md` on 2026-10-13, when the map [DSF v2: the factory builds its own repo from a GitHub-hosted runner](https://github.com/sbiondolillo/dotnet-software-factory/issues/273) was charted. The map's Not yet specified and Out of scope sections point here. A link of the form `sam/homelab` `docs/...` names a file in that repo, on the homelab's own Gitea.
 
-A section here is one of three things. A capability or a fault is fog: it becomes a ticket or a map when the owner picks it. A design input is out of scope for the map: it is a settled or half-settled design that waits for a later effort. DSF work with no map is a story, filed with the `story` skill when the owner picks it.
+A section here is one of three things. A capability or a fault is fog: it becomes a ticket or a map when the owner picks it. A design input is out of scope for the map: it is a settled or half-settled design that waits for a later effort. DSF work with no map is a story, filed with `/change` when the owner picks it.
 
 ## The capabilities the homelab factory is the template for
 
@@ -18,7 +18,7 @@ Since 2026-10-09 Claude builds DSF directly, on a branch, with a frontier model 
 ## The trial faults
 
 - **The DSF faults that the `factory#217` trial found** (`sam/homelab` `docs/log/2026-10-09-factory-217-starter-trial.md`).
-  Each is a DSF story, filed from the DSF workspace with the `story` skill. All are seen at DSF `352f531`:
+  Each is a DSF story, filed from the DSF workspace with `/change`. All are seen at DSF `352f531`:
   - The factory reads Copilot's quota refusal as a review with 0 threads, and the gate passes
     (`forecast-sample` `#6` and `#8`). A refusal is not a review.
   - The pull request body prints the cost as a raw double: `$0.21640510000000003`.
@@ -140,14 +140,12 @@ Since 2026-10-09 Claude builds DSF directly, on a branch, with a frontier model 
 ## DSF work with no map
 
 - **The stories after DSF `#236`.** `#236` makes the factory pin the feature files of an issue's `## Scenarios`
-  as written, and `PlanPhase` writes only the plan. Each item below is a DSF story, filed with DSF's `story`
+  as written, and `PlanPhase` writes only the plan. Each item below is a DSF story, filed with DSF's `change`
   skill when `#236` merges:
   - The plan names one integration test for each `Given` that holds a service's answer, and the review
     blocks a build that lacks one. On `main` only `AGENTS.md` asks for these tests, and no gate checks them.
-  - DSF's own `story` skill writes the path line `# specs/features/<name>.feature` on each block. Its
-    scenarios stay at the level of behaviour, because a person builds a story and refines them.
-  - The `story` skill removes the label `building` after the merge, in step 7 beside the removal of the
-    worktree. Step 5 adds it and no step removes it, so `#236` closed with `building` on it on 2026-10-09.
+  - The starter's `write-issue`, which `/change` follows, writes the path line `# specs/features/<name>.feature`
+    on each block. Its scenarios stay at the level of behaviour, and the builder refines them.
 - **IDE0005 at `warning`.** Added on 2026-10-07, from the strict proof of `homelab-factory#212`. IDE0005 (an
   unused `using`) runs in the build only when `GenerateDocumentationFile` is `true`, with CS1591 in `NoWarn`.
   Both go in the root `Directory.Build.props`. DSF `main` `5ce5e6f` has 11 findings, all in tests. The operator
