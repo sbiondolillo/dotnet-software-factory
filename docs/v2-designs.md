@@ -6,7 +6,7 @@ A section here is one of three things. A capability or a fault is fog: it become
 
 ## The capabilities the homelab factory is the template for
 
-Since 2026-10-09 Claude builds DSF directly, on a branch, with a frontier model (`sam/homelab` `docs/decisions/od-33.md`). The homelab factory is the template, and these are the capabilities to reproduce on GitHub, each as a later map:
+Since 2026-10-09 Claude builds DSF directly, on a branch, with a frontier model (`sam/homelab` `docs/decisions/od-33.md`). Since #280, on 2026-10-13, the factory builds a DSF story by default, and a direct session builds the rest, as `.claude/skills/change/SKILL.md` states. The homelab factory is the template, and these are the capabilities to reproduce on GitHub, each as a later map:
 
 - **An OpenTelemetry pipeline into Grafana.** One trace per run, one span per phase and per tool call, and a
   waterfall that drills into one run. The lab's reference is OD-26 (ClickHouse on `nas-01`) and OD-27 (the
