@@ -1,0 +1,38 @@
+# The self-build: the factory builds an issue of its own repo, with the
+# factory at the commit of the event. The label `factory` from the owner runs
+# it at main. A run by hand runs it at the branch it is started from:
+# `gh workflow run factory --ref <branch> -f issue=<n>`.
+#
+# A starter repo's copy, templates/starter/.github/workflows/factory.yml, runs
+# the factory at the tag v1.
+name: factory
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: The number of the issue to run
+        required: true
+        type: number
+
+# The job's own token reads the check runs of the pull request. A fine-grained token has no Checks permission on a private repo.
+permissions:
+  checks: read
+
+jobs:
+  factory:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || (github.event.label.name == 'factory' && github.event.sender.login == github.repository_owner)
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Run the factory
+        env:
+          FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_SELF_TOKEN }}
+          FACTORY_CHECKS_TOKEN: ${{ github.token }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }}

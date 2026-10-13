@@ -13,6 +13,7 @@ A software factory for C# repos. A repo made from its starter gets one pull requ
 | `src/Core/` | the library, with `Greeter` |
 | `src/App/` | the console program, built as `dotnet-software-factory` |
 | `.github/workflows/ci.yml` | the checks: the `build` job, then the `integration` job |
+| `.github/workflows/factory.yml` | the self-build: on the label `factory` from the owner, runs the factory at this repo's own commit with the secret `FACTORY_SELF_TOKEN` |
 | `.github/workflows/relock.yml` | on a Dependabot pull request, regenerates the `packages.lock.json` of each project in `Solution.slnx` and pushes them with the Dependabot secret `RELOCK_TOKEN` |
 | `specs/features/` | the pinned `.feature` files. One ships here, so the first build has a binding to follow |
 | `tests/Specs/` | the test project: Reqnroll under xUnit v3, with the step class for that feature |
@@ -254,7 +255,9 @@ A pull request with no unresolved thread gets no build. A `cleanup` or `refactor
 
 ## A trial run at another ref
 
-The repo's owner starts a trial run of the factory at another ref with the command `gh workflow run factory -f issue=<number> -f ref=<ref>`. The ref is a branch, a tag or a commit.
+The owner of a repo made from the starter starts a trial run of the factory at another ref with the command `gh workflow run factory -f issue=<number> -f ref=<ref>`. The ref is a branch, a tag or a commit.
+
+This repo's own `factory.yml` has no input `ref`. It runs the factory at the branch that the run starts from: `gh workflow run factory --ref <branch> -f issue=<number>`.
 
 ## Tokens and secrets
 
@@ -303,7 +306,7 @@ Claude Code runs with `--dangerously-skip-permissions`, in a docker container on
 
 ## Who builds this repo
 
-The owner builds each change to this repo with Claude Code and the skill `story` in `.claude/skills/story/`. An issue holds a story. The owner approves it with the label `ready`, and a pull request delivers it. This repo has no `factory.yml`, so a label on one of its issues starts no run. The labels `factory`, `behavior`, `cleanup`, `refactor` and `reframe` stay on its closed issues, as the record of the runs that built it before 2026-10-09.
+The owner builds each change to this repo with Claude Code and the skill `story` in `.claude/skills/story/`. An issue holds a story. The owner approves it with the label `ready`, and a pull request delivers it. The factory also builds this repo. When the owner labels an issue `factory`, `.github/workflows/factory.yml` runs the factory at `main` on that issue. The labels `behavior`, `cleanup`, `refactor` and `reframe` select the kind of run, as in a starter repo. The run reaches GitHub with the secret `FACTORY_SELF_TOKEN`, which reaches this repo alone. A run by hand, `gh workflow run factory --ref <branch> -f issue=<n>`, runs the factory at that branch. The same labels on the issues closed before 2026-10-09 record the runs of the homelab factory.
 
 ## Commands
 
