@@ -41,6 +41,9 @@ public sealed class FactoryRunHarness : IDisposable
 
     public List<string> SecretNames { get; set; } = [];
 
+    /// <summary>True when the test gates of the run skip the integration suite.</summary>
+    public bool SkipIntegration { get; set; }
+
     public string PlanModel { get; set; } = "plan-model";
 
     public int PlanTurns { get; set; } = 20;
@@ -178,7 +181,7 @@ public sealed class FactoryRunHarness : IDisposable
         var client = new GitHubClient(new HttpClient(new Handler(this)), Token, TimeSpan.Zero);
         var request = new FactoryRunRequest(
             Owner, Repo, Issue, Token, RunId, _clone.FullName, BaseBranch, "factory-sandbox:test", _root.FullName,
-            PlanModel, PlanTurns, BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames);
+            PlanModel, PlanTurns, BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames, SkipIntegration);
         return new FactoryRun(mock.Object, client, Progress).RunAsync(request, cancellationToken);
     }
 

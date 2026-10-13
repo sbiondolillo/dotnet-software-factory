@@ -226,6 +226,34 @@ public sealed class TestGateTests : IDisposable
         Assert.Contains("AnotherOne", text, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task AGateThatSkipsTheIntegrationSuiteFailsOnAFailedTestOfTheTrxFile()
+    {
+        _harness.Answers["test"] = new CommandResult { ExitCode = 1 };
+        _harness.Trx = [TestGateHarness.PassingFeatureTest, ("Specs.Unit.CheckoutTests", "AddsTwoPrices", "Failed", "Assert.Equal() Failure: Values differ")];
+        await _harness.StartAsync(TestContext.Current.CancellationToken);
+
+        TestGateResult result = await _harness.RunAsync([], true, TestContext.Current.CancellationToken);
+
+        Assert.False(result.Passed);
+        Assert.Contains(result.Evidence, e => e.Contains("Specs.Unit.CheckoutTests.AddsTwoPrices", StringComparison.Ordinal));
+        Assert.DoesNotContain(_harness.Seen, c => c.Subcommand is "run");
+    }
+
+    [Fact]
+    public async Task AGateThatSkipsTheIntegrationSuiteGivesBackTheTestsOfTheTrxFile()
+    {
+        await _harness.StartAsync(TestContext.Current.CancellationToken);
+
+        TestGateResult result = await _harness.RunAsync([], true, TestContext.Current.CancellationToken);
+
+        Assert.True(result.Passed);
+        Assert.NotNull(result.Tests);
+        Assert.Equal(
+            ["Specs.Features.CheckoutFeature.TheTotalIsTheSumOfThePrices", "Specs.Unit.CheckoutTests.AddsTwoPrices"],
+            result.Tests.Select(t => $"{t.ClassName}.{t.Method}"));
+    }
+
     private static async Task<TestGateResult> RunWithNewPin(TestGateHarness harness)
     {
         await harness.StartAsync(TestContext.Current.CancellationToken);
