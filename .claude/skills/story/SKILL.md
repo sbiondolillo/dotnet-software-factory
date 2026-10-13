@@ -165,6 +165,6 @@ The query reads each blocker's state, and leaves out a story that an open issue 
 
 Then list the prototype branches, `git ls-remote origin 'refs/heads/design/*'`, and remove each one whose issue is closed: `gh issue view <n> --json state -q .state` is `CLOSED`, and `git push origin --delete design/<n>` removes it.
 
-Each story that is ready gets its own builder: a separate session, where the owner types `/story #<n>`. The skill has `disable-model-invocation: true`, so a subagent cannot start it. The issue holds the rest. Two stories that change the same file are built one after the other, in the order of their numbers.
+Each story that is ready gets its own builder: a separate session, where a person types `/story #<n>`. The skill has `disable-model-invocation: true`, so a subagent cannot start it. The issue holds the rest. Two stories that change the same file are built one after the other, in the order of their numbers.
 
 Done when the handover lists each story that is ready with its command `/story #<n>`, and names each pair of stories that change the same file.
