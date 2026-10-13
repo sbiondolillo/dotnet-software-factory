@@ -127,3 +127,9 @@ Feature: A run writes a job summary with one row for each phase and the reason f
     When the run delivers with 0 Redos
     Then the summary file starts with the text "earlier step text"
     And the summary file holds the summary after that text
+
+  Scenario: The spend of a row rounds to four decimal places
+    Given the issue has no recipe label
+    And the plan answer has 4 turns and the cost "0.0560938", 77 seconds after its prompt
+    When the run delivers with 0 Redos
+    Then the summary holds the row "| plan | 77 | 4 | $0.0561 | passed |"
