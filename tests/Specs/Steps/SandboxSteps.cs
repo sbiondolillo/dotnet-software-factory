@@ -17,6 +17,8 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
     private CommandResult? _result;
     private Mock<CommandRunner>? _mock;
     private HashSet<string> _directoriesAtRun = [];
+    private readonly HashSet<string> _homesAtRun = [];
+    private string? _fileExecWrites;
 
     public void Dispose() => _directory.Delete(recursive: true);
 
@@ -33,6 +35,18 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
                     {
                         _directoriesAtRun = [.. Directory.EnumerateDirectories(workTree.Path, "*", SearchOption.AllDirectories)
                             .Select(directory => Path.GetRelativePath(workTree.Path, directory))];
+                    }
+
+                    if (spec.Arguments[0] is "run" && Directory.Exists(MountedHome(spec)))
+                    {
+                        _homesAtRun.Add(MountedHome(spec));
+                    }
+
+                    if (spec.Arguments[0] is "exec" && _fileExecWrites is not null)
+                    {
+                        string file = Path.Combine(MountedHome(Docker("run")), _fileExecWrites);
+                        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+                        File.WriteAllText(file, "{}\n");
                     }
 
                     return Task.FromResult(spec.Arguments[0] switch
@@ -55,6 +69,13 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
     }
 
     private CommandSpec Docker(string subcommand) => _recorded.Last(spec => spec.Arguments[0] == subcommand);
+
+    private static string MountedHome(CommandSpec run)
+    {
+        List<string> arguments = [.. run.Arguments];
+        int index = arguments.FindIndex(argument => argument.EndsWith(":/tmp/sandbox-home", StringComparison.Ordinal));
+        return index > 0 && arguments[index - 1] is "--volume" ? arguments[index][..^":/tmp/sandbox-home".Length] : "";
+    }
 
     private static void AssertFollows(CommandSpec spec, string flag, string value)
     {
@@ -82,6 +103,9 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
     [Given("docker exec exits with the code {int}, writes {string} to standard output and writes {string} to standard error")]
     public void GivenExec(int code, string output, string error) =>
         _exec = new CommandResult { ExitCode = code, StandardOutput = output, StandardError = error };
+
+    [Given("docker exec writes the file {string} into the mounted home")]
+    public void GivenExecWrites(string relativePath) => _fileExecWrites = relativePath;
 
     [When("a caller starts a sandbox with the image tag {string} and the work tree {string}")]
     public async Task WhenStarts(string tag, string workTree)
@@ -153,6 +177,37 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
 
     [Then("the arguments of the docker run hold {string} and then the path of that work tree followed by {string}")]
     public void ThenRunHoldsWorkTreePath(string flag, string suffix) => AssertFollows(Docker("run"), flag, workTree.Path + suffix);
+
+    [Then("the arguments of the docker run hold {string} and then the path of a directory under {string} of the root directory followed by {string}")]
+    public void ThenRunHoldsRootPath(string flag, string parent, string suffix)
+    {
+        string home = MountedHome(Docker("run"));
+        AssertFollows(Docker("run"), flag, home + suffix);
+        Assert.StartsWith(Path.Combine(_directory.FullName, parent), home, StringComparison.Ordinal);
+        Assert.NotEqual(Path.Combine(_directory.FullName, parent), home + "/");
+    }
+
+    [Then("no argument of the docker run is {string}")]
+    public void ThenRunLacks(string argument) => Assert.DoesNotContain(argument, Docker("run").Arguments);
+
+    [Then("the home directory of that sandbox existed when the docker run started")]
+    public void ThenHomeExistedAtRun() => Assert.Contains(MountedHome(Docker("run")), _homesAtRun);
+
+    [Then("the two docker runs mount two different home directories")]
+    public void ThenTwoHomes()
+    {
+        List<string> homes = [.. _recorded.Where(spec => spec.Arguments[0] is "run").Select(MountedHome)];
+        Assert.Equal(2, homes.Count);
+        Assert.NotEqual(homes[0], homes[1]);
+    }
+
+    [Then("the file {string} is under {string} of the root directory")]
+    public void ThenFileUnderRoot(string relativePath, string parent)
+    {
+        string home = MountedHome(Docker("run"));
+        Assert.StartsWith(Path.Combine(_directory.FullName, parent), home, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(home, relativePath)));
+    }
 
     [Then("the directory {string} of that work tree existed when the docker run started")]
     public void ThenExistedAtRun(string relativePath) => Assert.Contains(relativePath, _directoriesAtRun);

@@ -103,6 +103,11 @@ code 0, as `tests/Specs/Steps/LintGateSteps.cs` does.
   `.config` in it, and `HOME` names that directory. For a user id that the image does not
   hold, `HOME` reads `/`, and `dotnet` fails in its first-run setup. With no `.config` in
   the home directory, `dotnet test` writes `Reqnroll/userid` into the test project.
+- That home directory is a bind mount of `<root>/.factory/sandbox-home/<n>/` on the host,
+  one new directory for each container, which `Sandbox` creates before `docker run`. So
+  the transcript that Claude Code writes under `.claude/projects/` in it is on the host
+  after the removal of the container, and `.gitignore` ignores `.factory/`. A tmpfs home
+  is removed with the container.
 - That container starts with `--init`, and its first command runs until the removal.
   `dotnet test` leaves defunct processes behind it, and the init process removes them. A
   container with no first command exits at once, and each `docker exec` then exits with
