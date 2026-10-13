@@ -21,7 +21,7 @@ public sealed class JobSummary
     /// <summary>True when no phase has run yet.</summary>
     public bool IsEmpty => _rows.Count is 0;
 
-    /// <summary>Notes one answer of <c>claude</c>; the next row takes the sum of the answers noted since the row before.</summary>
+    /// <summary>Notes one answer of <c>claude</c>; the next row takes the sum of the answers noted since the row before, rounded to four decimal places.</summary>
     public void Prompt(TimeSpan elapsed, int turns, decimal cost)
     {
         _pendingTime += elapsed;
@@ -36,7 +36,7 @@ public sealed class JobSummary
         _counts[phase] = number;
         string name = phase is "plan" ? phase : string.Create(CultureInfo.InvariantCulture, $"{phase} {number}");
         long seconds = (long)(elapsed ?? _pendingTime).TotalSeconds;
-        _rows.Add(string.Create(CultureInfo.InvariantCulture, $"| {name} | {seconds} | {_pendingTurns} | ${_pendingCost} | {result} |"));
+        _rows.Add(string.Create(CultureInfo.InvariantCulture, $"| {name} | {seconds} | {_pendingTurns} | ${Math.Round(_pendingCost, 4, MidpointRounding.AwayFromZero)} | {result} |"));
         _pendingTime = TimeSpan.Zero;
         _pendingTurns = 0;
         _pendingCost = 0m;
