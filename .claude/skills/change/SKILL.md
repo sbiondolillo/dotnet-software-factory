@@ -12,7 +12,7 @@ disable-model-invocation: true
 - a phase prompt
 - a prose file: a skill, a template, a page, the README
 - a change with no scenario
-- a story that a factory run failed on after the build started. The Redos ran out, or the build or the review stopped on an error. Or the run delivered a pull request whose checks stayed red or whose review threads stayed open. A run that failed before the build, on the runner, the clone or the token, gets one relaunch instead. The owner routes a run that refused the issue: a fix to the body and a relaunch, or a direct build
+- a story that a factory run failed on, which the owner sends direct with the run, and with its pull request when it has one. A relaunch of a run that failed before any build, on the runner, the clone or the token, is the owner's `gh run rerun`
 - any change the owner sends direct, for any reason. The owner records no justification
 
 A direct change keeps the pull request body as its record. A change on a wayfinder map keeps its ticket as the record. A direct change can get an issue in any form, written by hand or by `write-issue`, and that issue takes the labels below.
@@ -35,25 +35,13 @@ Done when the issue is filed, with its URL in the handover. Then stop. The owner
 
 ### 1. Claim the issue and read it
 
-Build an issue that has `ready`. An issue with no `ready` waits for the owner's label. An issue that already has the label `building` belongs to another session: stop, and say so. For an issue with `factory`, first find its run and its pull request, as the next two paragraphs say, and stop when either says so. Then claim the issue, before any other work.
+Build an issue that has `ready`. An issue with no `ready` waits for the owner's label. An issue that already has the label `building` belongs to another session: stop, and say so. For an issue with `factory`, read the next paragraph first. Then claim the issue, before any other work.
+
+For a story the factory failed on, the owner names the failed run and its pull request. When the owner names neither, the session asks. The owner is in the chat on the direct path, so the session reads no run list. With an open pull request, `<pr>` is its number, and step 2 continues on its head branch, `factory/<run id>`, where `<run id>` is the id of the run. Otherwise step 2 starts from `origin/main`, and step 4 opens a new pull request. The run's log, `gh run view <run id> --log-failed`, and its comments on the issue say what failed.
 
 ```
 gh issue edit <n> --add-label building
 ```
-
-**The run of an issue with `factory`.** List the runs: `gh run list --workflow factory.yml -L 200 --json databaseId,displayTitle,event,status,conclusion,attempt,createdAt`. Each label on the issue starts a run, and a run for a label other than `factory` is `skipped`. Its run is the newest whose `conclusion` is not `skipped` and whose log holds the issue's number: `gh run view <databaseId> --log | grep -Ew -- '--issue <n>'`. Runs created before the issue are not its runs. A run that failed before the factory step has no such line. Its run is then the newest one that is not `skipped`, has the issue's `displayTitle`, and is newer than any run with the line. Such a run posted nothing. Otherwise a title is not the key, since a title can change and two issues can share one. A run whose `status` is not `completed` has no log yet, and `gh run view --log` fails for it. When such a run has the issue's title or `factory` as its `displayTitle`, stop, and say so. A run from the label has the `displayTitle` of the issue, and a run by hand has the `displayTitle` `factory`. Then read its failed log, `gh run view <databaseId> --log-failed`, and act on the run:
-
-| The run | Action |
-|---|---|
-| `status` is not `completed` | the factory's: stop, and say so |
-| `conclusion` is `success` | it delivered a green pull request: stop, and say so |
-| `conclusion` is `failure` with no line `build: start` in the log, and the run commented on the issue | the factory refused the issue, and the comment says why. Unless the owner sent it direct, stop, and give the owner the choice: a fix to the body and a relaunch, or a direct build |
-| `conclusion` is `failure` with no line `build: start` in the log and no comment, and `attempt` is 1 | the factory failed before any build and posted nothing: relaunch it once, `gh run rerun <databaseId>`, and stop, unless the owner sent it direct |
-| the same, and `attempt` is 2 or more | the relaunch failed too: stop, and give the owner the log line, unless the owner sent it direct |
-| `conclusion` is `failure`, with a line `build: start` in the log | a failed run: read its comments on the issue, and go on |
-| any other conclusion | stop, and say so |
-
-The run commented on the issue when the run's log holds the comment's first line: the factory prints each comment to its log before it posts it, and it posts as the owner. A failed run that delivered a pull request commented `Opened <url>` on the issue, and `gh pr view <url> --json number,headRefName,state` gives `<pr>` and the branch `factory/<run id>`. When `state` is `OPEN`, step 2 continues on that branch. When `state` is `MERGED`, stop, and say so. When `state` is `CLOSED`, the owner closed it. Step 2 then starts from `origin/main`, as for a run with no branch, and step 4 opens a new pull request. A run with no such comment pushed no branch, so step 2 starts from `origin/main`.
 
 Read the issue and its comments with `gh issue view <n> --comments`. The body is the spec. A comment of the owner's that the body does not hold yet changes the spec.
 
@@ -115,7 +103,7 @@ tr -d '\r' < <scratch>/spec | sed -nE 's/^ *Scenario( Outline)?: //p' | while re
 tr -d '\r' < <scratch>/spec | sed -n '/^## Removed scenarios/,/^## /p' | sed -nE 's/^- `[^`]*`: //p' | while read -r name; do grep -rhE '^ *Scenario( Outline)?: ' specs/features | sed -E 's/^ *Scenario( Outline)?: //' | grep -qxF -- "$name" && echo "still present: $name"; done
 ```
 
-Write the report to a file: what changed, the result of each suite, each reviewer's verdict, and each finding with its fix or its refutation. Then push the branch, `git push -u origin HEAD`. A push with no new commit prints `Everything up-to-date`, and GitHub starts no check run for it. Then rerun the failed jobs of the last `ci` run on the branch, when its `conclusion` is `failure`: `gh run rerun <ci run> --failed`, where `<ci run>` is `gh run list --branch factory/<run id> --workflow ci -L 1 --json databaseId -q '.[0].databaseId'`. For a failed run with an open pull request, each open review thread then gets a reply, as `## Review threads` says: the SHA of its pushed fix, or the evidence that refutes it. A fixed thread is resolved, and a refuted thread stays open for the reviewer, as the factory's feedback path does. Deliver the report by the case:
+Write the report to a file: what changed, the result of each suite, each reviewer's verdict, and each finding with its fix or its refutation. Then push the branch, `git push -u origin HEAD`. A push with no new commit prints `Everything up-to-date` and starts no check run, so the handover names each red check, and the owner reruns it with `gh run rerun <id> --failed`. For a failed run with an open pull request, each open review thread then gets a reply, as `## Review threads` says: the SHA of its pushed fix, or the evidence that refutes it. A fixed thread is resolved, and a refuted thread stays open for the reviewer, as the factory's feedback path does. Deliver the report by the case:
 
 | Case | Delivery |
 |---|---|
