@@ -5,7 +5,7 @@ Reference for [`change`](SKILL.md), step 3. Each angle is one subagent. A review
 Give each reviewer the SHA of the commit, the SHA of the base, the path of the build worktree, and the path of the spec file: the issue's body, or the owner's request. The reviewer works in a clone of its own, and edits nothing in the build worktree. `<scratch>` is an absolute path of its own, `<clone>` is `<scratch>/clone`, and `<HOME>` is `<scratch>/home`:
 
 ```
-mkdir -p <scratch>/home && git clone -q <worktree> <scratch>/clone && cd <scratch>/clone && git checkout -q <SHA>
+mkdir -p <scratch>/home/.config && git clone -q <worktree> <scratch>/clone && cd <scratch>/clone && git checkout -q <SHA>
 ```
 
 Run every later command in `<clone>`. The clone's `origin/main` is the local `main` of the checkout, which can lag the base. So each command below takes `<base>`, never `origin/main`. The base can be ahead of the commit the branch started from. So a list of the branch's changes takes three dots, `<base>...<SHA>`, and `<fork>` is `git merge-base <base> <SHA>`.
