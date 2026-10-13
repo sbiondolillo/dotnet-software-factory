@@ -121,3 +121,10 @@ Feature: The pull request of a run states its scenarios, gates, Redos, factory v
     And the issue 12 has the label "refactor" and no "## Check" section
     When a caller delivers the run with the token "token"
     Then the section Gates of the body does not hold the line "- check: green"
+
+  Scenario: The total rounds the spend to four decimal places
+    Given the run of the issue 12 delivers with 0 Redos
+    And the plan answer has the cost "0.12645510000000004" and comes 120 seconds after its prompt
+    And the review answer has the cost "0.09" and comes 89 seconds after its prompt
+    When a caller delivers the run with the token "token"
+    Then the last line of the body of the pull request is "Total: $0.2165 in 209 s"
