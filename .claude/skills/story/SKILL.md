@@ -1,6 +1,7 @@
 ---
 name: story
 description: Turn a requested change to this repo into a story issue, judge its draft, and build it once the owner approves, or build a change the owner states exactly and approves in chat. Use when a change to this repo is requested, or when an issue with the label ready is to be built.
+disable-model-invocation: true
 ---
 
 A change to this repo that needs a **story** goes through two gates. The owner approves the story on GitHub before a build starts. The owner merges the pull request after it is built. The story says what the system does after the change, at the level of behaviour. The full detail lives in the branch, one time.
@@ -164,6 +165,6 @@ The query reads each blocker's state, and leaves out a story that an open issue 
 
 Then list the prototype branches, `git ls-remote origin 'refs/heads/design/*'`, and remove each one whose issue is closed: `gh issue view <n> --json state -q .state` is `CLOSED`, and `git push origin --delete design/<n>` removes it.
 
-Give each story that is ready to its own builder: a subagent with its own worktree, or a separate session. Give it one line, `Build #<n> with the story skill.`, and nothing more. The issue holds the rest. Two stories that change the same file are built one after the other, in the order of their numbers.
+Give each story that is ready to its own builder: a subagent with its own worktree, or a separate session. Give it one line, `Read .claude/skills/story/SKILL.md and build #<n> by it.`, and nothing more. The skill has `disable-model-invocation: true`, so a builder cannot start it as a skill. The issue holds the rest. Two stories that change the same file are built one after the other, in the order of their numbers.
 
 Done when each story that is ready has a builder, and the handover lists each one with its builder and, once open, its pull request.
