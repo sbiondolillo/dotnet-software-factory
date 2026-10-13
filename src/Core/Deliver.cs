@@ -50,7 +50,7 @@ public sealed class Deliver(Git git, PullRequests pullRequests, GitHubClient cli
             body.Append(CultureInfo.InvariantCulture, $"Factory version: {known.Version}\n");
         }
 
-        body.Append(CultureInfo.InvariantCulture, $"Total: ${known.Spend} in {known.Seconds} s");
+        body.Append(CultureInfo.InvariantCulture, $"Total: ${decimal.Round(known.Spend, 4, MidpointRounding.AwayFromZero)} in {known.Seconds} s");
         return body.ToString();
     }
 

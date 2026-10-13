@@ -96,6 +96,13 @@ public sealed class DeliverTests
     }
 
     [Fact]
+    public async Task TheTotalRoundsTheSpendToFourDecimalPlaces()
+    {
+        string body = await BodyAsync([], [], new DeliveryFacts("base", 3, false, 2, 0.21645510000000004m, 209));
+        Assert.EndsWith("Total: $0.2165 in 209 s", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AVersionComesBeforeTheTotal()
     {
         string body = await BodyAsync([], [], new DeliveryFacts("base", Version: "1.0.0+abc"));
