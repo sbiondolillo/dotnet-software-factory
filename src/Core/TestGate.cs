@@ -8,8 +8,9 @@ namespace Core;
 /// <param name="Tests">The tests of the TRX file, or null when the gate stopped before it read one.</param>
 public sealed record TestGateResult(bool Passed, IReadOnlyList<string> Evidence, IReadOnlyList<ReportedTest>? Tests = null);
 
-/// <summary>Judges a work tree the way CI does: the pin, the four build commands, the TRX file and the integration suite.</summary>
-public sealed class TestGate(Sandbox sandbox, TextWriter? log = null)
+/// <summary>Judges a work tree the way CI does: the pin, the four build commands, the TRX file and the integration suite,
+/// which <c>skipIntegration</c> true leaves out.</summary>
+public sealed class TestGate(Sandbox sandbox, TextWriter? log = null, bool skipIntegration = false)
 {
     /// <summary>Runs the gate over <paramref name="workTree"/>; the integration command alone gets <paramref name="secretNames"/>.</summary>
     public Task<TestGateResult> RunAsync(
@@ -116,6 +117,11 @@ public sealed class TestGate(Sandbox sandbox, TextWriter? log = null)
         if (evidence.Count > 0)
         {
             return new TestGateResult(false, evidence, tests);
+        }
+
+        if (skipIntegration)
+        {
+            return new TestGateResult(true, [], tests);
         }
 
         CommandResult integration = await RunDotnetAsync(

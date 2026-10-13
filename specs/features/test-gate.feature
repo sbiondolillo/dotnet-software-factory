@@ -113,3 +113,9 @@ Feature: Test gate
     When a caller runs the test gate
     Then the test gate gives back a failed result
     And the evidence names the integration command and holds the code 1 and the summary
+
+  Scenario: A gate that skips the integration suite runs no integration command
+    Given a passing run
+    When a caller runs the test gate that skips the integration suite
+    Then the test gate gives back a passed result
+    And the commands ran in the order restore, build, format check, test and no other

@@ -104,6 +104,9 @@ public sealed class TestGateSteps : IDisposable
     [When("a caller runs the test gate with the names {string} and {string}")]
     public Task WhenRunsWithNames(string first, string second) => Run([first, second]);
 
+    [When("a caller runs the test gate that skips the integration suite")]
+    public Task WhenRunsSkipping() => Run([], skipIntegration: true);
+
     [Then("the test gate gives back a passed result")]
     public void ThenPassed()
     {
@@ -116,6 +119,9 @@ public sealed class TestGateSteps : IDisposable
 
     [Then("the commands ran in the order restore, build, format check, test, integration and no other")]
     public void ThenOrder() => Assert.Equal(["restore", "build", "format", "test", "run"], _harness.Seen.Select(c => c.Subcommand));
+
+    [Then("the commands ran in the order restore, build, format check, test and no other")]
+    public void ThenOrderWithoutIntegration() => Assert.Equal(["restore", "build", "format", "test"], _harness.Seen.Select(c => c.Subcommand));
 
     [Then("the integration command ran with the names {string} and {string}")]
     public void ThenIntegrationNames(string first, string second) =>
@@ -196,7 +202,7 @@ public sealed class TestGateSteps : IDisposable
     private void Fail(string subcommand) =>
         _harness.Answers[subcommand] = new CommandResult { ExitCode = subcommand is "format" ? 2 : 1, StandardOutput = Out, StandardError = Err };
 
-    private async Task Run(IReadOnlyList<string> names)
+    private async Task Run(IReadOnlyList<string> names, bool skipIntegration = false)
     {
         if (!_started)
         {
@@ -204,7 +210,7 @@ public sealed class TestGateSteps : IDisposable
             _started = true;
         }
 
-        _result = await _harness.RunAsync(names, TestContext.Current.CancellationToken);
+        _result = await _harness.RunAsync(names, skipIntegration, TestContext.Current.CancellationToken);
     }
 
     private void Joined(params string[] parts)

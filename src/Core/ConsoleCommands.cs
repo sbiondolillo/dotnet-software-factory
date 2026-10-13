@@ -85,7 +85,20 @@ public static class ConsoleCommands
             }
         });
 
-        var command = new Command(verb, description) { repo, number, passEnv, timeout, copilotReview };
+        var skipIntegration = new Option<string>("--skip-integration")
+        {
+            Description = "Whether the test gate skips the integration suite: on or off.",
+            DefaultValueFactory = _ => "off",
+        };
+        skipIntegration.Validators.Add(result =>
+        {
+            if (result.Tokens.Count is not 0 && result.Tokens is not [{ Value: "on" or "off" }])
+            {
+                result.AddError("Option '--skip-integration' must be on or off.");
+            }
+        });
+
+        var command = new Command(verb, description) { repo, number, passEnv, timeout, copilotReview, skipIntegration };
         var rounds = new Option<int>("--review-rounds")
         {
             Description = "The most feedback runs one run makes.",
@@ -107,7 +120,7 @@ public static class ConsoleCommands
         {
             string[] names = parse.GetValue(passEnv) ?? [];
             string[] repoParts = parse.GetValue(repo)!.Split('/');
-            var options = new Options(verb, new RepoName(repoParts[0], repoParts[1]), parse.GetValue(number), names, TimeSpan.FromMinutes(parse.GetValue(timeout)), verb is "run" ? parse.GetValue(rounds) : 0, parse.GetValue(copilotReview) is not "off");
+            var options = new Options(verb, new RepoName(repoParts[0], repoParts[1]), parse.GetValue(number), names, TimeSpan.FromMinutes(parse.GetValue(timeout)), verb is "run" ? parse.GetValue(rounds) : 0, parse.GetValue(copilotReview) is not "off", parse.GetValue(skipIntegration) is not "off");
             return await RunVerbAsync(options, host, token).ConfigureAwait(false);
         });
         return command;
@@ -177,7 +190,7 @@ public static class ConsoleCommands
             {
                 var request = new FactoryRunRequest(
                     owner, repo, options.Number, token, runId, directory.FullName, baseBranch, ImageTag, host.RootDirectory,
-                    Model, 50, Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames);
+                    Model, 50, Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration);
                 result = await new FactoryRun(host.Runner, client, host.Out, host.Error, host.Time, host.Environment("GITHUB_STEP_SUMMARY"), EntryVersion()).RunAsync(request, cancellationToken).ConfigureAwait(false);
                 localHead = result.PullRequest is null ? null : await git.ReadHeadShaAsync(directory.FullName, cancellationToken).ConfigureAwait(false);
             }
@@ -233,7 +246,7 @@ public static class ConsoleCommands
         {
             var request = new FeedbackRunRequest(
                 options.Repo.Owner, options.Repo.Name, number, token, directory.FullName, ImageTag, host.RootDirectory,
-                Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames);
+                Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration);
             FeedbackRunResult result = await new FeedbackRun(host.Runner, client, host.Out).RunAsync(request, cancellationToken).ConfigureAwait(false);
             return result.Resolved + result.Unresolved is 0
                 ? null
@@ -308,5 +321,5 @@ public static class ConsoleCommands
         public void Deconstruct(out string owner, out string name) => (owner, name) = (Owner, Name);
     }
 
-    private sealed record Options(string Verb, RepoName Repo, int Number, IReadOnlyList<string> SecretNames, TimeSpan Timeout, int ReviewRounds, bool CopilotReview);
+    private sealed record Options(string Verb, RepoName Repo, int Number, IReadOnlyList<string> SecretNames, TimeSpan Timeout, int ReviewRounds, bool CopilotReview, bool SkipIntegration);
 }

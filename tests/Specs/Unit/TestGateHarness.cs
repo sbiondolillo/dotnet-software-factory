@@ -63,7 +63,10 @@ internal sealed class TestGateHarness : IDisposable
     }
 
     public Task<TestGateResult> RunAsync(IReadOnlyList<string> names, CancellationToken cancellationToken) =>
-        new TestGate(_sandbox!).RunAsync(WorkTree.FullName, Pin, names, cancellationToken);
+        RunAsync(names, false, cancellationToken);
+
+    public Task<TestGateResult> RunAsync(IReadOnlyList<string> names, bool skipIntegration, CancellationToken cancellationToken) =>
+        new TestGate(_sandbox!, skipIntegration: skipIntegration).RunAsync(WorkTree.FullName, Pin, names, cancellationToken);
 
     public void WriteEarlierTrx(string outcome)
     {
