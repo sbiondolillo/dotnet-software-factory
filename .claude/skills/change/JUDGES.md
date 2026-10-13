@@ -32,7 +32,7 @@ The image tag is the major and minor version of `global.json`, such as `10.0`. D
 grep -rhoE 'partial class \w+' tests/Specs/obj --include='<file>.feature.cs'
 ```
 
-Then list the changed files: `git diff --name-only <base>...<SHA>`. For each one, put the version of `<fork>` back on its own, run the features, and list each pinned scenario that stays green. Then restore the commit. A file that is new in the change is removed with `git rm -q <path>` in place of the checkout from `<fork>`. A run with the feature file itself removed has no scenario, which is its result.
+Then list the changed files: `git diff --name-only <base>...<SHA>`. A prose file that no program reads gets no run: `Conformance` reads it, as `AGENTS.md` → "What a scenario tests" states. For each other changed file, put the version of `<fork>` back on its own, run the features, and list each pinned scenario that stays green. Then restore the commit. A file that is new in the change is removed with `git rm -q <path>` in place of the checkout from `<fork>`. A run with the feature file itself removed has no scenario, which is its result.
 
 ```
 git checkout <fork> -- <path>
