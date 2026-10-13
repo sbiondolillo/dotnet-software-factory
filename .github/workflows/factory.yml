@@ -1,6 +1,10 @@
-# The self-build: the factory builds an issue of its own repo, with the factory at the commit of the event.
-# A label runs it at main, and a run by hand runs it at the branch it is started from.
-# A starter repo's copy, templates/starter/.github/workflows/factory.yml, runs the factory at the tag v1.
+# The self-build: the factory builds an issue of its own repo, with the
+# factory at the commit of the event. The label `factory` from the owner runs
+# it at main. A run by hand runs it at the branch it is started from:
+# `gh workflow run factory --ref <branch> -f issue=<n>`.
+#
+# A starter repo's copy, templates/starter/.github/workflows/factory.yml, runs
+# the factory at the tag v1.
 name: factory
 
 on:
