@@ -78,4 +78,28 @@ Feature: A repo made from the starter holds the factory's three workflows
                 ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
                 EXAMPLE_API_KEY: ${{ secrets.EXAMPLE_API_KEY }}
               run: dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --pass-env EXAMPLE_API_KEY
+            - name: Push the transcripts to the store
+              # The store is a private repo. With no store, the step exits 0 at once. The log prints no transcript.
+              if: always()
+              env:
+                STORE_REPO: ${{ secrets.STORE_REPO }}
+                STORE_DEPLOY_KEY: ${{ secrets.STORE_DEPLOY_KEY }}
+              run: |
+                if [ -z "$STORE_REPO" ] || [ -z "$STORE_DEPLOY_KEY" ]; then exit 0; fi
+                key="$RUNNER_TEMP/store-key"
+                printf '%s\n' "$STORE_DEPLOY_KEY" > "$key"
+                chmod 600 "$key"
+                export GIT_SSH_COMMAND="ssh -i $key -o StrictHostKeyChecking=accept-new"
+                store="$RUNNER_TEMP/store"
+                git clone -q "git@github.com:$STORE_REPO.git" "$store"
+                mkdir -p "$store/runs/$GITHUB_RUN_ID"
+                if [ -d .factory/sandbox-home ]; then
+                  find .factory/sandbox-home -name '*.jsonl' -exec cp --parents -t "$store/runs/$GITHUB_RUN_ID" {} +
+                fi
+                cd "$store"
+                git add runs
+                if git diff --cached --quiet; then exit 0; fi
+                git -c user.name=factory -c user.email=factory@users.noreply.github.com commit -q -m "Run $GITHUB_RUN_ID of $GITHUB_REPOSITORY"
+                git pull -q --rebase
+                git push -q
       """

@@ -23,5 +23,5 @@ Feature: A repo made from the starter starts a trial run of the factory at a cho
   Scenario: The factory job sets up the SDK before the last step
     Then a step of the job in "factory.yml" sets up the .NET SDK that the global.json of the checkout names, before the step with the run command "dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --pass-env EXAMPLE_API_KEY"
 
-  Scenario: The factory job's last step runs the run command with the chosen issue
-    Then the last step of the job in "factory.yml" runs "dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --pass-env EXAMPLE_API_KEY"
+  Scenario: The factory job runs the run command with the chosen issue, and then pushes the transcripts whatever the result
+    Then the last two steps of the job in "factory.yml" are a step that runs "dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --pass-env EXAMPLE_API_KEY" and then the step "Push the transcripts to the store" with the condition "always()"

@@ -162,12 +162,14 @@ public static partial class WorkflowChecks
         }
     }
 
-    /// <summary>Fails when the last step of the one job does not run the command.</summary>
-    public static void LastStepRuns(string file, string run)
+    /// <summary>Fails when the last two steps of the one job are not a step that runs the command and then a step with the name and the condition.</summary>
+    public static void LastTwoSteps(string file, string run, string name, string condition)
     {
-        if ((Steps(OnlyJob(file)).LastOrDefault()?.GetValueOrDefault("run") as string) != run)
+        List<Dictionary<string, object?>> steps = Steps(OnlyJob(file));
+        if (steps.Count < 2 || (steps[^2].GetValueOrDefault("run") as string) != run
+            || (steps[^1].GetValueOrDefault("name") as string) != name || (steps[^1].GetValueOrDefault("if") as string) != condition)
         {
-            throw new InvalidOperationException($"the last step of {file} does not run {run}");
+            throw new InvalidOperationException($"the last two steps of {file} are not a step that runs {run} and then the step {name} with the condition {condition}");
         }
     }
 
