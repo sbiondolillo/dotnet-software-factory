@@ -1,6 +1,6 @@
 ---
 name: change
-description: Route a change to this repo to its builder, write the story the factory builds, or build a direct change in this session. Use when a change to this repo is requested, when a ready issue is to be built directly, or when a factory run failed on an issue.
+description: Route a change to this repo to its builder, write the story the factory builds, or build a direct change in this session. Use when a change to this repo is requested, when a ready issue is built directly, or when a factory run failed on an issue.
 disable-model-invocation: true
 ---
 
@@ -23,13 +23,13 @@ A direct change keeps the pull request body as its record. A change on a wayfind
 | `ready` + `building` | a direct build in progress, claimed by step 1 |
 | `ready` + `factory` + `building` | a story the factory failed on, and a session finishes. `factory` stays, as the record of the run |
 
-Start at `## Story` for a request that the factory builds. Start at `## Build` for a direct change: at step 1 for an issue, and at step 2 for a change the owner states in chat. The owner decides between the two, as the list above says, and a request with no decision gets the question.
+Start at `## Story` for a request that the factory builds. Start at `## Build` for a direct change. An issue starts at step 1, and a change the owner states in chat starts at step 2. The owner decides between the two, as the list above says, and a request with no decision gets the question.
 
 ## Story
 
 Follow `templates/starter/.claude/skills/write-issue/SKILL.md`, with these two readings. Its `docs/write-an-issue.md` is `templates/starter/docs/write-an-issue.md`. Its repo is this one: `main` is DSF's `main`, and the feature files and the step classes are under `specs/features/` and `tests/Specs/Steps/`.
 
-Done when the issue is filed, with its URL in the handover. Then stop. The owner reads the issue and adds `ready` and `factory`, comments a change, or closes it. A comment of the owner's goes into the body by the skill's steps and `gh issue edit <n> --body-file`, since the factory reads the body alone.
+Done when the issue is filed, with its URL in the handover. Then stop. The owner reads the issue and adds `ready` and `factory`, comments a change, or closes it. The factory reads the body alone. So a comment of the owner's goes into the body, by the skill's steps and `gh issue edit <n> --body-file`.
 
 ## Build
 
@@ -41,21 +41,21 @@ Claim the issue before any other work. An issue that already has the label `buil
 gh issue edit <n> --add-label building
 ```
 
-Read the issue and its comments with `gh issue view <n> --comments`. The body is the spec. A comment of the owner's that the body does not hold yet changes the spec. For a story the factory failed on, read the run's log and its pull request too, `gh run view <id> --log-failed`, and start from the failed branch when its diff is sound: it is `<start>` in step 2.
+Read the issue and its comments with `gh issue view <n> --comments`. The body is the spec. A comment of the owner's that the body does not hold yet changes the spec. For a story the factory failed on, read the run's comment on the issue and its log too, `gh run view <id> --log-failed`. A run whose Redos ran out pushed no branch, so `<start>` in step 2 is `origin/main`. A run that delivered a pull request whose checks stayed red left its branch on origin. Then `<start>` is `origin/<that head branch>`, and the pull request stays open for the push.
 
 Done when the spec is in one file in the session's scratch directory, and matches every comment of the owner's.
 
 ### 2. Write the scenarios, then the code
 
-For a change the owner states in chat, the request text in a file in the scratch directory is the spec, and the worktree and the branch take a short slug with no number.
+For a change the owner states in chat, the request text in a file in the scratch directory is the spec. The worktree and the branch take a short slug with no number.
 
-Work in a worktree of your own, on a branch from `<start>`, and run every later command there. `<start>` is `origin/main`, or the failed run's branch:
+Work in a worktree of your own, on a branch from `<start>`, and run every later command there. `<start>` is `origin/main`, or the failed run's head branch as step 1 says:
 
 ```
 git fetch origin && git worktree add .claude/worktrees/<n>-<a short slug> -b <n>-<a short slug> <start>
 ```
 
-Each block of `## Scenarios` goes into its feature file under `specs/features/`, word for word. A block that holds a `Feature:` line replaces its feature file. Any other block edits the file on `main`: a scenario whose name the file holds is replaced whole, and a new name goes at the end. Each name under `## Removed scenarios` is removed from its feature file. Run `dotnet test` and see each new scenario fail. Then write the code until it passes. A spec with no scenario, such as a prose change, skips to the code: `AGENTS.md` → "What a scenario tests" states that no scenario reads a prose file.
+Each block of `## Scenarios` goes into its feature file under `specs/features/`, word for word. A block that holds a `Feature:` line replaces its feature file. Any other block edits the file on `main`: a scenario whose name the file holds is replaced whole, and a new name goes at the end. Each name under `## Removed scenarios` is removed from its feature file. Run `dotnet test` and see each new scenario fail. Then write the code until it passes. A spec with no scenario, such as a prose change, skips to the code. `AGENTS.md` → "What a scenario tests" states that no scenario reads a prose file. A body with `## Scope` changes no path outside it. A body with `## Check` runs its block with `sh -c` in the work tree, and the block exits with the code 0.
 
 Then run every check of the `build` job of `.github/workflows/ci.yml` on the branch:
 
@@ -90,7 +90,7 @@ Done when each angle accepts, or each finding has a fix or a refutation.
 
 ### 4. Open the pull request
 
-For an issue, check the link from the spec to the code: each scenario name of the issue is in `specs/features/`, and each name under `## Removed scenarios` is in no file there.
+For an issue, check the link from the spec to the code. Each scenario name of the issue is in `specs/features/`, and each name under `## Removed scenarios` is in no file there.
 
 ```
 gh issue view <n> --json body -q .body | tr -d '\r' | sed -nE 's/^ *Scenario( Outline)?: //p' | while read -r name; do grep -rhE '^ *Scenario( Outline)?: ' specs/features | sed -E 's/^ *Scenario( Outline)?: //' | grep -qxF -- "$name" || echo "missing: $name"; done

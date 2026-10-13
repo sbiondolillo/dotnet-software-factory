@@ -144,8 +144,6 @@ Since 2026-10-09 Claude builds DSF directly, on a branch, with a frontier model 
   skill when `#236` merges:
   - The plan names one integration test for each `Given` that holds a service's answer, and the review
     blocks a build that lacks one. On `main` only `AGENTS.md` asks for these tests, and no gate checks them.
-  - The starter's `write-issue`, which `/change` follows, writes the path line `# specs/features/<name>.feature`
-    on each block. Its scenarios stay at the level of behaviour, and the builder refines them.
 - **IDE0005 at `warning`.** Added on 2026-10-07, from the strict proof of `homelab-factory#212`. IDE0005 (an
   unused `using`) runs in the build only when `GenerateDocumentationFile` is `true`, with CS1591 in `NoWarn`.
   Both go in the root `Directory.Build.props`. DSF `main` `5ce5e6f` has 11 findings, all in tests. The operator
