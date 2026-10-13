@@ -29,7 +29,7 @@ Start at `## Story` for a request that the factory builds. Start at `## Build` f
 
 Follow `templates/starter/.claude/skills/write-issue/SKILL.md`, with these two readings. Its `docs/write-an-issue.md` is `templates/starter/docs/write-an-issue.md`. Its repo is this one: `main` is DSF's `main`, and the feature files and the step classes are under `specs/features/` and `tests/Specs/Steps/`.
 
-Done when the issue is filed, with its URL in the handover. Then stop. The owner reads the issue and adds `ready` and `factory`, comments a change, or closes it. The factory reads the body alone. So a comment of the owner's goes into the body, by the skill's steps and `gh issue edit <n> --body-file`.
+Done when the issue is filed, with its URL in the handover. Then stop. The owner reads the issue and adds `ready`, then `factory`, or comments a change, or closes it. The label `factory` starts the run on its own, so it goes on last. The factory reads the body alone. So a comment of the owner's goes into the body, by the skill's steps and `gh issue edit <n> --body-file`.
 
 ## Build
 

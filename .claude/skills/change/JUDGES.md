@@ -14,7 +14,7 @@ Each reviewer reports `accept` or `reject`. Then it reports each finding with th
 
 ## Conformance
 
-Read each sentence of the spec against the clone, and give the line of the branch that makes it true. A behaviour issue states its changes under `**What changes.**`. A `cleanup`, `refactor` or `reframe` issue states them in its prose, `## Scope` and `## Check`: run the block of `## Check` in the clone, and list each changed path outside `## Scope`. A request in the owner's words states them as it does. Read each prose file the spec names as `git diff <base>...<SHA> -- <path>`, against its sentence there. Read each scenario of the spec against its feature file: the same name, and the same steps in the same order.
+Read each sentence of the spec against the clone, and give the line of the branch that makes it true. A behaviour issue states its changes under `**What changes.**`. A `cleanup`, `refactor` or `reframe` issue states them in its prose, and in `## Scope` and `## Check` when it holds them. Run the block of `## Check` in the clone when the body holds one, and list each changed path outside `## Scope` when the body holds one. A request in the owner's words states them as it does. Read each prose file the spec names as `git diff <base>...<SHA> -- <path>`, against its sentence there. Read each scenario of the spec against its feature file: the same name, and the same steps in the same order.
 
 Done when each sentence, each prose file and each scenario has its line in the branch or its finding.
 
