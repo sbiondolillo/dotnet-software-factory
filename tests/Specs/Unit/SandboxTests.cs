@@ -39,6 +39,12 @@ public sealed class SandboxTests : IDisposable
     private Task<Sandbox> StartAsync(CommandRunner runner, CancellationToken token = default) =>
         Sandbox.StartAsync(runner, "t:1", _directory.FullName, "/tree", token);
 
+    private List<string> VolumeTargets()
+    {
+        List<string> arguments = [.. _recorded.Single(s => s.Arguments[0] == "run").Arguments];
+        return [.. arguments.Where((_, i) => i > 0 && arguments[i - 1] is "--volume").Select(v => v.Split(':')[1])];
+    }
+
     [Fact]
     public async Task AWorkTreeWithNoGitDirectoryGetsNoGitVolumeAndNoGitDirectory()
     {
@@ -46,7 +52,7 @@ public sealed class SandboxTests : IDisposable
 
         await Sandbox.StartAsync(Runner(), "t:1", _directory.FullName, tree.FullName, TestContext.Current.CancellationToken);
 
-        Assert.DoesNotContain(_recorded.Single(s => s.Arguments[0] == "run").Arguments, a => a.Contains(":/work/.git", StringComparison.Ordinal));
+        Assert.Equal(["/work", "/tmp/sandbox-home"], VolumeTargets());
         Assert.False(Path.Exists(Path.Combine(tree.FullName, ".git")));
     }
 
@@ -58,7 +64,7 @@ public sealed class SandboxTests : IDisposable
 
         await Sandbox.StartAsync(Runner(), "t:1", _directory.FullName, tree.FullName, TestContext.Current.CancellationToken);
 
-        Assert.DoesNotContain(_recorded.Single(s => s.Arguments[0] == "run").Arguments, a => a.Contains(":/work/.git", StringComparison.Ordinal));
+        Assert.Equal(["/work", "/tmp/sandbox-home"], VolumeTargets());
     }
 
     [Theory]
