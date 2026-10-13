@@ -191,6 +191,7 @@ public sealed class WorkflowChecksTests : IDisposable
         Assert.Throws<InvalidOperationException>(() => WorkflowChecks.LastTwoSteps(Wf(Factory(store: Store.Replace("always()", "success()", StringComparison.Ordinal))), Run, name, "always()"));
         Assert.Throws<InvalidOperationException>(() => WorkflowChecks.LastTwoSteps(Wf(Factory(store: "")), Run, name, "always()"));
         Assert.Throws<InvalidOperationException>(() => WorkflowChecks.LastTwoSteps(Wf(Factory(store: Store + Store)), Run, name, "always()"));
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.LastTwoSteps(Wf("jobs:\n  factory:\n    steps:\n      - run: echo"), Run, name, "always()"));
     }
 
     [Fact]
