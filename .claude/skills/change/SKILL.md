@@ -47,12 +47,13 @@ gh issue edit <n> --add-label building
 |---|---|
 | `status` is not `completed` | the factory's: stop, and say so |
 | `conclusion` is `success` | it delivered a green pull request: stop, and say so |
-| `conclusion` is `failure` with no line `build: start` in the log, and `attempt` is 1 | no build ran: relaunch it once, `gh run rerun <databaseId>`, and stop, unless the owner sent it direct |
-| `conclusion` is `failure` with no line `build: start` in the log, and `attempt` is 2 or more | the relaunch failed too: stop, and give the owner the log line, unless the owner sent it direct |
+| `conclusion` is `failure` with no line `build: start` in the log, and the run commented on the issue | the factory refused the issue, and the comment says why. Unless the owner sent it direct, stop, and give the owner the choice: a fix to the body and a relaunch, or a direct build |
+| `conclusion` is `failure` with no line `build: start` in the log and no comment, and `attempt` is 1 | the factory failed before any build and posted nothing: relaunch it once, `gh run rerun <databaseId>`, and stop, unless the owner sent it direct |
+| the same, and `attempt` is 2 or more | the relaunch failed too: stop, and give the owner the log line, unless the owner sent it direct |
 | `conclusion` is `failure`, with a line `build: start` in the log | a failed run: read its comments on the issue, and go on |
 | any other conclusion | stop, and say so |
 
-A failed run that delivered a pull request commented `Opened <url>` on the issue, and `gh pr view <url> --json number,headRefName,state` gives `<pr>` and the branch `factory/<run id>`. When `state` is `OPEN`, step 2 continues on that branch. When `state` is `MERGED`, stop, and say so. When `state` is `CLOSED`, the owner closed it. Step 2 then starts from `origin/main`, as for a run with no branch, and step 4 opens a new pull request. A run with no such comment pushed no branch, so step 2 starts from `origin/main`.
+The run commented on the issue when the run's log holds the comment's first line: the factory prints each comment to its log before it posts it, and it posts as the owner. A failed run that delivered a pull request commented `Opened <url>` on the issue, and `gh pr view <url> --json number,headRefName,state` gives `<pr>` and the branch `factory/<run id>`. When `state` is `OPEN`, step 2 continues on that branch. When `state` is `MERGED`, stop, and say so. When `state` is `CLOSED`, the owner closed it. Step 2 then starts from `origin/main`, as for a run with no branch, and step 4 opens a new pull request. A run with no such comment pushed no branch, so step 2 starts from `origin/main`.
 
 Read the issue and its comments with `gh issue view <n> --comments`. The body is the spec. A comment of the owner's that the body does not hold yet changes the spec.
 
@@ -114,7 +115,7 @@ tr -d '\r' < <scratch>/spec | sed -nE 's/^ *Scenario( Outline)?: //p' | while re
 tr -d '\r' < <scratch>/spec | sed -n '/^## Removed scenarios/,/^## /p' | sed -nE 's/^- `[^`]*`: //p' | while read -r name; do grep -rhE '^ *Scenario( Outline)?: ' specs/features | sed -E 's/^ *Scenario( Outline)?: //' | grep -qxF -- "$name" && echo "still present: $name"; done
 ```
 
-Write the report to a file: what changed, the result of each suite, each reviewer's verdict, and each finding with its fix or its refutation. Then push the branch, `git push -u origin HEAD`. For a failed run with an open pull request, each open review thread then gets a reply, as `## Review threads` says: the SHA of its pushed fix, or the evidence that refutes it. A fixed thread is resolved, and a refuted thread stays open for the reviewer, as the factory's feedback path does. Deliver the report by the case:
+Write the report to a file: what changed, the result of each suite, each reviewer's verdict, and each finding with its fix or its refutation. Then push the branch, `git push -u origin HEAD`. A push with no new commit prints `Everything up-to-date`, and GitHub starts no check run for it. Then rerun the failed jobs of the last `ci` run on the branch, when its `conclusion` is `failure`: `gh run rerun <ci run> --failed`, where `<ci run>` is `gh run list --branch factory/<run id> --workflow ci -L 1 --json databaseId -q '.[0].databaseId'`. For a failed run with an open pull request, each open review thread then gets a reply, as `## Review threads` says: the SHA of its pushed fix, or the evidence that refutes it. A fixed thread is resolved, and a refuted thread stays open for the reviewer, as the factory's feedback path does. Deliver the report by the case:
 
 | Case | Delivery |
 |---|---|
