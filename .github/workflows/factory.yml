@@ -53,7 +53,7 @@ jobs:
           git clone -q "git@github.com:$STORE_REPO.git" "$store"
           mkdir -p "$store/runs/$GITHUB_RUN_ID"
           if [ -d .factory/sandbox-home ]; then
-            find .factory/sandbox-home -name '*.jsonl' -exec cp --parents -t "$store/runs/$GITHUB_RUN_ID" {} +
+            find .factory/sandbox-home -type f -name '*.jsonl' -exec cp --parents -t "$store/runs/$GITHUB_RUN_ID" {} +
           fi
           cd "$store"
           git add runs
