@@ -19,7 +19,8 @@ public sealed record FeedbackRunRequest(
     int ReviewTurns,
     string AuthorName,
     string AuthorEmail,
-    IReadOnlyList<string> SecretNames);
+    IReadOnlyList<string> SecretNames,
+    bool SkipIntegration = false);
 
 /// <summary>The outcome of a <see cref="FeedbackRun"/>: the threads resolved, the threads left unresolved and the Redos spent.</summary>
 public sealed record FeedbackRunResult(int Resolved, int Unresolved, int Redos);
@@ -81,7 +82,7 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
             var agent = new ClaudeCodeAgent(sandbox);
             var buildPhase = new BuildPhase(agent, cleanup, refactor, readsPlan: false);
             var lintGate = new LintGate(sandbox, git);
-            var testGate = new TestGate(sandbox);
+            var testGate = new TestGate(sandbox, skipIntegration: request.SkipIntegration);
             var reviewPhase = new ReviewPhase(agent, git, cleanup, refactor, readsPlan: false);
 
             IReadOnlySet<string> basePassed = cleanup

@@ -21,7 +21,8 @@ public sealed record FactoryRunRequest(
     int ReviewTurns,
     string AuthorName,
     string AuthorEmail,
-    IReadOnlyList<string> SecretNames);
+    IReadOnlyList<string> SecretNames,
+    bool SkipIntegration = false);
 
 /// <summary>The outcome of a <see cref="FactoryRun"/>: the pull request, or null for none, and the Redos spent.</summary>
 public sealed record FactoryRunResult(PullRequest? PullRequest, int Redos);
@@ -192,7 +193,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
             await Say("plan: passed").ConfigureAwait(false);
             var buildPhase = new BuildPhase(agent);
             var lintGate = new LintGate(sandbox, git, log);
-            var testGate = new TestGate(sandbox, log);
+            var testGate = new TestGate(sandbox, log, request.SkipIntegration);
             var reviewPhase = new ReviewPhase(agent, git);
 
             int redos = 0;
@@ -303,7 +304,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         var pin = Pin.TakeRefactor(request.Directory);
         var buildPhase = new BuildPhase(agent, refactor: true);
         var lintGate = new LintGate(sandbox, git, log);
-        var testGate = new TestGate(sandbox, log);
+        var testGate = new TestGate(sandbox, log, request.SkipIntegration);
         var reviewPhase = new ReviewPhase(agent, git, refactor: true);
 
         int redos = 0;
@@ -413,7 +414,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
 
         var buildPhase = new BuildPhase(agent, cleanup: true);
         var lintGate = new LintGate(sandbox, git, log);
-        var testGate = new TestGate(sandbox, log);
+        var testGate = new TestGate(sandbox, log, request.SkipIntegration);
         var reviewPhase = new ReviewPhase(agent, git, cleanup: true);
         var pin = Pin.Take(request.Directory);
         IReadOnlySet<string> basePassed = await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false);
@@ -524,7 +525,7 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
 
         var buildPhase = new BuildPhase(agent, reframe: true);
         var lintGate = new LintGate(sandbox, git, log);
-        var testGate = new TestGate(sandbox, log);
+        var testGate = new TestGate(sandbox, log, request.SkipIntegration);
         var reviewPhase = new ReviewPhase(agent, git, reframe: true);
         var pin = Pin.Take(request.Directory);
         IReadOnlySet<string> basePassed = await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false);
