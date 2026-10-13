@@ -27,7 +27,12 @@ public sealed class Sandbox : IAsyncDisposable
         await new SandboxImage(runner).EnsureAsync(tag, rootDirectory, cancellationToken).ConfigureAwait(false);
 
         string user = string.Create(CultureInfo.InvariantCulture, $"{GetUid()}:{GetGid()}");
-        List<string> volumes = ["--volume", $"{workTree}:/work"];
+
+        // The home is a directory on the host, so the transcript that Claude Code writes under it outlives the container.
+        // The process that creates it owns it, and that is the user the container runs as.
+        string home = Path.Combine(rootDirectory, ".factory", "sandbox-home", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(home);
+        List<string> volumes = ["--volume", $"{workTree}:/work", "--volume", $"{home}:{Home}"];
         string gitDirectory = Path.Combine(workTree, ".git");
         if (Directory.Exists(gitDirectory))
         {
@@ -50,7 +55,6 @@ public sealed class Sandbox : IAsyncDisposable
                     "--user", user,
                     .. volumes,
                     "--workdir", "/work",
-                    "--tmpfs", $"{Home}:uid={GetUid()},gid={GetGid()},mode=0755",
                     "--env", $"HOME={Home}",
                     "--env", "ANTHROPIC_API_KEY",
                     tag,

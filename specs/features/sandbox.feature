@@ -81,3 +81,29 @@ Feature: A sandbox container starts, runs commands on the work tree, and is remo
     And a work tree in a new directory that holds a directory ".git" with no directory "worktrees" in it
     When a caller starts a sandbox with the image tag "factory-sandbox:test" over that work tree
     Then the directory ".git/worktrees" of that work tree existed when the docker run started
+
+  Scenario: The home of the container is a new directory under .factory/sandbox-home of the root directory
+    Given a Sandbox built over a mock of CommandRunner
+    When a caller starts a sandbox with the image tag "factory-sandbox:test" and the work tree "/tmp/factory-work-tree"
+    Then the arguments of the docker run hold "--volume" and then the path of a directory under ".factory/sandbox-home/" of the root directory followed by ":/tmp/sandbox-home"
+    And the arguments of the docker run hold "--env" and then "HOME=/tmp/sandbox-home"
+    And no argument of the docker run is "--tmpfs"
+
+  Scenario: The home directory exists on the host when the docker run starts
+    Given a Sandbox built over a mock of CommandRunner
+    When a caller starts a sandbox with the image tag "factory-sandbox:test" and the work tree "/tmp/factory-work-tree"
+    Then the home directory of that sandbox existed when the docker run started
+
+  Scenario: Two sandboxes get two home directories
+    Given a Sandbox built over a mock of CommandRunner
+    When a caller starts a sandbox with the image tag "factory-sandbox:test" and the work tree "/tmp/factory-work-tree"
+    And a caller starts a sandbox with the image tag "factory-sandbox:test" and the work tree "/tmp/factory-work-tree"
+    Then the two docker runs mount two different home directories
+
+  Scenario: A transcript the container wrote into its home is on the host after the sandbox is removed
+    Given a Sandbox built over a mock of CommandRunner
+    And a caller has started a sandbox
+    And docker exec writes the file ".claude/projects/-work/session.jsonl" into the mounted home
+    When a caller runs "claude" with the argument "-p" and an empty list of names
+    And a caller disposes the sandbox
+    Then the file ".claude/projects/-work/session.jsonl" is under ".factory/sandbox-home/" of the root directory
