@@ -114,7 +114,7 @@ tr -d '\r' < <scratch>/spec | sed -nE 's/^ *Scenario( Outline)?: //p' | while re
 tr -d '\r' < <scratch>/spec | sed -n '/^## Removed scenarios/,/^## /p' | sed -nE 's/^- `[^`]*`: //p' | while read -r name; do grep -rhE '^ *Scenario( Outline)?: ' specs/features | sed -E 's/^ *Scenario( Outline)?: //' | grep -qxF -- "$name" && echo "still present: $name"; done
 ```
 
-Write the report to a file: what changed, the result of each suite, each reviewer's verdict, and each finding with its fix or its refutation. Then push the branch, `git push -u origin HEAD`. For a failed run with an open pull request, each open review thread then gets a reply, as `## Review threads` says: the SHA of its pushed fix, or the evidence that refutes it. Deliver the report by the case:
+Write the report to a file: what changed, the result of each suite, each reviewer's verdict, and each finding with its fix or its refutation. Then push the branch, `git push -u origin HEAD`. For a failed run with an open pull request, each open review thread then gets a reply, as `## Review threads` says: the SHA of its pushed fix, or the evidence that refutes it. A fixed thread is resolved, and a refuted thread stays open for the reviewer, as the factory's feedback path does. Deliver the report by the case:
 
 | Case | Delivery |
 |---|---|
@@ -122,7 +122,7 @@ Write the report to a file: what changed, the result of each suite, each reviewe
 | a change stated in chat | `gh pr create --title '<the commit title>' --body-file <report>` |
 | a failed run with an open pull request | `gh pr comment <pr> --body-file <report>`. The push put the fix on the pull request |
 
-Done when the check above prints nothing for an issue, the report is on the pull request, and its checks are green. For a failed run, the pull request also has no open review thread that lacks a reply. The owner merges it, and removes the claim of an issue or a failed run with `gh issue edit <n> --remove-label building`. The handover gives that command with the merge commands. The worktree stays for a fix the owner asks for, and the owner removes it before the merge. `gh pr merge --delete-branch` cannot delete a branch that a worktree holds.
+Done when the check above prints nothing for an issue, the report is on the pull request, and its checks are green. For a failed run, each fixed thread holds the SHA of its fix and is resolved, and each open thread holds a refutation. The owner merges it, and removes the claim of an issue or a failed run with `gh issue edit <n> --remove-label building`. The handover gives that command with the merge commands. The worktree stays for a fix the owner asks for, and the owner removes it before the merge. `gh pr merge --delete-branch` cannot delete a branch that a worktree holds.
 
 ## Review threads
 
@@ -136,4 +136,10 @@ Each thread with `isResolved` false gets a reply with a character other than whi
 
 ```
 gh api graphql -f query='mutation($t:ID!,$b:String!){addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$t,body:$b}){comment{id}}}' -f t=<id> -F b=@<scratch>/reply
+```
+
+A thread whose fix is pushed is then resolved:
+
+```
+gh api graphql -f query='mutation($t:ID!){resolveReviewThread(input:{threadId:$t}){thread{isResolved}}}' -f t=<id>
 ```
