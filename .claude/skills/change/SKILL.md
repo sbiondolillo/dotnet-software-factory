@@ -41,19 +41,21 @@ Claim the issue before any other work. An issue that already has the label `buil
 gh issue edit <n> --add-label building
 ```
 
-Read the issue and its comments with `gh issue view <n> --comments`. The body is the spec. A comment of the owner's that the body does not hold yet changes the spec. For a story the factory failed on, read the run's comment on the issue and its log too, `gh run view <id> --log-failed`. A run whose Redos ran out pushed no branch, so `<start>` in step 2 is `origin/main`. A run that delivered a pull request whose checks stayed red left its branch on origin. Then `<start>` is `origin/<that head branch>`, and the pull request stays open for the push.
+Read the issue and its comments with `gh issue view <n> --comments`. The body is the spec. A comment of the owner's that the body does not hold yet changes the spec. For a story the factory failed on, read the run's comment on the issue and its log too, `gh run view <id> --log-failed`. A run whose Redos ran out pushed no branch, so step 2 starts from `origin/main`. A run that delivered a pull request whose checks stayed red left its head branch `factory/<run id>` on origin, and step 2 continues on it.
 
 Done when the spec is in one file in the session's scratch directory, and matches every comment of the owner's.
 
 ### 2. Write the scenarios, then the code
 
-For a change the owner states in chat, the request text in a file in the scratch directory is the spec. The worktree and the branch take a short slug with no number.
+For a change the owner states in chat, the request text in a file in the scratch directory is the spec.
 
-Work in a worktree of your own, on a branch from `<start>`, and run every later command there. `<start>` is `origin/main`, or the failed run's head branch as step 1 says:
+Work in a worktree of your own, and run every later command there. The branch depends on the case:
 
-```
-git fetch origin && git worktree add .claude/worktrees/<n>-<a short slug> -b <n>-<a short slug> <start>
-```
+| Case | Command, after `git fetch origin` |
+|---|---|
+| an issue | `git worktree add .claude/worktrees/<n>-<a short slug> -b <n>-<a short slug> origin/main` |
+| a change stated in chat | `git worktree add .claude/worktrees/<a short slug> -b <a short slug> origin/main` |
+| a failed run with an open pull request | `git worktree add .claude/worktrees/<n>-<a short slug> factory/<run id>`, which tracks the head branch, so the push of step 4 updates that pull request |
 
 Each block of `## Scenarios` goes into its feature file under `specs/features/`, word for word. A block that holds a `Feature:` line replaces its feature file. Any other block edits the file on `main`: a scenario whose name the file holds is replaced whole, and a new name goes at the end. Each name under `## Removed scenarios` is removed from its feature file. Run `dotnet test` and see each new scenario fail. Then write the code until it passes. A spec with no scenario, such as a prose change, skips to the code. `AGENTS.md` → "What a scenario tests" states that no scenario reads a prose file. A body with `## Scope` changes no path outside it. A body with `## Check` runs its block with `sh -c` in the work tree, and the block exits with the code 0.
 
@@ -97,7 +99,7 @@ gh issue view <n> --json body -q .body | tr -d '\r' | sed -nE 's/^ *Scenario( Ou
 gh issue view <n> --json body -q .body | tr -d '\r' | sed -n '/^## Removed scenarios/,/^## /p' | sed -nE 's/^- `[^`]*`: //p' | while read -r name; do grep -rhE '^ *Scenario( Outline)?: ' specs/features | sed -E 's/^ *Scenario( Outline)?: //' | grep -qxF -- "$name" && echo "still present: $name"; done
 ```
 
-Push the branch, and open the pull request with the commit's title. The body states what changed, the result of each suite, each reviewer's verdict, each finding with its fix or its refutation, and, for an issue, the line `Closes #<n>`.
+Push the branch. Open the pull request with the commit's title, or, for a failed run's pull request, put the same text in a comment there. The body states what changed, the result of each suite, each reviewer's verdict, each finding with its fix or its refutation, and, for an issue, the line `Closes #<n>`.
 
 ```
 gh pr create --title '<title>' --body-file <file>
