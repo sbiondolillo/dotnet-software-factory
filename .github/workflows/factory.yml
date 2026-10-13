@@ -35,4 +35,4 @@ jobs:
           FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_SELF_TOKEN }}
           FACTORY_CHECKS_TOKEN: ${{ github.token }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }}
+        run: dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --skip-integration on
