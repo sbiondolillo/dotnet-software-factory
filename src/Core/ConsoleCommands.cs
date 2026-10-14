@@ -299,17 +299,20 @@ public static class ConsoleCommands
         }
 
         string head = await pullRequests.ReadHeadShaAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
+        int skipped = 0;
         if (copilotReview)
         {
             IReadOnlyList<Review> reviews = await reviewThreads.ReadReviewsAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
-            if (!reviews.Any(r => r.Author == Reviewer && r.CommitSha.Length is not 0 && r.CommitSha == head))
+            List<Review> onHead = [.. reviews.Where(r => r.Author == Reviewer && r.CommitSha.Length is not 0 && r.CommitSha == head)];
+            if (onHead.Count is 0 || Review.Refusal(reviews, Reviewer, head) is not null)
             {
+                skipped = onHead.Count;
                 string nodeId = await pullRequests.ReadNodeIdAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
                 await reviewThreads.RequestReviewAsync(nodeId, Reviewer, cancellationToken).ConfigureAwait(false);
             }
         }
 
-        PullRequestWatchResult result = await watch.WatchAsync(owner, repo, number, copilotReview ? Reviewer : null, PollWait, timeout, cancellationToken).ConfigureAwait(false);
+        PullRequestWatchResult result = await watch.WatchAsync(owner, repo, number, copilotReview ? Reviewer : null, PollWait, timeout, skipped, head, cancellationToken).ConfigureAwait(false);
         return (result, head);
     }
 

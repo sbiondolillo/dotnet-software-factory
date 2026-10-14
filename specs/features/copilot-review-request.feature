@@ -112,3 +112,29 @@ Feature: With --copilot-review on, the factory requests the Copilot review of ea
     And GitHub answers the read of the review threads with an empty list of threads
     When a caller starts the watch
     Then the watch gives back a green result
+
+  Scenario: A feedback watch with a refusal of the head commit gets a new review request
+    Given GitHub answers each read of the review threads with the thread A
+    And GitHub answers each read of the head commit of the pull request 10 with "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c"
+    And GitHub answers each read of the reviews with one review with the author login "copilot-pull-request-reviewer", the state "COMMENTED", the commit "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c" and the body "Copilot was unable to review this pull request because the user who requested the review has reached their quota limit."
+    When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10 --copilot-review on"
+    Then GitHub gets one GraphQL request that names "requestReviewsByLogin" with the bot login "copilot-pull-request-reviewer"
+
+  Scenario: A refusal before the new review request and a review of the head commit after it is green
+    Given GitHub answers each read of the head commit of the pull request 10 with "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c"
+    And GitHub answers each read of the reviews before the review request and the first read after it with one review with the author login "copilot-pull-request-reviewer", the state "COMMENTED", the commit "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c" and the body "Copilot was unable to review this pull request because the user who requested the review has reached their quota limit.", and each later read with that review and a second review with the author login "copilot-pull-request-reviewer", the state "COMMENTED", the commit "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c" and the body "<!-- ccr-overview-v2 -->"
+    And GitHub answers each read of the review threads with no thread
+    And GitHub answers each read of the check runs with a green check
+    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --copilot-review on"
+    Then standard output holds the line "checks: green, unresolved threads: 0"
+    And the exit code is 0
+
+  Scenario: A refusal before the new review request and a second refusal after it is red with the refusal
+    Given GitHub answers each read of the head commit of the pull request 10 with "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c"
+    And GitHub answers each read of the reviews before the review request and the first read after it with one review with the author login "copilot-pull-request-reviewer", the state "COMMENTED", the commit "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c" and the body "Copilot was unable to review this pull request because the user who requested the review has reached their quota limit.", and each later read with that review and a second review with the author login "copilot-pull-request-reviewer", the state "COMMENTED", the commit "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c" and the body "Copilot was unable to review this pull request because the user who requested the review has reached their quota limit."
+    And GitHub answers each read of the review threads with no thread
+    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --copilot-review on"
+    Then GitHub gets one GraphQL request that names "requestReviewsByLogin" with the bot login "copilot-pull-request-reviewer"
+    And standard output holds the line "review: refused: Copilot was unable to review this pull request because the user who requested the review has reached their quota limit."
+    And standard output holds the line "checks: red, unresolved threads: 0"
+    And the exit code is 1

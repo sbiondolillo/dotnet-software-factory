@@ -45,6 +45,8 @@ public sealed class ConsoleHarness : IDisposable
     private int _headReads;
     private int _checkReads;
     private bool _resolved;
+    private bool _requested;
+    private int _readsAfterRequest;
 
     public ConsoleHarness()
     {
@@ -82,6 +84,9 @@ public sealed class ConsoleHarness : IDisposable
     public Func<int, string> CheckRuns { get; set; }
 
     public string Reviews { get; set; } = ReviewsJson("copilot-pull-request-reviewer");
+
+    /// <summary>The answer to a read of the reviews from the number of reads after the review request (0 before it), or null for <see cref="Reviews"/>.</summary>
+    public Func<int, string>? ReviewsByRead { get; set; }
 
     /// <summary>"none", "always" or "until-resolved".</summary>
     public string Threads { get; set; } = "none";
@@ -158,6 +163,9 @@ public sealed class ConsoleHarness : IDisposable
 
     public static string ReviewsJson(string login, string commit = DefaultSha, string body = "") =>
         JsonSerializer.Serialize(new { data = new { repository = new { pullRequest = new { reviews = new { nodes = new[] { new { state = "COMMENTED", body, author = new { login }, commit = new { oid = commit } } } } } } } });
+
+    public static string ReviewsJson(params (string Login, string Commit, string Body)[] reviews) =>
+        JsonSerializer.Serialize(new { data = new { repository = new { pullRequest = new { reviews = new { nodes = reviews.Select(r => new { state = "COMMENTED", body = r.Body, author = new { login = r.Login }, commit = new { oid = r.Commit } }).ToArray() } } } } });
 
     public static string NoReviewsJson() =>
         JsonSerializer.Serialize(new { data = new { repository = new { pullRequest = new { reviews = new { nodes = Array.Empty<object>() } } } } });
@@ -424,9 +432,15 @@ public sealed class ConsoleHarness : IDisposable
 
         if (query.Contains("requestReviewsByLogin", StringComparison.Ordinal))
         {
+            _requested = true;
             return ReviewRequestError is { } message
                 ? (200, JsonSerializer.Serialize(new { data = (object?)null, errors = new[] { new { message } } }))
                 : (200, "{\"data\":{\"requestReviewsByLogin\":{\"pullRequest\":{\"id\":\"PR_kwDOUpm1Qc6abc\"}}}}");
+        }
+
+        if (ReviewsByRead is { } byRead)
+        {
+            return (200, byRead(_requested ? ++_readsAfterRequest : 0));
         }
 
         return (200, Reviews);

@@ -88,8 +88,26 @@ public sealed partial class ConsoleProgramSteps : IDisposable
     public void GivenReviewsBody(string login, string state, string commit, string body) =>
         _h.Reviews = ConsoleHarness.ReviewsJson(login, commit, body).Replace("COMMENTED", state, StringComparison.Ordinal);
 
+    [Given("GitHub answers each read of the reviews before the review request with no review, and each read after it with one review with the author login {string}, the state {string}, the commit {string} and the body {string}")]
+    public void GivenReviewsAfterRequest(string login, string state, string commit, string body)
+    {
+        string after = ConsoleHarness.ReviewsJson(login, commit, body).Replace("COMMENTED", state, StringComparison.Ordinal);
+        _h.ReviewsByRead = read => read is 0 ? ConsoleHarness.NoReviewsJson() : after;
+    }
+
+    [Given("GitHub answers each read of the reviews before the review request and the first read after it with one review with the author login {string}, the state {string}, the commit {string} and the body {string}, and each later read with that review and a second review with the author login {string}, the state {string}, the commit {string} and the body {string}")]
+    public void GivenReviewsTwo(string login, string state, string commit, string body, string secondLogin, string secondState, string secondCommit, string secondBody)
+    {
+        string one = ConsoleHarness.ReviewsJson(login, commit, body).Replace("COMMENTED", state, StringComparison.Ordinal);
+        string two = ConsoleHarness.ReviewsJson((login, commit, body), (secondLogin, secondCommit, secondBody)).Replace("COMMENTED", secondState, StringComparison.Ordinal);
+        _h.ReviewsByRead = read => read <= 1 ? one : two;
+    }
+
     [Given("GitHub answers the review request with a GraphQL error")]
     public void GivenRequestError() => _h.ReviewRequestError = "Copilot code review is not available for this repo.";
+
+    [Given("GitHub answers each read of the check runs with a green check")]
+    public void GivenGreen() => _h.CheckRuns = _ => ConsoleHarness.RunsJson("build", "completed", "success");
 
     [Given("GitHub answers each read of the check runs with a red check")]
     public void GivenRed() => _h.CheckRuns = _ => ConsoleHarness.RunsJson("build", "completed", "failure");
