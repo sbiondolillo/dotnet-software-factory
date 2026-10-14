@@ -18,7 +18,7 @@ Since 2026-10-09 Claude builds DSF directly, on a branch, with a frontier model 
 ## The trial faults
 
 - **The DSF faults that the `factory#217` trial found** (`sam/homelab` `docs/log/2026-10-09-factory-217-starter-trial.md`).
-  Each is a DSF story, filed from the DSF workspace with `/change`. All are seen at DSF `352f531`:
+  Each is a DSF story, filed from the DSF workspace with `/change`. Each is seen at DSF `352f531`, except the item on the launch:
   - The factory reads Copilot's quota refusal as a review with 0 threads, and the gate passes
     (`forecast-sample` `#6` and `#8`). A refusal is not a review.
   - The pull request body prints the cost as a raw double: `$0.21640510000000003`.
