@@ -1,6 +1,6 @@
 namespace Core;
 
-/// <summary>The end of a watch: green or red, and the review threads that are not resolved.</summary>
+/// <summary>The end of a watch: green or red, the review threads that are not resolved, and the body of a refusal by the reviewer on the head commit, or null.</summary>
 public sealed record PullRequestWatchResult(bool IsGreen, IReadOnlyList<ReviewThread> Threads, string? Refusal = null);
 
 /// <summary>Polls GitHub until a pull request is settled or a timeout passes.</summary>
@@ -13,7 +13,7 @@ public sealed class PullRequestWatch(
     private readonly Func<TimeSpan, CancellationToken, Task> _delay = delay ?? ((span, token) => Task.Delay(span, token));
     private readonly TimeProvider _time = time ?? TimeProvider.System;
 
-    /// <summary>Polls the check runs and the reviews of a pull request (the check runs alone when <paramref name="reviewerLogin"/> is null), then gives back green or red and the unresolved threads.</summary>
+    /// <summary>Polls the check runs and the reviews of a pull request (the check runs alone when <paramref name="reviewerLogin"/> is null), then gives back green or red and the unresolved threads. A refusal by the reviewer on the head commit ends the watch at once with red.</summary>
     public async Task<PullRequestWatchResult> WatchAsync(string owner, string repo, int number, string? reviewerLogin, TimeSpan wait, TimeSpan timeout, CancellationToken cancellationToken = default)
     {
         long start = _time.GetTimestamp();
