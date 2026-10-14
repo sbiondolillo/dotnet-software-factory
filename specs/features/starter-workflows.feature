@@ -101,5 +101,9 @@ Feature: A repo made from the starter holds the factory's three workflows
                 git add runs
                 if git diff --cached --quiet; then exit 0; fi
                 git commit -q -m "Run $GITHUB_RUN_ID of $GITHUB_REPOSITORY"
-                git push -q 2>/dev/null || { git pull -q --rebase && git push -q; }
+                for wait in 1 2 3 4 5; do
+                  if git push -q 2>/dev/null; then exit 0; fi
+                  sleep "$wait" && git pull -q --rebase
+                done
+                git push -q
       """
