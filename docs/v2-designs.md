@@ -1,8 +1,8 @@
 # DSF v2: the designs settled before the map, and the work no map holds
 
-Moved from `sam/homelab` `docs/TODO.md` on 2026-10-13, when the map [DSF v2: the factory builds its own repo from a GitHub-hosted runner](https://github.com/sbiondolillo/dotnet-software-factory/issues/273) was charted. The map's Not yet specified and Out of scope sections point here. A link of the form `sam/homelab` `docs/...` names a file in that repo, on the homelab's own Gitea.
+Moved from `sam/homelab` `docs/TODO.md` on 2026-10-13, when the map [DSF v2: the factory builds its own repo from a GitHub-hosted runner](https://github.com/sbiondolillo/dotnet-software-factory/issues/273) was charted. The map's Not yet specified and Out of scope sections pointed here. The map closed on 2026-10-14, when it reached its goal. A link of the form `sam/homelab` `docs/...` names a file in that repo, on the homelab's own Gitea.
 
-A section here is one of three things. A capability or a fault is fog: it becomes a ticket or a map when the owner picks it. A design input is out of scope for the map: it is a settled or half-settled design that waits for a later effort. DSF work with no map is a story filed with `/change` when the owner picks it, or a direct change, as `.claude/skills/change/SKILL.md` routes it.
+A section here is one of three things. A capability becomes a map when the owner picks it. A fault is an issue. A design input is out of scope for the map: it is a settled or half-settled design that waits for a later effort. DSF work with no map is a story filed with `/change` when the owner picks it, or a direct change, as `.claude/skills/change/SKILL.md` routes it.
 
 ## The capabilities the homelab factory is the template for
 
@@ -17,28 +17,21 @@ Since 2026-10-09 Claude builds DSF directly, on a branch, with a frontier model 
 
 ## The trial faults
 
-- **The DSF faults that the `factory#217` trial found** (`sam/homelab` `docs/log/2026-10-09-factory-217-starter-trial.md`).
-  Each is a DSF story, filed from the DSF workspace with `/change`. Each is seen at DSF `352f531`, except the item on the launch:
-  - The factory reads Copilot's quota refusal as a review with 0 threads, and the gate passes
-    (`forecast-sample` `#6` and `#8`). A refusal is not a review.
-  - The pull request body prints the cost as a raw double: `$0.21640510000000003`.
-  - The starter's `src/App/App.csproj` sets `AssemblyName` to `dotnet-software-factory`.
-  - No test and no check launches the built program of `src/App`. The build suite calls the command tree in
-    process, under the test host, and CI runs no `src/App`. Seen on 2026-10-14, after the trial, at DSF
-    `8e515ce`: at `forecast-sample` `eb302c0`, every launch exits with the code 134. The root command takes
-    the name `forecast` from `AssemblyName`, and the subcommand `forecast` collides with it. All 52 tests
-    pass. A launch of the built program with `--help` catches such a fault of the host.
-  - Reqnroll writes `tests/Specs/Reqnroll/userid` into the project when `HOME` has no `.config`. This is a
-    lead: `starter-trial` caught it in its first commit.
-  - `TestGate` runs `dotnet test --logger trx`, so a target on xunit 4 and Microsoft.Testing.Platform fails.
-  - The review passed `forecast-sample` `#4`, which edited `tests/Integration/GeocodingTests.cs`, against
-    the issue's "Every existing test passes unchanged".
-  - The starter `AGENTS.md` style item lists too few by-hand cases: `value == null` and `x == 0` are missing.
-  - The rules page `docs/write-an-issue.md` gives the starter's `greeting.feature` as its example. A repo
-    that replaces the greeter, such as `forecast-sample`, then holds a page about a file it does not have.
-  - The headless `write-issue` session filed its issue with no judge round after its last edit.
-  - A rule for `write-issue`: a count of findings names the command that lists them. A count of `CA1849`
-    was wrong by one in a draft of `forecast-sample` `#5`.
+The DSF faults that the `factory#217` trial found (`sam/homelab` `docs/log/2026-10-09-factory-217-starter-trial.md`), at DSF `352f531`, and one fault seen after it. Each open fault is an issue. An issue whose fix needs a design states the open question, and becomes a story with `/change` when the owner answers it.
+
+| Fault | State |
+|---|---|
+| The factory reads Copilot's quota refusal as a review with 0 threads, and the gate passes (`forecast-sample` `#6` and `#8`) | fixed by #302 and #304, released in `v1.2.0` |
+| The pull request body prints the cost as a raw double: `$0.21640510000000003` | fixed by #293 and #296 |
+| The starter's `src/App/App.csproj` sets `AssemblyName` to `dotnet-software-factory` | #307, needs a design |
+| No test and no check launches the built program of `src/App`. Seen on 2026-10-14 at `forecast-sample` `eb302c0`, where every launch exited with the code 134 and all 52 tests passed | #308, needs a design |
+| `TestGate` runs `dotnet test --logger trx`, so a target on xunit 4 and Microsoft.Testing.Platform fails | #309, needs a design |
+| The review passed `forecast-sample` `#4`, which edited `tests/Integration/GeocodingTests.cs`, against the issue's "Every existing test passes unchanged" | #310 |
+| The starter `AGENTS.md` style item lists too few by-hand cases: `value == null` and `x == 0` are missing | #311 |
+| The rules page `docs/write-an-issue.md` gives the starter's `greeting.feature` as its example | #312 |
+| A rule for `write-issue`: a count of findings names the command that lists them. A count of `CA1849` was wrong by one in a draft of `forecast-sample` `#5` | #313 |
+| Reqnroll writes `tests/Specs/Reqnroll/userid` into the project when `HOME` has no `.config` | no issue: `Sandbox` creates `$HOME/.config` since #78, before the trial, so no factory run writes the file |
+| The headless `write-issue` session filed its issue with no judge round after its last edit | no issue: #256 settled it after the trial. The judge rounds stop at 2, and the fixes of round 2 get no round 3 |
 
 
 ## Design inputs, out of scope for the map
