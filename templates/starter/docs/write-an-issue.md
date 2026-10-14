@@ -30,7 +30,7 @@ The body states results, and the build chooses every means. A means is a package
 
 In a scenario, the sentence is a `Then` step and the block is its doc string. In prose, the block is a fenced block.
 
-These forms hold a text that no test can run, such as a workflow. A file that a test can run, such as a feature file or a script, is tested by that run, and its text is in no `Then`. `**What changes.**` names the test that runs it and the result of the run.
+A file whose behaviour a test checks by running it is tested by that run, and its text is in no `Then`. Examples are a feature file outside `specs/features/`, which a test compiles and runs, and a script that a test starts. The body names that test and the result of the run: a behaviour body in `**What changes.**`, and another body in its prose. A text that no run checks keeps the forms above, such as a workflow, or the base image of a Dockerfile that a test builds.
 
 Name what holds after the change. State an invariant as the state it keeps: "Every other existing test passes unchanged." `**Today.**` is the one place that states what `main` does now.
 
@@ -163,7 +163,7 @@ Read the draft once for each row. File it when every row passes. A person with C
 | scenario names | list the names of the scenarios of each feature file after the change | no two give one test name, and no block holds one name twice |
 | removed | each line under `## Removed scenarios` | it is a list item: a path in backticks, a colon, and a name that the file on `main` holds |
 | conditions | search the scenarios for "When" | each `When` names an event that occurs |
-| known text | list each config value, workflow and pinned version that the issue already knows | each one that no test can run is in a `Then` as one value or as a doc string, and each one that a test runs is in no `Then` |
+| known text | list each config value, workflow, pinned version and file whose text the issue already knows | each file whose behaviour a test checks by running it is in no `Then`, and each other one is in a `Then` as one value or as a doc string |
 | context | list each sentence and each row of `## Context` | each one states a fact of the world and its source, and none states what the program must do |
 | stated once | list each requirement of the program in the draft | each one is in one scenario, and nowhere else |
 | positive form | search the prose for "not", "never", "don't", "later" | each sentence found states what holds |
