@@ -113,8 +113,30 @@ public sealed class StarterTemplateIntegrationTests
             Assert.Equal(want, have);
             foreach (string file in want)
             {
+                if (file is "src/App/App.csproj")
+                {
+                    continue;
+                }
+
                 Assert.Equal(File.ReadAllBytes(Path.Combine(starter, file)), File.ReadAllBytes(Path.Combine(copy, file)));
             }
+        });
+    }
+
+    [Theory]
+    [InlineData("my-factory-repo", null, "my-factory-repo")]
+    [InlineData("forecast.sample", null, "forecast.sample")]
+    [InlineData("named", "other-name", "other-name")]
+    public async Task TheCopysProgramTakesTheNameOfTheCopy(string directory, string? name, string expected)
+    {
+        await WithTemplateAsync(async (home, parent) =>
+        {
+            string copy = Path.Combine(parent, directory);
+            string[] arguments = name is null ? ["new", "factory-starter", "-o", copy] : ["new", "factory-starter", "-o", copy, "-n", name];
+            CommandResult created = await DotnetAsync(home, null, arguments);
+            Assert.Equal(0, created.ExitCode);
+            string? found = System.Xml.Linq.XDocument.Load(Path.Combine(copy, "src", "App", "App.csproj")).Descendants("AssemblyName").Select(e => e.Value).FirstOrDefault();
+            Assert.Equal(expected, found);
         });
     }
 

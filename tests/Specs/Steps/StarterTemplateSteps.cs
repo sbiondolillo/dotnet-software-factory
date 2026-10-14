@@ -30,6 +30,20 @@ public sealed class StarterTemplateSteps(StarterState state)
     public async Task WhenIRunDotnetNew(string shortName)
         => state.NewExit = (await state.DotnetAsync("new", shortName, "-o", state.Copy).ConfigureAwait(false)).ExitCode;
 
+    [When("I run dotnet new {string} into an empty directory named {string}")]
+    public async Task WhenIRunDotnetNewNamed(string shortName, string directory)
+    {
+        state.NameCopy(directory);
+        state.NewExit = (await state.DotnetAsync("new", shortName, "-o", state.Copy).ConfigureAwait(false)).ExitCode;
+    }
+
+    [When("I run dotnet new {string} with --name {string} into an empty directory named {string}")]
+    public async Task WhenIRunDotnetNewWithName(string shortName, string name, string directory)
+    {
+        state.NameCopy(directory);
+        state.NewExit = (await state.DotnetAsync("new", shortName, "-n", name, "-o", state.Copy).ConfigureAwait(false)).ExitCode;
+    }
+
     [Then("the install exits with the code {int}")]
     public void ThenTheInstallExits(int code) => Assert.Equal(code, state.InstallExit);
 
@@ -46,8 +60,12 @@ public sealed class StarterTemplateSteps(StarterState state)
     [Then("the template list does not show the short name {string}")]
     public void ThenTheTemplateListDoesNotShow(string shortName) => StarterChecks.ListLacks(_list, shortName);
 
-    [Then("the copy holds every file of the starter outside {string}, each byte-equal to the starter's file")]
-    public void ThenTheCopyHoldsEveryFile(string _) => StarterChecks.EveryFileEqual(StarterState.Starter, state.Copy);
+    [Then("the copy holds every file of the starter outside {string} other than {string}, each byte-equal to the starter's file")]
+    public void ThenTheCopyHoldsEveryFile(string _, string except) => StarterChecks.EveryFileEqual(StarterState.Starter, state.Copy, except);
+
+    [Then("the copy's {string} gives the property {string} the value {string}")]
+    public void ThenTheCopysProjectGivesTheProperty(string project, string name, string value)
+        => StarterChecks.Property(Path.Combine(state.Copy, project), name, value);
 
     [Then("the copy holds no other file")]
     public void ThenTheCopyHoldsNoOtherFile() => StarterChecks.NoOtherFile(StarterState.Starter, state.Copy);

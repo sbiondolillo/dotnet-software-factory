@@ -13,7 +13,7 @@ Feature: A new repo starts from the starter template
     Given the template is installed
     When I run dotnet new "factory-starter" into an empty directory
     Then the dotnet new command exits with the code 0
-    And the copy holds every file of the starter outside ".template.config/", each byte-equal to the starter's file
+    And the copy holds every file of the starter outside ".template.config/" other than "src/App/App.csproj", each byte-equal to the starter's file
     And the copy holds no other file
 
   Scenario: The copy holds no file of the template configuration
@@ -80,3 +80,18 @@ Feature: A new repo starts from the starter template
     Given the template is installed
     When I run dotnet new "factory-starter" into an empty directory
     Then the copy's file "LICENSE" is byte-equal to the file "LICENSE" of this repo
+
+  Scenario: The copy's program takes the name of the copy's directory
+    Given the template is installed
+    When I run dotnet new "factory-starter" into an empty directory named "my-factory-repo"
+    Then the copy's "src/App/App.csproj" gives the property "AssemblyName" the value "my-factory-repo"
+
+  Scenario: The copy's program keeps the dots of the copy's directory name
+    Given the template is installed
+    When I run dotnet new "factory-starter" into an empty directory named "forecast.sample"
+    Then the copy's "src/App/App.csproj" gives the property "AssemblyName" the value "forecast.sample"
+
+  Scenario: The copy's program takes the name given to dotnet new
+    Given the template is installed
+    When I run dotnet new "factory-starter" with --name "other-name" into an empty directory named "my-factory-repo"
+    Then the copy's "src/App/App.csproj" gives the property "AssemblyName" the value "other-name"
