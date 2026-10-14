@@ -2,7 +2,7 @@
 
 Moved from `sam/homelab` `docs/TODO.md` on 2026-10-13, when the map [DSF v2: the factory builds its own repo from a GitHub-hosted runner](https://github.com/sbiondolillo/dotnet-software-factory/issues/273) was charted. The map's Not yet specified and Out of scope sections pointed here. The map closed on 2026-10-14, when it reached its goal. A link of the form `sam/homelab` `docs/...` names a file in that repo, on the homelab's own Gitea.
 
-A section here is one of three things. A capability becomes a map when the owner picks it. A fault is an issue. A design input is out of scope for the map: it is a settled or half-settled design that waits for a later effort. DSF work with no map is a story filed with `/change` when the owner picks it, or a direct change, as `.claude/skills/change/SKILL.md` routes it.
+A section here is one of four things. A capability becomes a map when the owner picks it. A fault is an issue. A design input is out of scope for the map: it is a settled or half-settled design that waits for a later effort. DSF work with no map is a story filed with `/change` when the owner picks it, or a direct change, as `.claude/skills/change/SKILL.md` routes it.
 
 ## The capabilities the homelab factory is the template for
 
@@ -17,7 +17,7 @@ Since 2026-10-09 Claude builds DSF directly, on a branch, with a frontier model 
 
 ## The trial faults
 
-The DSF faults that the `factory#217` trial found (`sam/homelab` `docs/log/2026-10-09-factory-217-starter-trial.md`), at DSF `352f531`, and one fault seen after it. Each open fault is an issue. An issue whose fix needs a design states the open question, and becomes a story with `/change` when the owner answers it.
+The DSF faults that the `factory#217` trial found (`sam/homelab` `docs/log/2026-10-09-factory-217-starter-trial.md`), at DSF `352f531`, and one fault seen after it. Each open fault is an issue. An issue whose fix needs a design states the open question. When the owner answers it, it becomes a story or a direct change, as its `## Builder` says.
 
 | Fault | State |
 |---|---|
@@ -26,7 +26,7 @@ The DSF faults that the `factory#217` trial found (`sam/homelab` `docs/log/2026-
 | The starter's `src/App/App.csproj` sets `AssemblyName` to `dotnet-software-factory` | #307, needs a design |
 | No test and no check launches the built program of `src/App`. Seen on 2026-10-14 at `forecast-sample` `eb302c0`, where every launch exited with the code 134 and all 52 tests passed | #308, needs a design |
 | `TestGate` runs `dotnet test --logger trx`, so a target on xunit 4 and Microsoft.Testing.Platform fails | #309, needs a design |
-| The review passed `forecast-sample` `#4`, which edited `tests/Integration/GeocodingTests.cs`, against the issue's "Every existing test passes unchanged" | #310 |
+| The review passed `forecast-sample` `#4`, which edited `tests/Integration/GeocodingTests.cs`, against the issue's "Every existing test passes unchanged" | #310, needs a design |
 | The starter `AGENTS.md` style item lists too few by-hand cases: `value == null` and `x == 0` are missing | #311 |
 | The rules page `docs/write-an-issue.md` gives the starter's `greeting.feature` as its example | #312 |
 | A rule for `write-issue`: a count of findings names the command that lists them. A count of `CA1849` was wrong by one in a draft of `forecast-sample` `#5` | #313 |
