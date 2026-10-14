@@ -29,6 +29,15 @@ public sealed class StarterChecksTests : IDisposable
     }
 
     [Fact]
+    public void TheStarterLibraryKeepsAnAssemblyNameThatTheProgramNeverTakes()
+    {
+        string library = System.Xml.Linq.XDocument.Load(Path.Combine(StarterChecks.RepoRoot(), "templates", "starter", "src", "Core", "Core.csproj"))
+            .Descendants("AssemblyName").Select(e => e.Value).Single();
+        Assert.NotEqual("Core", library);
+        Assert.NotEqual("starter-program", library);
+    }
+
+    [Fact]
     public void AListThatHoldsTheShortNameFailsTheLackCheck()
     {
         Assert.Throws<InvalidOperationException>(() => StarterChecks.ListLacks("x  starter  factory-starter  [C#]\n", "factory-starter"));
