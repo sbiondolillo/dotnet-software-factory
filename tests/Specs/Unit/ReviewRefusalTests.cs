@@ -36,6 +36,7 @@ public sealed class ReviewRefusalTests
 
     [Theory]
     [InlineData(Reviewer, "COMMENTED", Sha, "Looks fine.")]
+    [InlineData(Reviewer, "COMMENTED", Sha, "Copilot reviewed 2 out of 2 changed files in this pull request and generated no comments.")]
     [InlineData("someone", "COMMENTED", Sha, Text)]
     [InlineData(Reviewer, "COMMENTED", "other", Text)]
     [InlineData(Reviewer, "APPROVED", Sha, Text)]
