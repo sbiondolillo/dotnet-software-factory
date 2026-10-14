@@ -37,8 +37,8 @@ public sealed class StarterWorkflowsSteps(StarterState state)
     [Then("a step of the job in {string} sets up the .NET SDK that the global.json of the checkout names, before the step with the run command {string}")]
     public void ThenASetupStep(string file, string run) => WorkflowChecks.SetupBeforeRun(Workflow(file), run);
 
-    [Then("the last step of the job in {string} runs {string}")]
-    public void ThenLastStepRuns(string file, string run) => WorkflowChecks.LastStepRuns(Workflow(file), run);
+    [Then("the last two steps of the job in {string} are a step that runs {string} and then the step {string} with the condition {string}")]
+    public void ThenLastTwoSteps(string file, string run, string name, string condition) => WorkflowChecks.LastTwoSteps(Workflow(file), run, name, condition);
 
     [Then("the step with the run command in {string} has {string}, {string} and {string} in its environment, each from the secret of the same name")]
     public void ThenRunStepEnvironment(string file, string first, string second, string third)

@@ -6,6 +6,7 @@ public sealed class WorkflowChecksTests : IDisposable
 {
     private const string Run = "dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --pass-env EXAMPLE_API_KEY";
     private const string Condition = "github.event_name == 'workflow_dispatch' || (github.event.label.name == 'factory' && github.event.sender.login == github.repository_owner)";
+    private const string Store = "\n      - name: Push the transcripts to the store\n        if: always()\n        run: echo";
     private const string Dispatch = "workflow_dispatch:\n    inputs:\n      issue:\n        required: true\n        type: number\n      ref:\n        default: v1";
     private readonly string _root = Directory.CreateTempSubdirectory("workflow-checks-").FullName;
 
@@ -22,7 +23,7 @@ public sealed class WorkflowChecksTests : IDisposable
         string condition = Condition, string checkout = "repository: sbiondolillo/dotnet-software-factory\n          ref: ${{ inputs.ref || 'v1' }}",
         string setup = "- uses: actions/setup-dotnet@v6\n        with:\n          global-json-file: global.json\n      ",
         string env = "FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_GITHUB_TOKEN }}\n          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}\n          EXAMPLE_API_KEY: ${{ secrets.EXAMPLE_API_KEY }}",
-        string run = Run, string extra = "", string secondJob = "")
+        string run = Run, string extra = "", string store = Store, string secondJob = "")
         => $"""
         name: factory
         on:
@@ -39,7 +40,7 @@ public sealed class WorkflowChecksTests : IDisposable
               {setup}{extra}- name: Run
                 env:
                   {env}
-                run: {run}
+                run: {run}{store}
         {secondJob}
         """;
 
@@ -80,7 +81,7 @@ public sealed class WorkflowChecksTests : IDisposable
         WorkflowChecks.JobRuns(f, "ubuntu-latest", Condition);
         WorkflowChecks.FirstStepChecksOut(f, "sbiondolillo/dotnet-software-factory", "${{ inputs.ref || 'v1' }}");
         WorkflowChecks.SetupBeforeRun(f, Run);
-        WorkflowChecks.LastStepRuns(f, Run);
+        WorkflowChecks.LastTwoSteps(f, Run, "Push the transcripts to the store", "always()");
         WorkflowChecks.RunStepEnvironment(f, Run, "FACTORY_GITHUB_TOKEN", "ANTHROPIC_API_KEY", "EXAMPLE_API_KEY");
         WorkflowChecks.NoOtherStepEnvironment(f, Run);
         string c = Wf(Ci());
@@ -180,10 +181,17 @@ public sealed class WorkflowChecksTests : IDisposable
     }
 
     [Fact]
-    public void ALastStepThatDiffersFailsTheLastStepCheck()
+    public void ADifferentRunNameConditionOrCountFailsTheLastTwoStepsCheck()
     {
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.LastStepRuns(Wf(Factory(run: "echo")), Run));
-        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.LastStepRuns(Wf(Factory(run: Run + " x")), Run));
+        const string name = "Push the transcripts to the store";
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.LastTwoSteps(Wf(Factory(run: "echo")), Run, name, "always()"));
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.LastTwoSteps(Wf(Factory(run: Run + " x")), Run, name, "always()"));
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.LastTwoSteps(Wf(Factory(store: Store.Replace("store", "shop", StringComparison.Ordinal))), Run, name, "always()"));
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.LastTwoSteps(Wf(Factory(store: Store.Replace("        if: always()\n", "", StringComparison.Ordinal))), Run, name, "always()"));
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.LastTwoSteps(Wf(Factory(store: Store.Replace("always()", "success()", StringComparison.Ordinal))), Run, name, "always()"));
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.LastTwoSteps(Wf(Factory(store: "")), Run, name, "always()"));
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.LastTwoSteps(Wf(Factory(store: Store + Store)), Run, name, "always()"));
+        Assert.Throws<InvalidOperationException>(() => WorkflowChecks.LastTwoSteps(Wf("jobs:\n  factory:\n    steps:\n      - run: echo"), Run, name, "always()"));
     }
 
     [Fact]
