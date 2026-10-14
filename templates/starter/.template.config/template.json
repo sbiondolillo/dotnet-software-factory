@@ -6,6 +6,7 @@
   "name": "dotnet-software-factory starter",
   "shortName": "factory-starter",
   "preferNameDirectory": false,
+  "sourceName": "starter-program",
   "sources": [
     {
       "exclude": [ ".template.config/**", "**/bin/**", "**/obj/**", "**/TestResults/**" ]

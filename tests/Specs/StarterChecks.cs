@@ -72,8 +72,8 @@ public static partial class StarterChecks
         }
     }
 
-    /// <summary>Fails when a file of the starter is missing from the copy or differs in a byte.</summary>
-    public static void EveryFileEqual(string starter, string copy)
+    /// <summary>Fails when a file of the starter is missing from the copy, or differs in a byte unless it is excepted.</summary>
+    public static void EveryFileEqual(string starter, string copy, params string[] except)
     {
         foreach (string file in StarterFiles(starter))
         {
@@ -81,6 +81,11 @@ public static partial class StarterChecks
             if (!File.Exists(path))
             {
                 throw new InvalidOperationException($"the copy lacks {file}");
+            }
+
+            if (except.Contains(file))
+            {
+                continue;
             }
 
             if (!File.ReadAllBytes(path).AsSpan().SequenceEqual(File.ReadAllBytes(Path.Combine(starter, file))))
@@ -133,6 +138,16 @@ public static partial class StarterChecks
         if (!found.SequenceEqual(want))
         {
             throw new InvalidOperationException($"the solution names [{string.Join(", ", found)}], not [{string.Join(", ", want)}]");
+        }
+    }
+
+    /// <summary>Fails unless the project file gives the property that value.</summary>
+    public static void Property(string projectFile, string name, string value)
+    {
+        string? found = XDocument.Load(projectFile).Descendants("PropertyGroup").Elements(name).Select(e => e.Value).FirstOrDefault();
+        if (found != value)
+        {
+            throw new InvalidOperationException($"{projectFile} gives {name} the value {found ?? "(none)"}, not {value}");
         }
     }
 

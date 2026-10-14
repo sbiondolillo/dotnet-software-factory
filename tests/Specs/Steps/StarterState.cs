@@ -6,7 +6,10 @@ namespace Specs.Steps;
 public sealed class StarterState : IDisposable
 {
     private readonly string _home = Directory.CreateTempSubdirectory("starter-home-").FullName;
-    private readonly string _copy = Path.Combine(Directory.CreateTempSubdirectory("starter-copy-").FullName, "copy");
+    private readonly string _parent = Directory.CreateTempSubdirectory("starter-copy-").FullName;
+    private string _copy;
+
+    public StarterState() => _copy = Path.Combine(_parent, "copy");
 
     private static readonly SemaphoreSlim DotnetGate = new(1, 1);
 
@@ -15,6 +18,9 @@ public sealed class StarterState : IDisposable
     public int? NewExit { get; set; }
 
     public string Copy => _copy;
+
+    /// <summary>Gives the copy a directory of this name, in place of <c>copy</c>.</summary>
+    public void NameCopy(string name) => _copy = Path.Combine(_parent, name);
 
     public static string Starter => Path.Combine(StarterChecks.RepoRoot(), "templates", "starter");
 
@@ -40,6 +46,6 @@ public sealed class StarterState : IDisposable
     public void Dispose()
     {
         Directory.Delete(_home, true);
-        Directory.Delete(Path.GetDirectoryName(_copy)!, true);
+        Directory.Delete(_parent, true);
     }
 }

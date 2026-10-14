@@ -52,6 +52,32 @@ public sealed class StarterChecksTests : IDisposable
     }
 
     [Fact]
+    public void AnExceptedFileThatDiffersPassesAndAnotherFails()
+    {
+        (string s, string c) = Pair();
+        File.WriteAllText(Path.Combine(c, "a.txt"), "changed");
+        StarterChecks.EveryFileEqual(s, c, "a.txt");
+        Assert.Throws<InvalidOperationException>(() => StarterChecks.EveryFileEqual(s, c, "d/b.txt"));
+    }
+
+    [Fact]
+    public void AnExceptedFileThatIsMissingFails()
+    {
+        (string s, string c) = Pair();
+        File.Delete(Path.Combine(c, "a.txt"));
+        Assert.Throws<InvalidOperationException>(() => StarterChecks.EveryFileEqual(s, c, "a.txt"));
+    }
+
+    [Fact]
+    public void APropertyPassesOnAMatchAndFailsOnAnotherValueOrNone()
+    {
+        string project = Write("p.csproj", "<Project><PropertyGroup><AssemblyName>x</AssemblyName></PropertyGroup></Project>");
+        StarterChecks.Property(project, "AssemblyName", "x");
+        Assert.Throws<InvalidOperationException>(() => StarterChecks.Property(project, "AssemblyName", "y"));
+        Assert.Throws<InvalidOperationException>(() => StarterChecks.Property(project, "OutputType", "Exe"));
+    }
+
+    [Fact]
     public void ACopyThatLacksAFileFails()
     {
         (string s, string c) = Pair();
