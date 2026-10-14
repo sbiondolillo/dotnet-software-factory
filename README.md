@@ -46,7 +46,7 @@ dotnet new install "$factory/templates/starter"
 dotnet new factory-starter -o "$name"
 ```
 
-The program of `src/App` takes the name `$name`: `dotnet build` writes `$name.dll`, and `--help` shows `$name` in its usage line. A command of the program with the same name as the program makes each launch fail with `System.ArgumentException: An item with the same key has already been added`.
+The program of `src/App` takes the name `$name`: `dotnet build` writes `$name.dll`, and `--help` shows `$name` in its usage line. A command of the program with the same name as the program makes each launch fail with `System.ArgumentException: An item with the same key has already been added`. The starter's library project is `Core`, so a `$name` of `Core`, in any case, fails the first restore with `error : Ambiguous project name '$name'`. For such a repo, add `--name` with another program name to the `dotnet new` command.
 
 Go into it. Every command below runs there:
 
