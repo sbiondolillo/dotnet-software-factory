@@ -124,3 +124,12 @@ Feature: The factory waits for a pull request's checks and its Copilot review
     And GitHub answers each read of the check runs with the check run "build" with the status "in_progress" and no conclusion
     When a caller starts the watch and cancels the cancellation token 1 second after the start
     Then the watch throws an OperationCanceledException
+
+  Scenario: A refusal by the reviewer on the head commit ends the watch at once with a red result
+    Given the reviewer login is "copilot-pull-request-reviewer"
+    And the wait between two polls is 1 hour
+    And GitHub answers each read of the reviews with one review by "copilot-pull-request-reviewer" with the state "COMMENTED" of the commit "2878cae3e3bab7f3b1dcdfa14206f2c361021085" and the body "Copilot was unable to review this pull request because the user who requested the review has reached their quota limit."
+    When a caller starts the watch and cancels the cancellation token 1 second after the start
+    Then the watch gives back a red result
+    And the watch result holds the refusal "Copilot was unable to review this pull request because the user who requested the review has reached their quota limit."
+    And the watch result holds an empty list of threads

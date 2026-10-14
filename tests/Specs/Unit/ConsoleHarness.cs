@@ -156,8 +156,8 @@ public sealed class ConsoleHarness : IDisposable
     public static string RunsJson(string name, string status, string? conclusion) =>
         JsonSerializer.Serialize(new { check_runs = new[] { new { name, status, conclusion } } });
 
-    public static string ReviewsJson(string login, string commit = DefaultSha) =>
-        JsonSerializer.Serialize(new { data = new { repository = new { pullRequest = new { reviews = new { nodes = new[] { new { state = "COMMENTED", author = new { login }, commit = new { oid = commit } } } } } } } });
+    public static string ReviewsJson(string login, string commit = DefaultSha, string body = "") =>
+        JsonSerializer.Serialize(new { data = new { repository = new { pullRequest = new { reviews = new { nodes = new[] { new { state = "COMMENTED", body, author = new { login }, commit = new { oid = commit } } } } } } } });
 
     public static string NoReviewsJson() =>
         JsonSerializer.Serialize(new { data = new { repository = new { pullRequest = new { reviews = new { nodes = Array.Empty<object>() } } } } });

@@ -91,6 +91,12 @@ public sealed class PullRequestWatchSteps(ExceptionState exceptionState, Console
     [Given("GitHub answers each read of the reviews with one review by {string} with the state {string} of the commit {string}")]
     public void GivenReview(string login, string state, string commit) => _handler.ReviewsBody = WatchHandler.ReviewsJson([(login, state, commit)]);
 
+    [Given("GitHub answers each read of the reviews with one review by {string} with the state {string} of the commit {string} and the body {string}")]
+    public void GivenReviewBody(string login, string state, string commit, string body) => _handler.ReviewsBody = WatchHandler.ReviewsWithBodiesJson([(login, state, commit, body)]);
+
+    [Then("the watch result holds the refusal {string}")]
+    public void ThenRefusal(string refusal) => Assert.Equal(refusal, _result!.Refusal);
+
     [Given("GitHub answers each read of the reviews with no review")]
     public void GivenNoReview()
     {

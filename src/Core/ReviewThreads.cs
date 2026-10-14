@@ -3,7 +3,18 @@ using System.Text.Json;
 namespace Core;
 
 /// <summary>A review of a pull request.</summary>
-public sealed record Review(string Author, string State, string CommitSha);
+public sealed record Review(string Author, string State, string CommitSha, string Body = "")
+{
+    private const string RefusalStart = "Copilot was unable to review this pull request";
+
+    /// <summary>Gives the body of the first refusal by the reviewer on a commit among the reviews, or null when there is none.</summary>
+    public static string? Refusal(IEnumerable<Review> reviews, string reviewerLogin, string sha) =>
+        reviews.FirstOrDefault(r => r.Author == reviewerLogin
+            && r.State is "COMMENTED"
+            && r.CommitSha.Length is not 0
+            && r.CommitSha == sha
+            && r.Body.StartsWith(RefusalStart, StringComparison.Ordinal))?.Body;
+}
 
 /// <summary>A comment in a review thread.</summary>
 public sealed record ReviewThreadComment(string Author, string Body);
@@ -15,7 +26,7 @@ public sealed record ReviewThread(string Id, bool IsResolved, string Path, int? 
 public sealed class ReviewThreads(GitHubClient client)
 {
     private const string FaultText = "Something went wrong while executing your query";
-    private const string ReviewsQuery = "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviews(first: 100) { nodes { state author { login } commit { oid } } } } } }";
+    private const string ReviewsQuery = "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviews(first: 100) { nodes { state body author { login } commit { oid } } } } } }";
     private const string ThreadsQuery = "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewThreads(first: 100) { nodes { id isResolved path line comments(first: 100) { nodes { author { login } body } } } } } } }";
     private const string ReplyQuery = "mutation($threadId: ID!, $body: String!) { addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $threadId, body: $body}) { comment { id } } }";
     private const string RequestQuery = "mutation($pullRequestId: ID!, $botLogins: [String!]) { requestReviewsByLogin(input: {pullRequestId: $pullRequestId, botLogins: $botLogins}) { pullRequest { id } } }";
@@ -28,7 +39,7 @@ public sealed class ReviewThreads(GitHubClient client)
         var reviews = new List<Review>();
         foreach (JsonElement node in Nodes(data.GetProperty("repository").GetProperty("pullRequest").GetProperty("reviews")))
         {
-            reviews.Add(new Review(Login(node), node.GetProperty("state").GetString() ?? "", CommitOid(node)));
+            reviews.Add(new Review(Login(node), node.GetProperty("state").GetString() ?? "", CommitOid(node), Body(node)));
         }
 
         return reviews;
@@ -77,6 +88,11 @@ public sealed class ReviewThreads(GitHubClient client)
         node.TryGetProperty("commit", out JsonElement commit) && commit.ValueKind is JsonValueKind.Object
             && commit.TryGetProperty("oid", out JsonElement oid) && oid.ValueKind is JsonValueKind.String
             ? oid.GetString() ?? ""
+            : "";
+
+    private static string Body(JsonElement node) =>
+        node.TryGetProperty("body", out JsonElement body) && body.ValueKind is JsonValueKind.String
+            ? body.GetString() ?? ""
             : "";
 
     private static string Login(JsonElement node) =>

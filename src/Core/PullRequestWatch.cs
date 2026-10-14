@@ -1,7 +1,7 @@
 namespace Core;
 
 /// <summary>The end of a watch: green or red, and the review threads that are not resolved.</summary>
-public sealed record PullRequestWatchResult(bool IsGreen, IReadOnlyList<ReviewThread> Threads);
+public sealed record PullRequestWatchResult(bool IsGreen, IReadOnlyList<ReviewThread> Threads, string? Refusal = null);
 
 /// <summary>Polls GitHub until a pull request is settled or a timeout passes.</summary>
 public sealed class PullRequestWatch(
@@ -18,6 +18,7 @@ public sealed class PullRequestWatch(
     {
         long start = _time.GetTimestamp();
         bool green;
+        string? refusal = null;
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -26,6 +27,13 @@ public sealed class PullRequestWatch(
             IReadOnlyList<Review> reviews = reviewerLogin is null
                 ? []
                 : await reviewThreads.ReadReviewsAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
+            if (reviewerLogin is not null && Review.Refusal(reviews, reviewerLogin, sha) is { } refused)
+            {
+                green = false;
+                refusal = refused;
+                break;
+            }
+
             bool settled = runs.Count is not 0
                 && runs.All(r => r.Status is "completed")
                 && (reviewerLogin is null || reviews.Any(r => r.Author == reviewerLogin && r.CommitSha.Length is not 0 && r.CommitSha == sha));
@@ -45,6 +53,6 @@ public sealed class PullRequestWatch(
         }
 
         IReadOnlyList<ReviewThread> threads = await reviewThreads.ReadThreadsAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
-        return new PullRequestWatchResult(green, [.. threads.Where(t => !t.IsResolved)]);
+        return new PullRequestWatchResult(green, [.. threads.Where(t => !t.IsResolved)], refusal);
     }
 }

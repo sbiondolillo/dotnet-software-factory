@@ -38,9 +38,12 @@ public sealed class WatchHandler : HttpMessageHandler
         JsonSerializer.Serialize(new { check_runs = runs.Select(r => new { name = r.Name, status = r.Status, conclusion = r.Conclusion }).ToArray() });
 
     public static string ReviewsJson(IEnumerable<(string? Login, string State, string Commit)> reviews) =>
+        ReviewsWithBodiesJson(reviews.Select(r => (r.Login, r.State, r.Commit, "")));
+
+    public static string ReviewsWithBodiesJson(IEnumerable<(string? Login, string State, string Commit, string Body)> reviews) =>
         JsonSerializer.Serialize(new
         {
-            data = new { repository = new { pullRequest = new { reviews = new { nodes = reviews.Select(r => new { state = r.State, author = r.Login is null ? null : new { login = r.Login }, commit = new { oid = r.Commit } }).ToArray() } } } },
+            data = new { repository = new { pullRequest = new { reviews = new { nodes = reviews.Select(r => new { state = r.State, body = r.Body, author = r.Login is null ? null : new { login = r.Login }, commit = new { oid = r.Commit } }).ToArray() } } } },
         });
 
     public static string ThreadsJson(IEnumerable<(string Id, bool Resolved, string Path, int? Line, (string Login, string Body)[] Comments)> threads) =>
