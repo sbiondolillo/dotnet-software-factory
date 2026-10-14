@@ -7,6 +7,7 @@ namespace Specs.Steps;
 [Binding]
 public sealed class PullRequestWatchSteps(ExceptionState exceptionState, ConsoleState consoleState) : IDisposable
 {
+    private const string QuotaRefusal = "Copilot was unable to review this pull request because the user who requested the review has reached their quota limit.";
     private readonly WatchHandler _handler = new();
     private string _owner = "";
     private string _repo = "";
@@ -94,8 +95,15 @@ public sealed class PullRequestWatchSteps(ExceptionState exceptionState, Console
     [Given("GitHub answers each read of the reviews with one review by {string} with the state {string} of the commit {string} and the body {string}")]
     public void GivenReviewBody(string login, string state, string commit, string body) => _handler.ReviewsBody = WatchHandler.ReviewsWithBodiesJson([(login, state, commit, body)]);
 
+    [Given("GitHub answers each read of the reviews with a refusal by {string} of the commit {string}, then a review by {string} with the state {string} of the same commit and the body {string}")]
+    public void GivenRefusalThenReview(string refuser, string commit, string login, string state, string body) =>
+        _handler.ReviewsBody = WatchHandler.ReviewsWithBodiesJson([(refuser, "COMMENTED", commit, QuotaRefusal), (login, state, commit, body)]);
+
     [Then("the watch result holds the refusal {string}")]
     public void ThenRefusal(string refusal) => Assert.Equal(refusal, _result!.Refusal);
+
+    [Then("the watch result holds no refusal")]
+    public void ThenNoRefusal() => Assert.Null(_result!.Refusal);
 
     [Given("GitHub answers each read of the reviews with no review")]
     public void GivenNoReview()

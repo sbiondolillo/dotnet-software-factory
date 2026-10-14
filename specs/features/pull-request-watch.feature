@@ -133,3 +133,10 @@ Feature: The factory waits for a pull request's checks and its Copilot review
     Then the watch gives back a red result
     And the watch result holds the refusal "Copilot was unable to review this pull request because the user who requested the review has reached their quota limit."
     And the watch result holds an empty list of threads
+
+  Scenario: A review by the reviewer after its refusal on the head commit settles the watch green
+    Given the reviewer login is "copilot-pull-request-reviewer"
+    And GitHub answers each read of the reviews with a refusal by "copilot-pull-request-reviewer" of the commit "2878cae3e3bab7f3b1dcdfa14206f2c361021085", then a review by "copilot-pull-request-reviewer" with the state "COMMENTED" of the same commit and the body "No findings."
+    When a caller starts the watch
+    Then the watch gives back a green result
+    And the watch result holds no refusal

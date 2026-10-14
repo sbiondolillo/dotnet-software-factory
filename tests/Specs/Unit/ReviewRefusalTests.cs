@@ -42,4 +42,19 @@ public sealed class ReviewRefusalTests
     [InlineData(Reviewer, "COMMENTED", "", Text)]
     public void AnyOtherReviewGivesNoRefusal(string author, string state, string commit, string body) =>
         Assert.Null(Review.Refusal([new Review(author, state, commit, body)], Reviewer, Sha));
+
+    [Fact]
+    public void ALaterReviewByTheReviewerOnTheCommitEndsTheRefusal() =>
+        Assert.Null(Review.Refusal([new Review(Reviewer, "COMMENTED", Sha, Text), new Review(Reviewer, "COMMENTED", Sha, "Looks fine.")], Reviewer, Sha));
+
+    [Fact]
+    public void ARefusalAfterAReviewByTheReviewerOnTheCommitGivesItsBody() =>
+        Assert.Equal(Text, Review.Refusal([new Review(Reviewer, "COMMENTED", Sha, "Looks fine."), new Review(Reviewer, "COMMENTED", Sha, Text)], Reviewer, Sha));
+
+    [Theory]
+    [InlineData("someone", Sha)]
+    [InlineData(Reviewer, "other")]
+    [InlineData(Reviewer, "")]
+    public void ALaterReviewByAnotherAuthorOrOnAnotherCommitKeepsTheRefusal(string author, string commit) =>
+        Assert.Equal(Text, Review.Refusal([new Review(Reviewer, "COMMENTED", Sha, Text), new Review(author, "COMMENTED", commit, "Looks fine.")], Reviewer, Sha));
 }

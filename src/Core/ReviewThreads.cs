@@ -7,13 +7,12 @@ public sealed record Review(string Author, string State, string CommitSha, strin
 {
     private const string RefusalStart = "Copilot was unable to review this pull request";
 
-    /// <summary>Gives the body of the first refusal by the reviewer on a commit among the reviews, or null when there is none.</summary>
+    /// <summary>Gives the body of the last review by the reviewer on a commit when that review is a refusal, or null otherwise. The reviews are in GitHub's order, oldest first.</summary>
     public static string? Refusal(IEnumerable<Review> reviews, string reviewerLogin, string sha) =>
-        reviews.FirstOrDefault(r => r.Author == reviewerLogin
-            && r.State is "COMMENTED"
-            && r.CommitSha.Length is not 0
-            && r.CommitSha == sha
-            && r.Body.StartsWith(RefusalStart, StringComparison.Ordinal))?.Body;
+        reviews.LastOrDefault(r => r.Author == reviewerLogin && r.CommitSha.Length is not 0 && r.CommitSha == sha) is { State: "COMMENTED" } last
+            && last.Body.StartsWith(RefusalStart, StringComparison.Ordinal)
+            ? last.Body
+            : null;
 }
 
 /// <summary>A comment in a review thread.</summary>
