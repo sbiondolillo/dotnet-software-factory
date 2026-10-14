@@ -24,6 +24,10 @@ Reqnroll compiles each linked feature into a test class under `obj/`, named afte
 
 The build suite answers each call to a service with a canned answer from a stub `HttpMessageHandler`. For each canned answer that a scenario depends on, write a test under `tests/Integration/` that gets the same answer from the real service. The test fails when the service is unreachable. A test reads each credential from the environment, by the name that the `integration` job of `.github/workflows/ci.yml` passes.
 
+## The test platform
+
+The tests run on VSTest, and `global.json` names no `test.runner`. The factory runs `dotnet test --logger trx` and reads the TRX file, and only VSTest accepts `--logger`. From version 4.0.0, `xunit.v3` brings Microsoft.Testing.Platform, and `dotnet test` on the .NET 10 SDK fails on it with `Testing with VSTest target is no longer supported`. So an upgrade to xUnit 4.x replaces `xunit.v3` with `xunit.v3.mtp-off`, and moves `xunit.runner.visualstudio` to 4.x.
+
 ## Style
 
 `Directory.Build.props` makes every warning an error and enforces the style of `.editorconfig` in the build. `dotnet format` fixes what it can.
