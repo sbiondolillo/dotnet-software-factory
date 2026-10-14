@@ -30,6 +30,8 @@ The body states results, and the build chooses every means. A means is a package
 
 In a scenario, the sentence is a `Then` step and the block is its doc string. In prose, the block is a fenced block.
 
+These forms hold a text that no test can run, such as a workflow. A file that a test can run, such as a feature file or a script, is tested by that run, and its text is in no `Then`. `**What changes.**` names the test that runs it and the result of the run.
+
 Name what holds after the change. State an invariant as the state it keeps: "Every other existing test passes unchanged." `**Today.**` is the one place that states what `main` does now.
 
 ## A behaviour body
@@ -161,7 +163,7 @@ Read the draft once for each row. File it when every row passes. A person with C
 | scenario names | list the names of the scenarios of each feature file after the change | no two give one test name, and no block holds one name twice |
 | removed | each line under `## Removed scenarios` | it is a list item: a path in backticks, a colon, and a name that the file on `main` holds |
 | conditions | search the scenarios for "When" | each `When` names an event that occurs |
-| known text | list each config value, workflow and pinned version that the issue already knows | each one is in a `Then` as one value or as a doc string |
+| known text | list each config value, workflow and pinned version that the issue already knows | each one that no test can run is in a `Then` as one value or as a doc string, and each one that a test runs is in no `Then` |
 | context | list each sentence and each row of `## Context` | each one states a fact of the world and its source, and none states what the program must do |
 | stated once | list each requirement of the program in the draft | each one is in one scenario, and nowhere else |
 | positive form | search the prose for "not", "never", "don't", "later" | each sentence found states what holds |
