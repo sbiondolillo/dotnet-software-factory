@@ -269,6 +269,8 @@ Replace `EXAMPLE_API_KEY` in `factory.yml`, in `review-feedback.yml` and in `ci.
 
 A repo whose integration tests read no secret keeps `EXAMPLE_API_KEY` as it is. The secret is not set, and each step gets an empty value.
 
+The step `Push the transcripts to the store` in `factory.yml` copies the Claude Code transcripts of the run to `runs/<run id>/` in a store repo. It reads two secrets. `STORE_REPO` holds the store repo as `<owner>/<repo>`. `STORE_DEPLOY_KEY` holds the private key of a deploy key with write access to that repo. Both secrets are optional. With either one unset, the step exits with the code 0 and pushes nothing.
+
 ## When a run fails
 
 A run that stops at a gate or at an answer of the agent says why in a comment on the issue. A failure of `dotnet format`, and an answer of the agent that is not JSON, fail the job with no comment: read the job log.

@@ -20,7 +20,7 @@ Feature: A repo made from the starter starts a trial run of the factory at a cho
   Scenario: The factory job first checks out the factory at the chosen ref
     Then the first step of the job in "factory.yml" checks out the repo "sbiondolillo/dotnet-software-factory" at the ref "${{ inputs.ref || 'v1' }}" with no token
 
-  Scenario: The factory job sets up the SDK before the last step
+  Scenario: The factory job sets up the SDK before the run command
     Then a step of the job in "factory.yml" sets up the .NET SDK that the global.json of the checkout names, before the step with the run command "dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --pass-env EXAMPLE_API_KEY"
 
   Scenario: The factory job runs the run command with the chosen issue, and then pushes the transcripts whatever the result
