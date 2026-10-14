@@ -84,6 +84,10 @@ public sealed partial class ConsoleProgramSteps : IDisposable
     public void GivenReviews(string login, string state, string commit) =>
         _h.Reviews = ConsoleHarness.ReviewsJson(login, commit).Replace("COMMENTED", state, StringComparison.Ordinal);
 
+    [Given("GitHub answers each read of the reviews with one review with the author login {string}, the state {string}, the commit {string} and the body {string}")]
+    public void GivenReviewsBody(string login, string state, string commit, string body) =>
+        _h.Reviews = ConsoleHarness.ReviewsJson(login, commit, body).Replace("COMMENTED", state, StringComparison.Ordinal);
+
     [Given("GitHub answers the review request with a GraphQL error")]
     public void GivenRequestError() => _h.ReviewRequestError = "Copilot code review is not available for this repo.";
 

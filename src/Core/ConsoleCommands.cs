@@ -223,7 +223,7 @@ public static class ConsoleCommands
         {
             int rounds = 0;
             bool changed = true;
-            while (last.Threads.Count > 0 && rounds < options.ReviewRounds && changed)
+            while (last.Refusal is null && last.Threads.Count > 0 && rounds < options.ReviewRounds && changed)
             {
                 localHead = await FeedbackAsync(options, host, client, token, number, cancellationToken).ConfigureAwait(false);
                 rounds++;
@@ -231,6 +231,11 @@ public static class ConsoleCommands
                 (last, head) = await WatchAsync(host, pullRequests, reviewThreads, watch, owner, repo, number, localHead, options.Timeout, options.CopilotReview, cancellationToken).ConfigureAwait(false);
                 changed = head != before;
             }
+        }
+
+        if (last.Refusal is not null)
+        {
+            await host.Out.WriteLineAsync($"review: refused: {last.Refusal}").ConfigureAwait(false);
         }
 
         await host.Out.WriteLineAsync($"checks: {(last.IsGreen ? "green" : "red")}, unresolved threads: {last.Threads.Count.ToString(CultureInfo.InvariantCulture)}").ConfigureAwait(false);
