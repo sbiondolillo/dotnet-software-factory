@@ -26,7 +26,7 @@ The build suite answers each call to a service with a canned answer from a stub 
 
 ## The test platform
 
-The tests run on VSTest, and `global.json` names no `test.runner`. The factory runs `dotnet test --logger trx` and reads the TRX file, and only VSTest accepts `--logger`. From version 4.0.0, `xunit.v3` brings Microsoft.Testing.Platform, and `dotnet test` on the .NET 10 SDK fails on it with `Testing with VSTest target is no longer supported`. So an upgrade to xUnit 4.x replaces `xunit.v3` with `xunit.v3.mtp-off`, and moves `xunit.runner.visualstudio` to 4.x.
+`dotnet test` runs the build suite on VSTest, and `global.json` names no `test.runner`. The factory runs `dotnet test --logger trx` and reads the TRX file, and only VSTest accepts `--logger`. From version 4.0.0, `xunit.v3` makes each test project run on Microsoft.Testing.Platform 2. `dotnet test` on the .NET 10 SDK then fails with `Testing with VSTest target is no longer supported`. So an upgrade to xUnit 4.x replaces `xunit.v3` with `xunit.v3.mtp-off` in both test projects, and moves `xunit.runner.visualstudio` to 4.x. `dotnet run` runs the integration suite on `xunit.v3.mtp-off` as before.
 
 ## Style
 
