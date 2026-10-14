@@ -264,7 +264,8 @@ Feature: The console program runs the factory on an issue or a pull request
 
   Scenario: Copilot refusal
     Given GitHub answers each read of the head commit of the pull request 10 with "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c"
-    And GitHub answers each read of the reviews with one review with the author login "copilot-pull-request-reviewer", the state "COMMENTED", the commit "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c" and the body "Copilot was unable to review this pull request because the user who requested the review has reached their quota limit."
+    And GitHub answers each read of the reviews before the review request with no review, and each read after it with one review with the author login "copilot-pull-request-reviewer", the state "COMMENTED", the commit "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c" and the body "Copilot was unable to review this pull request because the user who requested the review has reached their quota limit."
+    And GitHub answers each read of the review threads with no thread
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --copilot-review on"
     Then standard output holds the line "review: refused: Copilot was unable to review this pull request because the user who requested the review has reached their quota limit."
     And standard output holds the line "checks: red, unresolved threads: 0"
@@ -272,7 +273,7 @@ Feature: The console program runs the factory on an issue or a pull request
 
   Scenario: Copilot refusal with a thread
     Given GitHub answers each read of the head commit of the pull request 10 with "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c"
-    And GitHub answers each read of the reviews with one review with the author login "copilot-pull-request-reviewer", the state "COMMENTED", the commit "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c" and the body "Copilot was unable to review this pull request because the user who requested the review has reached their quota limit."
+    And GitHub answers each read of the reviews before the review request with no review, and each read after it with one review with the author login "copilot-pull-request-reviewer", the state "COMMENTED", the commit "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c" and the body "Copilot was unable to review this pull request because the user who requested the review has reached their quota limit."
     And GitHub answers each read of the review threads with the thread A
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --copilot-review on"
     Then standard output holds the line "review: refused: Copilot was unable to review this pull request because the user who requested the review has reached their quota limit."

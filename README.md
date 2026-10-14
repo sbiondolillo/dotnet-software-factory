@@ -184,7 +184,7 @@ After step 4, every C# file starts with `// SPDX-License-Identifier: MIT`. You h
 
 ## Turn on Copilot code review
 
-The factory can request a Copilot code review of each pull request it watches, and wait for that review on the head commit as well as the checks. A review round that leaves threads unresolved fails the job, and `review-feedback` runs answer the threads. This needs a plan that includes Copilot code review, with credit on it. A repo made from the starter runs with no review: its workflows pass no `--copilot-review`, and the factory then waits for the checks alone. A quota refusal by Copilot ends the watch at once with the checks red, and the job log names the refusal.
+The factory can request a Copilot code review of each pull request it watches, and wait for that review on the head commit as well as the checks. A review round that leaves threads unresolved fails the job, and `review-feedback` runs answer the threads. This needs a plan that includes Copilot code review, with credit on it. A repo made from the starter runs with no review: its workflows pass no `--copilot-review`, and the factory then waits for the checks alone. A refusal by Copilot of the head commit from before the review request gets a new review request. A quota refusal after the request ends the watch at once with the checks red, and the job log names the refusal.
 
 With a Copilot plan, add `--copilot-review on` to the run command in `factory.yml` and in `review-feedback.yml`. Two ways do it. The first is a direct edit and push, as the repo's owner:
 

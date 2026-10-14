@@ -14,7 +14,11 @@ public sealed class PullRequestWatch(
     private readonly TimeProvider _time = time ?? TimeProvider.System;
 
     /// <summary>Polls the check runs and the reviews of a pull request (the check runs alone when <paramref name="reviewerLogin"/> is null), then gives back green or red and the unresolved threads. A refusal by the reviewer on the head commit ends the watch at once with red.</summary>
-    public async Task<PullRequestWatchResult> WatchAsync(string owner, string repo, int number, string? reviewerLogin, TimeSpan wait, TimeSpan timeout, CancellationToken cancellationToken = default)
+    public Task<PullRequestWatchResult> WatchAsync(string owner, string repo, int number, string? reviewerLogin, TimeSpan wait, TimeSpan timeout, CancellationToken cancellationToken = default) =>
+        WatchAsync(owner, repo, number, reviewerLogin, wait, timeout, 0, null, cancellationToken);
+
+    /// <summary>Polls like the watch without the skip, but the first <paramref name="skippedReviews"/> reviews by the reviewer on <paramref name="skippedHead"/>, the ones that existed when a new review was requested, count for neither the refusal nor the settled check.</summary>
+    public async Task<PullRequestWatchResult> WatchAsync(string owner, string repo, int number, string? reviewerLogin, TimeSpan wait, TimeSpan timeout, int skippedReviews, string? skippedHead, CancellationToken cancellationToken = default)
     {
         long start = _time.GetTimestamp();
         bool green;
@@ -27,6 +31,11 @@ public sealed class PullRequestWatch(
             IReadOnlyList<Review> reviews = reviewerLogin is null
                 ? []
                 : await reviewThreads.ReadReviewsAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
+            if (reviewerLogin is not null && skippedReviews > 0 && sha == skippedHead)
+            {
+                reviews = [.. SkipOld(reviews, reviewerLogin, sha, skippedReviews)];
+            }
+
             if (reviewerLogin is not null && Review.Refusal(reviews, reviewerLogin, sha) is { } refused)
             {
                 green = false;
@@ -54,5 +63,19 @@ public sealed class PullRequestWatch(
 
         IReadOnlyList<ReviewThread> threads = await reviewThreads.ReadThreadsAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
         return new PullRequestWatchResult(green, [.. threads.Where(t => !t.IsResolved)], refusal);
+    }
+
+    private static IEnumerable<Review> SkipOld(IReadOnlyList<Review> reviews, string reviewerLogin, string sha, int skipped)
+    {
+        int seen = 0;
+        foreach (Review review in reviews)
+        {
+            if (review.Author == reviewerLogin && review.CommitSha.Length is not 0 && review.CommitSha == sha && seen++ < skipped)
+            {
+                continue;
+            }
+
+            yield return review;
+        }
     }
 }
