@@ -23,6 +23,11 @@ Since 2026-10-09 Claude builds DSF directly, on a branch, with a frontier model 
     (`forecast-sample` `#6` and `#8`). A refusal is not a review.
   - The pull request body prints the cost as a raw double: `$0.21640510000000003`.
   - The starter's `src/App/App.csproj` sets `AssemblyName` to `dotnet-software-factory`.
+  - No test and no check launches the built program of `src/App`. The build suite calls the command tree in
+    process, under the test host, and CI runs no `src/App`. Seen on 2026-10-14, after the trial, at DSF
+    `8e515ce`: at `forecast-sample` `eb302c0`, every launch exits with the code 134. The root command takes
+    the name `forecast` from `AssemblyName`, and the subcommand `forecast` collides with it. All 52 tests
+    pass. A launch of the built program with `--help` catches such a fault of the host.
   - Reqnroll writes `tests/Specs/Reqnroll/userid` into the project when `HOME` has no `.config`. This is a
     lead: `starter-trial` caught it in its first commit.
   - `TestGate` runs `dotnet test --logger trx`, so a target on xunit 4 and Microsoft.Testing.Platform fails.
