@@ -121,6 +121,8 @@ public sealed class ReviewPhase(ClaudeCodeAgent agent, Git git, bool cleanup = f
                     + "2. Judge the build against every scenario, every result the plan states and every sentence of the issue, "
                     + "and judge whether the tests cover what each scenario names. "
                     + "An existing test is a scenario under specs/features/, or a [Fact] or [Theory] method under tests/Specs/Unit/ or tests/Integration/, at the base commit. "
+                    + "Each row of the Examples of a Scenario Outline, and each [InlineData] row of a [Theory], is a test, and an edit to the row is an edit to that test. "
+                    + "A step class, a helper and a stub are not tests. "
                     + "Block an edit to the text of an existing scenario or to the body of an existing test method, a rename or a removal, when the issue does not name that test. "
                     + "A wrapper around the body, such as a retry, is an edit. "
                     + "An edit to a step that an existing scenario uses keeps what the step does and what it asserts. "
