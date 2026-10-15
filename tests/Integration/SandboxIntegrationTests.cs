@@ -26,6 +26,9 @@ public sealed class SandboxIntegrationTests : IDisposable
     private static Task<CommandResult> DockerAsync(params string[] arguments) =>
         Runner.RunAsync(new CommandSpec { Command = "docker", Arguments = arguments }, TestContext.Current.CancellationToken);
 
+    private static Task<CommandResult> CleanUpDockerAsync(params string[] arguments) =>
+        Runner.RunAsync(new CommandSpec { Command = "docker", Arguments = arguments });
+
     private static Task EnsureImageAsync() =>
         new SandboxImage(Runner).EnsureAsync(Tag, RepoRoot(), TestContext.Current.CancellationToken);
 
@@ -71,7 +74,7 @@ public sealed class SandboxIntegrationTests : IDisposable
             CommandResult ok = await DockerAsync("run", "--detach", "--init", Tag, "sleep", "infinity");
             Assert.Equal(0, ok.ExitCode);
             string id = ok.StandardOutput.Trim();
-            cleanup.Add($"remove the container {id}", async () => Assert.Equal(0, (await DockerAsync("rm", "--force", id)).ExitCode));
+            cleanup.Add($"remove the container {id}", async () => Assert.Equal(0, (await CleanUpDockerAsync("rm", "--force", id)).ExitCode));
             Assert.Matches("^[0-9a-f]{64}\n$", ok.StandardOutput);
             Assert.Empty(ok.StandardError);
         });
@@ -170,9 +173,9 @@ public sealed class SandboxIntegrationTests : IDisposable
             string id = run.StandardOutput.Trim();
             cleanup.Add($"remove the container {id} when docker holds it", async () =>
             {
-                if ((await DockerAsync("container", "inspect", id)).ExitCode is 0)
+                if ((await CleanUpDockerAsync("container", "inspect", id)).ExitCode is 0)
                 {
-                    Assert.Equal(0, (await DockerAsync("rm", "--force", id)).ExitCode);
+                    Assert.Equal(0, (await CleanUpDockerAsync("rm", "--force", id)).ExitCode);
                 }
             });
 

@@ -77,7 +77,7 @@ public sealed class SandboxImageIntegrationTests
 
             var recording = new RecordingRunner();
             var image = new SandboxImage(recording);
-            cleanup.Add($"remove the image {tag}", async () => Assert.Equal(0, (await DockerAsync("image", "rm", "--force", tag)).ExitCode));
+            cleanup.Add($"remove the image {tag}", async () => Assert.Equal(0, (await Runner.RunAsync(new CommandSpec { Command = "docker", Arguments = ["image", "rm", "--force", tag] })).ExitCode));
             await image.EnsureAsync(tag, copy.FullName, TestContext.Current.CancellationToken);
             Assert.Equal(["image", "build"], recording.Runs.Select(run => run.Spec.Arguments[0]));
             CommandResult build = recording.Runs[1].Result;

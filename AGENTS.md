@@ -21,6 +21,8 @@ An integration test that creates a thing in its body removes it through `Cleanup
 - The body records the step that removes a thing with `cleanup.Add`, on the line after the call that creates it. So a step removes only a thing that exists, and a failed create leaves no step behind.
 - When the code under test creates the thing, the body records the step before that call, and the step first reads whether the thing exists. `DeliverIntegrationTests` reads the branch that `Deliver` pushes.
 - `RunAsync` runs every step, the last recorded first, so a pull request closes before its branch goes. When the body failed, the test fails with the body's exception, and each error of a step goes to the test output. When the body passed, an error of a step fails the test.
+- A step passes no cancellation token, so it runs after a cancel.
+- A `Sandbox` under `await using`, and a directory of the class that its `Dispose` removes, take no step.
 
 ## What a scenario tests
 

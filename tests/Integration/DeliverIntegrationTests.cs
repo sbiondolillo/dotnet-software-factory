@@ -36,7 +36,8 @@ public sealed class DeliverIntegrationTests
             await git.CommitAllAsync(directory.FullName, "Deliver integration " + runId, "Factory Integration Test", "factory-integration@example.com", ct);
 
             // The push in RunAsync creates the branch, and a failure after it leaves no answer to
-            // record it by. So this step reads whether GitHub holds the branch.
+            // record it by. So this step reads whether GitHub holds the branch. A pull request that
+            // RunAsync opened before a failure gets no step: GitHub closes it with its head branch.
             cleanup.Add($"delete the branch {branch} when GitHub holds it", () => DeleteWhenHeldAsync(client, branch));
             var pullRequests = new PullRequests(client);
             var deliver = new Deliver(git, pullRequests, client);

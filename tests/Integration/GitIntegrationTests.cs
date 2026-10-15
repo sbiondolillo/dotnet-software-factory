@@ -41,12 +41,17 @@ public sealed class GitIntegrationTests
 
             await git.CommitAllAsync(directory.FullName, $"Factory integration test {branch}", authorName, authorEmail, TestContext.Current.CancellationToken);
             string headSha = await git.ReadHeadShaAsync(directory.FullName, TestContext.Current.CancellationToken);
-            await git.PushAsync(branch, directory.FullName, token, TestContext.Current.CancellationToken);
-            cleanup.Add($"delete the branch {branch}", async () =>
+            cleanup.Add($"delete the branch {branch} when GitHub holds it", async () =>
             {
-                using HttpResponseMessage deleted = await http.DeleteAsync($"repos/{Owner}/{Repo}/git/refs/heads/{branch}");
-                deleted.EnsureSuccessStatusCode();
+                using HttpResponseMessage held = await http.GetAsync($"repos/{Owner}/{Repo}/branches/{branch}");
+                if (held.StatusCode is not System.Net.HttpStatusCode.NotFound)
+                {
+                    held.EnsureSuccessStatusCode();
+                    using HttpResponseMessage deleted = await http.DeleteAsync($"repos/{Owner}/{Repo}/git/refs/heads/{branch}");
+                    deleted.EnsureSuccessStatusCode();
+                }
             });
+            await git.PushAsync(branch, directory.FullName, token, TestContext.Current.CancellationToken);
 
             BranchInfo branchInfo = await ReadBranchAsync(http, branch);
             Assert.Equal(headSha, branchInfo.Commit.Sha);

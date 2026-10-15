@@ -10,7 +10,7 @@ namespace Integration;
 /// fails with the body's exception. When the body passed, an error of a step fails the test.
 /// </summary>
 /// <remarks>
-/// A step takes no cancellation token, so it runs after the test is cancelled too.
+/// A step passes no cancellation token, so it runs after the test is cancelled too.
 /// </remarks>
 public sealed class Cleanup
 {
