@@ -21,19 +21,22 @@ public sealed class ReviewThreadsIntegrationTests
 
     private sealed record Scratch(string Branch, int Number, string Path, string FileSha, string CommitSha);
 
-    private static async Task<Scratch> CreatePullAsync(GitHubClient client, CancellationToken ct)
+    private static async Task<Scratch> CreatePullAsync(GitHubClient client, Cleanup cleanup, CancellationToken ct)
     {
         string branch = "rt-test/" + Guid.NewGuid().ToString("N");
         string path = branch.Replace('/', '-') + ".txt";
         JsonElement main = await client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/git/ref/heads/main", null, ct);
         string sha = main.GetProperty("object").GetProperty("sha").GetString() ?? "";
         await client.SendAsync(HttpMethod.Post, $"/repos/{Owner}/{Repo}/git/refs", JsonSerializer.Serialize(new { @ref = "refs/heads/" + branch, sha }), ct);
+        cleanup.Add($"delete the branch {branch}", () => client.SendAsync(HttpMethod.Delete, $"/repos/{Owner}/{Repo}/git/refs/heads/{branch}"));
         string content = Convert.ToBase64String(Encoding.UTF8.GetBytes("one\ntwo\nthree\n"));
         JsonElement put = await client.SendAsync(HttpMethod.Put, $"/repos/{Owner}/{Repo}/contents/{path}", JsonSerializer.Serialize(new { message = "add " + path, content, branch }), ct);
         JsonElement pull = await client.SendAsync(HttpMethod.Post, $"/repos/{Owner}/{Repo}/pulls", JsonSerializer.Serialize(new { title = "test " + branch, head = branch, @base = "main", body = "b" }), ct);
+        int number = pull.GetProperty("number").GetInt32();
+        cleanup.Add($"close the pull request #{number}", () => client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/pulls/{number}", "{\"state\":\"closed\"}"));
         return new Scratch(
             branch,
-            pull.GetProperty("number").GetInt32(),
+            number,
             path,
             put.GetProperty("content").GetProperty("sha").GetString() ?? "",
             put.GetProperty("commit").GetProperty("sha").GetString() ?? "");
@@ -45,17 +48,6 @@ public sealed class ReviewThreadsIntegrationTests
             $"/repos/{Owner}/{Repo}/pulls/{s.Number}/comments",
             JsonSerializer.Serialize(new { body = "comment on " + line, commit_id = s.CommitSha, path = s.Path, line, side = "RIGHT" }),
             ct);
-
-    private static async Task CleanUpAsync(GitHubClient client, Scratch? s)
-    {
-        if (s is null)
-        {
-            return;
-        }
-
-        await client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/pulls/{s.Number}", "{\"state\":\"closed\"}");
-        await client.SendAsync(HttpMethod.Delete, $"/repos/{Owner}/{Repo}/git/refs/heads/{s.Branch}");
-    }
 
     [Fact]
     public async Task APullRequestWithNoReviewReadsEmptyReviewsAndThreads()
@@ -71,10 +63,9 @@ public sealed class ReviewThreadsIntegrationTests
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
         GitHubClient client = Client();
-        Scratch? s = null;
-        try
+        await Cleanup.RunAsync(async cleanup =>
         {
-            s = await CreatePullAsync(client, ct);
+            Scratch s = await CreatePullAsync(client, cleanup, ct);
             JsonElement comment = await CommentAsync(client, s, 2, ct);
             string login = comment.GetProperty("user").GetProperty("login").GetString() ?? "";
             var sut = new ReviewThreads(client);
@@ -84,11 +75,7 @@ public sealed class ReviewThreadsIntegrationTests
             Assert.Equal(2, thread.Line);
             Assert.Equal(new ReviewThreadComment(login, "comment on 2"), Assert.Single(thread.Comments));
             Assert.Equal(new Review(login, "COMMENTED", s.CommitSha), Assert.Single(await sut.ReadReviewsAsync(Owner, Repo, s.Number, ct)));
-        }
-        finally
-        {
-            await CleanUpAsync(client, s);
-        }
+        });
     }
 
     [Fact]
@@ -96,10 +83,9 @@ public sealed class ReviewThreadsIntegrationTests
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
         GitHubClient client = Client();
-        Scratch? s = null;
-        try
+        await Cleanup.RunAsync(async cleanup =>
         {
-            s = await CreatePullAsync(client, ct);
+            Scratch s = await CreatePullAsync(client, cleanup, ct);
             await CommentAsync(client, s, 1, ct);
             await CommentAsync(client, s, 3, ct);
             var sut = new ReviewThreads(client);
@@ -118,11 +104,7 @@ public sealed class ReviewThreadsIntegrationTests
             Assert.True(after.IsResolved);
             Assert.Equal(body, after.Comments[^1].Body);
             Assert.False(threads.Single(t => t.Id == other.Id).IsResolved);
-        }
-        finally
-        {
-            await CleanUpAsync(client, s);
-        }
+        });
     }
 
     [Fact]
@@ -130,10 +112,9 @@ public sealed class ReviewThreadsIntegrationTests
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
         GitHubClient client = Client();
-        Scratch? s = null;
-        try
+        await Cleanup.RunAsync(async cleanup =>
         {
-            s = await CreatePullAsync(client, ct);
+            Scratch s = await CreatePullAsync(client, cleanup, ct);
             await CommentAsync(client, s, 2, ct);
             var sut = new ReviewThreads(client);
             ReviewThread thread = Assert.Single(await sut.ReadThreadsAsync(Owner, Repo, s.Number, ct));
@@ -141,11 +122,7 @@ public sealed class ReviewThreadsIntegrationTests
             await sut.ReplyAsync(thread.Id, "  ", ct);
             ReviewThread after = (await sut.ReadThreadsAsync(Owner, Repo, s.Number, ct)).Single(t => t.Id == thread.Id);
             Assert.Single(after.Comments);
-        }
-        finally
-        {
-            await CleanUpAsync(client, s);
-        }
+        });
     }
 
     [Fact]
@@ -153,10 +130,9 @@ public sealed class ReviewThreadsIntegrationTests
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
         GitHubClient client = Client();
-        Scratch? s = null;
-        try
+        await Cleanup.RunAsync(async cleanup =>
         {
-            s = await CreatePullAsync(client, ct);
+            Scratch s = await CreatePullAsync(client, cleanup, ct);
             await CommentAsync(client, s, 3, ct);
             string content = Convert.ToBase64String(Encoding.UTF8.GetBytes("changed\n"));
             await client.SendAsync(HttpMethod.Put, $"/repos/{Owner}/{Repo}/contents/{s.Path}", JsonSerializer.Serialize(new { message = "shrink", content, sha = s.FileSha, branch = s.Branch }), ct);
@@ -169,11 +145,7 @@ public sealed class ReviewThreadsIntegrationTests
             }
 
             Assert.Null(thread.Line);
-        }
-        finally
-        {
-            await CleanUpAsync(client, s);
-        }
+        });
     }
 
     [Fact]
@@ -200,28 +172,22 @@ public sealed class ReviewThreadsIntegrationTests
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
         GitHubClient client = Client();
-        Scratch? s = null;
-        string? id = null;
-        try
+        await Cleanup.RunAsync(async cleanup =>
         {
-            s = await CreatePullAsync(client, ct);
-            id = await new PullRequests(client).ReadNodeIdAsync(Owner, Repo, s.Number, ct);
+            Scratch s = await CreatePullAsync(client, cleanup, ct);
+            string id = await new PullRequests(client).ReadNodeIdAsync(Owner, Repo, s.Number, ct);
             await new ReviewThreads(client).RequestReviewAsync(id, "copilot-pull-request-reviewer", ct);
+            cleanup.Add($"remove the review requests of the pull request #{s.Number}", () =>
+            {
+                const string remove = "mutation($pullRequestId: ID!, $botLogins: [String!], $union: Boolean!) { requestReviewsByLogin(input: {pullRequestId: $pullRequestId, botLogins: $botLogins, union: $union}) { pullRequest { id } } }";
+                return client.SendAsync(HttpMethod.Post, "/graphql", JsonSerializer.Serialize(new { query = remove, variables = new { pullRequestId = id, botLogins = Array.Empty<string>(), union = false } }));
+            });
             const string query = "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewRequests(first: 10) { nodes { requestedReviewer { __typename ... on Bot { login } } } } } } }";
             JsonElement answer = await client.SendAsync(HttpMethod.Post, "/graphql", JsonSerializer.Serialize(new { query, variables = new { owner = Owner, name = Repo, number = s.Number } }), ct);
             JsonElement nodes = answer.GetProperty("data").GetProperty("repository").GetProperty("pullRequest").GetProperty("reviewRequests").GetProperty("nodes");
             Assert.Contains(
                 nodes.EnumerateArray().Select(n => n.GetProperty("requestedReviewer")),
                 r => r.GetProperty("__typename").GetString() is "Bot" && r.GetProperty("login").GetString() is "copilot-pull-request-reviewer");
-        }
-        finally
-        {
-            if (s is not null && id is not null)
-            {
-                const string remove = "mutation($pullRequestId: ID!, $botLogins: [String!], $union: Boolean!) { requestReviewsByLogin(input: {pullRequestId: $pullRequestId, botLogins: $botLogins, union: $union}) { pullRequest { id } } }";
-                await client.SendAsync(HttpMethod.Post, "/graphql", JsonSerializer.Serialize(new { query = remove, variables = new { pullRequestId = id, botLogins = Array.Empty<string>(), union = false } }), ct);
-            }
-            await CleanUpAsync(client, s);
-        }
+        });
     }
 }

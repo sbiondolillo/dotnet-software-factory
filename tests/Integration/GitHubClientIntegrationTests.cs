@@ -19,14 +19,13 @@ public sealed class GitHubClientIntegrationTests
         return new GitHubClient(new HttpClient(), token);
     }
 
-    private static async Task<(int Number, string Login)> CreateAsync(GitHubClient client, string json, CancellationToken ct)
+    private static async Task<(int Number, string Login)> CreateAsync(GitHubClient client, Cleanup cleanup, string json, CancellationToken ct)
     {
         JsonElement created = await client.SendAsync(HttpMethod.Post, $"/repos/{Owner}/{Repo}/issues", json, ct);
-        return (created.GetProperty("number").GetInt32(), created.GetProperty("user").GetProperty("login").GetString() ?? "");
+        int number = created.GetProperty("number").GetInt32();
+        cleanup.Add($"close the issue #{number}", () => client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/issues/{number}", "{\"state\":\"closed\"}"));
+        return (number, created.GetProperty("user").GetProperty("login").GetString() ?? "");
     }
-
-    private static Task<JsonElement> CloseAsync(GitHubClient client, int number) =>
-        client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/issues/{number}", "{\"state\":\"closed\"}");
 
     [Fact]
     public async Task AnIssueReadsBackWithTitleBodyAuthorAndLabelsAndTakesAComment()
@@ -35,9 +34,9 @@ public sealed class GitHubClientIntegrationTests
         GitHubClient client = Client();
         string title = "client-test " + Guid.NewGuid();
         string comment = "comment " + Guid.NewGuid();
-        (int number, string login) = await CreateAsync(client, JsonSerializer.Serialize(new { title, body = "the body", labels = BugAndQuestion }), ct);
-        try
+        await Cleanup.RunAsync(async cleanup =>
         {
+            (int number, string login) = await CreateAsync(client, cleanup, JsonSerializer.Serialize(new { title, body = "the body", labels = BugAndQuestion }), ct);
             GitHubIssue issue = await client.ReadIssueAsync(Owner, Repo, number, ct);
             Assert.Equal(title, issue.Title);
             Assert.Equal("the body", issue.Body);
@@ -47,11 +46,7 @@ public sealed class GitHubClientIntegrationTests
             await client.PostCommentAsync(Owner, Repo, number, comment, ct);
             JsonElement comments = await client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/issues/{number}/comments", null, ct);
             Assert.Equal(comment, Assert.Single(comments.EnumerateArray()).GetProperty("body").GetString());
-        }
-        finally
-        {
-            await CloseAsync(client, number);
-        }
+        });
     }
 
     [Fact]
@@ -74,17 +69,13 @@ public sealed class GitHubClientIntegrationTests
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
         GitHubClient client = Client();
-        (int number, _) = await CreateAsync(client, JsonSerializer.Serialize(new { title = "client-test " + Guid.NewGuid() }), ct);
-        try
+        await Cleanup.RunAsync(async cleanup =>
         {
+            (int number, _) = await CreateAsync(client, cleanup, JsonSerializer.Serialize(new { title = "client-test " + Guid.NewGuid() }), ct);
             await client.PostCommentAsync(Owner, Repo, number, new string('a', 262144), ct);
             GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => client.PostCommentAsync(Owner, Repo, number, new string('é', 131073), ct));
             Assert.Equal(422, ex.StatusCode);
-        }
-        finally
-        {
-            await CloseAsync(client, number);
-        }
+        });
     }
 
     [Fact]

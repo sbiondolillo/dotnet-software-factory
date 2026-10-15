@@ -26,6 +26,9 @@ public sealed class SandboxIntegrationTests : IDisposable
     private static Task<CommandResult> DockerAsync(params string[] arguments) =>
         Runner.RunAsync(new CommandSpec { Command = "docker", Arguments = arguments }, TestContext.Current.CancellationToken);
 
+    private static Task<CommandResult> CleanUpDockerAsync(params string[] arguments) =>
+        Runner.RunAsync(new CommandSpec { Command = "docker", Arguments = arguments });
+
     private static Task EnsureImageAsync() =>
         new SandboxImage(Runner).EnsureAsync(Tag, RepoRoot(), TestContext.Current.CancellationToken);
 
@@ -66,17 +69,15 @@ public sealed class SandboxIntegrationTests : IDisposable
     public async Task RunPrintsA64DigitIdAndAMissingTagExitsWith125()
     {
         await EnsureImageAsync();
-        CommandResult ok = await DockerAsync("run", "--detach", "--init", Tag, "sleep", "infinity");
-        try
+        await Cleanup.RunAsync(async cleanup =>
         {
+            CommandResult ok = await DockerAsync("run", "--detach", "--init", Tag, "sleep", "infinity");
             Assert.Equal(0, ok.ExitCode);
+            string id = ok.StandardOutput.Trim();
+            cleanup.Add($"remove the container {id}", async () => Assert.Equal(0, (await CleanUpDockerAsync("rm", "--force", id)).ExitCode));
             Assert.Matches("^[0-9a-f]{64}\n$", ok.StandardOutput);
             Assert.Empty(ok.StandardError);
-        }
-        finally
-        {
-            await DockerAsync("rm", "--force", ok.StandardOutput.Trim());
-        }
+        });
 
         CommandResult missing = await DockerAsync("run", "--detach", $"factory-missing:{Guid.NewGuid():N}", "true");
         Assert.Equal(125, missing.ExitCode);
@@ -165,23 +166,34 @@ public sealed class SandboxIntegrationTests : IDisposable
     public async Task RemoveForceEndsARunningCommandAndTheContainerIsGone()
     {
         await EnsureImageAsync();
-        CommandResult run = await DockerAsync("run", "--detach", "--init", Tag, "sleep", "infinity");
-        string id = run.StandardOutput.Trim();
+        await Cleanup.RunAsync(async cleanup =>
+        {
+            CommandResult run = await DockerAsync("run", "--detach", "--init", Tag, "sleep", "infinity");
+            Assert.Equal(0, run.ExitCode);
+            string id = run.StandardOutput.Trim();
+            cleanup.Add($"remove the container {id} when docker holds it", async () =>
+            {
+                if ((await CleanUpDockerAsync("container", "inspect", id)).ExitCode is 0)
+                {
+                    Assert.Equal(0, (await CleanUpDockerAsync("rm", "--force", id)).ExitCode);
+                }
+            });
 
-        CommandResult exec = await DockerAsync("exec", "--detach", id, "sleep", "600");
-        Assert.Equal(0, exec.ExitCode);
-        Assert.Empty(exec.StandardOutput);
+            CommandResult exec = await DockerAsync("exec", "--detach", id, "sleep", "600");
+            Assert.Equal(0, exec.ExitCode);
+            Assert.Empty(exec.StandardOutput);
 
-        await WaitForAsync(() => HostHasProcess("sleep", "600"), 5_000);
-        Assert.True(HostHasProcess("sleep", "600"));
+            await WaitForAsync(() => HostHasProcess("sleep", "600"), 5_000);
+            Assert.True(HostHasProcess("sleep", "600"));
 
-        CommandResult removed = await DockerAsync("rm", "--force", id);
+            CommandResult removed = await DockerAsync("rm", "--force", id);
 
-        await WaitForAsync(() => !HostHasProcess("sleep", "600"), 5_000);
-        Assert.False(HostHasProcess("sleep", "600"));
+            await WaitForAsync(() => !HostHasProcess("sleep", "600"), 5_000);
+            Assert.False(HostHasProcess("sleep", "600"));
 
-        Assert.Equal(id + "\n", removed.StandardOutput);
-        Assert.Equal(1, (await DockerAsync("container", "inspect", id)).ExitCode);
+            Assert.Equal(id + "\n", removed.StandardOutput);
+            Assert.Equal(1, (await DockerAsync("container", "inspect", id)).ExitCode);
+        });
     }
 
     private static async Task WaitForAsync(Func<bool> condition, int timeoutMilliseconds)

@@ -9,11 +9,12 @@ public sealed class GitShowIntegrationTests
     [Fact]
     public async Task ShowGivesTheFileAtTheBaseAndNullForAFileTheBaseLacks()
     {
-        DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-git-show-");
         var runner = new CommandRunner();
         var git = new Git(runner);
-        try
+        await Cleanup.RunAsync(async cleanup =>
         {
+            DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-git-show-");
+            cleanup.Add($"delete the directory {directory.FullName}", () => directory.Delete(recursive: true));
             string dir = directory.FullName;
             await Run(runner, dir, "init", "-q");
             Directory.CreateDirectory(Path.Combine(dir, "specs/features"));
@@ -24,11 +25,7 @@ public sealed class GitShowIntegrationTests
 
             Assert.Equal("Feature: A\n", await git.ReadFileAtAsync(baseCommit, "specs/features/a.feature", dir, TestContext.Current.CancellationToken));
             Assert.Null(await git.ReadFileAtAsync(baseCommit, "specs/features/none.feature", dir, TestContext.Current.CancellationToken));
-        }
-        finally
-        {
-            directory.Delete(recursive: true);
-        }
+        });
     }
 
     private static async Task Run(CommandRunner runner, string directory, params string[] arguments)

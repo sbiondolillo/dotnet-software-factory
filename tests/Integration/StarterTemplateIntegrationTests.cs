@@ -56,15 +56,12 @@ public sealed class StarterTemplateIntegrationTests(StarterTemplateIntegrationTe
     /// <summary>Runs a body over the installed template and a fresh parent directory for the copy, and removes the parent at its end.</summary>
     private async Task WithTemplateAsync(Func<string, string, Task> body)
     {
-        string parent = Directory.CreateTempSubdirectory("starter-copy-").FullName;
-        try
+        await Cleanup.RunAsync(async cleanup =>
         {
+            string parent = Directory.CreateTempSubdirectory("starter-copy-").FullName;
+            cleanup.Add($"delete the directory {parent}", () => Directory.Delete(parent, true));
             await body(installed.Home, parent);
-        }
-        finally
-        {
-            Directory.Delete(parent, true);
-        }
+        });
     }
 
     private static async Task<string> NewCopyAsync(string home, string parent)
@@ -86,9 +83,10 @@ public sealed class StarterTemplateIntegrationTests(StarterTemplateIntegrationTe
     [Fact]
     public async Task TheInstallExitsWith0AndListsTheTemplate()
     {
-        string home = Directory.CreateTempSubdirectory("starter-home-").FullName;
-        try
+        await Cleanup.RunAsync(async cleanup =>
         {
+            string home = Directory.CreateTempSubdirectory("starter-home-").FullName;
+            cleanup.Add($"delete the directory {home}", () => Directory.Delete(home, true));
             CommandResult installed = await DotnetAsync(home, null, "new", "install", Path.Combine(RepoRoot(), "templates", "starter"));
             Assert.Equal(0, installed.ExitCode);
             CommandResult list = await DotnetAsync(home, null, "new", "list");
@@ -96,11 +94,7 @@ public sealed class StarterTemplateIntegrationTests(StarterTemplateIntegrationTe
             await DotnetAsync(home, null, "new", "uninstall", Path.Combine(RepoRoot(), "templates", "starter"));
             CommandResult after = await DotnetAsync(home, null, "new", "list");
             Assert.DoesNotContain("factory-starter", after.StandardOutput, StringComparison.Ordinal);
-        }
-        finally
-        {
-            Directory.Delete(home, true);
-        }
+        });
     }
 
     [Fact]

@@ -20,12 +20,13 @@ public sealed class PullRequestsIntegrationTests
         return new GitHubClient(new HttpClient(), token);
     }
 
-    private static async Task<string> CreateBranchAsync(GitHubClient client, CancellationToken ct)
+    private static async Task<string> CreateBranchAsync(GitHubClient client, Cleanup cleanup, CancellationToken ct)
     {
         string branch = "pr-test/" + Guid.NewGuid().ToString("N");
         JsonElement main = await client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/git/ref/heads/main", null, ct);
         string sha = main.GetProperty("object").GetProperty("sha").GetString() ?? "";
         await client.SendAsync(HttpMethod.Post, $"/repos/{Owner}/{Repo}/git/refs", JsonSerializer.Serialize(new { @ref = "refs/heads/" + branch, sha }), ct);
+        cleanup.Add($"delete the branch {branch}", () => client.SendAsync(HttpMethod.Delete, $"/repos/{Owner}/{Repo}/git/refs/heads/{branch}"));
         string content = Convert.ToBase64String(Encoding.UTF8.GetBytes(branch));
         await client.SendAsync(HttpMethod.Put, $"/repos/{Owner}/{Repo}/contents/{branch}.txt", JsonSerializer.Serialize(new { message = "add " + branch, content, branch }), ct);
         return branch;
@@ -37,33 +38,17 @@ public sealed class PullRequestsIntegrationTests
         return json.GetProperty("object").GetProperty("sha").GetString() ?? "";
     }
 
-    private static async Task CleanUpAsync(GitHubClient client, List<int> pulls, List<string> branches)
-    {
-        foreach (int number in pulls)
-        {
-            await client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/pulls/{number}", "{\"state\":\"closed\"}");
-        }
-
-        foreach (string branch in branches)
-        {
-            await client.SendAsync(HttpMethod.Delete, $"/repos/{Owner}/{Repo}/git/refs/heads/{branch}");
-        }
-    }
-
     [Fact]
     public async Task OpeningTwiceOnOneBranchGivesTheSamePullRequestAndTwoBranchesGiveTwo()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
         GitHubClient client = Client();
-        var pulls = new List<int>();
-        var branches = new List<string>();
-        try
+        await Cleanup.RunAsync(async cleanup =>
         {
             var sut = new PullRequests(client);
-            string first = await CreateBranchAsync(client, ct);
-            branches.Add(first);
+            string first = await CreateBranchAsync(client, cleanup, ct);
             PullRequest a = await sut.OpenAsync(Owner, Repo, first, "main", "test " + first, "body", ct);
-            pulls.Add(a.Number);
+            cleanup.Add($"close the pull request #{a.Number}", () => client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/pulls/{a.Number}", "{\"state\":\"closed\"}"));
             PullRequest again = await sut.OpenAsync(Owner, Repo, first, "main", "test " + first, "body", ct);
             Assert.Equal(a, again);
 
@@ -71,11 +56,7 @@ public sealed class PullRequestsIntegrationTests
             Assert.Equal(ScratchFixtures.EmptyPull, b.Number);
             Assert.NotEqual(a.Number, b.Number);
             Assert.Equal(a, await sut.OpenAsync(Owner, Repo, first, "main", "test", "body", ct));
-        }
-        finally
-        {
-            await CleanUpAsync(client, pulls, branches);
-        }
+        });
     }
 
     [Fact]
@@ -91,18 +72,12 @@ public sealed class PullRequestsIntegrationTests
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
         GitHubClient client = Client();
-        var branches = new List<string>();
-        try
+        await Cleanup.RunAsync(async cleanup =>
         {
-            string branch = await CreateBranchAsync(client, ct);
-            branches.Add(branch);
+            string branch = await CreateBranchAsync(client, cleanup, ct);
             string sha = await HeadShaAsync(client, branch, ct);
             Assert.Empty(await new PullRequests(client).ReadCheckRunsAsync(Owner, Repo, sha, ct));
-        }
-        finally
-        {
-            await CleanUpAsync(client, [], branches);
-        }
+        });
     }
 
     [Fact]
