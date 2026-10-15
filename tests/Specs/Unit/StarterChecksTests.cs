@@ -171,24 +171,18 @@ public sealed class StarterChecksTests : IDisposable
     }
 
     [Fact]
-    public void TheCheckOfTheFeatureDirectoryFailsForTwoFeaturesAndTwoScenarios()
+    public void TheCheckOfTheFeatureDirectoryFailsForAMissingAnExtraAndANestedFeature()
     {
-        Write("f/a.feature", "Feature: A\n  Scenario: one\n    Given x\n");
-        StarterChecks.OneFeatureWithOneScenario(Path.Combine(_root, "f"));
-        Write("f/a.feature", "Feature: A\n  Scenario: one\n  Scenario: two\n");
-        Assert.Throws<InvalidOperationException>(() => StarterChecks.OneFeatureWithOneScenario(Path.Combine(_root, "f")));
-        Write("f/a.feature", "Feature: A\n  Scenario: one\n");
-        Write("f/b.feature", "Feature: B\n  Scenario: one\n");
-        Assert.Throws<InvalidOperationException>(() => StarterChecks.OneFeatureWithOneScenario(Path.Combine(_root, "f")));
-    }
-
-    [Fact]
-    public void TheCheckOfTheStepsDirectoryFailsForTwoStepClasses()
-    {
-        Write("st/A.cs", "");
-        StarterChecks.OneStepClass(Path.Combine(_root, "st"));
-        Write("st/B.cs", "");
-        Assert.Throws<InvalidOperationException>(() => StarterChecks.OneStepClass(Path.Combine(_root, "st")));
+        string dir = Path.Combine(_root, "f");
+        Write("f/a.feature", "");
+        Assert.Throws<InvalidOperationException>(() => StarterChecks.HoldsFeatureFiles(dir, "a.feature", "b.feature"));
+        Write("f/b.feature", "");
+        StarterChecks.HoldsFeatureFiles(dir, "b.feature", "a.feature");
+        Write("f/c.feature", "");
+        Assert.Throws<InvalidOperationException>(() => StarterChecks.HoldsFeatureFiles(dir, "a.feature", "b.feature"));
+        File.Delete(Path.Combine(dir, "c.feature"));
+        Write("f/sub/c.feature", "");
+        Assert.Throws<InvalidOperationException>(() => StarterChecks.HoldsFeatureFiles(dir, "a.feature", "b.feature"));
     }
 
     [Fact]

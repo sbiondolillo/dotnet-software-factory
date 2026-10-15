@@ -21,5 +21,16 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Core/Core.csproj" />
+    <!-- Builds the program with this project, in its configuration, so a step can launch it. -->
+    <ProjectReference Include="../../src/App/App.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
+  <!-- The path of the built program goes into the test assembly, resolved by MSBuild for the configuration of this build. -->
+  <Target Name="ProgramPathIntoAssembly" BeforeTargets="GetAssemblyAttributes" DependsOnTargets="ResolveProjectReferences">
+    <MSBuild Projects="../../src/App/App.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">
+      <Output TaskParameter="TargetOutputs" ItemName="BuiltProgram" />
+    </MSBuild>
+    <ItemGroup>
+      <AssemblyMetadata Include="BuiltProgram" Value="@(BuiltProgram->'%(FullPath)')" />
+    </ItemGroup>
+  </Target>
 </Project>

@@ -165,11 +165,45 @@ public sealed class StarterTemplateIntegrationTests(StarterTemplateIntegrationTe
 
             CommandResult test = await DotnetAsync(home, copy, "test", "--no-restore");
             Assert.True(test.ExitCode is 0, test.StandardOutput + test.StandardError);
-            Assert.Matches(@"Failed:\s+0, Passed:\s+1, Skipped:\s+0", test.StandardOutput);
+            Assert.Matches(@"Failed:\s+0, Passed:\s+2, Skipped:\s+0", test.StandardOutput);
             foreach (string file in LockFiles)
             {
                 Assert.Equal(before[file], File.ReadAllBytes(Path.Combine(copy, file)));
             }
+        });
+    }
+
+    private static string? Outcome(Dictionary<string, string?> results, string scenario)
+        => results.Single(pair => pair.Key.EndsWith("." + FeatureFiles.ComputeTestName(scenario), StringComparison.Ordinal)).Value;
+
+    [Fact]
+    public async Task TheCopysTestFailsWhenTheProgramThrowsAtItsStart()
+    {
+        await WithTemplateAsync(async (home, parent) =>
+        {
+            string copy = await NewCopyAsync(home, parent);
+            string[][] commands = [["restore", "--locked-mode"], ["build", "--no-restore"], ["build", "--no-restore", "-c", "Release"]];
+            foreach (string[] command in commands)
+            {
+                CommandResult result = await DotnetAsync(home, copy, command);
+                Assert.True(result.ExitCode is 0, string.Join(' ', command) + "\n" + result.StandardOutput + result.StandardError);
+            }
+
+            string program = Path.Combine(copy, "src", "App", "Program.cs");
+            string source = File.ReadAllText(program);
+            string edited = source.Replace("using IHost host", "if (args.Length > -1)\n{\n    throw new InvalidOperationException(\"the program fails at its start\");\n}\n\nusing IHost host", StringComparison.Ordinal);
+            Assert.NotEqual(source, edited);
+            File.WriteAllText(program, edited);
+
+            string trx = "start.trx";
+            CommandResult test = await DotnetAsync(home, copy, "test", "--no-restore", "-c", "Release", "tests/Specs/Specs.csproj", "--logger", "trx;LogFileName=" + trx);
+            Assert.Equal(1, test.ExitCode);
+            Assert.Matches(@"Failed:\s+1, Passed:\s+1, Skipped:\s+0", test.StandardOutput);
+            var results = System.Xml.Linq.XDocument.Load(Directory.EnumerateFiles(copy, trx, SearchOption.AllDirectories).Single()).Descendants()
+                .Where(e => e.Name.LocalName is "UnitTestResult")
+                .ToDictionary(e => (string?)e.Attribute("testName") ?? "", e => (string?)e.Attribute("outcome"));
+            Assert.Equal("Failed", Outcome(results, "The launched program greets by name"));
+            Assert.Equal("Passed", Outcome(results, "The greeter greets by name"));
         });
     }
 

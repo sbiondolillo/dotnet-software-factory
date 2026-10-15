@@ -1,10 +1,9 @@
-using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace Specs;
 
 /// <summary>The checks the starter template's scenarios make on a copy. Each throws <see cref="InvalidOperationException"/> when it fails.</summary>
-public static partial class StarterChecks
+public static class StarterChecks
 {
     private static readonly string[] Left = [".template.config/", "bin/", "obj/", "TestResults/"];
 
@@ -199,29 +198,16 @@ public static partial class StarterChecks
         }
     }
 
-    /// <summary>Fails unless the directory holds one feature file with one scenario.</summary>
-    public static void OneFeatureWithOneScenario(string directory)
+    /// <summary>Fails unless the directory holds exactly these feature files, at any depth.</summary>
+    public static void HoldsFeatureFiles(string directory, params string[] names)
     {
-        string[] features = [.. Directory.EnumerateFiles(directory, "*.feature", SearchOption.AllDirectories)];
-        if (features.Length is not 1)
+        string[] found = [.. Directory.EnumerateFiles(directory, "*.feature", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(directory, path).Replace(Path.DirectorySeparatorChar, '/'))
+            .Order(StringComparer.Ordinal)];
+        string[] want = [.. names.Order(StringComparer.Ordinal)];
+        if (!found.SequenceEqual(want))
         {
-            throw new InvalidOperationException($"{directory} holds {features.Length} feature files");
-        }
-
-        int scenarios = File.ReadAllLines(features[0]).Count(line => ScenarioLine().IsMatch(line));
-        if (scenarios is not 1)
-        {
-            throw new InvalidOperationException($"the feature holds {scenarios} scenarios");
-        }
-    }
-
-    /// <summary>Fails unless the directory holds one step class.</summary>
-    public static void OneStepClass(string directory)
-    {
-        int classes = Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories).Count();
-        if (classes is not 1)
-        {
-            throw new InvalidOperationException($"{directory} holds {classes} step classes");
+            throw new InvalidOperationException($"{directory} holds the feature files [{string.Join(", ", found)}], not [{string.Join(", ", want)}]");
         }
     }
 
@@ -244,7 +230,4 @@ public static partial class StarterChecks
             throw new InvalidOperationException($"{programFile} does not parse with the root command");
         }
     }
-
-    [GeneratedRegex(@"^\s*Scenario( Outline)?:")]
-    private static partial Regex ScenarioLine();
 }
