@@ -312,6 +312,25 @@ Claude Code runs with `--dangerously-skip-permissions`, in a docker container on
 
 The factory builds this repo. A story is an issue written with the starter's `write-issue` skill, and the owner approves it with the labels `ready` and `factory`. Then `.github/workflows/factory.yml` runs the factory at `main` on that issue, and the owner merges the pull request. A direct session with Claude Code and the skill `change` in `.claude/skills/change/` builds the rest. That is the workflow files, a phase prompt, a prose file, and a change with no scenario. It is also a story that a run failed on, and any change the owner sends direct. The skill states the rule and the labels. The labels `behavior`, `cleanup`, `refactor` and `reframe` select the kind of run, as in a starter repo. The run reaches GitHub with the secret `FACTORY_SELF_TOKEN`, which reaches this repo alone. A run by hand, `gh workflow run factory --ref <branch> -f issue=<n>`, runs the factory at that branch. The same labels on the issues closed before 2026-10-09 record the runs of the homelab factory.
 
+## Release a version
+
+`<Version>` in `src/App/App.csproj` is the version of the factory. The SDK adds the commit, and a pull request that the factory opens ends with `Factory version: <version>+<commit>`. The version stays the same between two releases.
+
+The owner releases a version, such as `1.2.1`, in these steps:
+
+1. Merge a commit that sets `<Version>` to `1.2.1`.
+2. Tag that commit `v1.2.1`, and push the tag.
+3. Move the tag `v1` to that commit, and push it with `--force`.
+
+```
+git tag -a v1.2.1 -m v1.2.1 <commit>
+git push origin v1.2.1
+git tag -f v1 <commit>
+git push -f origin v1
+```
+
+A tag on a commit before the change of `<Version>` gives the version of the last release.
+
 ## Commands
 
 ```
