@@ -314,7 +314,7 @@ The factory builds this repo. A story is an issue written with the starter's `wr
 
 ## Release a version
 
-`<Version>` in `src/App/App.csproj` is the version of the factory. The SDK adds the commit, and a pull request that the factory opens ends with `Factory version: <version>+<commit>`. The version stays the same between two releases.
+`<Version>` in `src/App/App.csproj` is the version of the factory. The SDK adds the commit. A pull request that the factory opens holds `Factory version: <version>+<commit>` in the line before its total. The version stays the same between two releases.
 
 The owner releases a version, such as `1.2.1`, in these steps:
 
