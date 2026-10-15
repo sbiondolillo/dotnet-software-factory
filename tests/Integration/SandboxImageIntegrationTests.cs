@@ -8,6 +8,7 @@ namespace Integration;
 public sealed class SandboxImageIntegrationTests
 {
     private static readonly CommandRunner Runner = new();
+    private static readonly string[] Programs = ["node", "claude", "git"];
 
     private static Task<CommandResult> DockerAsync(params string[] arguments) =>
         Runner.RunAsync(new CommandSpec { Command = "docker", Arguments = arguments }, TestContext.Current.CancellationToken);
@@ -35,9 +36,10 @@ public sealed class SandboxImageIntegrationTests
     [Fact]
     public async Task ABuildWithAMissingDockerfileExitsWithOneAndSandboxImageThrowsItsStandardError()
     {
-        DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-sandbox-integration-");
-        try
+        await Cleanup.RunAsync(async cleanup =>
         {
+            DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-sandbox-integration-");
+            cleanup.Add($"delete the directory {directory.FullName}", () => directory.Delete(recursive: true));
             string path = Path.Combine(directory.FullName, "sandbox", "Dockerfile");
             CommandResult result = await DockerAsync("build", "--tag", $"factory-nofile:{Guid.NewGuid():N}", "--file", path, directory.FullName);
 
@@ -49,11 +51,7 @@ public sealed class SandboxImageIntegrationTests
             SandboxImageException exception = await Assert.ThrowsAsync<SandboxImageException>(
                 () => new SandboxImage(Runner).EnsureAsync($"factory-nofile:{Guid.NewGuid():N}", directory.FullName, TestContext.Current.CancellationToken));
             Assert.NotEmpty(exception.Message.Replace("docker build failed:", "", StringComparison.Ordinal).Trim());
-        }
-        finally
-        {
-            directory.Delete(recursive: true);
-        }
+        });
     }
 
     [Fact]
@@ -61,9 +59,10 @@ public sealed class SandboxImageIntegrationTests
     {
         string root = RepoRoot();
         string tag = $"factory-sandbox-test:{Guid.NewGuid():N}";
-        DirectoryInfo copy = Directory.CreateTempSubdirectory("factory-sandbox-copy-");
-        try
+        await Cleanup.RunAsync(async cleanup =>
         {
+            DirectoryInfo copy = Directory.CreateTempSubdirectory("factory-sandbox-copy-");
+            cleanup.Add($"delete the directory {copy.FullName}", () => copy.Delete(recursive: true));
             Directory.CreateDirectory(Path.Combine(copy.FullName, "sandbox"));
             File.Copy(Path.Combine(root, "global.json"), Path.Combine(copy.FullName, "global.json"));
             File.Copy(Path.Combine(root, "sandbox", "Dockerfile"), Path.Combine(copy.FullName, "sandbox", "Dockerfile"));
@@ -78,6 +77,7 @@ public sealed class SandboxImageIntegrationTests
 
             var recording = new RecordingRunner();
             var image = new SandboxImage(recording);
+            cleanup.Add($"remove the image {tag}", async () => Assert.Equal(0, (await DockerAsync("image", "rm", "--force", tag)).ExitCode));
             await image.EnsureAsync(tag, copy.FullName, TestContext.Current.CancellationToken);
             Assert.Equal(["image", "build"], recording.Runs.Select(run => run.Spec.Arguments[0]));
             CommandResult build = recording.Runs[1].Result;
@@ -91,7 +91,7 @@ public sealed class SandboxImageIntegrationTests
 
             CommandResult dotnet = await DockerAsync("run", "--rm", tag, "dotnet", "--version");
             Assert.Equal(version, dotnet.StandardOutput.Trim());
-            foreach (string program in new[] { "node", "claude", "git" })
+            foreach (string program in Programs)
             {
                 Assert.Equal(0, (await DockerAsync("run", "--rm", tag, program, "--version")).ExitCode);
             }
@@ -102,12 +102,7 @@ public sealed class SandboxImageIntegrationTests
             CommandResult printer = await DockerAsync("run", "--rm", tag, "dotnet", "/opt/api-printer/ApiPrinter.dll");
             Assert.Equal(2, printer.ExitCode);
             Assert.Equal("usage: ApiPrinter <directory>...", printer.StandardError.Trim());
-        }
-        finally
-        {
-            await DockerAsync("image", "rm", "--force", tag);
-            copy.Delete(recursive: true);
-        }
+        });
     }
 
     private sealed class RecordingRunner : CommandRunner

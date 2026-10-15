@@ -29,11 +29,10 @@ public sealed class GitIntegrationTests
 
         string mainShaBefore = await ReadBranchShaAsync(http, "main");
 
-        DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-git-integration-");
         var git = new Git(new CommandRunner());
-
-        try
+        await Cleanup.RunAsync(async cleanup =>
         {
+            DirectoryInfo directory = NewDirectory(cleanup);
             await git.CloneAsync($"https://github.com/{Owner}/{Repo}.git", token, directory.FullName, TestContext.Current.CancellationToken);
             await git.CheckoutBranchAsync(branch, directory.FullName, TestContext.Current.CancellationToken);
 
@@ -43,6 +42,11 @@ public sealed class GitIntegrationTests
             await git.CommitAllAsync(directory.FullName, $"Factory integration test {branch}", authorName, authorEmail, TestContext.Current.CancellationToken);
             string headSha = await git.ReadHeadShaAsync(directory.FullName, TestContext.Current.CancellationToken);
             await git.PushAsync(branch, directory.FullName, token, TestContext.Current.CancellationToken);
+            cleanup.Add($"delete the branch {branch}", async () =>
+            {
+                using HttpResponseMessage deleted = await http.DeleteAsync($"repos/{Owner}/{Repo}/git/refs/heads/{branch}");
+                deleted.EnsureSuccessStatusCode();
+            });
 
             BranchInfo branchInfo = await ReadBranchAsync(http, branch);
             Assert.Equal(headSha, branchInfo.Commit.Sha);
@@ -55,97 +59,112 @@ public sealed class GitIntegrationTests
             string[] changedFiles = await git.ListChangedFilesAsync("main", directory.FullName, TestContext.Current.CancellationToken);
             Assert.Contains("README.md", changedFiles);
             Assert.Contains(newFile, changedFiles);
-        }
-        finally
-        {
-            // Remove the branch the push created, so a run leaves the repo with the branches it held before.
-            // No branch means a 422, which DeleteAsync does not throw, so a test that failed before
-            // its push reports that first failure.
-            await http.DeleteAsync($"repos/{Owner}/{Repo}/git/refs/heads/{branch}", TestContext.Current.CancellationToken);
-        }
+        });
     }
 
     [Fact]
     public async Task APushWithAnInvalidTokenFailsAuthentication()
     {
-        string token = Token;
-        DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-git-integration-");
-        var git = new Git(new CommandRunner());
-        string branch = $"factory-integration-{Guid.NewGuid():N}";
+        await Cleanup.RunAsync(async cleanup =>
+        {
+            string token = Token;
+            DirectoryInfo directory = NewDirectory(cleanup);
+            var git = new Git(new CommandRunner());
+            string branch = $"factory-integration-{Guid.NewGuid():N}";
 
-        await git.CloneAsync($"https://github.com/{Owner}/{Repo}.git", token, directory.FullName, TestContext.Current.CancellationToken);
-        await git.CheckoutBranchAsync(branch, directory.FullName, TestContext.Current.CancellationToken);
-        await File.AppendAllTextAsync(Path.Combine(directory.FullName, "README.md"), $"\nfactory integration {branch}\n", TestContext.Current.CancellationToken);
-        await git.CommitAllAsync(directory.FullName, $"Factory integration test {branch}", "Factory Integration Test", "factory-integration@example.com", TestContext.Current.CancellationToken);
+            await git.CloneAsync($"https://github.com/{Owner}/{Repo}.git", token, directory.FullName, TestContext.Current.CancellationToken);
+            await git.CheckoutBranchAsync(branch, directory.FullName, TestContext.Current.CancellationToken);
+            await File.AppendAllTextAsync(Path.Combine(directory.FullName, "README.md"), $"\nfactory integration {branch}\n", TestContext.Current.CancellationToken);
+            await git.CommitAllAsync(directory.FullName, $"Factory integration test {branch}", "Factory Integration Test", "factory-integration@example.com", TestContext.Current.CancellationToken);
 
-        GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
-            () => git.PushAsync(branch, directory.FullName, "invalid", TestContext.Current.CancellationToken));
+            GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
+                () => git.PushAsync(branch, directory.FullName, "invalid", TestContext.Current.CancellationToken));
 
-        Assert.Contains("push", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("Authentication failed", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("push", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("Authentication failed", exception.Message, StringComparison.Ordinal);
+        });
     }
 
     [Fact]
     public async Task AChangedFilesReadAgainstAnUnknownBaseGetsGitsUnknownRevisionAnswer()
     {
-        string token = Token;
-        DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-git-integration-");
-        var git = new Git(new CommandRunner());
+        await Cleanup.RunAsync(async cleanup =>
+        {
+            string token = Token;
+            DirectoryInfo directory = NewDirectory(cleanup);
+            var git = new Git(new CommandRunner());
 
-        await git.CloneAsync($"https://github.com/{Owner}/{Repo}.git", token, directory.FullName, TestContext.Current.CancellationToken);
+            await git.CloneAsync($"https://github.com/{Owner}/{Repo}.git", token, directory.FullName, TestContext.Current.CancellationToken);
 
-        GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
-            () => git.ListChangedFilesAsync("no-such-base", directory.FullName, TestContext.Current.CancellationToken));
+            GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
+                () => git.ListChangedFilesAsync("no-such-base", directory.FullName, TestContext.Current.CancellationToken));
 
-        Assert.Contains("diff", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("unknown revision", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("diff", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("unknown revision", exception.Message, StringComparison.Ordinal);
+        });
     }
 
     [Fact]
     public async Task ADiffAgainstABaseHoldsOneSectionPerTrackedFileAndNoneForAnUntrackedFile()
     {
-        (DirectoryInfo directory, string baseSha, Git git) = await NewLocalRepoAsync();
-        await File.AppendAllTextAsync(Path.Combine(directory.FullName, "a.txt"), "two\n", TestContext.Current.CancellationToken);
-        await File.WriteAllTextAsync(Path.Combine(directory.FullName, "b.txt"), "new\n", TestContext.Current.CancellationToken);
-        await git.CommitAllAsync(directory.FullName, "second", "Factory Integration Test", "factory-integration@example.com", TestContext.Current.CancellationToken);
-        await File.WriteAllTextAsync(Path.Combine(directory.FullName, "c.txt"), "untracked\n", TestContext.Current.CancellationToken);
+        await Cleanup.RunAsync(async cleanup =>
+        {
+            (DirectoryInfo directory, string baseSha, Git git) = await NewLocalRepoAsync(cleanup);
+            await File.AppendAllTextAsync(Path.Combine(directory.FullName, "a.txt"), "two\n", TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(Path.Combine(directory.FullName, "b.txt"), "new\n", TestContext.Current.CancellationToken);
+            await git.CommitAllAsync(directory.FullName, "second", "Factory Integration Test", "factory-integration@example.com", TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(Path.Combine(directory.FullName, "c.txt"), "untracked\n", TestContext.Current.CancellationToken);
 
-        string diff = await git.ReadDiffAsync(baseSha, directory.FullName, TestContext.Current.CancellationToken);
+            string diff = await git.ReadDiffAsync(baseSha, directory.FullName, TestContext.Current.CancellationToken);
 
-        Assert.Contains("diff --git a/a.txt b/a.txt", diff, StringComparison.Ordinal);
-        Assert.Contains("+two", diff, StringComparison.Ordinal);
-        int bSection = diff.IndexOf("diff --git a/b.txt b/b.txt", StringComparison.Ordinal);
-        Assert.True(bSection >= 0);
-        Assert.Contains("new file mode 100644", diff[bSection..], StringComparison.Ordinal);
-        Assert.DoesNotContain("c.txt", diff, StringComparison.Ordinal);
+            Assert.Contains("diff --git a/a.txt b/a.txt", diff, StringComparison.Ordinal);
+            Assert.Contains("+two", diff, StringComparison.Ordinal);
+            int bSection = diff.IndexOf("diff --git a/b.txt b/b.txt", StringComparison.Ordinal);
+            Assert.True(bSection >= 0);
+            Assert.Contains("new file mode 100644", diff[bSection..], StringComparison.Ordinal);
+            Assert.DoesNotContain("c.txt", diff, StringComparison.Ordinal);
+        });
     }
 
     [Fact]
     public async Task ADiffWithHeadAtTheBaseIsEmpty()
     {
-        (DirectoryInfo directory, string baseSha, Git git) = await NewLocalRepoAsync();
+        await Cleanup.RunAsync(async cleanup =>
+        {
+            (DirectoryInfo directory, string baseSha, Git git) = await NewLocalRepoAsync(cleanup);
 
-        string diff = await git.ReadDiffAsync(baseSha, directory.FullName, TestContext.Current.CancellationToken);
+            string diff = await git.ReadDiffAsync(baseSha, directory.FullName, TestContext.Current.CancellationToken);
 
-        Assert.Equal("", diff);
+            Assert.Equal("", diff);
+        });
     }
 
     [Fact]
     public async Task ADiffAgainstAnUnknownBaseGetsGitsBadObjectAnswer()
     {
-        (DirectoryInfo directory, _, Git git) = await NewLocalRepoAsync();
-        string unknown = new('0', 40);
+        await Cleanup.RunAsync(async cleanup =>
+        {
+            (DirectoryInfo directory, _, Git git) = await NewLocalRepoAsync(cleanup);
+            string unknown = new('0', 40);
 
-        GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
-            () => git.ReadDiffAsync(unknown, directory.FullName, TestContext.Current.CancellationToken));
+            GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
+                () => git.ReadDiffAsync(unknown, directory.FullName, TestContext.Current.CancellationToken));
 
-        Assert.Contains("diff", exception.Message, StringComparison.Ordinal);
-        Assert.Contains($"fatal: bad object {unknown}", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("diff", exception.Message, StringComparison.Ordinal);
+            Assert.Contains($"fatal: bad object {unknown}", exception.Message, StringComparison.Ordinal);
+        });
     }
 
-    private static async Task<(DirectoryInfo Directory, string BaseSha, Git Git)> NewLocalRepoAsync()
+    private static DirectoryInfo NewDirectory(Cleanup cleanup, string prefix = "factory-git-integration-")
     {
-        DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-git-diff-");
+        DirectoryInfo directory = Directory.CreateTempSubdirectory(prefix);
+        cleanup.Add($"delete the directory {directory.FullName}", () => directory.Delete(recursive: true));
+        return directory;
+    }
+
+    private static async Task<(DirectoryInfo Directory, string BaseSha, Git Git)> NewLocalRepoAsync(Cleanup cleanup)
+    {
+        DirectoryInfo directory = NewDirectory(cleanup, "factory-git-diff-");
         var runner = new CommandRunner();
         var git = new Git(runner);
         CommandResult init = await runner.RunAsync(

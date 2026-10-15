@@ -14,6 +14,14 @@ Where things are in this repo, for an agent about to read or write code here.
 | `src/Core/` | the library, where the behaviour lives | the test project references it |
 | `src/App/` | the console program, a thin shell over the library | it builds the Generic Host, `Microsoft.Extensions.Hosting`, and parses its arguments with `System.CommandLine`. A new option or argument is a `System.CommandLine` symbol, and `--help` lists it |
 
+## The cleanup of an integration test
+
+An integration test that creates a thing in its body removes it through `Cleanup.RunAsync`, in `tests/Integration/Cleanup.cs`. A thing is a branch, a pull request, an issue, a review request, a container, an image or a directory.
+
+- The body records the step that removes a thing with `cleanup.Add`, on the line after the call that creates it. So a step removes only a thing that exists, and a failed create leaves no step behind.
+- When the code under test creates the thing, the body records the step before that call, and the step first reads whether the thing exists. `DeliverIntegrationTests` reads the branch that `Deliver` pushes.
+- `RunAsync` runs every step, the last recorded first, so a pull request closes before its branch goes. When the body failed, the test fails with the body's exception, and each error of a step goes to the test output. When the body passed, an error of a step fails the test.
+
 ## What a scenario tests
 
 A scenario tests what a program does. No scenario reads the words of a prose file: the README, an `AGENTS.md`, a skill, an issue template, a page under `docs/`. Such a pin fails only when the file is edited, so it taxes each edit and catches nothing. A document that a program reads is tested through that program: a template goes through `IssueScenarios.Apply`, and a script in a fenced block runs. A change to prose is read in the diff of the pull request.

@@ -62,20 +62,17 @@ public sealed class CleanupSandboxIntegrationTests : IDisposable
         string copy = $"/tmp/check-{Guid.NewGuid():N}";
         CancellationToken token = TestContext.Current.CancellationToken;
 
+        // The copy is under /tmp of the container, which the removal of the container removes, and
+        // its record is under .git of the tree, which Dispose removes. So the removal of the copy is
+        // part of the body, and no step of a cleanup repeats it.
         CommandResult add = await sandbox.RunAsync("git", ["worktree", "add", "--detach", copy, "HEAD"], [], token);
-        try
-        {
-            Assert.Equal(0, add.ExitCode);
-            CommandResult run = await sandbox.RunAsync("sh", ["-c", "pwd; cat tracked.txt; test ! -e untracked.txt"], [], copy, token);
-            Assert.Equal(0, run.ExitCode);
-            Assert.Equal($"{copy}\nhead", run.StandardOutput);
-        }
-        finally
-        {
-            CommandResult remove = await sandbox.RunAsync("git", ["worktree", "remove", "--force", copy], [], token);
-            Assert.Equal(0, remove.ExitCode);
-        }
+        Assert.Equal(0, add.ExitCode);
+        CommandResult run = await sandbox.RunAsync("sh", ["-c", "pwd; cat tracked.txt; test ! -e untracked.txt"], [], copy, token);
+        Assert.Equal(0, run.ExitCode);
+        Assert.Equal($"{copy}\nhead", run.StandardOutput);
 
+        CommandResult remove = await sandbox.RunAsync("git", ["worktree", "remove", "--force", copy], [], token);
+        Assert.Equal(0, remove.ExitCode);
         Assert.NotEqual(0, (await sandbox.RunAsync("test", ["-e", copy], [], token)).ExitCode);
     }
 

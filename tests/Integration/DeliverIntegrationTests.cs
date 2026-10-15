@@ -22,23 +22,27 @@ public sealed class DeliverIntegrationTests
         string runId = Guid.NewGuid().ToString("N")[..8];
         string branch = "factory/" + runId;
         string title = "Deliver integration " + runId;
-        DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-deliver-integration-");
-        int issue = 0;
-        int pull = 0;
-        try
+        await Cleanup.RunAsync(async cleanup =>
         {
+            DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-deliver-integration-");
+            cleanup.Add($"delete the directory {directory.FullName}", () => directory.Delete(true));
             JsonElement created = await client.SendAsync(HttpMethod.Post, $"/repos/{Owner}/{Repo}/issues", JsonSerializer.Serialize(new { title }), ct);
-            issue = created.GetProperty("number").GetInt32();
+            int issue = created.GetProperty("number").GetInt32();
+            cleanup.Add($"close the issue #{issue}", () => client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/issues/{issue}", "{\"state\":\"closed\"}"));
 
             var git = new Git(new CommandRunner());
             await git.CloneAsync($"https://github.com/{Owner}/{Repo}.git", token, directory.FullName, ct);
             await File.WriteAllTextAsync(Path.Combine(directory.FullName, $"deliver-{runId}.txt"), runId, ct);
             await git.CommitAllAsync(directory.FullName, "Deliver integration " + runId, "Factory Integration Test", "factory-integration@example.com", ct);
 
+            // The push in RunAsync creates the branch, and a failure after it leaves no answer to
+            // record it by. So this step reads whether GitHub holds the branch.
+            cleanup.Add($"delete the branch {branch} when GitHub holds it", () => DeleteWhenHeldAsync(client, branch));
             var pullRequests = new PullRequests(client);
             var deliver = new Deliver(git, pullRequests, client);
             PullRequest result = await deliver.RunAsync(directory.FullName, runId, Owner, Repo, "main", issue, title, token, ct);
-            pull = result.Number;
+            int pull = result.Number;
+            cleanup.Add($"close the pull request #{pull}", () => client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/pulls/{pull}", "{\"state\":\"closed\"}"));
 
             JsonElement pr = await client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/pulls/{pull}", null, ct);
             Assert.Equal(title, pr.GetProperty("title").GetString());
@@ -48,21 +52,15 @@ public sealed class DeliverIntegrationTests
             JsonElement comments = await client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/issues/{issue}/comments", null, ct);
             JsonElement only = Assert.Single(comments.EnumerateArray().ToList());
             Assert.Contains(result.HtmlUrl, only.GetProperty("body").GetString(), StringComparison.Ordinal);
-        }
-        finally
+        });
+    }
+
+    private static async Task DeleteWhenHeldAsync(GitHubClient client, string branch)
+    {
+        JsonElement refs = await client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/git/matching-refs/heads/{branch}", null);
+        if (refs.EnumerateArray().Any(r => r.GetProperty("ref").GetString() == "refs/heads/" + branch))
         {
-            if (pull is not 0)
-            {
-                await client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/pulls/{pull}", "{\"state\":\"closed\"}", TestContext.Current.CancellationToken);
-            }
-
-            if (issue is not 0)
-            {
-                await client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/issues/{issue}", "{\"state\":\"closed\"}", TestContext.Current.CancellationToken);
-            }
-
-            await client.SendAsync(HttpMethod.Delete, $"/repos/{Owner}/{Repo}/git/refs/heads/{branch}", null, TestContext.Current.CancellationToken);
-            directory.Delete(true);
+            await client.SendAsync(HttpMethod.Delete, $"/repos/{Owner}/{Repo}/git/refs/heads/{branch}");
         }
     }
 }

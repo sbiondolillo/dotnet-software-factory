@@ -19,26 +19,18 @@ public sealed class PullRequestWatchIntegrationTests
         return new GitHubClient(new HttpClient(), token);
     }
 
-    private static async Task<(string Branch, int Number)> OpenAsync(GitHubClient client, CancellationToken ct)
+    private static async Task<(string Branch, int Number)> OpenAsync(GitHubClient client, Cleanup cleanup, CancellationToken ct)
     {
         string branch = "watch-test/" + Guid.NewGuid().ToString("N");
         JsonElement main = await client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/git/ref/heads/main", null, ct);
         string sha = main.GetProperty("object").GetProperty("sha").GetString() ?? "";
         await client.SendAsync(HttpMethod.Post, $"/repos/{Owner}/{Repo}/git/refs", JsonSerializer.Serialize(new { @ref = "refs/heads/" + branch, sha }), ct);
+        cleanup.Add($"delete the branch {branch}", () => client.SendAsync(HttpMethod.Delete, $"/repos/{Owner}/{Repo}/git/refs/heads/{branch}"));
         string content = Convert.ToBase64String(Encoding.UTF8.GetBytes(branch));
         await client.SendAsync(HttpMethod.Put, $"/repos/{Owner}/{Repo}/contents/{branch}.txt", JsonSerializer.Serialize(new { message = "add " + branch, content, branch }), ct);
         PullRequest pr = await new PullRequests(client).OpenAsync(Owner, Repo, branch, "main", "watch test " + branch, "body", ct);
+        cleanup.Add($"close the pull request #{pr.Number}", () => client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/pulls/{pr.Number}", "{\"state\":\"closed\"}"));
         return (branch, pr.Number);
-    }
-
-    private static async Task CleanUpAsync(GitHubClient client, int number, string branch)
-    {
-        if (number is not 0)
-        {
-            await client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/pulls/{number}", "{\"state\":\"closed\"}");
-        }
-
-        await client.SendAsync(HttpMethod.Delete, $"/repos/{Owner}/{Repo}/git/refs/heads/{branch}");
     }
 
     private static async Task CommentAsync(GitHubClient client, int number, string path, CancellationToken ct)
@@ -87,11 +79,9 @@ public sealed class PullRequestWatchIntegrationTests
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
         GitHubClient client = Client();
-        string branch = "";
-        int number = 0;
-        try
+        await Cleanup.RunAsync(async cleanup =>
         {
-            (branch, number) = await OpenAsync(client, ct);
+            (string branch, int number) = await OpenAsync(client, cleanup, ct);
             var threads = new ReviewThreads(client);
             Assert.Empty(await threads.ReadReviewsAsync(Owner, Repo, number, ct));
             await CommentAsync(client, number, branch + ".txt", ct);
@@ -105,10 +95,6 @@ public sealed class PullRequestWatchIntegrationTests
             PullRequestWatchResult after = await watch.WatchAsync(Owner, Repo, number, Owner, TimeSpan.Zero, TimeSpan.Zero, ct);
             Assert.Empty(after.Threads);
             Assert.Contains(await threads.ReadReviewsAsync(Owner, Repo, number, ct), r => r.Author == Owner);
-        }
-        finally
-        {
-            await CleanUpAsync(client, number, branch);
-        }
+        });
     }
 }
