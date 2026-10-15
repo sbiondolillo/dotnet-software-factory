@@ -173,8 +173,8 @@ public sealed class StarterTemplateIntegrationTests(StarterTemplateIntegrationTe
         });
     }
 
-    private static string? Outcome(Dictionary<string, string?> results, string scenario)
-        => results.Single(pair => pair.Key.EndsWith("." + FeatureFiles.ComputeTestName(scenario), StringComparison.Ordinal)).Value;
+    private static TestOutcome Outcome(IReadOnlyList<ReportedTest> results, string scenario)
+        => results.Single(test => test.Method == FeatureFiles.ComputeTestName(scenario)).Outcome;
 
     [Fact]
     public async Task TheCopysTestFailsWhenTheProgramThrowsAtItsStart()
@@ -199,11 +199,9 @@ public sealed class StarterTemplateIntegrationTests(StarterTemplateIntegrationTe
             CommandResult test = await DotnetAsync(home, copy, "test", "--no-restore", "-c", "Release", "tests/Specs/Specs.csproj", "--logger", "trx;LogFileName=" + trx);
             Assert.Equal(1, test.ExitCode);
             Assert.Matches(@"Failed:\s+1, Passed:\s+1, Skipped:\s+0", test.StandardOutput);
-            var results = System.Xml.Linq.XDocument.Load(Directory.EnumerateFiles(copy, trx, SearchOption.AllDirectories).Single()).Descendants()
-                .Where(e => e.Name.LocalName is "UnitTestResult")
-                .ToDictionary(e => (string?)e.Attribute("testName") ?? "", e => (string?)e.Attribute("outcome"));
-            Assert.Equal("Failed", Outcome(results, "The launched program greets by name"));
-            Assert.Equal("Passed", Outcome(results, "The greeter greets by name"));
+            IReadOnlyList<ReportedTest> results = TestReport.Read(Directory.EnumerateFiles(copy, trx, SearchOption.AllDirectories).Single());
+            Assert.Equal(TestOutcome.Failed, Outcome(results, "The launched program greets by name"));
+            Assert.Equal(TestOutcome.Passed, Outcome(results, "The greeter greets by name"));
         });
     }
 
