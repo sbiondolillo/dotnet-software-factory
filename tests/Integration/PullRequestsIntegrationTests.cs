@@ -6,7 +6,6 @@ using Xunit;
 namespace Integration;
 
 /// <summary>Proves the canned pull request and check-run answers in tests/Specs are what GitHub gives.</summary>
-[Collection(GitHubWrites.Name)]
 public sealed class PullRequestsIntegrationTests
 {
     private const string Owner = "sbiondolillo";

@@ -7,7 +7,6 @@ using Xunit;
 namespace Integration;
 
 /// <summary>Proves the git answers <c>tests/Specs</c> canned still hold against the real GitHub and a real <c>git</c>.</summary>
-[Collection(GitHubWrites.Name)]
 public sealed class GitIntegrationTests
 {
     private const string Owner = "sbiondolillo";

@@ -6,7 +6,6 @@ using Xunit;
 namespace Integration;
 
 /// <summary>Proves the canned review thread answers in tests/Specs are what GitHub gives.</summary>
-[Collection(GitHubWrites.Name)]
 public sealed class ReviewThreadsIntegrationTests
 {
     private const string Owner = "sbiondolillo";

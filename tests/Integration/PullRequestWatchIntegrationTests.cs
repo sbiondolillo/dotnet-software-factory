@@ -6,7 +6,6 @@ using Xunit;
 namespace Integration;
 
 /// <summary>Proves the canned answers of the pull request watch in tests/Specs are what GitHub gives.</summary>
-[Collection(GitHubWrites.Name)]
 public sealed class PullRequestWatchIntegrationTests
 {
     private const string Owner = "sbiondolillo";
