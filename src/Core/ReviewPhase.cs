@@ -119,7 +119,12 @@ public sealed class ReviewPhase(ClaudeCodeAgent agent, Git git, bool cleanup = f
                     + "and it keeps every test.\n"
                 : "1. Read every feature file under specs/features/ and the plan, .factory/plan.md.\n"
                     + "2. Judge the build against every scenario, every result the plan states and every sentence of the issue, "
-                    + "and judge whether the tests cover what each scenario names.\n")
+                    + "and judge whether the tests cover what each scenario names. "
+                    + "An existing test is a scenario under specs/features/, or a [Fact] or [Theory] method under tests/Specs/Unit/ or tests/Integration/, at the base commit. "
+                    + "Block an edit to the text of an existing scenario or to the body of an existing test method, a rename or a removal, when the issue does not name that test. "
+                    + "A wrapper around the body, such as a retry, is an edit. "
+                    + "An edit to a step that an existing scenario uses keeps what the step does and what it asserts. "
+                    + "New steps, state of a step class moved into a shared class, and new helpers pass.\n")
             + $"3. Write the verdict to {VerdictPath}, as one JSON object with approved and blocking. "
             + "approved is true or false; blocking is a list of texts. Approve only a build with no blocking item. "
             + "Write each blocking item as one fault, in words that a builder can act on with the item alone.\n"
