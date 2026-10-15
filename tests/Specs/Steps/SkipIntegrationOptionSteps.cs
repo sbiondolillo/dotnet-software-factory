@@ -25,8 +25,10 @@ public sealed class SkipIntegrationOptionSteps(ConsoleProgramSteps console)
     [Then("docker runs a command that starts with {string}")]
     public void ThenStartsWith(string prefix) => Assert.Contains(ExecCommands(), c => c.StartsWith(prefix, StringComparison.Ordinal));
 
+    /// <summary>A <c>claude</c> command is not searched: its argument is a prompt, and a prompt names paths that no command runs.</summary>
     [Then("docker runs no command that holds {string}")]
-    public void ThenNoneHolds(string text) => Assert.DoesNotContain(ExecCommands(), c => c.Contains(text, StringComparison.Ordinal));
+    public void ThenNoneHolds(string text) =>
+        Assert.DoesNotContain(ExecCommands(), c => !c.StartsWith("claude ", StringComparison.Ordinal) && c.Contains(text, StringComparison.Ordinal));
 
     [Then("docker runs the command {string} one time or more")]
     public void ThenRuns(string command) => Assert.Contains(command, ExecCommands());
