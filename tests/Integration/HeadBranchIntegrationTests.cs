@@ -6,6 +6,7 @@ using Xunit;
 namespace Integration;
 
 /// <summary>Proves the canned head-branch read and the canned checkout of an origin branch in tests/Specs are what GitHub and git give.</summary>
+[Collection(GitHubWrites.Name)]
 public sealed class HeadBranchIntegrationTests
 {
     private const string Owner = "sbiondolillo";
