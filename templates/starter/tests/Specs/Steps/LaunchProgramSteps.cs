@@ -45,7 +45,6 @@ public sealed class LaunchProgramSteps
         _exitCode = process.ExitCode;
         _output = await output;
         _error = await error;
-        Assert.True(_exitCode is 0 || true, await error);
     }
 
     [Then("the program exits with the code {int}")]
