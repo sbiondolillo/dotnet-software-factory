@@ -61,11 +61,13 @@ public sealed class PullRequestWatchIntegrationTests
         IReadOnlyList<CheckRun> runs = await pulls.ReadCheckRunsAsync(Owner, Repo, sha, ct);
         Assert.Contains(new CheckRun("build", "completed", conclusion), runs);
         Assert.Contains(new CheckRun("skipped", "completed", "skipped"), runs);
+        Assert.All(runs, r => Assert.Equal("completed", r.Status));
         Assert.Contains(await threads.ReadReviewsAsync(Owner, Repo, number, ct), r => r.Author == Owner && r.CommitSha == sha);
 
         var watch = new PullRequestWatch(pulls, threads);
         PullRequestWatchResult result = await watch.WatchAsync(Owner, Repo, number, Owner, TimeSpan.Zero, TimeSpan.Zero, ct);
         Assert.Equal(green, result.IsGreen);
+        Assert.Null(result.Refusal);
     }
 
     [Fact]

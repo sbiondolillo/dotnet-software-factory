@@ -3,7 +3,7 @@ using Xunit;
 
 namespace Integration;
 
-/// <summary>Proves the starter template's canned answers are what the real dotnet gives: each test makes a copy of the template that the class installs one time, and runs the command of its row.</summary>
+/// <summary>Proves the starter template's canned answers are what the real dotnet gives: each test but the install test makes a copy of the template that the class installs one time, and runs the command of its row.</summary>
 public sealed class StarterTemplateIntegrationTests(StarterTemplateIntegrationTests.Installed installed) : IClassFixture<StarterTemplateIntegrationTests.Installed>
 {
     /// <summary>A template store with the starter installed, which every test of the class reads.</summary>
