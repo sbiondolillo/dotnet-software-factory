@@ -5,6 +5,7 @@ using Xunit;
 namespace Integration;
 
 /// <summary>Proves the canned git, pull request and comment answers in tests/Specs/Steps/DeliverSteps.cs are what git and GitHub give.</summary>
+[Collection(GitHubWrites.Name)]
 public sealed class DeliverIntegrationTests
 {
     private const string Owner = "sbiondolillo";

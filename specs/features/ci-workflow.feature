@@ -23,6 +23,18 @@ Feature: CI workflow
       # and builds nothing. So a run asks Docker Hub for the base image one time.
       # When Docker Hub fails, the step `Sandbox image` fails, and the suite does
       # not run.
+      #
+      # One run of the suite sends many writes to GitHub with one token. GitHub's
+      # secondary limit for content creation counts per account, so the suite
+      # spends the owner's own budget. Two defences keep a burst under it:
+      #   - Every test class that writes to GitHub is in the xUnit collection
+      #     `GitHub writes`, tests/Integration/GitHubWrites.cs. So one run sends its
+      #     writes in sequence.
+      #   - The concurrency group `ci-integration` holds the `integration` job of
+      #     every pull request and of main. So one job runs at a time.
+      # A group holds one running job and one waiting job. A newer waiting job
+      # cancels the older waiting one, and that check then shows `cancelled`. A
+      # cancelled required check blocks the merge until a rerun of its job passes.
       name: ci
 
       on:
@@ -52,6 +64,9 @@ Feature: CI workflow
 
         integration:
           needs: build
+          concurrency:
+            group: ci-integration
+            cancel-in-progress: false
           runs-on: ubuntu-latest
           steps:
             - uses: actions/checkout@v7
