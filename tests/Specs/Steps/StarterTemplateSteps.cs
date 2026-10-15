@@ -81,11 +81,9 @@ public sealed class StarterTemplateSteps(StarterState state)
     public void ThenTheCopysSolutionNames(Table table)
         => StarterChecks.SolutionNames(Path.Combine(state.Copy, "Solution.slnx"), table.Rows.Select(row => row["project"]));
 
-    [Then("the copy's specs\\/features directory holds one feature file with one scenario")]
-    public void ThenTheCopysFeaturesHoldOne() => StarterChecks.OneFeatureWithOneScenario(Path.Combine(state.Copy, "specs", "features"));
-
-    [Then("the copy's tests\\/Specs\\/Steps directory holds one step class")]
-    public void ThenTheCopysStepsHoldOne() => StarterChecks.OneStepClass(Path.Combine(state.Copy, "tests", "Specs", "Steps"));
+    [Then("the copy's specs\\/features directory holds the feature files {string} and {string} and no other")]
+    public void ThenTheCopysFeaturesHold(string first, string second)
+        => StarterChecks.HoldsFeatureFiles(Path.Combine(state.Copy, "specs", "features"), first, second);
 
     [Then("the copy's tests\\/Integration directory holds these files and no other")]
     public void ThenTheCopysIntegrationHolds(Table table)

@@ -31,12 +31,6 @@ Feature: A new repo starts from the starter template
       | tests/Specs/Specs.csproj        |
       | tests/Integration/Integration.csproj |
 
-  Scenario: The copy holds one feature file with one scenario and one step class
-    Given the template is installed
-    When I run dotnet new "factory-starter" into an empty directory
-    Then the copy's specs/features directory holds one feature file with one scenario
-    And the copy's tests/Specs/Steps directory holds one step class
-
   Scenario: The copy's integration suite holds the project file and its lock file only
     Given the template is installed
     When I run dotnet new "factory-starter" into an empty directory
@@ -95,3 +89,8 @@ Feature: A new repo starts from the starter template
     Given the template is installed
     When I run dotnet new "factory-starter" with --name "other-name" into an empty directory named "my-factory-repo"
     Then the copy's "src/App/App.csproj" gives the property "AssemblyName" the value "other-name"
+
+  Scenario: The copy holds the greeting feature and the launch feature
+    Given the template is installed
+    When I run dotnet new "factory-starter" into an empty directory
+    Then the copy's specs/features directory holds the feature files "greeting.feature" and "launch-program.feature" and no other

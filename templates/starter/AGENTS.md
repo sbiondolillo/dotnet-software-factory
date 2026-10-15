@@ -7,7 +7,7 @@ The rules for an agent that reads, writes or reviews code in this repo.
 | path | holds | rule |
 |---|---|---|
 | `specs/features/` | the `.feature` files | `tests/Specs/Specs.csproj` links every one of them in |
-| `tests/Specs/` | the build suite: Reqnroll step classes under `Steps/`, and xUnit unit tests under `Unit/` | each test answers every call to a service from a stub. A unit test class name ends `Tests` |
+| `tests/Specs/` | the build suite: Reqnroll step classes under `Steps/`, and xUnit unit tests under `Unit/` | each test answers every call to a service from a stub, and the program that a scenario launches calls none. A unit test class name ends `Tests` |
 | `tests/Integration/` | the integration suite: xUnit tests against the real services that the program calls | `dotnet run --no-restore --project tests/Integration` runs it, and `dotnet test` leaves it out |
 | `src/Core/` | the library, where the behaviour lives, and the `System.CommandLine` command tree | the tree holds every command, option, argument and action. A new option or argument is a symbol in the tree, and `--help` lists it |
 | `src/App/` | the console program, a thin shell over the library | `Program.cs` builds the Generic Host, `Microsoft.Extensions.Hosting`, and parses its arguments with the command tree from `src/Core` |
@@ -18,7 +18,7 @@ A scenario tests what the program does. No scenario reads the words of a prose f
 
 ## How a scenario reaches the code
 
-Reqnroll compiles each linked feature into a test class under `obj/`, named after the feature title with `Feature` added, and one test method per scenario. A class name that ends `Feature` belongs to that generated code. A step class marked `[Binding]` answers the steps, and it calls the library in process.
+Reqnroll compiles each linked feature into a test class under `obj/`, named after the feature title with `Feature` added, and one test method per scenario. A class name that ends `Feature` belongs to that generated code. A step class marked `[Binding]` answers the steps, and each step class calls the library in process except one. That one launches the built program of `src/App` as a process, as a smoke test of its start. A scenario that launches the program uses a path that calls no service, because a stub cannot reach a process.
 
 ## The integration suite
 
