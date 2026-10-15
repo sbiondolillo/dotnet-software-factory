@@ -5,6 +5,7 @@ using Xunit;
 namespace Integration;
 
 /// <summary>Proves the canned GitHub answers in tests/Specs are what the real API gives.</summary>
+[Collection(GitHubWrites.Name)]
 public sealed class GitHubClientIntegrationTests
 {
     private const string Owner = "sbiondolillo";

@@ -5,6 +5,7 @@ using Xunit;
 namespace Integration;
 
 /// <summary>Proves the canned clone answer in tests/Specs/Unit/FactoryRunHarness.cs is what git and GitHub give.</summary>
+[Collection(GitHubWrites.Name)]
 public sealed class FactoryRunIntegrationTests
 {
     private const string Owner = "sbiondolillo";
