@@ -3,9 +3,27 @@ using Xunit;
 
 namespace Integration;
 
-/// <summary>Proves the starter template's canned answers are what the real dotnet gives: each test installs the template, makes a copy and runs the command of its row.</summary>
-public sealed class StarterTemplateIntegrationTests
+/// <summary>Proves the starter template's canned answers are what the real dotnet gives: each test but the install test makes a copy of the template that the class installs one time, and runs the command of its row.</summary>
+public sealed class StarterTemplateIntegrationTests(StarterTemplateIntegrationTests.Installed installed) : IClassFixture<StarterTemplateIntegrationTests.Installed>
 {
+    /// <summary>A template store with the starter installed, which every test of the class reads.</summary>
+    public sealed class Installed : IAsyncLifetime
+    {
+        public string Home { get; } = Directory.CreateTempSubdirectory("starter-home-").FullName;
+
+        public async ValueTask InitializeAsync()
+        {
+            CommandResult result = await DotnetAsync(Home, null, "new", "install", Path.Combine(RepoRoot(), "templates", "starter"));
+            Assert.True(result.ExitCode is 0, result.StandardOutput + result.StandardError);
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Directory.Delete(Home, true);
+            return ValueTask.CompletedTask;
+        }
+    }
+
     private static readonly string[] LockFiles =
     [
         "src/App/packages.lock.json",
@@ -35,24 +53,16 @@ public sealed class StarterTemplateIntegrationTests
             Timeout = TimeSpan.FromMinutes(5),
         }, TestContext.Current.CancellationToken);
 
-    /// <summary>Runs a body over a fresh template store and an installed template, and removes both at its end.</summary>
-    private static async Task WithTemplateAsync(Func<string, string, Task> body, bool install = true)
+    /// <summary>Runs a body over the installed template and a fresh parent directory for the copy, and removes the parent at its end.</summary>
+    private async Task WithTemplateAsync(Func<string, string, Task> body)
     {
-        string home = Directory.CreateTempSubdirectory("starter-home-").FullName;
         string parent = Directory.CreateTempSubdirectory("starter-copy-").FullName;
         try
         {
-            if (install)
-            {
-                CommandResult installed = await DotnetAsync(home, null, "new", "install", Path.Combine(RepoRoot(), "templates", "starter"));
-                Assert.True(installed.ExitCode is 0, installed.StandardOutput + installed.StandardError);
-            }
-
-            await body(home, parent);
+            await body(installed.Home, parent);
         }
         finally
         {
-            Directory.Delete(home, true);
             Directory.Delete(parent, true);
         }
     }

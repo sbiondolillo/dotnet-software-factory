@@ -67,10 +67,8 @@ public sealed class PullRequestsIntegrationTests
             PullRequest again = await sut.OpenAsync(Owner, Repo, first, "main", "test " + first, "body", ct);
             Assert.Equal(a, again);
 
-            string second = await CreateBranchAsync(client, ct);
-            branches.Add(second);
-            PullRequest b = await sut.OpenAsync(Owner, Repo, second, "main", "test " + second, "body", ct);
-            pulls.Add(b.Number);
+            PullRequest b = await sut.OpenAsync(Owner, Repo, ScratchFixtures.EmptyBranch, "main", "test", "body", ct);
+            Assert.Equal(ScratchFixtures.EmptyPull, b.Number);
             Assert.NotEqual(a.Number, b.Number);
             Assert.Equal(a, await sut.OpenAsync(Owner, Repo, first, "main", "test", "body", ct));
         }

@@ -57,19 +57,9 @@ public sealed class GitHubClientIntegrationTests
     [Fact]
     public async Task AnIssueWithATitleAloneReadsWithEmptyBodyAndNoLabels()
     {
-        CancellationToken ct = TestContext.Current.CancellationToken;
-        GitHubClient client = Client();
-        (int number, _) = await CreateAsync(client, JsonSerializer.Serialize(new { title = "client-test " + Guid.NewGuid() }), ct);
-        try
-        {
-            GitHubIssue issue = await client.ReadIssueAsync(Owner, Repo, number, ct);
-            Assert.Equal("", issue.Body);
-            Assert.Empty(issue.Labels);
-        }
-        finally
-        {
-            await CloseAsync(client, number);
-        }
+        GitHubIssue issue = await Client().ReadIssueAsync(Owner, Repo, ScratchFixtures.TitleAloneIssue, TestContext.Current.CancellationToken);
+        Assert.Equal("", issue.Body);
+        Assert.Empty(issue.Labels);
     }
 
     [Fact]

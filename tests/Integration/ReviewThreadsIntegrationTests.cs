@@ -58,22 +58,12 @@ public sealed class ReviewThreadsIntegrationTests
     }
 
     [Fact]
-    public async Task ANewPullRequestReadsEmptyReviewsAndThreads()
+    public async Task APullRequestWithNoReviewReadsEmptyReviewsAndThreads()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
-        GitHubClient client = Client();
-        Scratch? s = null;
-        try
-        {
-            s = await CreatePullAsync(client, ct);
-            var sut = new ReviewThreads(client);
-            Assert.Empty(await sut.ReadReviewsAsync(Owner, Repo, s.Number, ct));
-            Assert.Empty(await sut.ReadThreadsAsync(Owner, Repo, s.Number, ct));
-        }
-        finally
-        {
-            await CleanUpAsync(client, s);
-        }
+        var sut = new ReviewThreads(Client());
+        Assert.Empty(await sut.ReadReviewsAsync(Owner, Repo, ScratchFixtures.EmptyPull, ct));
+        Assert.Empty(await sut.ReadThreadsAsync(Owner, Repo, ScratchFixtures.EmptyPull, ct));
     }
 
     [Fact]

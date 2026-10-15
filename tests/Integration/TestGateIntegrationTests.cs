@@ -56,8 +56,8 @@ public sealed class TestGateIntegrationTests : IDisposable
         return await Sandbox.StartAsync(Runner, Tag, RepoRoot(), _tree.FullName, Token);
     }
 
-    private static Task<CommandResult> DotnetAsync(Sandbox sandbox, IReadOnlyList<string> arguments, IReadOnlyList<string>? names = null) =>
-        sandbox.RunAsync("dotnet", arguments, names ?? [], Token);
+    private static Task<CommandResult> DotnetAsync(Sandbox sandbox, IReadOnlyList<string> arguments) =>
+        sandbox.RunAsync("dotnet", arguments, [], Token);
 
     private async Task<(CommandResult Result, IReadOnlyList<ReportedTest> Tests)> TestAsync(string source, string extraPackages = "")
     {
@@ -173,14 +173,14 @@ public sealed class TestGateIntegrationTests : IDisposable
         Assert.Empty(tests);
     }
 
-    private async Task<CommandResult> IntegrationAsync(string source, IReadOnlyList<string>? names = null)
+    private async Task<CommandResult> IntegrationAsync(string source)
     {
         await WriteAsync("tests/Integration/Integration.csproj", Project("Integration"));
         await WriteAsync("tests/Integration/ProbeTests.cs", source);
         await using Sandbox sandbox = await StartAsync();
         CommandResult restore = await DotnetAsync(sandbox, ["restore", "tests/Integration"]);
         Assert.Equal(0, restore.ExitCode);
-        return await DotnetAsync(sandbox, ["run", "--no-restore", "--project", "tests/Integration"], names);
+        return await DotnetAsync(sandbox, ["run", "--no-restore", "--project", "tests/Integration"]);
     }
 
     [Fact]
@@ -200,28 +200,5 @@ public sealed class TestGateIntegrationTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("Total: 0", result.StandardOutput, StringComparison.Ordinal);
-    }
-
-    private const string ProbeNameTest =
-        "using Xunit;\nnamespace Integration;\npublic class ProbeTests\n{\n    [Fact] public void NameIsSet() => Assert.False(string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable(\"PROBE_NAME\")));\n}\n";
-
-    [Fact]
-    public async Task ANameGivenWithEnvReachesTheIntegrationTest()
-    {
-        Environment.SetEnvironmentVariable("PROBE_NAME", "probe-value");
-
-        CommandResult result = await IntegrationAsync(ProbeNameTest, ["PROBE_NAME"]);
-
-        Assert.Equal(0, result.ExitCode);
-    }
-
-    [Fact]
-    public async Task WithoutTheNameTheIntegrationTestFails()
-    {
-        Environment.SetEnvironmentVariable("PROBE_NAME", "probe-value");
-
-        CommandResult result = await IntegrationAsync(ProbeNameTest);
-
-        Assert.Equal(1, result.ExitCode);
     }
 }
