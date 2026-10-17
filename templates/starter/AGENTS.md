@@ -33,7 +33,7 @@ The build suite answers each call to a service with a canned answer from a stub 
 `Directory.Build.props` makes every warning an error and enforces the style of `.editorconfig` in the build. `dotnet format` fixes what it can.
 
 - A class that stores its constructor arguments uses a primary constructor. IDE0290.
-- A test of equality or of type against a constant is a pattern: `value is null`, `value is not null`, `exitCode is not 0`, `value is string text`. A comparison of order keeps its operator: `count > 1`. IDE0041, IDE0083, IDE0078, IDE0020 and IDE0019 flag most cases. No analyzer asks for a pattern in place of `x != 0` or `(x as string) != "y"`, so write `x is not 0` and `x is not "y"` by hand.
+- A test of equality or of type against a constant is a pattern: `value is null`, `value is not null`, `exitCode is not 0`, `value is string text`. A comparison of order keeps its operator: `count > 1`. IDE0041, IDE0083, IDE0078, IDE0020 and IDE0019 flag other forms, such as `ReferenceEquals(value, null)` and `!(x is T)`. No analyzer asks for a pattern in place of `value == null`, `value != null`, `x == 0`, `x != 0` or `(x as string) != "y"`. So write `value is null`, `value is not null`, `x is 0`, `x is not 0` and `x is not "y"` by hand.
 - Every `await` in `src/` ends with `.ConfigureAwait(false)`. CA2007 flags an `await` with no `ConfigureAwait` there, and passes `.ConfigureAwait(true)`, so write `false` by hand. `.editorconfig` turns CA2007 off under `tests/`.
 
 ## Issues
