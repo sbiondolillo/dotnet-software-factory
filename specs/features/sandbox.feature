@@ -23,6 +23,11 @@ Feature: A sandbox container starts, runs commands on the work tree, and is remo
     When a caller starts a sandbox with the image tag "factory-sandbox:test" and the work tree "/tmp/factory-work-tree"
     Then the arguments of the docker run hold "--env" and then "ANTHROPIC_API_KEY"
 
+  Scenario: The container holds ANTHROPIC_BASE_URL by name
+    Given a Sandbox built over a mock of CommandRunner
+    When a caller starts a sandbox with the image tag "factory-sandbox:test" and the work tree "/tmp/factory-work-tree"
+    Then the arguments of the docker run hold "--env" and then "ANTHROPIC_BASE_URL"
+
   Scenario: A failing docker run makes the start throw a SandboxException
     Given a Sandbox built over a mock of CommandRunner
     And docker run exits with a nonzero code and writes a reason to standard error

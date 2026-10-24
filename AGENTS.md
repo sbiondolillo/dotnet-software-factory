@@ -99,7 +99,8 @@ adds a git operation to `src/Core/Git.cs` follows them too.
 A `Sandbox` sends every `docker` command through the one `CommandRunner` it is built
 over. `Sandbox.StartAsync` runs `docker image inspect` first, then `docker build` when the
 inspect exits with a code other than 0, then `docker run`. Each command runs as
-`docker exec`, and the disposal runs `docker rm --force`. So a mock `CommandRunner` under
+`docker exec`, and the disposal runs `docker rm --force`. The `docker run` carries
+`--env HOME=<home>`, `--env ANTHROPIC_API_KEY` and `--env ANTHROPIC_BASE_URL`. So a mock `CommandRunner` under
 a `Sandbox` answers `run` and `exec` by name and every other `docker` command with the
 code 0, as `tests/Specs/Steps/LintGateSteps.cs` does.
 
@@ -143,6 +144,10 @@ code 0, as `tests/Specs/Steps/LintGateSteps.cs` does.
 - Every command runs through a `Sandbox`, with an empty list of names. The container
   holds `ANTHROPIC_API_KEY` from its start, and `claude` reads the key from its
   environment.
+- The container holds `ANTHROPIC_BASE_URL` from its start when the factory's environment
+  holds it, and `claude` then calls that URL. `docker run --env <name>` copies a variable
+  only when it is set, so with no `ANTHROPIC_BASE_URL` on the host, `claude` calls
+  Anthropic directly.
 - `claude` runs with `-p`, `--output-format json` and `--dangerously-skip-permissions`.
   Without the bypass, `claude` denies itself each tool call, lists it under
   `permission_denials`, asks for permission in `result` and exits with the code 0.

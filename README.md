@@ -291,6 +291,7 @@ To run an issue again, remove the label `factory` and add it again.
 Claude Code runs with `--dangerously-skip-permissions`, in a docker container on the GitHub runner. The container holds the work tree of the target repo at `/work`, and it has network access.
 
 - The agent gets `ANTHROPIC_API_KEY`, and no other secret.
+- When the factory's environment holds `ANTHROPIC_BASE_URL`, the agent gets it too. So the factory can call an Anthropic-compatible gateway. When it is not set, Claude Code calls Anthropic directly.
 - `FACTORY_GITHUB_TOKEN` never enters the container. Only the workflows, `git` and the GitHub client of the factory use it, on the runner. `git` reads it from a credential helper in its environment, so the token is never written to the work tree.
 - The agent has no credential to push. The lint gate commits the change on the runner, and the factory pushes it after the tests and the review pass.
 - The container mounts `.git/` of the work tree read-only, except `.git/worktrees/`, and `Git` refuses a work tree with a nested `.git`. No git hook or git config line of the agent reaches the git commands of the factory.
