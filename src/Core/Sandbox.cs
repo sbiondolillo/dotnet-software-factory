@@ -57,6 +57,7 @@ public sealed class Sandbox : IAsyncDisposable
                     "--workdir", "/work",
                     "--env", $"HOME={Home}",
                     "--env", "ANTHROPIC_API_KEY",
+                    "--env", "ANTHROPIC_BASE_URL",
                     tag,
                     "sh", "-c", $"mkdir -p {Home}/.config && exec sleep infinity",
                 ],
