@@ -62,31 +62,31 @@ A block that holds a `Feature:` line is a whole-file block. It replaces the file
 
 In a block of scenarios, each scenario goes into the file by its name. A scenario whose name the file holds replaces that scenario whole, with its tags, its comments and its `Examples:`. So the block holds every line of that scenario, the unchanged ones too. A scenario with a new name goes at the end of the file. So a renamed scenario is a new scenario, and its old name goes under `## Removed scenarios`. Each line between the path line and the first scenario is blank, a tag or a comment. Each block indents its scenarios as the feature files do: `Scenario:` at 2 spaces, and each step at 4.
 
-This body adds a scenario to `specs/features/greeting.feature` and adds the new file `specs/features/farewell.feature`:
+This body adds a scenario to `specs/features/example.feature`, a feature file on `main`, and adds the new file `specs/features/new-example.feature`:
 
 ````markdown
 ## Scenarios
 
 ```gherkin
-# specs/features/greeting.feature
-  Scenario: An empty name gets the greeting of the world
-    Given the name ""
-    When the greeter greets
-    Then the greeting is "Hello, world!"
+# specs/features/example.feature
+  Scenario: An empty input gets the default answer
+    Given the input ""
+    When the program runs
+    Then the program prints "nothing to do"
 ```
 
 ```gherkin
-# specs/features/farewell.feature
-Feature: Farewell
+# specs/features/new-example.feature
+Feature: New example
 
-  Scenario: The greeter says goodbye by name
-    Given the name "Ada"
-    When the greeter says goodbye
-    Then the farewell is "Goodbye, Ada!"
+  Scenario: The program echoes its input
+    Given the input "Ada"
+    When the program runs
+    Then the program prints "Ada"
 ```
 ````
 
-**`## Removed scenarios` holds one list item for each scenario that the change removes.** The item is `- `, the path in backticks, a colon, and the name of the scenario: `` - `specs/features/greeting.feature`: An empty name gets the greeting of the world ``. Each line under the heading is such an item. A feature file whose last scenario is removed leaves the repo, and at least one feature file stays. A whole-file block leaves out each scenario that it removes, so `## Removed scenarios` names no scenario of that file. A name under `## Removed scenarios` is in no block.
+**`## Removed scenarios` holds one list item for each scenario that the change removes.** The item is `- `, the path in backticks, a colon, and the name of the scenario: `` - `specs/features/example.feature`: An empty input gets the default answer ``. Each line under the heading is such an item. A feature file whose last scenario is removed leaves the repo, and at least one feature file stays. A whole-file block leaves out each scenario that it removes, so `## Removed scenarios` names no scenario of that file. A name under `## Removed scenarios` is in no block.
 
 **Each scenario states one behaviour that a person observes.**
 

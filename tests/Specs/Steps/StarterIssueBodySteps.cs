@@ -29,6 +29,14 @@ public sealed partial class StarterIssueBodySteps(StarterState state)
         _body = block.Groups["body"].Value;
     }
 
+    [Given("the copy's {string} holds this text")]
+    public void GivenTheCopyHoldsText(string file, string text)
+    {
+        string path = Path.Combine(state.Copy, file);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, text + "\n");
+    }
+
     [When("the scenarios of that body are applied to the copy")]
     public void WhenTheBodyIsApplied() => _result = IssueScenarios.Apply(_body, state.Copy);
 
