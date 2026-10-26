@@ -34,6 +34,8 @@ A file whose behaviour a test checks by running it is tested by that run, and it
 
 Name what holds after the change. State an invariant as the state it keeps: "Every other existing test passes unchanged." `**Today.**` is the one place that states what `main` does now.
 
+A count of findings names the command that lists them: "`dotnet build -p:TreatWarningsAsErrors=false` on `main` lists 4 findings of `CA1849`." A reader who runs that command gets the same count.
+
 ## A behaviour body
 
 The title states what the person can do after the change, or the end state, in the present tense: "A repo owner can run an issue against any factory ref". The pull request takes the title of the issue.
@@ -167,6 +169,7 @@ Read the draft once for each row. File it when every row passes. A person with C
 | context | list each sentence and each row of `## Context` | each one states a fact of the world and its source, and none states what the program must do |
 | stated once | list each requirement of the program in the draft | each one is in one scenario, and nowhere else |
 | positive form | search the prose for "not", "never", "don't", "later" | each sentence found states what holds |
+| counts | list each count of findings | each one names the command that lists them, and that command on `main` gives the count |
 | result inputs | each `Then` whose result is a count, an exit code or a summary line | its scenario states each input that result reads |
 | on `main` | read each scenario that the change adds or edits against the code on `main` | `main` fails each one, unless the change is a new test for behaviour the program already has. A scenario that a whole-file block keeps from the file on `main` passes on `main` |
 | scope and check | a `cleanup` or a `reframe` body | `## Scope` holds a path, and `## Check` holds one fenced `sh` block |
