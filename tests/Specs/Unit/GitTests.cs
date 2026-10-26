@@ -308,6 +308,95 @@ public sealed class GitTests
         }
     }
 
+    [Fact]
+    public async Task CloneLeavesADirectoryWithNoGitDirectoryAsItIs()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), $"factory-git-tests-{Guid.NewGuid():N}");
+        var mock = new Mock<CommandRunner>(MockBehavior.Strict);
+        mock.Setup(runner => runner.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CommandResult { ExitCode = 0 });
+
+        await new Git(mock.Object).CloneAsync("https://example.com/repo.git", "token", directory, TestContext.Current.CancellationToken);
+
+        Assert.False(Directory.Exists(directory));
+    }
+
+    [Fact]
+    public async Task CloneStartsTheLineOnANewLineWhenTheExcludeFileEndsWithNone()
+    {
+        DirectoryInfo tree = Directory.CreateTempSubdirectory("factory-git-tests-");
+        try
+        {
+            string exclude = Path.Combine(Directory.CreateDirectory(Path.Combine(tree.FullName, ".git", "info")).FullName, "exclude");
+            await File.WriteAllTextAsync(exclude, "*.swp", TestContext.Current.CancellationToken);
+            var mock = new Mock<CommandRunner>(MockBehavior.Strict);
+            mock.Setup(runner => runner.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new CommandResult { ExitCode = 0 });
+
+            await new Git(mock.Object).CloneAsync("https://example.com/repo.git", "token", tree.FullName, TestContext.Current.CancellationToken);
+
+            Assert.Equal("*.swp\n.factory/\n", await File.ReadAllTextAsync(exclude, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            tree.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AFileUnderFactoryInARealCloneIsNoChangeAndNoCommitHoldsIt()
+    {
+        DirectoryInfo scratch = Directory.CreateTempSubdirectory("factory-git-tests-");
+        try
+        {
+            var runner = new CommandRunner();
+            string origin = Directory.CreateDirectory(Path.Combine(scratch.FullName, "origin")).FullName;
+            string clone = Path.Combine(scratch.FullName, "clone");
+            await RunGitAsync(runner, origin, "init", "--quiet");
+            await File.WriteAllTextAsync(Path.Combine(origin, ".gitignore"), "bin/\n", TestContext.Current.CancellationToken);
+            await RunGitAsync(runner, origin, "add", "-A");
+            await RunGitAsync(runner, origin, "commit", "--quiet", "-m", "Start");
+            var git = new Git(runner);
+
+            await git.CloneAsync(origin, "token", clone, TestContext.Current.CancellationToken);
+            Directory.CreateDirectory(Path.Combine(clone, ".factory"));
+            await File.WriteAllTextAsync(Path.Combine(clone, ".factory", "plan.md"), "# Plan\n", TestContext.Current.CancellationToken);
+
+            Assert.False(await git.HasChangesAsync(clone, TestContext.Current.CancellationToken));
+
+            await File.WriteAllTextAsync(Path.Combine(clone, "README.md"), "# Readme\n", TestContext.Current.CancellationToken);
+            await git.CommitAllAsync(clone, "Add README", "Ada Lovelace", "ada@example.com", TestContext.Current.CancellationToken);
+            CommandResult files = await RunGitAsync(runner, clone, "ls-tree", "-r", "--name-only", "HEAD");
+
+            Assert.Equal([".gitignore", "README.md"], files.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries));
+        }
+        finally
+        {
+            scratch.Delete(recursive: true);
+        }
+    }
+
+    private static async Task<CommandResult> RunGitAsync(CommandRunner runner, string directory, params string[] arguments)
+    {
+        CommandResult result = await runner.RunAsync(
+            new CommandSpec
+            {
+                Command = "git",
+                Arguments = arguments,
+                WorkingDirectory = directory,
+                EnvironmentVariables = new Dictionary<string, string>
+                {
+                    ["GIT_AUTHOR_NAME"] = "Ada Lovelace",
+                    ["GIT_AUTHOR_EMAIL"] = "ada@example.com",
+                    ["GIT_COMMITTER_NAME"] = "Ada Lovelace",
+                    ["GIT_COMMITTER_EMAIL"] = "ada@example.com",
+                },
+            },
+            TestContext.Current.CancellationToken);
+        Assert.True(result.ExitCode is 0, result.StandardError);
+        return result;
+    }
+
     private static bool Readable(string directory)
     {
         try

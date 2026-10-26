@@ -81,6 +81,9 @@ public sealed class GitSteps(ExceptionState exceptionState, WorkTreeState workTr
     public Task WhenGitClones(string url, string token, string directory)
         => RunAsync(() => _git!.CloneAsync(url, token, directory));
 
+    [When("Git clones {string} with the token {string} into that work tree")]
+    public Task WhenGitClonesIntoThatWorkTree(string url, string token) => WhenGitClones(url, token, workTree.Path);
+
     [When("Git checks out the new branch {string} in {string}")]
     public Task WhenGitChecksOutTheNewBranch(string branch, string directory)
         => RunAsync(() => _git!.CheckoutBranchAsync(branch, directory));

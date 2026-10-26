@@ -3,7 +3,10 @@ namespace Core;
 /// <summary>Runs the git operations the app needs, over a <see cref="CommandRunner"/>.</summary>
 public sealed class Git(CommandRunner runner)
 {
-    /// <summary>Clones <paramref name="url"/> into <paramref name="directory"/>, authenticating with <paramref name="token"/>.</summary>
+    /// <summary>
+    /// Clones <paramref name="url"/> into <paramref name="directory"/>, authenticating with <paramref name="token"/>,
+    /// and appends <c>.factory/</c> to the clone's <c>.git/info/exclude</c>, so no commit holds a file the factory writes there.
+    /// </summary>
     public async Task CloneAsync(string url, string token, string directory, CancellationToken cancellationToken = default)
     {
         var spec = new CommandSpec
@@ -14,6 +17,26 @@ public sealed class Git(CommandRunner runner)
         };
 
         await RunAsync(spec, cancellationToken).ConfigureAwait(false);
+        await ExcludeFactoryDirectoryAsync(directory, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Appends the line <c>.factory/</c> to <c>.git/info/exclude</c> under <paramref name="directory"/>, which git reads as it reads
+    /// <c>.gitignore</c> and never commits. A directory with no <c>.git</c> directory is left as it is.
+    /// </summary>
+    private static async Task ExcludeFactoryDirectoryAsync(string directory, CancellationToken cancellationToken)
+    {
+        string gitDirectory = Path.Combine(directory, ".git");
+        if (!Directory.Exists(gitDirectory))
+        {
+            return;
+        }
+
+        string info = Directory.CreateDirectory(Path.Combine(gitDirectory, "info")).FullName;
+        string exclude = Path.Combine(info, "exclude");
+        string existing = File.Exists(exclude) ? await File.ReadAllTextAsync(exclude, cancellationToken).ConfigureAwait(false) : "";
+        string separator = existing.Length is 0 || existing.EndsWith('\n') ? "" : "\n";
+        await File.AppendAllTextAsync(exclude, $"{separator}.factory/\n", cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Checks out a new branch named <paramref name="branch"/> in <paramref name="directory"/>.</summary>

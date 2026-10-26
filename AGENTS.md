@@ -71,6 +71,12 @@ adds a git operation to `src/Core/Git.cs` follows them too.
   output is one file that is changed, removed or new. `commit` with no change exits with
   the code 1 and an empty standard error, so a caller that commits a work tree asks
   first.
+- After the clone, `Git` appends the line `.factory/` to `.git/info/exclude` of the clone.
+  Git reads that file as it reads `.gitignore`, and never commits it, so `status
+  --porcelain`, `add -A` and `diff` skip each file the factory writes under `.factory/`,
+  in a repo whose `.gitignore` lacks the line. The pathspec `':(exclude).factory'` is no
+  route: `add` exits with the code 1 when `.gitignore` names `.factory/`. A line
+  `!.factory/` in the work tree's `.gitignore` overrides the exclude file.
 - The files changed since a base are `diff --name-only <base>`, with the base as one
   argument. The range form `<base>..HEAD` names the range in its error, so the error for
   an unknown base does not hold the base's name as given.

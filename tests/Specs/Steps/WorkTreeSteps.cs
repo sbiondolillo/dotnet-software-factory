@@ -26,6 +26,14 @@ public sealed class WorkTreeSteps(WorkTreeState workTree)
     [Given("a work tree in a new directory that holds a file {string}")]
     public void GivenFile(string relativePath) => File.WriteAllText(Entry(relativePath), "gitdir: ../.git/modules/lib\n");
 
+    [Given("a work tree in a new directory that holds a file {string} with the lines:")]
+    public void GivenFileWithLines(string relativePath, DataTable lines)
+        => File.WriteAllLines(Entry(relativePath), lines.Rows.Select(row => row["line"]));
+
+    [Then("the file {string} in that work tree holds the lines:")]
+    public void ThenTheFileHoldsTheLines(string relativePath, DataTable lines)
+        => Assert.Equal(lines.Rows.Select(row => row["line"]), File.ReadAllLines(Path.Combine(workTree.Path, relativePath)));
+
     [Given("a work tree in a new directory that holds a symlink {string}")]
     public void GivenSymlink(string relativePath)
     {
