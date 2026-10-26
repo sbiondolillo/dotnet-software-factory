@@ -120,3 +120,8 @@ Feature: The plan phase writes the scenarios and the plan, and the scenarios are
     When I run the plan phase
     Then the result is passed
     And each command the plan phase ran is a docker command
+
+  Scenario: The first prompt asks the plan to name an integration test for each canned answer
+    Given the agent on the first run writes the sound feature file and the plan
+    When I run the plan phase
+    Then the first prompt holds "For each canned answer that a scenario depends on, name in the plan one test under tests/Integration/ that gets the same answer from the real service."

@@ -129,3 +129,8 @@ Feature: The factory pins the scenarios of an issue as the owner wrote them
     Given an issue body with a block with no closing fence and a removed scenario in a file that the clone lacks
     When the factory runs the issue
     Then the issue gets one comment that holds both faults
+
+  Scenario: The first prompt of an issue with scenarios asks the plan to name an integration test for each canned answer
+    Given an issue with ## Scenarios
+    When the plan phase runs
+    Then the first prompt holds "For each canned answer that a scenario depends on, name in the plan one test under tests/Integration/ that gets the same answer from the real service."
