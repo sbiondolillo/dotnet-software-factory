@@ -52,7 +52,7 @@ Feature: A repo made from the starter holds the factory's three workflows
               required: true
               type: number
             ref:
-              description: The branch, tag or commit of the factory
+              description: The branch, tag or full 40-character commit SHA of the factory
               default: v1
 
       # The job's own token reads the check runs of the pull request. A fine-grained token has no Checks permission on a private repo.

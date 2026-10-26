@@ -257,7 +257,7 @@ A pull request with no unresolved thread gets no build. A `cleanup` or `refactor
 
 ## A trial run at another ref
 
-The owner of a repo made from the starter starts a trial run of the factory at another ref with the command `gh workflow run factory -f issue=<number> -f ref=<ref>`. The ref is a branch, a tag or a commit.
+The owner of a repo made from the starter starts a trial run of the factory at another ref with the command `gh workflow run factory -f issue=<number> -f ref=<ref>`. The ref is a branch, a tag or a full 40-character commit SHA.
 
 This repo's own `factory.yml` has no input `ref`. It runs the factory at the branch that the run starts from: `gh workflow run factory --ref <branch> -f issue=<number>`.
 
