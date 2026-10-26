@@ -513,3 +513,10 @@ Feature: A reframe run keeps every test and every public type and member
           public static string Access(FieldInfo f) => f.IsPublic ? "public" : "protected";
       }
       """
+
+  Scenario: The reframe review prompt asks for no integration test
+    Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
+    And the check command exits with the code 1 before the build
+    And the check command then exits with the code 0
+    When a caller starts a run
+    Then the review prompt holds no "For each canned answer"

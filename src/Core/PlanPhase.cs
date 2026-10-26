@@ -15,6 +15,14 @@ public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false, Issu
     private const string FeatureDirectory = "specs/features/";
     private const string PlanPath = ".factory/plan.md";
 
+    /// <summary>The sentence that says what a canned answer is, in the words of the starter's <c>AGENTS.md</c>.</summary>
+    internal const string CannedAnswerText =
+        "The build suite answers each call to a service with a canned answer from a stub HttpMessageHandler. ";
+
+    private const string IntegrationText =
+        CannedAnswerText
+        + "For each canned answer that a scenario depends on, name in the plan one test under tests/Integration/ that gets the same answer from the real service. ";
+
     /// <summary>Runs the first prompt and, when its gate fails, one correction prompt.</summary>
     public async Task<PlanPhaseResult> RunAsync(
         string title,
@@ -58,6 +66,7 @@ public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false, Issu
             + Named("The issue wrote these feature files, and the build makes their scenarios pass: ", scenarios.Written)
             + Named("The issue removed these feature files: ", scenarios.Removed)
             + $"Write the plan to {PlanPath}, stating each result the build owes. "
+            + IntegrationText
             + $"Write no other file: {PlanPath} is the only file the plan phase writes. "
             + "Leave every other file as it is."
         : refactor
@@ -70,6 +79,7 @@ public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false, Issu
         + $"Issue title:\n{title}\n\nIssue body:\n{body}\n\n"
         + $"Write Gherkin scenarios for the behaviour in feature files under {FeatureDirectory} "
         + $"and write the plan to {PlanPath}, stating each result the build owes. "
+        + IntegrationText
         + "Remove each feature file whose behaviour the issue removes or replaces. "
         + "Leave every other file as it is.";
 

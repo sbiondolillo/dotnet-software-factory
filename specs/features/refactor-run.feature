@@ -247,3 +247,16 @@ Feature: A refactor run changes the structure of the code and leaves every test 
       | https://github.com/sbiondolillo/factory-scratch/pull/10 |
       | watch: start |
       | checks: green, unresolved threads: 0 |
+
+  Scenario: The refactor plan prompt asks for no integration test
+    Given the issue has the label "refactor", the title "Rename Greeting" and a body with the first fenced block under "## Check" holding the line "test -f src/Core/Greeting.cs"
+    And the check command exits with the code 1 before the plan
+    When a caller starts a run
+    Then the plan prompt holds no "For each canned answer"
+
+  Scenario: The refactor review prompt asks for no integration test
+    Given the issue has the label "refactor", the title "Rename Greeting" and a body with the first fenced block under "## Check" holding the line "test -f src/Core/Greeting.cs"
+    And the check command exits with the code 1 before the plan
+    And the check command then exits with the code 0
+    When a caller starts a run
+    Then the review prompt holds no "For each canned answer"

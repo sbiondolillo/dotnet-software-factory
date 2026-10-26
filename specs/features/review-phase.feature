@@ -129,3 +129,7 @@ Feature: The review phase approves or rejects the build with blocking items
     Given claude answers with the error flag set and no result text
     When I run the review phase
     Then the review gives back a rejection with one blocking item
+
+  Scenario: The review prompt blocks a build with no integration test for a canned answer
+    When I run the review phase
+    Then the review prompt holds "The build suite answers each call to a service with a canned answer from a stub HttpMessageHandler." and "For each canned answer that a scenario depends on, block a build with no test under tests/Integration/ that gets the same answer from the real service."
