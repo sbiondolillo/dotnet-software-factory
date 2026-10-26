@@ -86,3 +86,22 @@ Feature: Git
     When Git pushes the branch "feature-1" from that work tree with the token "token-1"
     Then Git throws a GitCommandException whose message holds "vendor/.git"
     And the mock CommandRunner recorded no CommandSpec
+
+  Scenario: The clone appends .factory/ to the exclude file of the clone after the lines it holds
+    Given a work tree in a new directory that holds a file ".git/info/exclude" with the lines:
+      | line                                                       |
+      | # git ls-files --others --exclude-from=.git/info/exclude   |
+      | *.swp                                                      |
+    When Git clones "https://github.com/sbiondolillo/factory-scratch.git" with the token "token-1" into that work tree
+    Then the file ".git/info/exclude" in that work tree holds the lines:
+      | line                                                       |
+      | # git ls-files --others --exclude-from=.git/info/exclude   |
+      | *.swp                                                      |
+      | .factory/                                                  |
+
+  Scenario: The clone writes .factory/ to a new exclude file when the clone has none
+    Given a work tree in a new directory that holds a directory ".git" with no directory "info" in it
+    When Git clones "https://github.com/sbiondolillo/factory-scratch.git" with the token "token-1" into that work tree
+    Then the file ".git/info/exclude" in that work tree holds the lines:
+      | line      |
+      | .factory/ |
