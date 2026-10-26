@@ -21,6 +21,7 @@ Feature: A repo made from the starter holds the skill write-issue
     Then the apply gives no fault
     And the copy holds "specs/features/new-example.feature"
     And the copy's "specs/features/example.feature" ends with the scenario "An empty input gets the default answer"
+    And the copy's "specs/features/example.feature" still holds the scenario "The program runs"
 
   Scenario: The awk program of PROOF.md saves the check of a body in the form of the template
     Given the draft body

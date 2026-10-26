@@ -30,12 +30,7 @@ public sealed partial class StarterIssueBodySteps(StarterState state)
     }
 
     [Given("the copy's {string} holds this text")]
-    public void GivenTheCopyHoldsText(string file, string text)
-    {
-        string path = Path.Combine(state.Copy, file);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, text + "\n");
-    }
+    public void GivenTheCopyHoldsText(string file, string text) => File.WriteAllText(Path.Combine(state.Copy, file), text + "\n");
 
     [When("the scenarios of that body are applied to the copy")]
     public void WhenTheBodyIsApplied() => _result = IssueScenarios.Apply(_body, state.Copy);
@@ -78,6 +73,10 @@ public sealed partial class StarterIssueBodySteps(StarterState state)
         Assert.Equal($"Scenario: {name}", last);
         AssertLastScenarioIndentedAsFirst(text);
     }
+
+    [Then("the copy's {string} still holds the scenario {string}")]
+    public void ThenTheFileStillHoldsTheScenario(string file, string name) =>
+        Assert.Contains($"Scenario: {name}", File.ReadAllLines(Path.Combine(state.Copy, file)).Select(line => line.Trim()));
 
     // An appended scenario lands at the indent of the file's first scenario, so the file reads as one.
     private static void AssertLastScenarioIndentedAsFirst(string text)
