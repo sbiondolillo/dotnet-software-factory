@@ -15,8 +15,12 @@ public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false, Issu
     private const string FeatureDirectory = "specs/features/";
     private const string PlanPath = ".factory/plan.md";
 
+    /// <summary>The sentence that says what a canned answer is, in the words of the starter's <c>AGENTS.md</c>.</summary>
+    internal const string CannedAnswerText =
+        "The build suite answers each call to a service with a canned answer from a stub HttpMessageHandler. ";
+
     private const string IntegrationText =
-        "The build suite answers each call to a service with a canned answer from a stub HttpMessageHandler. "
+        CannedAnswerText
         + "For each canned answer that a scenario depends on, name in the plan one test under tests/Integration/ that gets the same answer from the real service. ";
 
     /// <summary>Runs the first prompt and, when its gate fails, one correction prompt.</summary>

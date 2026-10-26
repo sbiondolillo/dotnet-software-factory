@@ -247,3 +247,10 @@ Feature: A cleanup run fixes a test, a config file or a document
       | check: red |
       | redo: 1 |
       | build: start |
+
+  Scenario: The cleanup review prompt asks for no integration test
+    Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
+    And the check command exits with the code 1 before the build
+    And the check command then exits with the code 0
+    When a caller starts a run
+    Then the review prompt holds no "For each canned answer"
