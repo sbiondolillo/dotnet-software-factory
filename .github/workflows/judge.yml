@@ -30,7 +30,7 @@ permissions:
   issues: read
 
 concurrency:
-  group: judge-${{ inputs.pr }}
+  group: judge-${{ inputs.pr || github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
