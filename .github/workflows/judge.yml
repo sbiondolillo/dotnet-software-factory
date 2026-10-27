@@ -6,13 +6,16 @@
 # stays on the runner arm until the sandbox has a 10.0.4xx SDK, so the
 # default angles are Conformance and Regressions and style.
 #
-# By hand: `gh workflow run judge --ref <branch> -f pr=<n>`.
+# A pull request opened or pushed by the repository owner is judged on its head.
+# By hand: `gh workflow run judge.yml -f pr=<n>`. The job dedupes on the head SHA.
 # Secrets: JUDGE_ANTHROPIC_API_KEY (a dedicated workspace), JUDGE_GITHUB_RO_TOKEN
 # (fine-grained, this repo, Contents, Pull requests and Metadata read).
 # Variables: JUDGE_AGENT_ID, JUDGE_ENVIRONMENT_ID.
 name: judge
 
 on:
+  pull_request:
+    types: [opened, synchronize]
   workflow_dispatch:
     inputs:
       pr:
@@ -33,7 +36,7 @@ concurrency:
 jobs:
   judge:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.sender.login == github.repository_owner
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.user.login == github.repository_owner
     steps:
       - uses: actions/checkout@v7
       - name: Judge the pull request
