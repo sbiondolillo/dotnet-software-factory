@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Specs.Unit;
 using Xunit;
 
 namespace Specs.Unit;

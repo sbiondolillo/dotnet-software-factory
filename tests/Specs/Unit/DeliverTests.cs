@@ -1,5 +1,3 @@
-using System.Net;
-using System.Text;
 using Core;
 using Moq;
 using Specs.Steps;
