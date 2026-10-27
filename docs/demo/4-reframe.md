@@ -30,6 +30,8 @@ The program keeps its behaviour. Each public type and each public or protected m
 
 ## Check
 
+The hashes below are the files as they were when the demo ran. `Directory.Build.props` and `.editorconfig` changed on 2026-10-27 (#327), so the block is a record, not a check that passes on `main`.
+
 ```sh
 test -z "$(find . \( -name obj -o -name bin \) -print)" &&
 dotnet restore --locked-mode &&

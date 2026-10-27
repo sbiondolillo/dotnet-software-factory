@@ -1,6 +1,5 @@
 using Core;
 using Moq;
-using Xunit;
 
 namespace Specs.Unit;
 

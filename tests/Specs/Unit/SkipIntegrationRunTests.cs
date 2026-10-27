@@ -1,4 +1,3 @@
-using Core;
 using Xunit;
 
 namespace Specs.Unit;
