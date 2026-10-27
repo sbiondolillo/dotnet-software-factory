@@ -7,7 +7,7 @@
 # default angles are Conformance and Regressions and style.
 #
 # A pull request opened or pushed by the repository owner is judged on its head.
-# By hand: `gh workflow run judge.yml -f pr=<n>`. The job dedupes on the head SHA.
+# By hand: `gh workflow run judge.yml -f pr=<n>`. The job dedupes on the head SHA and the spec.
 # Secrets: JUDGE_ANTHROPIC_API_KEY (a dedicated workspace), JUDGE_GITHUB_RO_TOKEN
 # (fine-grained, this repo, Contents, Pull requests and Metadata read).
 # Variables: JUDGE_AGENT_ID, JUDGE_ENVIRONMENT_ID.

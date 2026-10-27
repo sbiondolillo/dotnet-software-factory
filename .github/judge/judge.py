@@ -11,6 +11,7 @@ JUDGE_AGENT_ID, JUDGE_ENVIRONMENT_ID, JUDGE_ANGLES (comma-separated, default "Co
 JUDGE_BUDGET_CENTS (default 500), JUDGE_TIMEOUT_SECONDS (default 1800).
 Argument: the pull request number.
 """
+import hashlib
 import json
 import os
 import re
@@ -22,7 +23,7 @@ import urllib.error
 
 API = "https://api.anthropic.com"
 BETA = "managed-agents-2026-04-01"
-MARKER = "<!-- judge:{sha} -->"
+MARKER = "<!-- judge:{sha}:{spec} -->"
 
 
 def env(name, default=None):
@@ -65,9 +66,14 @@ def spec_for(repo, pr):
     return f"# {pr['title']} (pull request #{pr['number']})\n\n{pr['body'] or ''}", None
 
 
-def already_judged(repo, number, sha):
+def spec_digest(spec):
+    """The first 12 hex digits of the spec's SHA-256, so an edited spec on the same head is judged again."""
+    return hashlib.sha256(spec.encode()).hexdigest()[:12]
+
+
+def already_judged(repo, number, sha, spec):
     comments = json.loads(gh("api", f"repos/{repo}/issues/{number}/comments", "--paginate"))
-    return any(MARKER.format(sha=sha) in (c.get("body") or "") for c in comments)
+    return any(MARKER.format(sha=sha, spec=spec_digest(spec)) in (c.get("body") or "") for c in comments)
 
 
 def reviewer_prompt(angle, repo, head, base, spec):
@@ -141,9 +147,9 @@ def parse_report(angle, text):
             "evidence": candidate[:800], "fix": "rerun the angle", "nitpick": False}], "clean": []}
 
 
-def render(reports, synthesis, pr, costs):
+def render(reports, synthesis, pr, costs, spec):
     verdict = "CHANGES REQUESTED" if any(r["verdict"] == "reject" for r in reports) else "APPROVED"
-    lines = [MARKER.format(sha=pr["headRefOid"]), f"**{verdict}** by the judge on `{pr['headRefOid'][:7]}`.", ""]
+    lines = [MARKER.format(sha=pr["headRefOid"], spec=spec_digest(spec)), f"**{verdict}** by the judge on `{pr['headRefOid'][:7]}`.", ""]
     if synthesis:
         lines += [synthesis.strip(), ""]
     for r in reports:
@@ -174,10 +180,10 @@ def main():
 
     pr = pull_request(repo, number)
     head, base = pr["headRefOid"], pr["baseRefOid"]
-    if already_judged(repo, number, head):
-        print(f"judge: {head[:7]} is already judged; nothing to do")
-        return
     spec, issue = spec_for(repo, pr)
+    if already_judged(repo, number, head, spec):
+        print(f"judge: {head[:7]} with this spec is already judged; nothing to do")
+        return
     print(f"judge: pull request #{number} {head[:7]} on {base[:7]}, spec from " + (f"issue #{issue}" if issue else "the pull request body"))
 
     resources = [{"type": "github_repository", "url": f"https://github.com/{repo}",
@@ -216,7 +222,7 @@ def main():
         synthesis, _, usage = final_message(sid)
         costs.append((sid, "synthesis", (usage.get("list_cost") or {}).get("amount", "?")))
 
-    verdict, body = render(reports, synthesis, pr, costs)
+    verdict, body = render(reports, synthesis, pr, costs, spec)
     gh("pr", "comment", str(number), "-R", repo, "--body-file", "-", input_text=body)
     conclusion = "success" if verdict == "APPROVED" else "failure"
     gh("api", f"repos/{repo}/check-runs", "-f", "name=judge", "-f", f"head_sha={head}", "-f", "status=completed",
