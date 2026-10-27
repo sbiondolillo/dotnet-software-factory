@@ -1,0 +1,47 @@
+# The judge: the three angles of .claude/skills/change/JUDGES.md on a pull
+# request, each one a Managed Agents session, started and read by this job.
+# The job holds the API key and the GitHub token. The sessions hold a
+# read-only repository token. The verdict is computed here, in code, and the
+# synthesis session runs only when an angle rejects. The mutation angle
+# stays on the runner arm until the sandbox has a 10.0.4xx SDK, so the
+# default angles are Conformance and Regressions and style.
+#
+# By hand: `gh workflow run judge --ref <branch> -f pr=<n>`.
+# Secrets: JUDGE_ANTHROPIC_API_KEY (a dedicated workspace), JUDGE_GITHUB_RO_TOKEN
+# (fine-grained, this repo, Contents, Pull requests and Metadata read).
+# Variables: JUDGE_AGENT_ID, JUDGE_ENVIRONMENT_ID.
+name: judge
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: The number of the pull request to judge
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+  issues: read
+
+concurrency:
+  group: judge-${{ inputs.pr }}
+  cancel-in-progress: false
+
+jobs:
+  judge:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.sender.login == github.repository_owner
+    steps:
+      - uses: actions/checkout@v7
+      - name: Judge the pull request
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          JUDGE_ANTHROPIC_API_KEY: ${{ secrets.JUDGE_ANTHROPIC_API_KEY }}
+          JUDGE_GITHUB_RO_TOKEN: ${{ secrets.JUDGE_GITHUB_RO_TOKEN }}
+          JUDGE_AGENT_ID: ${{ vars.JUDGE_AGENT_ID }}
+          JUDGE_ENVIRONMENT_ID: ${{ vars.JUDGE_ENVIRONMENT_ID }}
+        run: python3 .github/judge/judge.py ${{ inputs.pr || github.event.pull_request.number }}
