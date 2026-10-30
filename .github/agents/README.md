@@ -20,8 +20,8 @@ ant apply --lock-file .github/agents/claude-lock.json < /dev/null
 
 The pass condition is the line `Everything is up to date.` and the exit code 0. `ant apply` finds no `claude-lock.json` at the root, so the command names it. Each id in the lockfile must equal its variable. `gh variable list` shows the two variables.
 
-## The lockfile was written by hand
+## A hand-written lockfile
 
-The Console created the agent and the environment on 2026-10-27. `ant apply` adopts no resource that it did not create. So the lockfile was written by hand, with the kind, the id and the agent's version, and no hashes. With no recorded hash, each plan compares the file field by field with the live resource. A change in the Console to the agent raises its version, and the plan refuses to apply until `--force`. A change to the environment shows as an update, and `ant apply --yes` would overwrite it with the file.
+A Claude Code session created the agent and the environment through the API on 2026-10-27. `ant apply` adopts no resource that it did not create. So this lockfile holds a hand-written entry for each one: the kind, the id and the agent's version, and no hashes. With no recorded hash, each plan compares the file field by field with the live resource. A change in the Console to the agent raises its version, and the plan refuses to apply until `--force`. A change to a field that the environment file states shows as an update. `ant apply --yes` would overwrite it with the file.
 
 To change the agent or the environment, edit its file and run `ant apply` with no `< /dev/null`. Read the plan before you approve it. The first real apply writes the hashes to the lockfile. Commit the lockfile in the same pull request.

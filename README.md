@@ -16,7 +16,7 @@ A software factory for C# repos. A repo made from its starter gets one pull requ
 | `.github/workflows/factory.yml` | the self-build: on the label `factory` from the owner, runs the factory at this repo's own commit with the secret `FACTORY_SELF_TOKEN` |
 | `.github/workflows/relock.yml` | on a Dependabot pull request, regenerates the `packages.lock.json` of each project in `Solution.slnx` and pushes them with the Dependabot secret `RELOCK_TOKEN` |
 | `.github/agents/` | the judge's agent, `judge.md`, and its environment, `judge.environment.yaml`, in the form that `ant apply` reads. `claude-lock.json` holds their ids. Its `README.md` gives the check against the live resources |
-| `docs/agents/sessions.md` | one row for each kind of Managed Agents session: its token, its hosts, its untrusted input, what it can write and the step that reads its answer |
+| `docs/agents/sessions.md` | the trust boundary of each kind of Managed Agents session: its token, hosts, untrusted input and writes, and the step that reads its answer |
 | `specs/features/` | the pinned `.feature` files. One ships here, so the first build has a binding to follow |
 | `tests/Specs/` | the test project: Reqnroll under xUnit v3, with the step class for that feature |
 | `tests/Integration/` | the integration suite: xUnit v3 tests against the real GitHub, `docker` and Claude Code. `dotnet test` skips it |

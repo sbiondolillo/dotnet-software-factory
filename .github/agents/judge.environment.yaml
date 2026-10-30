@@ -10,6 +10,11 @@ config:
     type: packages
     apt:
       - dotnet-sdk-10.0
+    cargo: []
+    gem: []
+    go: []
+    npm: []
+    pip: []
   networking:
     type: limited
     allow_mcp_servers: false
