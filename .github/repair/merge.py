@@ -4,9 +4,11 @@
 The job arms GitHub's auto-merge with its own token, `gh pr merge --auto --squash --delete-branch`, as #361 found:
 GitHub accepts it from GITHUB_TOKEN, merges when the required checks `build`, `integration` and `judge-verdict` pass,
 and shows `app/github-actions` as the merger. `--match-head-commit` ties the merge to the settled head, and the job
-disarms the merge when the head moves while it waits, so no head that Copilot never settled on merges. The guards, decided in #355 and #366, run first: the pull request is
-open with the label `repair`, its head is `repair/*` or `factory/*`, its head is the SHA the Copilot stage settled
-on, and `judge-verdict` is success on that head. The job waits for the judge when its check run is not complete yet.
+disarms the merge when the head moves while it waits, so no head that Copilot never settled on merges.
+
+The guards, decided in #355 and #366, run first: the pull request is open with the label `repair`, its head is
+`repair/*` or `factory/*`, its head is the SHA the Copilot stage settled on, and `judge-verdict` is success on that
+head. The job waits for the judge when its check run is not complete yet.
 A verdict other than success is one comment on the issue and no merge.
 
 The loop bound: the job merges nothing on a pull request whose head branch is the branch of the red run that
@@ -14,7 +16,9 @@ started the repair. The run is the `Run:` line under `## Run` of the issue, whic
 
 A merge by GITHUB_TOKEN closes no issue named by `Closes #n`, and `--delete-branch` deletes nothing on a deferred
 merge, as #361 found. So the job waits for the merge, closes the issue with one comment that names the merge
-commit, and deletes the head branch when `delete_branch_on_merge` left it. The job reads check runs with no
+commit, and deletes the head branch when `delete_branch_on_merge` left it. A push by GITHUB_TOKEN starts no
+workflow run, so the job then starts `ci` on the base branch with workflow_dispatch, and the merge commit gets its
+run on `main`. A wait that reaches the timeout disarms the auto-merge, so no later head merges unsettled. The job reads check runs with no
 `checks` permission: the repo is public, and #361 bars `checks: write` on this job.
 
 The kill switch REPAIR_ENABLED is read first, on every event. Any value other than `true` ends the step with the
@@ -41,7 +45,7 @@ LABEL = "repair"
 HEADS = ("repair/", "factory/")
 CHECK = "judge-verdict"
 MARKER = "<!-- repair-merge:{sha} -->"
-FIELDS = "number,state,headRefName,headRefOid,body,labels,url,mergeCommit,mergedBy"
+FIELDS = "number,state,headRefName,headRefOid,baseRefName,body,labels,url,mergeCommit,mergedBy"
 
 
 def read_pull_request(repo, number):
@@ -103,8 +107,9 @@ def wait_for_merge(repo, number, sha, deadline, wait):
             print(f"repair: the head of pull request #{number} moved off {sha[:7]} while the auto-merge was armed; disarmed, no merge")
             return None
         if time.time() >= deadline:
-            sys.exit(f"repair: pull request #{number} is not merged after the timeout; auto-merge stays armed, "
-                     f"and the owner closes its issue after the merge")
+            gh("pr", "merge", str(number), "-R", repo, "--disable-auto")
+            sys.exit(f"repair: pull request #{number} is not merged after the timeout; the auto-merge is disarmed, "
+                     f"and `gh workflow run repair.yml -f pr={number}` arms it again")
         time.sleep(wait)
 
 
@@ -121,6 +126,12 @@ def close_issue(repo, issue, pr):
         return
     gh("issue", "close", str(issue), "-R", repo, "--comment", text)
     print(f"repair: closed issue #{issue}. {text}")
+
+
+def start_ci(repo, branch):
+    """A run of ci on the base branch. A push by GITHUB_TOKEN starts no run, so the merge commit gets one here."""
+    gh("workflow", "run", "ci.yml", "-R", repo, "--ref", branch)
+    print(f"repair: started ci on {branch}")
 
 
 def delete_branch(repo, branch):
@@ -179,6 +190,7 @@ def main():
              f"Pull request #{number} merged at `{merged['headRefOid']}`, not at the settled `{sha}`. The job closes no issue for it. The owner reads the pull request.")
         return
     close_issue(repo, issue, merged)
+    start_ci(repo, merged["baseRefName"])
     delete_branch(repo, pr["headRefName"])
 
 

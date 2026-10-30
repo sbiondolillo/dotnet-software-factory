@@ -24,7 +24,8 @@
 # moves. GitHub merges when build, integration and judge-verdict pass, and
 # shows app/github-actions as the merger. A merge by this token
 # closes no issue, so the step waits for the merge and closes the issue with
-# one comment that names the merge commit. The step merges nothing on a pull
+# one comment that names the merge commit. A push by this token starts no
+# run, so the step then starts ci on main with workflow_dispatch. The step merges nothing on a pull
 # request whose head branch is the branch of the red run that started the
 # repair. The job has no checks permission: the repo is public, so the read
 # of the check run needs none, and #361 bars checks: write here, since the
