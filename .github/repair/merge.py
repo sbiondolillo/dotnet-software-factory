@@ -107,12 +107,13 @@ def disarm(repo, number):
 
 def arm_and_wait(repo, number, sha, deadline, wait):
     """Arms the auto-merge and waits for the merge. Any exit before the merge, a timeout, a closed pull request, a
-    failed read or a cancel of the job, disarms the auto-merge first, so no armed merge outlives the step. A cancel
-    sends SIGINT, which is KeyboardInterrupt, then SIGTERM, which the handler turns into an exit."""
+    failed read or a cancel of the job, disarms the auto-merge first, so no armed merge outlives the step. The arm is
+    inside the try, so a cancel during the arm command disarms too. A cancel sends SIGINT, which is KeyboardInterrupt,
+    then SIGTERM, which the handler turns into an exit."""
     signal.signal(signal.SIGTERM, lambda *_: sys.exit("repair: the job was cancelled"))
-    gh("pr", "merge", str(number), "-R", repo, "--auto", "--squash", "--delete-branch", "--match-head-commit", sha)
-    print(f"repair: armed the auto-merge of pull request #{number} on {sha[:7]}")
     try:
+        gh("pr", "merge", str(number), "-R", repo, "--auto", "--squash", "--delete-branch", "--match-head-commit", sha)
+        print(f"repair: armed the auto-merge of pull request #{number} on {sha[:7]}")
         return wait_for_merge(repo, number, sha, deadline, wait)
     except BaseException:
         disarm(repo, number)
