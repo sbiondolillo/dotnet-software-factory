@@ -35,6 +35,7 @@ Arguments: the number of the repair pull request, and the head SHA the Copilot s
 import json
 import os
 import re
+import signal
 import sys
 import time
 
@@ -105,13 +106,15 @@ def disarm(repo, number):
 
 
 def arm_and_wait(repo, number, sha, deadline, wait):
-    """Arms the auto-merge and waits for the merge. Any exit before the merge, a timeout, a closed pull request or a
-    failed read, disarms the auto-merge first, so no armed merge outlives the step."""
+    """Arms the auto-merge and waits for the merge. Any exit before the merge, a timeout, a closed pull request, a
+    failed read or a cancel of the job, disarms the auto-merge first, so no armed merge outlives the step. A cancel
+    sends SIGINT, which is KeyboardInterrupt, then SIGTERM, which the handler turns into an exit."""
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit("repair: the job was cancelled"))
     gh("pr", "merge", str(number), "-R", repo, "--auto", "--squash", "--delete-branch", "--match-head-commit", sha)
     print(f"repair: armed the auto-merge of pull request #{number} on {sha[:7]}")
     try:
         return wait_for_merge(repo, number, sha, deadline, wait)
-    except SystemExit:
+    except BaseException:
         disarm(repo, number)
         raise
 
@@ -150,7 +153,8 @@ def close_issue(repo, issue, pr):
 
 
 def start_ci(repo, branch):
-    """A run of ci on the base branch. A push by GITHUB_TOKEN starts no run, so the merge commit gets one here."""
+    """A run of ci on the base branch, before the issue closes, so a failed close leaves no merge commit untested. A
+    push by GITHUB_TOKEN starts no run, so the merge commit gets one here."""
     gh("workflow", "run", "ci.yml", "-R", repo, "--ref", branch)
     print(f"repair: started ci on {branch}")
 
@@ -208,8 +212,8 @@ def main():
         stop(repo, number, issue, sha,
              f"Pull request #{number} merged at `{merged['headRefOid']}`, not at the settled `{sha}`. The job closes no issue for it. The owner reads the pull request.")
         return
-    close_issue(repo, issue, merged)
     start_ci(repo, merged["baseRefName"])
+    close_issue(repo, issue, merged)
     delete_branch(repo, pr["headRefName"])
 
 
