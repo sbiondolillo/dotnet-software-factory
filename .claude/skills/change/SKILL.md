@@ -95,7 +95,7 @@ A spec with no scenario gets `Conformance` and `Regressions and style`, and no `
 
 Read each finding against the branch before you act on it. Each finding gets a fix on the branch or a refutation with its evidence. A fix is a new commit, and runs the checks of step 2 again.
 
-A fix that adds behaviour the spec does not name edits the spec in the same turn as the fix. For an issue, the edit goes in its `## Change`, with the date and the review as its source. For a change stated in chat, the edit goes in `<scratch>/spec`, and the report of step 4 carries it. The judge reads the issue at run time, so a run after the edit judges the edited spec. A spec that lags its code gets a rejection for the gap, as PR #380 did.
+A fix that adds behaviour the spec does not name edits the spec in the same turn as the fix. For an issue, the edit goes in its `## Change`, with the date and the review as its source, and `<scratch>/spec` is then written again from the edited body, since the reviewers of this step and the checks of step 4 read that file and never the issue. For a change stated in chat, the edit goes in `<scratch>/spec`, and the report of step 4 carries it. The judge reads the issue at run time, so a run after the edit judges the edited spec. A spec that lags its code gets a rejection for the gap, as PR #380 did.
 
 Done when each angle accepts, or each finding has a fix or a refutation.
 
