@@ -80,6 +80,9 @@ def wait_for_pull_request(repo, number, run, timeout):
             return pr
         current = json.loads(gh("run", "view", str(run["databaseId"]), "-R", repo, "--json", "status,conclusion,url"))
         if current["status"] == "completed":
+            pr = opened_pull_request(repo, read_issue(repo, number))
+            if pr is not None:
+                return pr
             sys.exit(f"repair: the factory run {current['url']} ended {current['conclusion']} with no pull request on issue #{number}")
         time.sleep(30)
     sys.exit(f"repair: the factory run {run['url']} opened no pull request on issue #{number} within {timeout} s")
@@ -87,7 +90,7 @@ def wait_for_pull_request(repo, number, run, timeout):
 
 def main():
     repo = os.environ.get("GITHUB_REPOSITORY") or sys.exit("repair: GITHUB_REPOSITORY is not set")
-    number = int(sys.argv[1])
+    number = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else sys.exit("repair: give the number of a repair issue")
     issue = read_issue(repo, number)
     labels = [item["name"] for item in issue.get("labels") or []]
     if issue["state"] != "OPEN" or LABEL not in labels:

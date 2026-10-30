@@ -30,7 +30,7 @@ def read_run(repo, run_id):
 
 def open_pull_request(repo, branch):
     """The open pull request of a branch, by name, with the head it holds now."""
-    pulls = json.loads(gh("pr", "list", "-R", repo, "--head", branch, "--state", "open", "--json", "number,headRefOid"))
+    pulls = json.loads(gh("pr", "list", "-R", repo, "--head", branch, "--state", "open", "--json", "number,headRefOid,labels"))
     return pulls[0] if pulls else None
 
 
@@ -76,6 +76,9 @@ def gate(repo, run):
         pr = open_pull_request(repo, branch)
         if pr is None or pr["headRefOid"] != sha:
             print(f"repair: {sha[:7]} is not the head of an open pull request of {branch}; nothing to do")
+            return False, None
+        if any(label["name"] == "repair" for label in pr.get("labels") or []):
+            print(f"repair: pull request #{pr['number']} of {branch} is a repair; nothing to do")
             return False, None
     return not already_handled(repo, pr, run), pr
 
