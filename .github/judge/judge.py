@@ -225,7 +225,7 @@ def main():
     verdict, body = render(reports, synthesis, pr, costs, spec)
     gh("pr", "comment", str(number), "-R", repo, "--body-file", "-", input_text=body)
     conclusion = "success" if verdict == "APPROVED" else "failure"
-    gh("api", f"repos/{repo}/check-runs", "-f", "name=judge", "-f", f"head_sha={head}", "-f", "status=completed",
+    gh("api", f"repos/{repo}/check-runs", "-f", "name=judge-verdict", "-f", f"head_sha={head}", "-f", "status=completed",
        "-f", f"conclusion={conclusion}", "-f", f"output[title]={verdict}", "-f",
        f"output[summary]={len(reports)} angles, {sum(len(r['findings']) for r in reports)} findings")
     print(f"judge: {verdict}")
