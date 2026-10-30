@@ -7,8 +7,9 @@ by Copilot on the head, no refusal on the head, and zero unresolved threads.
 
 The builder of the first loop is factory.yml, which build.py starts with `copilot=on`, decided in #358. So the
 factory requests the review as well, and answers each thread through FeedbackRun within its run, three rounds at
-most, under FACTORY_SELF_TOKEN. This job waits while that run is in progress. A refusal by Copilot, or a thread
-still unresolved once the run ended, is a comment on the issue and a stop for the head SHA. The Managed Agents
+most, under FACTORY_SELF_TOKEN. This job waits while that run is in progress, and counts the rounds by the head: each
+push after the first head is one round. A refusal by Copilot, a thread still unresolved once the run ended, or a
+fourth round, is a comment on the issue and a stop for the head SHA. The Managed Agents
 builder, #370, answers each thread in a feedback session, and this job then posts the replies with its own token.
 
 Environment: GH_TOKEN, GITHUB_REPOSITORY, FACTORY_RUN (the id of the builder's run, optional),
@@ -30,6 +31,7 @@ REVIEWER = "copilot-pull-request-reviewer"
 REFUSAL = "Copilot was unable to review this pull request"
 MARKER = "<!-- repair-copilot:{sha} -->"
 WORKFLOW = "factory.yml"
+ROUNDS = 3
 QUERY = """query($o: String!, $r: String!, $n: Int!) { repository(owner: $o, name: $r) { pullRequest(number: $n) {
   id state headRefOid body labels(first: 50) { nodes { name } }
   reviewRequests(first: 50) { nodes { requestedReviewer { ... on Bot { login } ... on User { login } } } }
@@ -113,8 +115,16 @@ def main():
     wait = int(os.environ.get("REPAIR_POLL_SECONDS", "30"))
     deadline = time.time() + int(os.environ.get("REPAIR_COPILOT_TIMEOUT_SECONDS", "7200"))
     asked = set()
+    heads = [pr["headRefOid"]]
     while True:
         sha = pr["headRefOid"]
+        if sha != heads[-1]:
+            heads.append(sha)
+            if len(heads) > ROUNDS + 1:
+                stop(repo, number, issue, sha, "unanswered",
+                     f"Pull request #{number} took {ROUNDS} rounds of answers to Copilot, and `{sha}` starts a fourth. "
+                     f"The loop stops for this SHA. The owner reads the threads.")
+                return
         if (body := refusal(pr, sha)) is not None:
             stop(repo, number, issue, sha, "refused",
                  f"Copilot refused to review pull request #{number} on `{sha}`. The loop stops for this SHA.\n\n> {body.splitlines()[0]}")
