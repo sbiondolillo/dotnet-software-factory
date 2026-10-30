@@ -30,12 +30,16 @@
 # A group holds one running job and one waiting job. A newer waiting job
 # cancels the older waiting one, and that check then shows `cancelled`. A
 # cancelled required check blocks the merge until a rerun of its job passes.
+#
+# A merge by the repair loop's job uses GITHUB_TOKEN, and a push by that token
+# starts no run, so the merge step starts one on main with workflow_dispatch.
 name: ci
 
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
