@@ -1,0 +1,62 @@
+# The sense and read stages of the repair loop: a red ci run becomes an issue
+# with the label repair, written by one Managed Agents session. The job holds
+# the API key and the GitHub token. The session holds a read-only repository
+# token, the judge's agent and the judge's environment.
+#
+# A workflow_run trigger fires from the file on the default branch alone, and
+# it holds the secrets, so this job checks out main and runs no code of the red
+# run. A red run of a fork is out, because no job can push onto its branch.
+#
+# The job reruns a run on its first attempt, and the end of that rerun fires
+# this workflow again. The concurrency group holds that second job until the
+# first ends, and the second then finds the first one's issue or marker comment.
+#
+# The kill switch is the variable REPAIR_ENABLED. The job exits 0 at once on a
+# workflow_run event when it is not true. A run by hand skips the switch, for
+# development on a planted fault: `gh workflow run repair.yml -f run=<run id>`.
+# Secrets: JUDGE_ANTHROPIC_API_KEY, JUDGE_GITHUB_RO_TOKEN.
+# Variables: JUDGE_AGENT_ID, JUDGE_ENVIRONMENT_ID, REPAIR_ENABLED.
+name: repair
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run:
+        description: The id of the red run
+        required: true
+        type: string
+
+# actions reruns the run and reads its log. contents posts a comment on a commit of main.
+permissions:
+  actions: write
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: repair-${{ inputs.run || github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'failure' &&
+      !startsWith(github.event.workflow_run.head_branch, 'repair/') &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
+    steps:
+      - uses: actions/checkout@v7
+      - name: Read the red run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JUDGE_ANTHROPIC_API_KEY: ${{ secrets.JUDGE_ANTHROPIC_API_KEY }}
+          JUDGE_GITHUB_RO_TOKEN: ${{ secrets.JUDGE_GITHUB_RO_TOKEN }}
+          JUDGE_AGENT_ID: ${{ vars.JUDGE_AGENT_ID }}
+          JUDGE_ENVIRONMENT_ID: ${{ vars.JUDGE_ENVIRONMENT_ID }}
+          REPAIR_ENABLED: ${{ vars.REPAIR_ENABLED }}
+          RUN_ID: ${{ inputs.run || github.event.workflow_run.id }}
+        run: python3 .github/repair/read.py "$RUN_ID"
