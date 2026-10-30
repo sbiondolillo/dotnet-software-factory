@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """The build stage of the repair loop: a repair issue becomes a pull request with the label repair.
 
-The builder of the first loop is factory.yml, decided in #358. This job starts it with workflow_dispatch and
-the issue number, under GITHUB_TOKEN. The factory runs at main, pushes factory/<id>, opens the pull request
-with `Closes #<n>` under FACTORY_SELF_TOKEN, and posts `Opened <url>` on the issue. This job reads that
+The builder of the first loop is factory.yml, decided in #358. This job starts it with workflow_dispatch, the
+issue number and `copilot=on`, under GITHUB_TOKEN. The factory runs at main, pushes factory/<id>, opens the pull
+request with `Closes #<n>` under FACTORY_SELF_TOKEN, and posts `Opened <url>` on the issue. This job reads that
 comment and sets the label repair on the pull request. The factory keeps its Redo bound of three, and posts
-the last gate output on the issue when the bound is spent.
+the last gate output on the issue when the bound is spent. With `copilot=on` it then requests a Copilot code
+review and answers each thread through FeedbackRun, three rounds at most, which copilot.py watches.
 
 The factory builds at main, so an issue whose target is a pull request branch gets a comment and no build.
 The Managed Agents builder, #370, builds at the red SHA.
 
 Environment: GH_TOKEN, GITHUB_REPOSITORY, REPAIR_BUILD_TIMEOUT_SECONDS (default 3600).
-Argument: the number of the repair issue.
+Argument: the number of the repair issue. The pull request number goes to GITHUB_OUTPUT as `pr`, and the id of
+the factory run as `run` when this job started one, for the Copilot stage.
 """
 import json
 import os
@@ -67,7 +69,7 @@ def factory_runs(repo):
 def dispatch(repo, number, timeout):
     """Starts the factory on the issue, and gives back its run once the list holds it."""
     before = factory_runs(repo)
-    gh("workflow", "run", WORKFLOW, "-R", repo, "-f", f"issue={number}")
+    gh("workflow", "run", WORKFLOW, "-R", repo, "-f", f"issue={number}", "-f", "copilot=on")
     deadline = time.time() + timeout
     while time.time() < deadline:
         time.sleep(10)
@@ -123,6 +125,8 @@ def main():
     timeout = int(os.environ.get("REPAIR_BUILD_TIMEOUT_SECONDS", "3600"))
     run = dispatch(repo, number, 180)
     print(f"repair: started the factory: {run['url']}")
+    with open(os.environ.get("GITHUB_OUTPUT", os.devnull), "a") as output:
+        output.write(f"run={run['databaseId']}\n")
     pr = wait_for_pull_request(repo, number, run, timeout)
     label(repo, pr)
 

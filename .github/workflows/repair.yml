@@ -1,13 +1,21 @@
-# The sense, read and build stages of the repair loop: a red ci run becomes an
-# issue with the label repair, written by one Managed Agents session, and that
-# issue becomes a pull request with the label repair, built by factory.yml. The
-# job holds the API key and the GitHub token. The session holds a read-only
-# repository token, the judge's agent and the judge's environment.
+# The sense, read, build and Copilot stages of the repair loop: a red ci run
+# becomes an issue with the label repair, written by one Managed Agents
+# session, that issue becomes a pull request with the label repair, built by
+# factory.yml, and that pull request gets a Copilot review with every thread
+# answered. The job holds the API key and the GitHub token. The session holds
+# a read-only repository token, the judge's agent and the judge's environment.
 #
-# The build step starts factory.yml with workflow_dispatch and the issue
-# number, as #358 decided. The factory runs at main, opens the pull request
-# under FACTORY_SELF_TOKEN, so ci and the judge run on it, and posts
+# The build step starts factory.yml with workflow_dispatch, the issue number
+# and copilot=on, as #358 decided. The factory runs at main, opens the pull
+# request under FACTORY_SELF_TOKEN, so ci and the judge run on it, and posts
 # `Opened <url>` on the issue. The step reads that comment and sets the label.
+#
+# The Copilot step requests a review by copilot-pull-request-reviewer when the
+# head holds none, and polls until a review is on the head and no thread is
+# unresolved. The factory answers the threads within its run, three rounds at
+# most. A refusal, or a thread still open once that run ended, is one comment
+# on the issue and a stop for the SHA. The result is the step output copilot,
+# settled, refused or unanswered, for the merge stage.
 #
 # A workflow_run trigger fires from the file on the default branch alone, and
 # it holds the secrets, so this job checks out main and runs no code of the red
@@ -22,8 +30,9 @@
 # The kill switch is the variable REPAIR_ENABLED. The job exits 0 at once on a
 # workflow_run event when it is not true. A run by hand skips the switch, for
 # development on a planted fault: `gh workflow run repair.yml -f run=<run id>`.
-# A run by hand with an issue number runs the build step alone:
-# `gh workflow run repair.yml -f issue=<n>`.
+# A run by hand with an issue number runs the build step and the Copilot step:
+# `gh workflow run repair.yml -f issue=<n>`. A run by hand with a pull request
+# number runs the Copilot step alone: `gh workflow run repair.yml -f pr=<n>`.
 # Secrets: JUDGE_ANTHROPIC_API_KEY, JUDGE_GITHUB_RO_TOKEN.
 # Variables: JUDGE_AGENT_ID, JUDGE_ENVIRONMENT_ID, REPAIR_ENABLED.
 name: repair
@@ -42,6 +51,10 @@ on:
         description: The number of a repair issue, to build with no read
         required: false
         type: string
+      pr:
+        description: The number of a repair pull request, to watch with no read and no build
+        required: false
+        type: string
 
 # actions reruns the run, reads its log and starts factory.yml. contents posts a comment on a commit of main.
 permissions:
@@ -51,7 +64,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: repair-${{ inputs.issue && format('issue-{0}', inputs.issue) || inputs.run || github.event.workflow_run.id }}
+  group: repair-${{ inputs.pr && format('pr-{0}', inputs.pr) || inputs.issue && format('issue-{0}', inputs.issue) || inputs.run || github.event.workflow_run.id }}
   cancel-in-progress: false
 
 jobs:
@@ -66,7 +79,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Read the red run
         id: read
-        if: ${{ !inputs.issue }}
+        if: ${{ !inputs.issue && !inputs.pr }}
         env:
           GH_TOKEN: ${{ github.token }}
           JUDGE_ANTHROPIC_API_KEY: ${{ secrets.JUDGE_ANTHROPIC_API_KEY }}
@@ -78,8 +91,16 @@ jobs:
         run: python3 .github/repair/read.py "$RUN_ID"
       - name: Build the repair issue
         id: build
-        if: ${{ inputs.issue || steps.read.outputs.issue }}
+        if: ${{ !inputs.pr && (inputs.issue || steps.read.outputs.issue) }}
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE: ${{ inputs.issue || steps.read.outputs.issue }}
         run: python3 .github/repair/build.py "$ISSUE"
+      - name: Watch the Copilot review
+        id: copilot
+        if: ${{ inputs.pr || steps.build.outputs.pr }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr || steps.build.outputs.pr }}
+          FACTORY_RUN: ${{ steps.build.outputs.run }}
+        run: python3 .github/repair/copilot.py "$PR"
