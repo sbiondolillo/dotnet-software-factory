@@ -37,12 +37,25 @@ def target_pull_request(body):
 
 
 def opened_pull_request(repo, issue):
-    """The number of the pull request the factory posted on the issue as `Opened <url>`, or None."""
+    """The number of the pull request the factory posted on the issue as `Opened <url>`, or None.
+
+    The factory posts under FACTORY_SELF_TOKEN, the owner's identity, so a comment by anyone else is no result.
+    The pull request is open, on a `factory/` branch, and holds `Closes #<n>` for this issue.
+    """
+    owner = repo.split("/")[0]
     for comment in issue.get("comments") or []:
+        if (comment.get("author") or {}).get("login") != owner:
+            continue
         match = re.search(rf"^Opened https://github\.com/{re.escape(repo)}/pull/(\d+)\s*$", comment.get("body") or "", re.M)
-        if match:
+        if match and is_factory_pull_request(repo, int(match.group(1)), issue["number"]):
             return int(match.group(1))
     return None
+
+
+def is_factory_pull_request(repo, pr, number):
+    fields = json.loads(gh("pr", "view", str(pr), "-R", repo, "--json", "state,headRefName,body"))
+    return (fields["state"] == "OPEN" and fields["headRefName"].startswith("factory/")
+            and re.search(rf"^Closes #{number}\s*$", fields["body"] or "", re.M) is not None)
 
 
 def factory_runs(repo):
