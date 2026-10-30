@@ -51,7 +51,9 @@ def comment(repo, pr, sha, text):
         gh("api", f"repos/{repo}/commits/{sha}/comments", "-f", f"body={body}")
 
 
-def open_issue_for(repo, sha):
+def issue_for(repo, sha):
+    """The repair issue that holds the SHA, in any state. An open one wins over a closed one, and the oldest closed
+    one over a later one."""
     issues = json.loads(
         gh(
             "issue",
@@ -61,21 +63,26 @@ def open_issue_for(repo, sha):
             "--label",
             "repair",
             "--state",
-            "open",
+            "all",
             "--limit",
             "200",
             "--json",
-            "number,body",
+            "number,body,state",
         )
     )
-    return next((i for i in issues if sha in (i["body"] or "")), None)
+    held = [i for i in issues if sha in (i["body"] or "")]
+    return next((i for i in held if i["state"] == "OPEN"), min(held, key=lambda i: i["number"], default=None))
 
 
 def already_handled(repo, pr, run):
-    """One repair per SHA. A second red run on the SHA is a comment on its issue."""
+    """One repair per SHA. A second red run on the SHA is a comment on its open issue. A closed issue that holds
+    the SHA, such as one a rerun of the red run reaches after the fix merged, ends the read and gets no comment."""
     sha = run["head_sha"]
-    issue = open_issue_for(repo, sha)
+    issue = issue_for(repo, sha)
     if issue:
+        if issue["state"] != "OPEN":
+            print(f"repair: issue #{issue['number']} holds {sha[:7]}; closed; nothing to do")
+            return True
         if run["html_url"] not in issue["body"] + comments_on(repo, issue, sha):
             gh(
                 "issue",
