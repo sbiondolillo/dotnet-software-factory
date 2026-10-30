@@ -3,7 +3,8 @@
 
 The job arms GitHub's auto-merge with its own token, `gh pr merge --auto --squash --delete-branch`, as #361 found:
 GitHub accepts it from GITHUB_TOKEN, merges when the required checks `build`, `integration` and `judge-verdict` pass,
-and shows `app/github-actions` as the merger. The guards, decided in #355 and #366, run first: the pull request is
+and shows `app/github-actions` as the merger. `--match-head-commit` ties the merge to the settled head, and the job
+disarms the merge when the head moves while it waits, so no head that Copilot never settled on merges. The guards, decided in #355 and #366, run first: the pull request is
 open with the label `repair`, its head is `repair/*` or `factory/*`, its head is the SHA the Copilot stage settled
 on, and `judge-verdict` is success on that head. The job waits for the judge when its check run is not complete yet.
 A verdict other than success is one comment on the issue and no merge.
@@ -19,7 +20,11 @@ commit, and deletes the head branch when `delete_branch_on_merge` left it. The j
 The kill switch REPAIR_ENABLED is read first, on every event. Any value other than `true` ends the step with the
 exit code 0 and one line.
 
-Environment: GH_TOKEN, GITHUB_REPOSITORY, REPAIR_ENABLED, REPAIR_MERGE_TIMEOUT_SECONDS (default 7200),
+The merge timeout covers the wait for the judge and the wait for the merge. The defaults of the five waits of the job,
+the rerun, the reader, the build, the Copilot stage and this one, add up to 18900 s, under GitHub's job limit of
+21600 s. The required checks ran during the Copilot stage in the usual case, so the merge lands at once.
+
+Environment: GH_TOKEN, GITHUB_REPOSITORY, REPAIR_ENABLED, REPAIR_MERGE_TIMEOUT_SECONDS (default 3600),
 REPAIR_POLL_SECONDS (default 30).
 Arguments: the number of the repair pull request, and the head SHA the Copilot stage settled on.
 """
@@ -85,13 +90,18 @@ def wait_for_judge(repo, sha, deadline, wait):
         time.sleep(wait)
 
 
-def wait_for_merge(repo, number, deadline, wait):
+def wait_for_merge(repo, number, sha, deadline, wait):
+    """The merged pull request, or None once its head moved off the settled SHA, with the auto-merge disarmed."""
     while True:
         pr = read_pull_request(repo, number)
         if pr["state"] == "MERGED":
             return pr
         if pr["state"] != "OPEN":
             sys.exit(f"repair: pull request #{number} is {pr['state'].lower()} before the merge")
+        if pr["headRefOid"] != sha:
+            gh("pr", "merge", str(number), "-R", repo, "--disable-auto")
+            print(f"repair: the head of pull request #{number} moved off {sha[:7]} while the auto-merge was armed; disarmed, no merge")
+            return None
         if time.time() >= deadline:
             sys.exit(f"repair: pull request #{number} is not merged after the timeout; auto-merge stays armed, "
                      f"and the owner closes its issue after the merge")
@@ -123,10 +133,10 @@ def delete_branch(repo, branch):
 
 
 def main():
-    repo = os.environ.get("GITHUB_REPOSITORY") or sys.exit("repair: GITHUB_REPOSITORY is not set")
     if os.environ.get("REPAIR_ENABLED") != "true":
         print("repair: REPAIR_ENABLED is not true; no merge")
         return
+    repo = os.environ.get("GITHUB_REPOSITORY") or sys.exit("repair: GITHUB_REPOSITORY is not set")
     number = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else sys.exit("repair: give the number of a repair pull request")
     sha = sys.argv[2] if len(sys.argv) > 2 and re.fullmatch(r"[0-9a-f]{40}", sys.argv[2]) else sys.exit("repair: give the head SHA the Copilot stage settled on")
 
@@ -149,7 +159,7 @@ def main():
         return
 
     wait = int(os.environ.get("REPAIR_POLL_SECONDS", "30"))
-    deadline = time.time() + int(os.environ.get("REPAIR_MERGE_TIMEOUT_SECONDS", "7200"))
+    deadline = time.time() + int(os.environ.get("REPAIR_MERGE_TIMEOUT_SECONDS", "3600"))
     conclusion = wait_for_judge(repo, sha, deadline, wait)
     if conclusion != "success":
         stop(repo, number, issue, sha,
@@ -159,9 +169,15 @@ def main():
         print(f"repair: the head of pull request #{number} moved off {sha[:7]} while the judge ran; nothing to merge")
         return
 
-    gh("pr", "merge", str(number), "-R", repo, "--auto", "--squash", "--delete-branch")
+    gh("pr", "merge", str(number), "-R", repo, "--auto", "--squash", "--delete-branch", "--match-head-commit", sha)
     print(f"repair: armed the auto-merge of pull request #{number} on {sha[:7]}")
-    merged = wait_for_merge(repo, number, deadline, wait)
+    merged = wait_for_merge(repo, number, sha, deadline, wait)
+    if merged is None:
+        return
+    if merged["headRefOid"] != sha:
+        stop(repo, number, issue, sha,
+             f"Pull request #{number} merged at `{merged['headRefOid']}`, not at the settled `{sha}`. The job closes no issue for it. The owner reads the pull request.")
+        return
     close_issue(repo, issue, merged)
     delete_branch(repo, pr["headRefName"])
 

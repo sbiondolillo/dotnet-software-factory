@@ -20,8 +20,9 @@
 # The merge step runs on settled alone, on the same head, as #355 decided. It
 # waits for the check run judge-verdict on that head, and arms GitHub's
 # auto-merge with the job's own token, `gh pr merge --auto --squash
-# --delete-branch`. GitHub merges when build, integration and judge-verdict
-# pass, and shows app/github-actions as the merger. A merge by this token
+# --delete-branch --match-head-commit <sha>`, and disarms it when the head
+# moves. GitHub merges when build, integration and judge-verdict pass, and
+# shows app/github-actions as the merger. A merge by this token
 # closes no issue, so the step waits for the merge and closes the issue with
 # one comment that names the merge commit. The step merges nothing on a pull
 # request whose head branch is the branch of the red run that started the
@@ -29,7 +30,8 @@
 # of the check run needs none, and #361 bars checks: write here, since the
 # protection binds the check name and any job with checks: write could post
 # a green judge-verdict. The repo needs allow_auto_merge and
-# delete_branch_on_merge on, which the owner sets.
+# delete_branch_on_merge on, and main needs the required checks build,
+# integration and judge-verdict with enforce_admins. The owner sets both.
 #
 # A workflow_run trigger fires from the file on the default branch alone, and
 # it holds the secrets, so this job checks out main and runs no code of the red
