@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://platform.claude.com/schemas/ant/beta/environment.json
+# ant apply reads each YAML and Markdown resource file in a directory named agents/ as an agent unless the file states its type. This file states type: environment. A README.md is skipped.
+# The type line makes this file an environment.
+type: environment
+name: agent-platform-eval-ma
+scope: organization
+config:
+  type: cloud
+  packages:
+    type: packages
+    apt:
+      - dotnet-sdk-10.0
+    cargo: []
+    gem: []
+    go: []
+    npm: []
+    pip: []
+  networking:
+    type: limited
+    allow_mcp_servers: false
+    allow_package_managers: true
+    allowed_hosts: []

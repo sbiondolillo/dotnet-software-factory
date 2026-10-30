@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "origin": {
+    "base_url": "https://api.anthropic.com",
+    "organization_id": "5ee0df32-ee60-417d-a940-27ca68ef4de4",
+    "workspace_id": "wrkspc_019ARp1PpA5sEoGR4sLZMrw5"
+  },
+  "resources": {
+    "./judge.environment.yaml": {
+      "kind": "environment",
+      "id": "env_01LppsRP6QAsjQcMATGMfiKj"
+    },
+    "./judge.md": {
+      "kind": "agent",
+      "id": "agent_015ajBRYm99G5kMdMDSRsEY1",
+      "version": "1"
+    }
+  }
+}
