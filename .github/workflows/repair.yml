@@ -1,11 +1,19 @@
-# The sense and read stages of the repair loop: a red ci run becomes an issue
-# with the label repair, written by one Managed Agents session. The job holds
-# the API key and the GitHub token. The session holds a read-only repository
-# token, the judge's agent and the judge's environment.
+# The sense, read and build stages of the repair loop: a red ci run becomes an
+# issue with the label repair, written by one Managed Agents session, and that
+# issue becomes a pull request with the label repair, built by factory.yml. The
+# job holds the API key and the GitHub token. The session holds a read-only
+# repository token, the judge's agent and the judge's environment.
+#
+# The build step starts factory.yml with workflow_dispatch and the issue
+# number, as #358 decided. The factory runs at main, opens the pull request
+# under FACTORY_SELF_TOKEN, so ci and the judge run on it, and posts
+# `Opened <url>` on the issue. The step reads that comment and sets the label.
 #
 # A workflow_run trigger fires from the file on the default branch alone, and
 # it holds the secrets, so this job checks out main and runs no code of the red
 # run. A red run of a fork is out, because no job can push onto its branch.
+# A red run on a pull request with the label repair is out, since a loop that
+# repairs its own pull request would file a second repair.
 #
 # The job reruns a run on its first attempt, and the end of that rerun fires
 # this workflow again. The concurrency group holds that second job until the
@@ -14,6 +22,8 @@
 # The kill switch is the variable REPAIR_ENABLED. The job exits 0 at once on a
 # workflow_run event when it is not true. A run by hand skips the switch, for
 # development on a planted fault: `gh workflow run repair.yml -f run=<run id>`.
+# A run by hand with an issue number runs the build step alone:
+# `gh workflow run repair.yml -f issue=<n>`.
 # Secrets: JUDGE_ANTHROPIC_API_KEY, JUDGE_GITHUB_RO_TOKEN.
 # Variables: JUDGE_AGENT_ID, JUDGE_ENVIRONMENT_ID, REPAIR_ENABLED.
 name: repair
@@ -26,10 +36,14 @@ on:
     inputs:
       run:
         description: The id of the red run
-        required: true
+        required: false
+        type: string
+      issue:
+        description: The number of a repair issue, to build with no read
+        required: false
         type: string
 
-# actions reruns the run and reads its log. contents posts a comment on a commit of main.
+# actions reruns the run, reads its log and starts factory.yml. contents posts a comment on a commit of main.
 permissions:
   actions: write
   contents: write
@@ -37,7 +51,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: repair-${{ inputs.run || github.event.workflow_run.id }}
+  group: repair-${{ inputs.issue && format('issue-{0}', inputs.issue) || inputs.run || github.event.workflow_run.id }}
   cancel-in-progress: false
 
 jobs:
@@ -51,6 +65,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Read the red run
+        id: read
+        if: ${{ !inputs.issue }}
         env:
           GH_TOKEN: ${{ github.token }}
           JUDGE_ANTHROPIC_API_KEY: ${{ secrets.JUDGE_ANTHROPIC_API_KEY }}
@@ -60,3 +76,10 @@ jobs:
           REPAIR_ENABLED: ${{ vars.REPAIR_ENABLED }}
           RUN_ID: ${{ inputs.run || github.event.workflow_run.id }}
         run: python3 .github/repair/read.py "$RUN_ID"
+      - name: Build the repair issue
+        id: build
+        if: ${{ inputs.issue || steps.read.outputs.issue }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ inputs.issue || steps.read.outputs.issue }}
+        run: python3 .github/repair/build.py "$ISSUE"
