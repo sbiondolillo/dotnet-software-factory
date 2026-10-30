@@ -15,11 +15,11 @@ The loop bound: the job merges nothing on a pull request whose head branch is th
 started the repair. The run is the `Run:` line under `## Run` of the issue, which read.py wrote.
 
 A merge by GITHUB_TOKEN closes no issue named by `Closes #n`, and `--delete-branch` deletes nothing on a deferred
-merge, as #361 found. So the job waits for the merge, closes the issue with one comment that names the merge
-commit, and deletes the head branch when `delete_branch_on_merge` left it. A push by GITHUB_TOKEN starts no
-workflow run, so the job then starts `ci` on the base branch with workflow_dispatch, and the merge commit gets its
-run on `main`. A wait that reaches the timeout disarms the auto-merge, so no later head merges unsettled. The job reads check runs with no
-`checks` permission: the repo is public, and #361 bars `checks: write` on this job.
+merge, as #361 found. So the job waits for the merge, closes the issue with one comment that names the merge commit,
+and deletes the head branch when `delete_branch_on_merge` left it. A push by GITHUB_TOKEN starts no workflow run, so
+the job then starts `ci` on the base branch with workflow_dispatch, and the merge commit gets its run on `main`. A
+wait that reaches the timeout disarms the auto-merge, so no later head merges unsettled. The job reads check runs with
+no `checks` permission: the repo is public, and #361 bars `checks: write` on this job.
 
 The kill switch REPAIR_ENABLED is read first, on every event. Any value other than `true` ends the step with the
 exit code 0 and one line.
