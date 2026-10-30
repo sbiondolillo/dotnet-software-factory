@@ -58,7 +58,7 @@ def already_handled(repo, pr, run):
     sha = run["head_sha"]
     issue = open_issue_for(repo, sha)
     if issue:
-        if run["html_url"] not in issue["body"]:
+        if run["html_url"] not in issue["body"] + comments_on(repo, issue, sha):
             gh("issue", "comment", str(issue["number"]), "-R", repo, "--body", f"The run {run['html_url']} on `{sha}` is also red.")
         print(f"repair: issue #{issue['number']} holds {sha[:7]}; nothing to do")
         return True
@@ -204,6 +204,9 @@ def main():
     answer = parse_answer(text)
     summarise(answer, sid)
     print(f"repair: class {answer['class']}")
+    needed, pr = gate(repo, run)
+    if not needed:
+        return
 
     if answer["class"] == "flake":
         comment(repo, pr, sha, f"The run {run['html_url']} is red on `{sha}`, and the reader's class is `flake`. No repair. Session `{sid}`.\n\n{indented(answer['evidence'])}")
