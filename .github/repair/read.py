@@ -8,7 +8,7 @@ the issue with its own token. The session holds the read-only token and nothing 
 Environment: JUDGE_ANTHROPIC_API_KEY, JUDGE_GITHUB_RO_TOKEN, GH_TOKEN, GITHUB_REPOSITORY, GITHUB_EVENT_NAME,
 JUDGE_AGENT_ID, JUDGE_ENVIRONMENT_ID, REPAIR_ENABLED, REPAIR_BUDGET_CENTS (default 200),
 REPAIR_TIMEOUT_SECONDS (default 900), REPAIR_RERUN_TIMEOUT_SECONDS (default 3600).
-Argument: the id of the red run.
+Argument: the id of the red run. The number of the filed issue goes to GITHUB_OUTPUT as `issue`, for the build stage.
 """
 import json
 import os
@@ -161,7 +161,7 @@ def summarise(answer, sid):
 
 def main():
     repo = env("GITHUB_REPOSITORY")
-    run_id = sys.argv[1]
+    run_id = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else sys.exit("repair: give the id of a red run")
     if os.environ.get("GITHUB_EVENT_NAME") == "workflow_run" and os.environ.get("REPAIR_ENABLED") != "true":
         print("repair: REPAIR_ENABLED is not true; nothing to do")
         return
@@ -218,6 +218,8 @@ def main():
     if not url.strip():
         sys.exit("repair: gh issue create exited 0 and printed no issue")
     print(f"repair: filed {url.strip()}")
+    with open(os.environ.get("GITHUB_OUTPUT", os.devnull), "a") as output:
+        output.write(f"issue={url.strip().rsplit('/', 1)[-1]}\n")
 
 
 if __name__ == "__main__":
