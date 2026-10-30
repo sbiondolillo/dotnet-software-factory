@@ -15,6 +15,7 @@ Environment: GH_TOKEN, GITHUB_REPOSITORY, REPAIR_BUILD_TIMEOUT_SECONDS (default 
 Argument: the number of the repair issue. The pull request number goes to GITHUB_OUTPUT as `pr`, and the id of
 the factory run as `run` when this job started one, for the Copilot stage.
 """
+
 import json
 import os
 import re
@@ -48,7 +49,9 @@ def opened_pull_request(repo, issue):
     for comment in issue.get("comments") or []:
         if (comment.get("author") or {}).get("login") != owner:
             continue
-        match = re.search(rf"^Opened https://github\.com/{re.escape(repo)}/pull/(\d+)\s*$", comment.get("body") or "", re.M)
+        match = re.search(
+            rf"^Opened https://github\.com/{re.escape(repo)}/pull/(\d+)\s*$", comment.get("body") or "", re.M
+        )
         if match and is_factory_pull_request(repo, int(match.group(1)), issue["number"]):
             return int(match.group(1))
     return None
@@ -56,13 +59,30 @@ def opened_pull_request(repo, issue):
 
 def is_factory_pull_request(repo, pr, number):
     fields = json.loads(gh("pr", "view", str(pr), "-R", repo, "--json", "state,headRefName,body"))
-    return (fields["state"] == "OPEN" and fields["headRefName"].startswith("factory/")
-            and re.search(rf"^Closes #{number}\s*$", fields["body"] or "", re.M) is not None)
+    return (
+        fields["state"] == "OPEN"
+        and fields["headRefName"].startswith("factory/")
+        and re.search(rf"^Closes #{number}\s*$", fields["body"] or "", re.M) is not None
+    )
 
 
 def factory_runs(repo):
-    runs = json.loads(gh("run", "list", "-R", repo, "--workflow", WORKFLOW, "--event", "workflow_dispatch", "--limit", "30",
-                         "--json", "databaseId,status,conclusion,url"))
+    runs = json.loads(
+        gh(
+            "run",
+            "list",
+            "-R",
+            repo,
+            "--workflow",
+            WORKFLOW,
+            "--event",
+            "workflow_dispatch",
+            "--limit",
+            "30",
+            "--json",
+            "databaseId,status,conclusion,url",
+        )
+    )
     return {run["databaseId"]: run for run in runs}
 
 
@@ -98,14 +118,21 @@ def wait_for_pull_request(repo, number, run, timeout):
             pr = opened_pull_request(repo, read_issue(repo, number))
             if pr is not None:
                 return pr
-            sys.exit(f"repair: the factory run {current['url']} ended {current['conclusion']} with no pull request on issue #{number}")
+            sys.exit(
+                f"repair: the factory run {current['url']} ended {current['conclusion']} "
+                f"with no pull request on issue #{number}"
+            )
         time.sleep(30)
     sys.exit(f"repair: the factory run {run['url']} opened no pull request on issue #{number} within {timeout} s")
 
 
 def main():
     repo = os.environ.get("GITHUB_REPOSITORY") or sys.exit("repair: GITHUB_REPOSITORY is not set")
-    number = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else sys.exit("repair: give the number of a repair issue")
+    number = (
+        int(sys.argv[1])
+        if len(sys.argv) > 1 and sys.argv[1].isdigit()
+        else sys.exit("repair: give the number of a repair issue")
+    )
     issue = read_issue(repo, number)
     labels = [item["name"] for item in issue.get("labels") or []]
     if issue["state"] != "OPEN" or LABEL not in labels:
@@ -116,9 +143,16 @@ def main():
         label(repo, pr)
         return
     if (target := target_pull_request(issue["body"])) is not None:
-        gh("issue", "comment", str(number), "-R", repo, "--body",
-           f"The factory builds at `main`, and the fault is on the branch of pull request #{target}. No build. "
-           "A builder at the red SHA is the Managed Agents builder, #370.")
+        gh(
+            "issue",
+            "comment",
+            str(number),
+            "-R",
+            repo,
+            "--body",
+            f"The factory builds at `main`, and the fault is on the branch of pull request #{target}. No build. "
+            "A builder at the red SHA is the Managed Agents builder, #370.",
+        )
         print(f"repair: issue #{number} targets pull request #{target}; no build at main")
         return
 

@@ -1,0 +1,8 @@
+# The format and the lint of the Python under .github/. The build job of
+# ci.yml runs `ruff format --check .` and `ruff check .`, and step 2 of
+# .claude/skills/change/SKILL.md runs them before a commit.
+line-length = 120
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "W", "I"]

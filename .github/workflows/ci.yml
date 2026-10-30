@@ -4,6 +4,8 @@
 # `build` runs the four commands the factory's test gate runs, in the same
 # order: restore from the locks, build with every warning an error, verify
 # the format, and run the build suite. The build suite needs no network.
+# Then `Python` runs `ruff format --check` and `ruff check` on the scripts
+# under .github/, to ruff.toml at the root. `pipx run` pins the version.
 #
 # `integration` runs tests/Integration against the real GitHub, docker and
 # Claude Code. `dotnet test` never collects it, because its project sets
@@ -60,6 +62,8 @@ jobs:
         run: dotnet format --verify-no-changes --no-restore
       - name: Test
         run: dotnet test --no-restore
+      - name: Python
+        run: pipx run --spec ruff==0.16.2 ruff format --check . && pipx run --spec ruff==0.16.2 ruff check .
 
   integration:
     needs: build

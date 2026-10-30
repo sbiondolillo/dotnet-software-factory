@@ -32,6 +32,7 @@ Environment: GH_TOKEN, GITHUB_REPOSITORY, REPAIR_ENABLED, REPAIR_MERGE_TIMEOUT_S
 REPAIR_POLL_SECONDS (default 30).
 Arguments: the number of the repair pull request, and the head SHA the Copilot stage settled on.
 """
+
 import json
 import os
 import re
@@ -68,7 +69,8 @@ def red_run_branch(repo, issue):
 
 
 def verdict(repo, sha):
-    """The latest check run named judge-verdict on the commit: (status, conclusion), or None when the judge posted none."""
+    """The latest check run named judge-verdict on the commit: (status, conclusion), or None when the judge
+    posted none."""
     answer = json.loads(gh("api", f"repos/{repo}/commits/{sha}/check-runs?check_name={CHECK}&filter=latest"))
     runs = answer.get("check_runs") or []
     return (runs[0]["status"], runs[0].get("conclusion")) if runs else None
@@ -130,11 +132,16 @@ def wait_for_merge(repo, number, sha, deadline, wait):
             sys.exit(f"repair: pull request #{number} is {pr['state'].lower()} before the merge")
         if pr["headRefOid"] != sha:
             disarm(repo, number)
-            print(f"repair: the head of pull request #{number} moved off {sha[:7]} while the auto-merge was armed; no merge")
+            print(
+                f"repair: the head of pull request #{number} moved off {sha[:7]} while the auto-merge was armed; "
+                "no merge"
+            )
             return None
         if time.time() >= deadline:
-            sys.exit(f"repair: pull request #{number} is not merged after the timeout; "
-                     f"`gh workflow run repair.yml -f pr={number}` arms the auto-merge again")
+            sys.exit(
+                f"repair: pull request #{number} is not merged after the timeout; "
+                f"`gh workflow run repair.yml -f pr={number}` arms the auto-merge again"
+            )
         time.sleep(wait)
 
 
@@ -174,8 +181,16 @@ def main():
         print("repair: REPAIR_ENABLED is not true; no merge")
         return
     repo = os.environ.get("GITHUB_REPOSITORY") or sys.exit("repair: GITHUB_REPOSITORY is not set")
-    number = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else sys.exit("repair: give the number of a repair pull request")
-    sha = sys.argv[2] if len(sys.argv) > 2 and re.fullmatch(r"[0-9a-f]{40}", sys.argv[2]) else sys.exit("repair: give the head SHA the Copilot stage settled on")
+    number = (
+        int(sys.argv[1])
+        if len(sys.argv) > 1 and sys.argv[1].isdigit()
+        else sys.exit("repair: give the number of a repair pull request")
+    )
+    sha = (
+        sys.argv[2]
+        if len(sys.argv) > 2 and re.fullmatch(r"[0-9a-f]{40}", sys.argv[2])
+        else sys.exit("repair: give the head SHA the Copilot stage settled on")
+    )
 
     pr = read_pull_request(repo, number)
     labels = [item["name"] for item in pr["labels"]]
@@ -183,24 +198,42 @@ def main():
         print(f"repair: pull request #{number} is {pr['state'].lower()} with the labels {labels}; nothing to merge")
         return
     if not pr["headRefName"].startswith(HEADS):
-        print(f"repair: the head {pr['headRefName']} of pull request #{number} is not repair/* or factory/*; nothing to merge")
+        print(
+            f"repair: the head {pr['headRefName']} of pull request #{number} is not repair/* or factory/*; "
+            "nothing to merge"
+        )
         return
     if pr["headRefOid"] != sha:
-        print(f"repair: the head of pull request #{number} is {pr['headRefOid'][:7]}, not the settled {sha[:7]}; nothing to merge")
+        print(
+            f"repair: the head of pull request #{number} is {pr['headRefOid'][:7]}, not the settled {sha[:7]}; "
+            "nothing to merge"
+        )
         return
     issue = closing_issue(pr["body"])
     if issue is not None and red_run_branch(repo, issue) == pr["headRefName"]:
-        stop(repo, number, issue, sha,
-             f"The head `{pr['headRefName']}` of pull request #{number} is the branch of the red run that started this repair. "
-             "The loop merges no branch of its own red run. The owner reads the pull request.")
+        stop(
+            repo,
+            number,
+            issue,
+            sha,
+            f"The head `{pr['headRefName']}` of pull request #{number} is the branch of the red run "
+            "that started this repair. "
+            "The loop merges no branch of its own red run. The owner reads the pull request.",
+        )
         return
 
     wait = int(os.environ.get("REPAIR_POLL_SECONDS", "30"))
     deadline = time.time() + int(os.environ.get("REPAIR_MERGE_TIMEOUT_SECONDS", "3600"))
     conclusion = wait_for_judge(repo, sha, deadline, wait)
     if conclusion != "success":
-        stop(repo, number, issue, sha,
-             f"The check `{CHECK}` on `{sha}` of pull request #{number} is `{conclusion}`. No merge. The owner reads the judge's review.")
+        stop(
+            repo,
+            number,
+            issue,
+            sha,
+            f"The check `{CHECK}` on `{sha}` of pull request #{number} is `{conclusion}`. No merge. "
+            "The owner reads the judge's review.",
+        )
         return
     if read_pull_request(repo, number)["headRefOid"] != sha:
         print(f"repair: the head of pull request #{number} moved off {sha[:7]} while the judge ran; nothing to merge")
@@ -210,8 +243,14 @@ def main():
     if merged is None:
         return
     if merged["headRefOid"] != sha:
-        stop(repo, number, issue, sha,
-             f"Pull request #{number} merged at `{merged['headRefOid']}`, not at the settled `{sha}`. The job closes no issue for it. The owner reads the pull request.")
+        stop(
+            repo,
+            number,
+            issue,
+            sha,
+            f"Pull request #{number} merged at `{merged['headRefOid']}`, not at the settled `{sha}`. "
+            "The job closes no issue for it. The owner reads the pull request.",
+        )
         return
     start_ci(repo, merged["baseRefName"])
     close_issue(repo, issue, merged)

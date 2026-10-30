@@ -17,6 +17,7 @@ REPAIR_COPILOT_TIMEOUT_SECONDS (default 7200), REPAIR_POLL_SECONDS (default 30).
 Argument: the number of the repair pull request. The result goes to GITHUB_OUTPUT as `copilot`, one of `settled`,
 `refused` or `unanswered`, with the head SHA as `sha`, for the merge stage.
 """
+
 import json
 import os
 import re
@@ -37,19 +38,27 @@ QUERY = """query($o: String!, $r: String!, $n: Int!) { repository(owner: $o, nam
   reviewRequests(first: 50) { nodes { requestedReviewer { ... on Bot { login } ... on User { login } } } }
   reviews(first: 100) { nodes { state body author { login } commit { oid } } }
   reviewThreads(first: 100) { nodes { id isResolved } } } } }"""
-REQUEST = "mutation($id: ID!, $logins: [String!]) { requestReviewsByLogin(input: {pullRequestId: $id, botLogins: $logins}) { pullRequest { id } } }"
+REQUEST = (
+    "mutation($id: ID!, $logins: [String!]) "
+    "{ requestReviewsByLogin(input: {pullRequestId: $id, botLogins: $logins}) { pullRequest { id } } }"
+)
 
 
 def read_pull_request(repo, number):
     owner, name = repo.split("/")
-    answer = json.loads(gh("api", "graphql", "-f", f"query={QUERY}", "-F", f"o={owner}", "-F", f"r={name}", "-F", f"n={number}"))
+    answer = json.loads(
+        gh("api", "graphql", "-f", f"query={QUERY}", "-F", f"o={owner}", "-F", f"r={name}", "-F", f"n={number}")
+    )
     return answer["data"]["repository"]["pullRequest"]
 
 
 def reviews_on(pr, sha):
     """The reviews by Copilot on a commit, in GitHub's order, oldest first."""
-    return [r for r in pr["reviews"]["nodes"]
-            if (r.get("author") or {}).get("login") == REVIEWER and ((r.get("commit") or {}).get("oid") or "") == sha]
+    return [
+        r
+        for r in pr["reviews"]["nodes"]
+        if (r.get("author") or {}).get("login") == REVIEWER and ((r.get("commit") or {}).get("oid") or "") == sha
+    ]
 
 
 def refusal(pr, sha):
@@ -78,11 +87,27 @@ def closing_issue(body):
 
 
 def builder_running(repo):
-    """Whether the builder's run is in progress: the run FACTORY_RUN names, or any run of factory.yml by workflow_dispatch otherwise. The owner's label runs do not count."""
+    """Whether the builder's run is in progress: the run FACTORY_RUN names, or any run of factory.yml by
+    workflow_dispatch otherwise. The owner's label runs do not count."""
     run_id = os.environ.get("FACTORY_RUN")
     if run_id:
         return json.loads(gh("run", "view", run_id, "-R", repo, "--json", "status"))["status"] != "completed"
-    runs = json.loads(gh("run", "list", "-R", repo, "--workflow", WORKFLOW, "--event", "workflow_dispatch", "--limit", "30", "--json", "status"))
+    runs = json.loads(
+        gh(
+            "run",
+            "list",
+            "-R",
+            repo,
+            "--workflow",
+            WORKFLOW,
+            "--event",
+            "workflow_dispatch",
+            "--limit",
+            "30",
+            "--json",
+            "status",
+        )
+    )
     return any(run["status"] != "completed" for run in runs)
 
 
@@ -93,7 +118,8 @@ def output(**values):
 
 
 def stop(repo, number, issue, sha, result, text):
-    """One comment on the issue for the SHA, then the result for the merge stage. The comment goes on the pull request when it closes no issue."""
+    """One comment on the issue for the SHA, then the result for the merge stage. The comment goes on the pull
+    request when it closes no issue."""
     target = ("issue", str(issue)) if issue is not None else ("pr", str(number))
     comments = gh("api", f"repos/{repo}/issues/{target[1]}/comments", "--paginate", "--jq", ".[].body")
     marker = MARKER.format(sha=sha)
@@ -105,7 +131,11 @@ def stop(repo, number, issue, sha, result, text):
 
 def main():
     repo = os.environ.get("GITHUB_REPOSITORY") or sys.exit("repair: GITHUB_REPOSITORY is not set")
-    number = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else sys.exit("repair: give the number of a repair pull request")
+    number = (
+        int(sys.argv[1])
+        if len(sys.argv) > 1 and sys.argv[1].isdigit()
+        else sys.exit("repair: give the number of a repair pull request")
+    )
     pr = read_pull_request(repo, number)
     labels = [item["name"] for item in pr["labels"]["nodes"]]
     if pr["state"] != "OPEN" or LABEL not in labels:
@@ -121,13 +151,26 @@ def main():
         if sha != heads[-1]:
             heads.append(sha)
             if len(heads) > ROUNDS + 1:
-                stop(repo, number, issue, sha, "unanswered",
-                     f"Pull request #{number} took {ROUNDS} rounds of answers to Copilot, and `{sha}` starts a fourth. "
-                     f"The loop stops for this SHA. The owner reads the threads.")
+                stop(
+                    repo,
+                    number,
+                    issue,
+                    sha,
+                    "unanswered",
+                    f"Pull request #{number} took {ROUNDS} rounds of answers to Copilot, and `{sha}` starts a fourth. "
+                    f"The loop stops for this SHA. The owner reads the threads.",
+                )
                 return
         if (body := refusal(pr, sha)) is not None:
-            stop(repo, number, issue, sha, "refused",
-                 f"Copilot refused to review pull request #{number} on `{sha}`. The loop stops for this SHA.\n\n> {body.splitlines()[0]}")
+            stop(
+                repo,
+                number,
+                issue,
+                sha,
+                "refused",
+                f"Copilot refused to review pull request #{number} on `{sha}`. The loop stops for this SHA.\n\n"
+                f"> {body.splitlines()[0]}",
+            )
             return
         threads = unresolved(pr)
         if reviews_on(pr, sha):
@@ -136,17 +179,26 @@ def main():
                 print(f"repair: Copilot reviewed {sha[:7]} and every thread is resolved")
                 return
             if not builder_running(repo):
-                stop(repo, number, issue, sha, "unanswered",
-                     f"Copilot left {len(threads)} unresolved thread{'s' if len(threads) != 1 else ''} on `{sha}` of pull request #{number}, "
-                     f"and the builder's run ended. The loop stops for this SHA. The owner reads the threads.")
+                stop(
+                    repo,
+                    number,
+                    issue,
+                    sha,
+                    "unanswered",
+                    f"Copilot left {len(threads)} unresolved thread{'s' if len(threads) != 1 else ''} "
+                    f"on `{sha}` of pull request #{number}, "
+                    f"and the builder's run ended. The loop stops for this SHA. The owner reads the threads.",
+                )
                 return
         elif sha not in asked and not requested(pr):
             request_review(pr)
             asked.add(sha)
             print(f"repair: requested a review by {REVIEWER} on {sha[:7]}")
         if time.time() >= deadline:
-            sys.exit(f"repair: pull request #{number} is not settled on {sha[:7]} after the timeout: "
-                     f"{len(reviews_on(pr, sha))} reviews by Copilot on the head, {len(threads)} unresolved threads")
+            sys.exit(
+                f"repair: pull request #{number} is not settled on {sha[:7]} after the timeout: "
+                f"{len(reviews_on(pr, sha))} reviews by Copilot on the head, {len(threads)} unresolved threads"
+            )
         time.sleep(wait)
         pr = read_pull_request(repo, number)
 
