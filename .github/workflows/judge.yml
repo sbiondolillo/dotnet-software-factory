@@ -6,6 +6,9 @@
 # stays on the runner arm until the sandbox has a 10.0.4xx SDK, so the
 # default angles are Conformance and Regressions and style.
 #
+# The job posts its verdict as the check run judge-verdict, which main requires.
+# The check named judge is this job, and it passes when the verdict rejects.
+#
 # A pull request opened or pushed by the repository owner is judged on its head.
 # By hand: `gh workflow run judge.yml -f pr=<n>`. The job dedupes on the head SHA and the spec.
 # Secrets: JUDGE_ANTHROPIC_API_KEY (a dedicated workspace), JUDGE_GITHUB_RO_TOKEN
