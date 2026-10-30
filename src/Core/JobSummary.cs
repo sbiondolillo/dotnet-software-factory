@@ -52,6 +52,9 @@ public sealed class JobSummary
         }
     }
 
+    /// <summary>Adds the Managed Agents sessions of the run, one line with each id, role and cost.</summary>
+    public void AddSessions(IReadOnlyList<SessionCost> sessions) => throw new NotImplementedException();
+
     /// <summary>The Markdown text, ending with a line feed.</summary>
     public string Render()
     {

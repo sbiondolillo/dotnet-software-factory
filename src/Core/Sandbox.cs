@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 namespace Core;
 
 /// <summary>A running container that holds a work tree at <c>/work</c>, runs commands in it and removes it on disposal.</summary>
-public sealed class Sandbox : IAsyncDisposable
+public sealed class Sandbox : CommandHost, IAsyncDisposable
 {
     private const string Home = "/tmp/sandbox-home";
     private readonly CommandRunner _runner;
@@ -71,16 +71,14 @@ public sealed class Sandbox : IAsyncDisposable
         return new Sandbox(runner, run.StandardOutput.Trim());
     }
 
-    /// <summary>Runs <paramref name="program"/> in the container, holding each variable of <paramref name="names"/> by name.</summary>
-    public Task<CommandResult> RunAsync(
-        string program,
-        IReadOnlyList<string> arguments,
-        IReadOnlyList<string> names,
-        CancellationToken cancellationToken = default) =>
-        RunAsync(program, arguments, names, null, cancellationToken);
+    /// <inheritdoc />
+    public override string WorkDirectory => "/work";
+
+    /// <inheritdoc />
+    public override string ScratchPath(string name) => $"/tmp/{name}";
 
     /// <summary>Runs <paramref name="program"/> in the container, in <paramref name="workingDirectory"/> when it is not null.</summary>
-    public Task<CommandResult> RunAsync(
+    public override Task<CommandResult> RunAsync(
         string program,
         IReadOnlyList<string> arguments,
         IReadOnlyList<string> names,

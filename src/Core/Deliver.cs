@@ -11,7 +11,8 @@ public sealed record DeliveryFacts(
     int Redos = 0,
     decimal Spend = 0m,
     int Seconds = 0,
-    string? Version = null);
+    string? Version = null,
+    IReadOnlyList<SessionCost>? Sessions = null);
 
 /// <summary>Delivers a run: pushes its branch, opens a pull request and links it from the issue.</summary>
 public sealed class Deliver(Git git, PullRequests pullRequests, GitHubClient client, DeliveryFacts? facts = null)

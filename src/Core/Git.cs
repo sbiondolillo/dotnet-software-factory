@@ -205,11 +205,27 @@ public sealed class Git(CommandRunner runner)
         return result;
     }
 
+    /// <summary>Fast-forwards the current branch of <paramref name="directory"/> to <c>origin/<paramref name="branch"/></c>.</summary>
+    public Task PullAsync(string branch, string directory, string token, CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
+
+    /// <summary>Deletes <paramref name="branch"/> on origin.</summary>
+    public Task DeleteRemoteBranchAsync(string branch, string directory, string token, CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
+
+    /// <summary>Reads the commit at the tip of <paramref name="branch"/> on origin, or null when origin lacks the branch.</summary>
+    public Task<string?> ReadRemoteHeadAsync(string branch, string directory, string token, CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
+
+    /// <summary>Lists the tracked files under <paramref name="path"/> in <paramref name="directory"/>.</summary>
+    public Task<string[]> ListTrackedAsync(string path, string directory, CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
+
     /// <summary>
     /// Lists each directory, file or symlink named <c>.git</c> under <paramref name="workTree"/> other than its own,
     /// and each directory that cannot be read. Git runs the hooks and the config of a nested repo, outside the sandbox.
     /// </summary>
-    private static List<string> NestedGitEntries(string workTree)
+    internal static List<string> NestedGitEntries(string workTree)
     {
         List<string> found = [];
         if (!Directory.Exists(workTree))

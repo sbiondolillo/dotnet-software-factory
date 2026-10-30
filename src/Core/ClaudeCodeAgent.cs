@@ -5,20 +5,12 @@ using System.Text.Json;
 namespace Core;
 
 /// <summary>Runs one prompt through <c>claude</c> in a <see cref="Sandbox"/> and reads JSON files the agent wrote.</summary>
-public sealed class ClaudeCodeAgent(Sandbox sandbox, TextWriter? log = null, TimeProvider? time = null, Action<TimeSpan, ClaudeCodeResult>? onAnswer = null)
+public sealed class ClaudeCodeAgent(Sandbox sandbox, TextWriter? log = null, TimeProvider? time = null, Action<TimeSpan, ClaudeCodeResult>? onAnswer = null) : Agent
 {
     private const int PromptLimit = 131072;
 
-    /// <summary>Runs <paramref name="prompt"/> with <paramref name="model"/> and <paramref name="maxTurns"/>.</summary>
-    public Task<ClaudeCodeResult> RunAsync(
-        string prompt,
-        string model,
-        int maxTurns,
-        CancellationToken cancellationToken = default) =>
-        RunAsync(prompt, model, maxTurns, "agent", cancellationToken);
-
-    /// <summary>Runs <paramref name="prompt"/> and logs its start and end lines under the name <paramref name="phase"/>.</summary>
-    public async Task<ClaudeCodeResult> RunAsync(
+    /// <inheritdoc />
+    public override async Task<ClaudeCodeResult> RunAsync(
         string prompt,
         string model,
         int maxTurns,

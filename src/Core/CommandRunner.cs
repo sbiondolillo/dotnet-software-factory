@@ -29,6 +29,11 @@ public class CommandRunner
             psi.WorkingDirectory = spec.WorkingDirectory;
         }
 
+        if (spec.ClearEnvironment)
+        {
+            psi.Environment.Clear();
+        }
+
         foreach (KeyValuePair<string, string> extra in spec.EnvironmentVariables)
         {
             psi.Environment[extra.Key] = extra.Value;

@@ -262,8 +262,8 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
     private async Task<FactoryRunResult> RunRefactorAsync(
         FactoryRunRequest request,
         GitHubIssue issue,
-        Sandbox sandbox,
-        ClaudeCodeAgent agent,
+        CommandHost sandbox,
+        Agent agent,
         Git git,
         string baseCommit,
         CancellationToken cancellationToken)
@@ -390,8 +390,8 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         GitHubIssue issue,
         IReadOnlyList<string> scope,
         string check,
-        Sandbox sandbox,
-        ClaudeCodeAgent agent,
+        CommandHost sandbox,
+        Agent agent,
         Git git,
         string baseCommit,
         CancellationToken cancellationToken)
@@ -501,8 +501,8 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         GitHubIssue issue,
         IReadOnlyList<string> scope,
         string check,
-        Sandbox sandbox,
-        ClaudeCodeAgent agent,
+        CommandHost sandbox,
+        Agent agent,
         Git git,
         string baseCommit,
         CancellationToken cancellationToken)
@@ -628,8 +628,8 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         }
     }
 
-    private Task<ApiListing> ListApiAsync(Sandbox sandbox, CancellationToken cancellationToken) =>
-        ApiGate.ListAsync(sandbox, progress, log, cancellationToken);
+    private Task<ApiListing> ListApiAsync(CommandHost host, CancellationToken cancellationToken) =>
+        ApiGate.ListAsync(host, progress, log, cancellationToken);
 
     private DeliveryFacts Facts(string baseCommit, TestGateResult gate, bool checkGreen, int redos) => new(
         baseCommit,
@@ -647,8 +647,8 @@ public sealed class FactoryRun(CommandRunner runner, GitHubClient client, TextWr
         return new FactoryRunResult(null, redos);
     }
 
-    private Task<CommandResult> RunCheckAsync(Sandbox sandbox, string command, CancellationToken cancellationToken) =>
-        CleanupGate.RunCheckAsync(sandbox, command, progress, cancellationToken, log);
+    private Task<CommandResult> RunCheckAsync(CommandHost host, string command, CancellationToken cancellationToken) =>
+        CleanupGate.RunCheckAsync(host, command, progress, cancellationToken, log);
 
     private async Task WriteSummaryAsync()
     {

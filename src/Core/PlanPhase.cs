@@ -8,7 +8,7 @@ public sealed record PlanPhaseResult(bool Passed, Pin? Pin, IReadOnlyList<string
 
 /// <summary>Asks the agent for feature files and a plan, checks the work tree, and pins the scenarios.
 /// With <c>scenarios</c>, the feature files the issue wrote, the agent writes the plan alone.</summary>
-public sealed class PlanPhase(ClaudeCodeAgent agent, bool refactor = false, IssueScenariosResult? scenarios = null)
+public sealed class PlanPhase(Agent agent, bool refactor = false, IssueScenariosResult? scenarios = null)
 {
     private bool PlanOnly => refactor || scenarios is not null;
 
