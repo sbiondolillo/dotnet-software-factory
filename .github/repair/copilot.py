@@ -76,11 +76,11 @@ def closing_issue(body):
 
 
 def builder_running(repo):
-    """Whether the builder's run is in progress: the run FACTORY_RUN names, or any run of factory.yml otherwise."""
+    """Whether the builder's run is in progress: the run FACTORY_RUN names, or any run of factory.yml by workflow_dispatch otherwise. The owner's label runs do not count."""
     run_id = os.environ.get("FACTORY_RUN")
     if run_id:
         return json.loads(gh("run", "view", run_id, "-R", repo, "--json", "status"))["status"] != "completed"
-    runs = json.loads(gh("run", "list", "-R", repo, "--workflow", WORKFLOW, "--limit", "30", "--json", "status"))
+    runs = json.loads(gh("run", "list", "-R", repo, "--workflow", WORKFLOW, "--event", "workflow_dispatch", "--limit", "30", "--json", "status"))
     return any(run["status"] != "completed" for run in runs)
 
 
