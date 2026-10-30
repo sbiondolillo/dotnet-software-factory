@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://platform.claude.com/schemas/ant/beta/environment.json
+# ant apply reads each file in a directory named agents/ as an agent.
+# The type line makes this file an environment.
+type: environment
+name: agent-platform-eval-ma
+scope: organization
+config:
+  type: cloud
+  packages:
+    type: packages
+    apt:
+      - dotnet-sdk-10.0
+  networking:
+    type: limited
+    allow_mcp_servers: false
+    allow_package_managers: true
+    allowed_hosts: []
