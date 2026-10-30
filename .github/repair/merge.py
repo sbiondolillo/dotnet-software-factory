@@ -94,6 +94,28 @@ def wait_for_judge(repo, sha, deadline, wait):
         time.sleep(wait)
 
 
+def disarm(repo, number):
+    """The auto-merge goes off. A failure of the disarm is one line, so the caller's own exit keeps its message."""
+    try:
+        gh("pr", "merge", str(number), "-R", repo, "--disable-auto")
+    except SystemExit as error:
+        print(f"repair: the disarm of pull request #{number} failed: {error}")
+    else:
+        print(f"repair: disarmed the auto-merge of pull request #{number}")
+
+
+def arm_and_wait(repo, number, sha, deadline, wait):
+    """Arms the auto-merge and waits for the merge. Any exit before the merge, a timeout, a closed pull request or a
+    failed read, disarms the auto-merge first, so no armed merge outlives the step."""
+    gh("pr", "merge", str(number), "-R", repo, "--auto", "--squash", "--delete-branch", "--match-head-commit", sha)
+    print(f"repair: armed the auto-merge of pull request #{number} on {sha[:7]}")
+    try:
+        return wait_for_merge(repo, number, sha, deadline, wait)
+    except SystemExit:
+        disarm(repo, number)
+        raise
+
+
 def wait_for_merge(repo, number, sha, deadline, wait):
     """The merged pull request, or None once its head moved off the settled SHA, with the auto-merge disarmed."""
     while True:
@@ -103,13 +125,12 @@ def wait_for_merge(repo, number, sha, deadline, wait):
         if pr["state"] != "OPEN":
             sys.exit(f"repair: pull request #{number} is {pr['state'].lower()} before the merge")
         if pr["headRefOid"] != sha:
-            gh("pr", "merge", str(number), "-R", repo, "--disable-auto")
-            print(f"repair: the head of pull request #{number} moved off {sha[:7]} while the auto-merge was armed; disarmed, no merge")
+            disarm(repo, number)
+            print(f"repair: the head of pull request #{number} moved off {sha[:7]} while the auto-merge was armed; no merge")
             return None
         if time.time() >= deadline:
-            gh("pr", "merge", str(number), "-R", repo, "--disable-auto")
-            sys.exit(f"repair: pull request #{number} is not merged after the timeout; the auto-merge is disarmed, "
-                     f"and `gh workflow run repair.yml -f pr={number}` arms it again")
+            sys.exit(f"repair: pull request #{number} is not merged after the timeout; "
+                     f"`gh workflow run repair.yml -f pr={number}` arms the auto-merge again")
         time.sleep(wait)
 
 
@@ -180,9 +201,7 @@ def main():
         print(f"repair: the head of pull request #{number} moved off {sha[:7]} while the judge ran; nothing to merge")
         return
 
-    gh("pr", "merge", str(number), "-R", repo, "--auto", "--squash", "--delete-branch", "--match-head-commit", sha)
-    print(f"repair: armed the auto-merge of pull request #{number} on {sha[:7]}")
-    merged = wait_for_merge(repo, number, sha, deadline, wait)
+    merged = arm_and_wait(repo, number, sha, deadline, wait)
     if merged is None:
         return
     if merged["headRefOid"] != sha:
