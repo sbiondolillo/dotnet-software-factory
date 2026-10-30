@@ -40,6 +40,8 @@ Code that reads a feature file or names a test method goes in `FeatureFiles` in 
 
 The house style as prose, for the rules no analyzer expresses: a class that stores its constructor arguments uses a primary constructor, and a test of equality or of type against a constant is a pattern: `value is null`, `value is not null`, `result.ExitCode is not 0`, `value is string text`. A comparison of order keeps its operator: `count > 1`. No analyzer asks for a pattern in place of `value == null`, `value != null`, `x == 0`, `x != 0` or `(x as string) != "y"`. So write `value is null`, `value is not null`, `x is 0`, `x is not 0` and `x is not "y"` by hand. Every `await` in `src/` ends with `.ConfigureAwait(false)`. CA2007 flags an `await` with no `ConfigureAwait` there, and passes `.ConfigureAwait(true)`, so write `false` by hand. A public async method takes `CancellationToken cancellationToken = default` as its last parameter, and passes it to every call that takes one.
 
+`ruff.toml` at the root holds the format and the lint of the Python under `.github/`: a line length of 120, and the rules E, F, W and I. `ruff format .` rewraps what it can, and `ruff check .` names each line it cannot, such as a long docstring. The `build` job of `ci.yml` runs both with `ruff==0.16.2`, so a long line fails the build before a reviewer reads it.
+
 ## Git
 
 `AGENTS.md` states the rules every git command follows, so a change that

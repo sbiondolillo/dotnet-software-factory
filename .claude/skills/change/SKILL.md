@@ -65,7 +65,10 @@ Then run every check of the `build` job of `.github/workflows/ci.yml` on the bra
 
 ```
 dotnet restore --locked-mode && dotnet build --no-restore && dotnet format --verify-no-changes --no-restore && dotnet test --no-restore
+ruff format . && ruff check .
 ```
+
+`ruff format .` rewraps the Python under `.github/` to `ruff.toml`, and `ruff check .` names each line that it cannot wrap, such as a long docstring or a long string. Wrap each one by hand. The `build` job runs `ruff==0.16.2`, so a check with another version can differ.
 
 A change to code that calls GitHub, `docker` or Claude Code also runs `dotnet run --no-restore --project tests/Integration`, and the result goes in the pull request.
 
@@ -92,6 +95,8 @@ A spec with no scenario gets `Conformance` and `Regressions and style`, and no `
 
 Read each finding against the branch before you act on it. Each finding gets a fix on the branch or a refutation with its evidence. A fix is a new commit, and runs the checks of step 2 again.
 
+A fix that adds behaviour the spec does not name edits the spec in the same turn as the fix. For an issue, the edit goes in its `## Change`, with the date and the review as its source, and `<scratch>/spec` is then written again from the edited body, since the reviewers of this step and the checks of step 4 read that file and never the issue. For a change stated in chat, the edit goes in `<scratch>/spec`, and the report of step 4 carries it. The judge reads the issue at run time, so a run after the edit judges the edited spec. A spec that lags its code gets a rejection for the gap, as PR #380 did.
+
 Done when each angle accepts, or each finding has a fix or a refutation.
 
 ### 4. Deliver the branch
@@ -110,6 +115,8 @@ Write the report to a file: what changed, the result of each suite, each reviewe
 | an issue, or a failed run with no branch | `gh pr create --title '<the issue title>' --body-file <report>`, with the line `Closes #<n>` in the report |
 | a change stated in chat | `gh pr create --title '<the commit title>' --body-file <report>` |
 | a failed run with an open pull request | `gh pr comment <pr> --body-file <report>`. The push put the fix on the pull request |
+
+A fix after the push, from the judge or from a Copilot review, is a new commit under step 3: the checks of step 2 run again, and a fix that adds behaviour edits the spec in the same turn.
 
 Done when the check above prints nothing for an issue, the report is on the pull request, and its checks are green. For a failed run, each fixed thread holds the SHA of its fix and is resolved, and each open thread holds a refutation. The owner merges it, and removes the claim of an issue or a failed run with `gh issue edit <n> --remove-label building`. The handover gives that command with the merge commands. The worktree stays for a fix the owner asks for, and the owner removes it before the merge. `gh pr merge --delete-branch` cannot delete a branch that a worktree holds.
 
