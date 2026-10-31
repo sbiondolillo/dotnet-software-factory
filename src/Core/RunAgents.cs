@@ -211,8 +211,8 @@ internal sealed class RunAgents : IAsyncDisposable
     /// <summary>
     /// A session agent with the branch work of the host around each prompt: the push of the scratch branch before the first prompt, and
     /// for the builder the pull after each prompt, the check that no commit tracks a file under <c>.factory/</c>, and the read of the
-    /// remote head around each build prompt. A tracked file under <c>.factory/</c> throws <see cref="ClaudeCodeException"/>, which ends
-    /// the run whatever the phase.
+    /// remote head around each build prompt. A tracked file under <c>.factory/</c> throws <see cref="SessionBranchException"/>, which
+    /// stops the run whatever the phase.
     /// </summary>
     private sealed class BranchAgent(RunAgents owner, ManagedAgentsAgent inner, bool pulls) : Agent
     {
@@ -245,7 +245,7 @@ internal sealed class RunAgents : IAsyncDisposable
             string[] tracked = await setup.Git.ListTrackedAsync(".factory", setup.Directory, cancellationToken).ConfigureAwait(false);
             return tracked.Length is 0
                 ? answer
-                : throw new ClaudeCodeException(
+                : throw new SessionBranchException(
                     $"The session committed files under .factory/, which only the factory writes: {string.Join(", ", tracked)}. The run stops.");
         }
     }

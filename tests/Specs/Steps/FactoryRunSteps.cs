@@ -355,9 +355,6 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
         return push;
     }
 
-    [Then("FactoryRun throws ClaudeCodeException with a message that holds {string}")]
-    public void ThenThrowsClaudeCode(string text) =>
-        Assert.Contains(text, Assert.IsType<ClaudeCodeException>(_exception).Message, StringComparison.Ordinal);
 
     [Then("the run sends no command to docker")]
     public void ThenNoDocker() => Assert.DoesNotContain(Commands, c => c.Command is "docker");

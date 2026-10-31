@@ -40,8 +40,26 @@ public sealed class FeedbackRun(
     private const int RedoBudget = 3;
     private const string ReportPath = ".factory/threads.json";
 
-    /// <summary>Builds an answer to each unresolved thread, gates and reviews it, pushes it, and replies to each thread.</summary>
+    /// <summary>
+    /// Builds an answer to each unresolved thread, gates and reviews it, pushes it, and replies to each thread. A
+    /// <see cref="SessionBranchException"/> posts its message on the pull request, and the run then throws it.
+    /// </summary>
     public async Task<FeedbackRunResult> RunAsync(FeedbackRunRequest request, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await RunCoreAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (SessionBranchException exception)
+        {
+            string comment = CommentText.Fit(exception.Message, []);
+            await Say(comment).ConfigureAwait(false);
+            await client.PostCommentAsync(request.Owner, request.Repo, request.PullNumber, comment, cancellationToken).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private async Task<FeedbackRunResult> RunCoreAsync(FeedbackRunRequest request, CancellationToken cancellationToken)
     {
         var reviewThreads = new ReviewThreads(client);
         IReadOnlyList<ReviewThread> all = await reviewThreads.ReadThreadsAsync(request.Owner, request.Repo, request.PullNumber, cancellationToken).ConfigureAwait(false);

@@ -181,6 +181,10 @@ public sealed class FactoryRun(
             {
                 return await RunAgentsAsync(request, issue, scope, check, scenarios, reframe, refactor, cleanup, agents, git, baseCommit, cancellationToken).ConfigureAwait(false);
             }
+            catch (SessionBranchException exception)
+            {
+                return await StopAsync(request, exception.Message, 0, cancellationToken).ConfigureAwait(false);
+            }
             finally
             {
                 _sessions = agents.Sessions;
