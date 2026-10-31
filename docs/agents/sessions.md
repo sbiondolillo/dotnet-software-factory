@@ -22,3 +22,5 @@ A story that edits `.github/workflows/` needs the App permission `workflows: wri
 Read each value off the code and the files under `.github/agents/`. Change this table in the pull request that changes the code it reads.
 
 A run of the kind `reframe` under `--agent managed` reports that the public API of the base commit could not be listed. The API printer is in the Docker sandbox image alone, and the runner has none.
+
+Under `--agent managed`, the gates run the agent's code on the runner, as the runner's user. The cleared environment of `HostShell` stops a careless leak. It does not stop a test that reads `/proc/<pid>/environ` of the factory process, which holds the job's secrets. The docker path has a pid namespace, and this path has none yet. The owner accepts the gap for the stories this repo builds. The fix is #391.
