@@ -32,7 +32,8 @@ internal static class SessionPrompt
         return text.Append(Ending()).ToString();
     }
 
-    /// <summary>The commands that put the session's clone at the head of <paramref name="branch"/>, clean, before any edit.</summary>
+    /// <summary>The commands that put the session's clone at the head of <paramref name="branch"/>, clean, before any edit. A work
+    /// tree that a turn before left dirty is committed, not refused.</summary>
     public static string Preamble(string repo, string branch, string baseCommit, IReadOnlyList<string> uploads)
     {
         var text = new StringBuilder();
@@ -60,17 +61,16 @@ internal static class SessionPrompt
             text.Append(CultureInfo.InvariantCulture, $"cp /mnt/session/uploads/{name} .factory/{name}\n");
         }
 
-        text.Append(CultureInfo.InvariantCulture, $"""
+        text.Append(CultureInfo.InvariantCulture, $$"""
             rm -f .factory/review.json .factory/threads.json
             rm -f /mnt/session/outputs/review.json /mnt/session/outputs/threads.json
-            test -z "$(git status --porcelain)"
+            [ -z "$(git status --porcelain)" ] || { git add -A && git commit -q -m "wip: the uncommitted work of the turn before"; }
             ```
 
-            The last command fails when `git status --porcelain` prints a line. Then reply with `{PreambleFailed}` and
-            what `git status --porcelain` prints.
+            The last command commits the work that a turn before left in the work tree, so the task starts on a clean tree.
 
-            Work in `/workspace/{repo}`. Use `{Dotnet}` for each `dotnet` command. The base commit of the change is
-            `{baseCommit}`.
+            Work in `/workspace/{{repo}}`. Use `{{Dotnet}}` for each `dotnet` command. The base commit of the change is
+            `{{baseCommit}}`.
 
             The host reads only the directory `/mnt/session/outputs/`. When the task tells you to write a file under
             `.factory/`, such as `.factory/plan.md`, `.factory/review.json` or `.factory/threads.json`, write it there as

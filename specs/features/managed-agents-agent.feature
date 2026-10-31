@@ -47,10 +47,16 @@ Feature: ManagedAgentsAgent runs each prompt as one message of a Managed Agents 
       | git checkout factory/7-session |
       | git pull --ff-only origin factory/7-session |
       | rm -f .factory/review.json .factory/threads.json |
-      | git status --porcelain |
+      | [ -z "$(git status --porcelain)" ] \|\| { git add -A && git commit -q -m "wip: the uncommitted work of the turn before"; } |
       | Build the change. |
     And the first message holds "bash /tmp/dotnet-install.sh --jsonfile global.json --install-dir /root/.dotnet"
     And the first message holds "/mnt/session/outputs/"
+
+  Scenario: The preamble commits a dirty tree in place of failing
+    Given a builder agent with the budget 1500 cents
+    When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5"
+    Then the first message holds 'git add -A && git commit -q -m "wip: the uncommitted work of the turn before"'
+    And the first message does not hold 'test -z "$(git status --porcelain)"'
 
   Scenario: The builder's tail commits and pushes to the session branch after the prompt
     Given a builder agent with the budget 1500 cents
@@ -66,7 +72,7 @@ Feature: ManagedAgentsAgent runs each prompt as one message of a Managed Agents 
     Given a reviewer agent with the budget 300 cents
     When the caller runs the prompt "Review the change." with the model "claude-sonnet-5-5"
     Then the first message does not hold "git push"
-    And the first message does not hold "git commit"
+    And the first message does not hold "<one line that says what changed>"
     And the first message holds these texts in this order:
       | text |
       | Review the change. |
