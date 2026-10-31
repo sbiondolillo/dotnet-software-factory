@@ -195,8 +195,8 @@ public sealed class StarterChecksTests : IDisposable
     }
 
     [Theory]
-    [InlineData("Ada", "Hello, Ada!\n")]
-    [InlineData("", "Hello, world!\n")]
+    [InlineData("Ada", "Hi, Ada!\n")]
+    [InlineData("", "Hi, world!\n")]
     public async Task TheStarterRootCommandGreets(string name, string expected)
     {
         var output = new StringWriter { NewLine = "\n" };
