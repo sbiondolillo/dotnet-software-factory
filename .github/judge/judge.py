@@ -67,8 +67,12 @@ def pull_request(repo, number):
 
 
 def spec_for(repo, pr):
-    """The spec is the body of the issue the pull request closes, or the pull request body."""
-    match = re.search(r"(?i)\b(?:closes|fixes|resolves)\s+#(\d+)", pr["body"] or "")
+    """The spec is the body of the issue the pull request closes, or of the issue a line `Part of #<n>` names, or the
+    pull request body. A pull request names its issue with `Part of #<n>` when a check after the merge keeps it open."""
+    body = pr["body"] or ""
+    match = re.search(r"(?i)\b(?:closes|fixes|resolves)\s+#(\d+)", body) or re.search(
+        r"^Part of #(\d+)\s*$", body, re.M
+    )
     if match:
         issue = json.loads(gh("issue", "view", match.group(1), "-R", repo, "--json", "number,title,body"))
         return f"# {issue['title']} (#{issue['number']})\n\n{issue['body']}", issue["number"]

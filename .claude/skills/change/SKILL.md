@@ -112,9 +112,11 @@ Write the report to a file: what changed, the result of each suite, each reviewe
 
 | Case | Delivery |
 |---|---|
-| an issue, or a failed run with no branch | `gh pr create --title '<the issue title>' --body-file <report>`, with the line `Closes #<n>` in the report |
+| an issue, or a failed run with no branch | `gh pr create --title '<the issue title>' --body-file <report>`, with the line `Closes #<n>` in the report, or `Part of #<n>` for an issue with a check after the merge |
 | a change stated in chat | `gh pr create --title '<the commit title>' --body-file <report>` |
 | a failed run with an open pull request | `gh pr comment <pr> --body-file <report>`. The push put the fix on the pull request |
+
+An issue with a check after the merge is one whose `## Done when` holds an item that only a run after the merge shows, such as a dispatch of a workflow or the title of a run. GitHub closes an issue that the body or a commit message of a merged pull request names with `Closes #<n>`, so neither one names it that way, and the issue stays open for those checks. The line `Part of #<n>` stands alone, and the judge, `.github/judge/judge.py`, reads the issue it names as the spec. The handover lists each such item, and the owner closes the issue once each one holds.
 
 A fix after the push, from the judge or from a Copilot review, is a new commit under step 3: the checks of step 2 run again, and a fix that adds behaviour edits the spec in the same turn.
 
