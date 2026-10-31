@@ -48,8 +48,8 @@ Feature: ManagedAgentsAgent runs each prompt as one message of a Managed Agents 
     Then the first message holds these texts in this order:
       | text |
       | cd /workspace/factory-scratch |
-      | git config user.name "dsf-repair[bot]" |
-      | git config user.email "350419598+dsf-repair[bot]@users.noreply.github.com" |
+      | git config user.name "dsf-builder[bot]" |
+      | git config user.email "350419598+dsf-builder[bot]@users.noreply.github.com" |
       | echo '.factory/' >> .git/info/exclude |
       | git fetch --depth=400 origin +refs/heads/factory/7-session:refs/remotes/origin/factory/7-session abc1234 |
       | git checkout factory/7-session |
