@@ -98,6 +98,11 @@ public sealed class Sandbox : IAsyncDisposable
         IReadOnlyList<string> readOnlyPaths,
         CancellationToken cancellationToken)
     {
+        foreach (string path in readOnlyPaths)
+        {
+            RefuseLink(workTree, path);
+        }
+
         await new SandboxImage(runner).EnsureAsync(tag, rootDirectory, cancellationToken).ConfigureAwait(false);
 
         string user = string.Create(CultureInfo.InvariantCulture, $"{GetUid()}:{GetGid()}");
@@ -150,6 +155,20 @@ public sealed class Sandbox : IAsyncDisposable
         }
 
         return new Sandbox(runner, run.StandardOutput.Trim());
+    }
+
+    // Docker resolves a bind source on the host, so a link that a branch commits would mount a directory of the runner.
+    private static void RefuseLink(string workTree, string path)
+    {
+        string current = workTree;
+        foreach (string segment in path.Split('/'))
+        {
+            current = Path.Combine(current, segment);
+            if (new DirectoryInfo(current).LinkTarget is not null)
+            {
+                throw new SandboxException($"{Path.GetRelativePath(workTree, current)} is a symbolic link, so the gates do not start");
+            }
+        }
     }
 
     [DllImport("libc", EntryPoint = "getuid")]

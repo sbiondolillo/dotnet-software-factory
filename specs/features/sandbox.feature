@@ -134,3 +134,16 @@ Feature: A sandbox container starts, runs commands on the work tree, and is remo
     And a work tree in a new directory that holds a directory ".git"
     When a caller starts a sandbox with the image tag "factory-sandbox:test" over that work tree
     Then no argument of the docker run ends with ".factory:/work/.factory:ro"
+
+  Scenario Outline: A sandbox for the gates refuses a symbolic link in a read-only path
+    Given a Sandbox built over a mock of CommandRunner
+    And a work tree in a new directory that holds a symlink "<link>"
+    When a caller starts a sandbox for the gates with the image tag "factory-sandbox:test" over that work tree
+    Then the start throws a SandboxException whose message holds "<link>"
+    And the runner ran no docker run
+
+    Examples:
+      | link           |
+      | .factory       |
+      | specs          |
+      | specs/features |

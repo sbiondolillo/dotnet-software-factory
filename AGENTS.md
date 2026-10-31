@@ -139,8 +139,9 @@ user, with `no_new_privs` and no extra group, by `systemd-run --user` and by `ss
 
 The factory on the runner follows a link in the work tree, and a container can write
 the work tree. So `Sandbox.StartForGatesAsync` mounts `.factory` and `specs/features`
-read-only, and `FeatureFiles.ReadScenarioTitles` refuses a symbolic link, since a parser
-error quotes the text of the file. A new host read of a work tree file whose text can
+read-only, and throws `SandboxException` when either one, or `specs`, is a symbolic link,
+since Docker resolves a bind source on the host. `FeatureFiles.ReadScenarioTitles` refuses
+a symbolic link, since a parser error quotes the text of the file. A new host read of a work tree file whose text can
 reach a message, a comment or a session keeps to a read-only path and refuses a link.
 
 - Every command is a `CommandSpec` whose program is `docker`, run through the
