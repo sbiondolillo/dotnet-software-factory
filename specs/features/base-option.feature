@@ -11,11 +11,18 @@ Feature: The option --base names the base commit of a run
     Then standard output holds "--base", "full SHA" and "default branch"
     And the exit code is 0
 
-  Scenario: run refuses a base that is not the full SHA of a commit
-    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --base main"
+  Scenario Outline: run refuses a base that is not the full SHA of a commit
+    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --base <base>"
     Then standard error is the one line that holds "--base"
     And GitHub gets no request
     And the exit code is 1
+
+    Examples:
+      | base                                      |
+      | main                                      |
+      | 9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0   |
+      | 9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c0 |
+      | 9B8C7D6E5F4A3B2C1D0E9F8A7B6C5D4E3F2A1B0C  |
 
   Scenario: run with a base checks that commit out in the clone before it reads the head of the clone
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --base 9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c"
