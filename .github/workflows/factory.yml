@@ -13,9 +13,20 @@
 # container that holds no key, so the job builds the sandbox image.
 # docs/agents/sessions.md states what each session holds.
 #
+# The run name is the number of the issue, `#<n>`, on both paths. So the
+# `workflow_run` payload of a failed run names its issue in `display_title`.
+#
+# The input `base`, a branch, a tag or a commit, names the commit the run builds
+# on. The job resolves it to a full SHA and passes `--base <sha>`, and the run
+# checks that commit out in its clone. The repair loop dispatches this workflow
+# at the last green ref of the factory with `base=main`: the factory of that ref
+# builds, and the change lands on the head of main. With no `base`, the run
+# builds on the head of the default branch, as the clone checks it out.
+#
 # A starter repo's copy, templates/starter/.github/workflows/factory.yml, runs
 # the factory at the tag v1.
 name: factory
+run-name: "#${{ inputs.issue || github.event.issue.number }}"
 
 on:
   issues:
@@ -32,6 +43,11 @@ on:
         type: choice
         options: ['on', 'off']
         default: 'off'
+      base:
+        description: The ref the run builds on, such as main. Empty builds on the head of the default branch.
+        required: false
+        type: string
+        default: ''
 
 # The job's own token reads the check runs of the pull request. A fine-grained token has no Checks permission on a private repo.
 permissions:
@@ -48,6 +64,16 @@ jobs:
           global-json-file: global.json
       - name: Read the builder's ids from the lockfile
         run: jq -r '"FACTORY_AGENT_ID=" + (.resources["./builder.md"].id // error("claude-lock.json has no id for builder.md")), "FACTORY_ENVIRONMENT_ID=" + (.resources["./builder.environment.yaml"].id // error("claude-lock.json has no id for builder.environment.yaml"))' .github/agents/claude-lock.json >> "$GITHUB_ENV"
+      - name: Resolve the base commit
+        if: inputs.base
+        env:
+          BASE: ${{ inputs.base }}
+        run: |
+          case "$BASE" in -*) echo "The input base must not start with -: $BASE" >&2; exit 1 ;; esac
+          git fetch --no-tags --depth=1 origin "$BASE"
+          sha=$(git rev-parse FETCH_HEAD)
+          echo "base: $BASE is $sha"
+          echo "FACTORY_BASE_ARGS=--base $sha" >> "$GITHUB_ENV"
       - name: Run the factory
         env:
           FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_SELF_TOKEN }}
@@ -56,7 +82,7 @@ jobs:
           FACTORY_APP_PRIVATE_KEY: ${{ secrets.DSF_REPAIR_APP_PRIVATE_KEY }}
           FACTORY_APP_ID: ${{ vars.DSF_REPAIR_APP_ID }}
           FACTORY_APP_INSTALLATION_ID: ${{ vars.DSF_REPAIR_APP_INSTALLATION_ID }}
-        run: dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --skip-integration on --copilot-review ${{ inputs.copilot || 'off' }} --agent managed
+        run: dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --skip-integration on --copilot-review ${{ inputs.copilot || 'off' }} --agent managed $FACTORY_BASE_ARGS
       - name: Push the transcripts to the store
         # The store is a private repo. With no store, the step exits 0 at once. The log prints no transcript.
         if: always()

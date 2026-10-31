@@ -45,7 +45,13 @@ public sealed class Deliver(Git git, PullRequests pullRequests, GitHubClient cli
             body.Append("- check: green\n");
         }
 
-        body.Append(CultureInfo.InvariantCulture, $"- review: approved\n\nRedos: {known.Redos}\n\n");
+        body.Append(CultureInfo.InvariantCulture, $"- review: approved\n\nRedos: {known.Redos}\n");
+        if (known.BaseCommit is not null)
+        {
+            body.Append(CultureInfo.InvariantCulture, $"Base commit: {known.BaseCommit}\n");
+        }
+
+        body.Append('\n');
         if (known.Version is not null)
         {
             body.Append(CultureInfo.InvariantCulture, $"Factory version: {known.Version}\n");

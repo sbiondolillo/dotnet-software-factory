@@ -90,7 +90,7 @@ public sealed class DeliverTests
         string body = await BodyAsync([], [], new DeliveryFacts("base", 3, false, 2, 0.7500m, 31));
         Assert.DoesNotContain("Factory version", body, StringComparison.Ordinal);
         Assert.DoesNotContain("check:", body, StringComparison.Ordinal);
-        Assert.EndsWith("\nRedos: 2\n\nTotal: $0.7500 in 31 s", body, StringComparison.Ordinal);
+        Assert.EndsWith("\nRedos: 2\nBase commit: base\n\nTotal: $0.7500 in 31 s", body, StringComparison.Ordinal);
     }
 
     [Fact]

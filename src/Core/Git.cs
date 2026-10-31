@@ -67,6 +67,19 @@ public sealed class Git(CommandRunner runner)
         await RunAsync(spec, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Checks out the commit <paramref name="commit"/> in <paramref name="directory"/>, with the head detached at it.</summary>
+    public async Task CheckoutCommitAsync(string commit, string directory, CancellationToken cancellationToken = default)
+    {
+        var spec = new CommandSpec
+        {
+            Command = "git",
+            Arguments = ["checkout", "--detach", commit],
+            WorkingDirectory = directory,
+        };
+
+        await RunAsync(spec, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Stages and commits every change in the work tree at <paramref name="directory"/>.</summary>
     public async Task CommitAllAsync(string directory, string message, string authorName, string authorEmail, CancellationToken cancellationToken = default)
     {

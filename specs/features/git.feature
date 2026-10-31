@@ -28,6 +28,15 @@ Feature: Git
     When Git checks out the new branch "release-42" in "/tmp/factory-clone-3"
     Then the checkout's CommandSpec holds the arguments "checkout", "-b" and "release-42" in that order
 
+  Scenario: The checkout of a commit detaches the head at that commit, with the hooks off
+    When Git checks out the commit "9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c" in "/tmp/factory-clone-15"
+    Then the "checkout" CommandSpec holds the arguments "checkout --detach 9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c" and the working directory "/tmp/factory-clone-15"
+    And the "checkout" CommandSpec holds these environment variables:
+      | name               | value          |
+      | GIT_CONFIG_COUNT   | 1              |
+      | GIT_CONFIG_KEY_0   | core.hooksPath |
+      | GIT_CONFIG_VALUE_0 | /dev/null      |
+
   Scenario: The clone's and the push's CommandSpecs carry the token as FACTORY_GITHUB_TOKEN
     When Git clones "https://github.com/sbiondolillo/factory-scratch.git" with the token "token-4" into "/tmp/factory-clone-4"
     And Git pushes the branch "feature-4" from "/tmp/factory-clone-4" with the token "token-4"

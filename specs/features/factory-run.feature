@@ -35,6 +35,25 @@ Feature: Factory run
     When a caller starts a run
     Then the review prompt holds "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c"
 
+  Scenario: The pull request body names the head commit of the clone as the base commit
+    When a caller starts a run
+    Then the body of the pull request holds the line "Base commit: 4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c"
+
+  Scenario: A run with a base commit checks it out in the clone after the clone
+    Given the caller gives the base commit "9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c"
+    When a caller starts a run
+    Then git runs "checkout --detach 9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c" in the directory that the caller gave, after the clone and before the head read
+
+  Scenario: A run with a base commit holds it in the review prompt and in the pull request body
+    Given the caller gives the base commit "9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c"
+    When a caller starts a run
+    Then the review prompt holds "9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c"
+    And the body of the pull request holds the line "Base commit: 9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c"
+
+  Scenario: A run with no base commit checks out no commit
+    When a caller starts a run
+    Then git runs no "checkout --detach"
+
   Scenario: A clone without Solution.slnx gets a comment
     Given the clone lacks "Solution.slnx"
     When a caller starts a run

@@ -1,6 +1,7 @@
 namespace Core;
 
-/// <summary>What a <see cref="FactoryRun"/> needs: the issue, the clone, the models and the author.</summary>
+/// <summary>What a <see cref="FactoryRun"/> needs: the issue, the clone, the models and the author. <paramref name="BaseCommit"/> is the
+/// full SHA of the commit the run builds on, or null for the head of the default branch that the clone checks out.</summary>
 public sealed record FactoryRunRequest(
     string Owner,
     string Repo,
@@ -21,7 +22,8 @@ public sealed record FactoryRunRequest(
     string AuthorEmail,
     IReadOnlyList<string> SecretNames,
     bool SkipIntegration = false,
-    ManagedAgentsSettings? Managed = null);
+    ManagedAgentsSettings? Managed = null,
+    string? BaseCommit = null);
 
 /// <summary>The outcome of a <see cref="FactoryRun"/>: the pull request, or null for none, and the Redos spent.</summary>
 public sealed record FactoryRunResult(PullRequest? PullRequest, int Redos);
@@ -141,6 +143,11 @@ public sealed class FactoryRun(
         var git = new Git(runner);
         await Say("clone: start").ConfigureAwait(false);
         await git.CloneAsync($"https://github.com/{request.Owner}/{request.Repo}.git", request.Token, request.Directory, cancellationToken).ConfigureAwait(false);
+        if (request.BaseCommit is string chosen)
+        {
+            await git.CheckoutCommitAsync(chosen, request.Directory, cancellationToken).ConfigureAwait(false);
+        }
+
         string baseCommit = await git.ReadHeadShaAsync(request.Directory, cancellationToken).ConfigureAwait(false);
 
         List<string> absent = [];
