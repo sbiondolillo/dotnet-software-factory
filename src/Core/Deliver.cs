@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Core;
 
-/// <summary>What the pull request body states about a run besides its issue: the base commit, the passed tests, the check gate, the Redos, the spend, the seconds and the factory version.</summary>
+/// <summary>What the pull request body states about a run besides its issue: the base commit, the passed tests, the check gate, the Redos, the spend, the seconds, the factory version and the Managed Agents sessions.</summary>
 public sealed record DeliveryFacts(
     string? BaseCommit = null,
     int PassedTests = 0,
@@ -52,8 +52,16 @@ public sealed class Deliver(Git git, PullRequests pullRequests, GitHubClient cli
         }
 
         body.Append(CultureInfo.InvariantCulture, $"Total: ${decimal.Round(known.Spend, 4, MidpointRounding.AwayFromZero)} in {known.Seconds} s");
+        if (known.Sessions is { Count: > 0 } sessions)
+        {
+            body.Append("\nSessions: ").AppendJoin(", ", sessions.Select(session => $"{session.Id} ({session.Role}, {Dollars(session.Cents)})"));
+        }
+
         return body.ToString();
     }
+
+    /// <summary>The cents of a session as dollars with two decimal places and a leading dollar sign.</summary>
+    internal static string Dollars(int cents) => string.Create(CultureInfo.InvariantCulture, $"${cents / 100m:0.00}");
 
     private async Task<IReadOnlyList<string>> ScenarioLinesAsync(DeliveryFacts known, string workTree, CancellationToken cancellationToken)
     {

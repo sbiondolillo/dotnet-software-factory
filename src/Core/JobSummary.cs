@@ -13,6 +13,7 @@ public sealed class JobSummary
 {
     private readonly List<string> _rows = [];
     private readonly List<string> _redos = [];
+    private readonly List<SessionCost> _sessions = [];
     private readonly Dictionary<string, int> _counts = [];
     private TimeSpan _pendingTime = TimeSpan.Zero;
     private int _pendingTurns;
@@ -53,7 +54,7 @@ public sealed class JobSummary
     }
 
     /// <summary>Adds the Managed Agents sessions of the run, one line with each id, role and cost.</summary>
-    public void AddSessions(IReadOnlyList<SessionCost> sessions) => throw new NotImplementedException();
+    public void AddSessions(IReadOnlyList<SessionCost> sessions) => _sessions.AddRange(sessions);
 
     /// <summary>The Markdown text, ending with a line feed.</summary>
     public string Render()
@@ -70,6 +71,15 @@ public sealed class JobSummary
             foreach (string item in _redos)
             {
                 text.Append(item).Append('\n');
+            }
+        }
+
+        if (_sessions.Count > 0)
+        {
+            text.Append("\n### Sessions\n\n");
+            foreach (SessionCost session in _sessions)
+            {
+                text.Append(CultureInfo.InvariantCulture, $"- {session.Id}, {session.Role}, {Deliver.Dollars(session.Cents)}\n");
             }
         }
 

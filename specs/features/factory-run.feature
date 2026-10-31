@@ -177,3 +177,54 @@ Feature: Factory run
     Given GitHub answers the open of the pull request with the status code 422
     When a caller starts a run
     Then FactoryRun throws GitHubRequestException and removes the container
+
+  @managed
+  Scenario: A managed run starts no container and delivers the approved build
+    Given the run uses Managed Agents sessions
+    When a caller starts a run
+    Then the run sends no command to docker
+    And FactoryRun gives back a result with the pull request of the number 10 and 0 Redos
+
+  @managed
+  Scenario: A managed run pushes the session branch before the first session starts
+    Given the run uses Managed Agents sessions
+    When a caller starts a run
+    Then git pushes the session branch "factory/a1b2c3d4-session" before the first session starts
+
+  @managed
+  Scenario: A managed run pulls the session branch after the plan prompt and after the build prompt
+    Given the run uses Managed Agents sessions
+    When a caller starts a run
+    Then git pulls the branch "factory/a1b2c3d4-session" 2 times
+
+  @managed
+  Scenario: A managed run pushes the delivery branch from the session's work and then deletes the session branch
+    Given the run uses Managed Agents sessions
+    When a caller starts a run
+    Then git deletes the branch "factory/a1b2c3d4-session" on origin after the push of "factory/a1b2c3d4"
+
+  @managed
+  Scenario: A managed run with a spent budget deletes the session branch and pushes no delivery branch
+    Given the run uses Managed Agents sessions
+    And the test gate is red after each of four builds
+    When a caller starts a run
+    Then git deletes the branch "factory/a1b2c3d4-session" on origin as its last git command
+    And git pushes no branch "factory/a1b2c3d4"
+    And FactoryRun gives back a result with no pull request and 3 Redos
+
+  @managed
+  Scenario: A session commit of a file under .factory/ stops the run with a comment that names the file
+    Given the run uses Managed Agents sessions
+    And the session branch tracks the file ".factory/plan.md"
+    When a caller starts a run
+    Then FactoryRun posts one comment on the issue that holds ".factory/plan.md"
+    And FactoryRun runs no build prompt
+    And FactoryRun gives back a result with no pull request and 0 Redos
+
+  @managed
+  Scenario: A build that pushes no commit puts that fact in the next build prompt
+    Given the run uses Managed Agents sessions
+    And the session pushes no commit on the first build
+    And the test gate is red after the first build and passes after the second build
+    When a caller starts a run
+    Then FactoryRun runs a second build prompt that holds "The build pushed no commit to the session branch."

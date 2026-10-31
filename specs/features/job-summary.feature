@@ -133,3 +133,21 @@ Feature: A run writes a job summary with one row for each phase and the reason f
     And the plan answer has 4 turns and the cost "0.0560938", 77 seconds after its prompt
     When the run delivers with 0 Redos
     Then the summary holds the row "| plan | 77 | 4 | $0.0561 | passed |"
+
+  Scenario: The summary of a run with Managed Agents sessions ends with one item for each session
+    Given the summary of a run holds the row of a passed plan of 31 seconds
+    When the summary gets the session "sesn_01" of the role "builder" at 412 cents and the session "sesn_02" of the role "reviewer" at 1500 cents
+    Then the rendered summary ends with the lines
+      """
+      | plan | 31 | 0 | $0 | passed |
+
+      ### Sessions
+
+      - sesn_01, builder, $4.12
+      - sesn_02, reviewer, $15.00
+      """
+
+  Scenario: The summary of a run with no session has no section of sessions
+    Given the summary of a run holds the row of a passed plan of 31 seconds
+    When the summary gets no session
+    Then the rendered summary does not hold "### Sessions"

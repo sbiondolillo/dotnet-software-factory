@@ -21,6 +21,7 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
     private int _pushExit;
     private PullRequest? _result;
     private Exception? _exception;
+    private DeliveryFacts? _facts;
 
     public void Dispose() => _handler.Dispose();
 
@@ -63,6 +64,17 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
         _handler.PostBody = "{\"message\":\"Validation Failed\"}";
     }
 
+    [Given("the run spent {string} in {int} seconds over the session {string} of the role {string} at {int} cents and the session {string} of the role {string} at {int} cents")]
+    public void GivenSessions(string spend, int seconds, string first, string firstRole, int firstCents, string second, string secondRole, int secondCents) =>
+        _facts = new DeliveryFacts(
+            Spend: decimal.Parse(spend, System.Globalization.CultureInfo.InvariantCulture),
+            Seconds: seconds,
+            Sessions: [new SessionCost(first, firstRole, firstCents), new SessionCost(second, secondRole, secondCents)]);
+
+    [Given("the run spent {string} in {int} seconds over no session")]
+    public void GivenNoSession(string spend, int seconds) =>
+        _facts = new DeliveryFacts(Spend: decimal.Parse(spend, System.Globalization.CultureInfo.InvariantCulture), Seconds: seconds, Sessions: []);
+
     [When("a caller delivers the run with the token {string}")]
     public async Task WhenDelivers(string token)
     {
@@ -83,7 +95,7 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
                 return Task.FromResult(new CommandResult { ExitCode = exit, StandardError = exit is 0 ? "" : "fatal: push failed" });
             });
         var client = new GitHubClient(new HttpClient(_handler), token, TimeSpan.Zero);
-        var deliver = new Deliver(new Git(mock.Object), new PullRequests(client), client);
+        var deliver = new Deliver(new Git(mock.Object), new PullRequests(client), client, _facts);
         try
         {
             _result = await deliver.RunAsync(_workTree, _runId, _owner, _repo, _baseBranch, _issue, _title, token);
@@ -119,6 +131,21 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
         using var json = JsonDocument.Parse(OpenRequest().Content!);
         string body = json.RootElement.GetProperty("body").GetString() ?? "";
         Assert.Equal(line, body.Split('\n')[0]);
+    }
+
+    [Then("the last two lines of the body of the pull request are {string} and {string}")]
+    public void ThenLastTwo(string first, string second)
+    {
+        using var json = JsonDocument.Parse(OpenRequest().Content!);
+        string[] lines = (json.RootElement.GetProperty("body").GetString() ?? "").Split('\n');
+        Assert.Equal([first, second], lines[^2..]);
+    }
+
+    [Then("the last line of the body of the pull request that Deliver opened is {string}")]
+    public void ThenLastOpened(string line)
+    {
+        using var json = JsonDocument.Parse(OpenRequest().Content!);
+        Assert.Equal(line, (json.RootElement.GetProperty("body").GetString() ?? "").Split('\n')[^1]);
     }
 
     [Then("Deliver posted one comment on the issue {int} of {string} that holds {string}")]

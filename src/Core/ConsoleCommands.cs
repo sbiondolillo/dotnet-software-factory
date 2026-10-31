@@ -12,6 +12,8 @@ public static class ConsoleCommands
     private const string TokenName = "FACTORY_GITHUB_TOKEN";
     private const string ChecksTokenName = "FACTORY_CHECKS_TOKEN";
     private const string KeyName = "ANTHROPIC_API_KEY";
+    private static readonly string[] ManagedNames =
+        ["FACTORY_AGENT_ID", "FACTORY_ENVIRONMENT_ID", "FACTORY_APP_ID", "FACTORY_APP_INSTALLATION_ID", "FACTORY_APP_PRIVATE_KEY"];
     private const string Model = "claude-sonnet-5-5";
     private const string AuthorName = "dotnet-software-factory";
     private const string AuthorEmail = "dotnet-software-factory@noreply.github.com";
@@ -98,7 +100,20 @@ public static class ConsoleCommands
             }
         });
 
-        var command = new Command(verb, description) { repo, number, passEnv, timeout, copilotReview, skipIntegration };
+        var agent = new Option<string>("--agent")
+        {
+            Description = "claude-code or managed",
+            DefaultValueFactory = _ => "claude-code",
+        };
+        agent.Validators.Add(result =>
+        {
+            if (result.Tokens.Count is not 0 && result.Tokens is not [{ Value: "claude-code" or "managed" }])
+            {
+                result.AddError("Option '--agent' must be claude-code or managed.");
+            }
+        });
+
+        var command = new Command(verb, description) { repo, number, passEnv, timeout, copilotReview, skipIntegration, agent };
         var rounds = new Option<int>("--review-rounds")
         {
             Description = "The most feedback runs one run makes.",
@@ -120,7 +135,7 @@ public static class ConsoleCommands
         {
             string[] names = parse.GetValue(passEnv) ?? [];
             string[] repoParts = parse.GetValue(repo)!.Split('/');
-            var options = new Options(verb, new RepoName(repoParts[0], repoParts[1]), parse.GetValue(number), names, TimeSpan.FromMinutes(parse.GetValue(timeout)), verb is "run" ? parse.GetValue(rounds) : 0, parse.GetValue(copilotReview) is not "off", parse.GetValue(skipIntegration) is not "off");
+            var options = new Options(verb, new RepoName(repoParts[0], repoParts[1]), parse.GetValue(number), names, TimeSpan.FromMinutes(parse.GetValue(timeout)), verb is "run" ? parse.GetValue(rounds) : 0, parse.GetValue(copilotReview) is not "off", parse.GetValue(skipIntegration) is not "off", parse.GetValue(agent) is "managed");
             return await RunVerbAsync(options, host, token).ConfigureAwait(false);
         });
         return command;
@@ -138,13 +153,19 @@ public static class ConsoleCommands
 
     private static async Task<int> RunVerbAsync(Options options, ConsoleHost host, CancellationToken cancellationToken)
     {
-        foreach (string name in new[] { TokenName, KeyName })
+        string[] required = options.Managed ? [TokenName, KeyName, .. ManagedNames] : [TokenName, KeyName];
+        foreach (string name in required)
         {
             if (string.IsNullOrEmpty(host.Environment(name)))
             {
                 await host.Error.WriteLineAsync($"The environment variable {name} is not set.").ConfigureAwait(false);
                 return 1;
             }
+        }
+
+        if (options.Managed)
+        {
+            options = options with { Settings = ReadSettings(host) };
         }
 
         string token = host.Environment(TokenName)!;
@@ -190,8 +211,9 @@ public static class ConsoleCommands
             {
                 var request = new FactoryRunRequest(
                     owner, repo, options.Number, token, runId, directory.FullName, baseBranch, ImageTag, host.RootDirectory,
-                    Model, 50, Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration);
-                result = await new FactoryRun(host.Runner, client, host.Out, host.Error, host.Time, host.Environment("GITHUB_STEP_SUMMARY"), EntryVersion()).RunAsync(request, cancellationToken).ConfigureAwait(false);
+                    Model, 50, Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration, options.Settings);
+                result = await new FactoryRun(host.Runner, client, host.Out, host.Error, host.Time, host.Environment("GITHUB_STEP_SUMMARY"), EntryVersion(), host.Handler, host.Delay)
+                    .RunAsync(request, cancellationToken).ConfigureAwait(false);
                 localHead = result.PullRequest is null ? null : await git.ReadHeadShaAsync(directory.FullName, cancellationToken).ConfigureAwait(false);
             }
             finally
@@ -251,8 +273,9 @@ public static class ConsoleCommands
         {
             var request = new FeedbackRunRequest(
                 options.Repo.Owner, options.Repo.Name, number, token, directory.FullName, ImageTag, host.RootDirectory,
-                Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration);
-            FeedbackRunResult result = await new FeedbackRun(host.Runner, client, host.Out).RunAsync(request, cancellationToken).ConfigureAwait(false);
+                Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration, options.Settings);
+            FeedbackRunResult result = await new FeedbackRun(host.Runner, client, host.Out, host.Time, host.Handler, host.Delay)
+                .RunAsync(request, cancellationToken).ConfigureAwait(false);
             return result.Resolved + result.Unresolved is 0
                 ? null
                 : await new Git(host.Runner).ReadHeadShaAsync(directory.FullName, cancellationToken).ConfigureAwait(false);
@@ -316,6 +339,15 @@ public static class ConsoleCommands
         return (result, head);
     }
 
+    /// <summary>The settings of the managed path, from the variables that <see cref="RunVerbAsync"/> found set.</summary>
+    private static ManagedAgentsSettings ReadSettings(ConsoleHost host) => new(
+        host.Environment(KeyName)!,
+        host.Environment(ManagedNames[0])!,
+        host.Environment(ManagedNames[1])!,
+        host.Environment(ManagedNames[2])!,
+        host.Environment(ManagedNames[3])!,
+        host.Environment(ManagedNames[4])!);
+
     private static void Remove(DirectoryInfo directory)
     {
         if (directory.Exists)
@@ -329,5 +361,9 @@ public static class ConsoleCommands
         public void Deconstruct(out string owner, out string name) => (owner, name) = (Owner, Name);
     }
 
-    private sealed record Options(string Verb, RepoName Repo, int Number, IReadOnlyList<string> SecretNames, TimeSpan Timeout, int ReviewRounds, bool CopilotReview, bool SkipIntegration);
+    private sealed record Options(string Verb, RepoName Repo, int Number, IReadOnlyList<string> SecretNames, TimeSpan Timeout, int ReviewRounds, bool CopilotReview, bool SkipIntegration, bool Managed)
+    {
+        /// <summary>The settings of the managed path, or null for the path of Claude Code in a sandbox.</summary>
+        public ManagedAgentsSettings? Settings { get; init; }
+    }
 }

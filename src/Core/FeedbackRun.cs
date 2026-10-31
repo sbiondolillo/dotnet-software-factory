@@ -20,13 +20,21 @@ public sealed record FeedbackRunRequest(
     string AuthorName,
     string AuthorEmail,
     IReadOnlyList<string> SecretNames,
-    bool SkipIntegration = false);
+    bool SkipIntegration = false,
+    ManagedAgentsSettings? Managed = null);
 
 /// <summary>The outcome of a <see cref="FeedbackRun"/>: the threads resolved, the threads left unresolved and the Redos spent.</summary>
 public sealed record FeedbackRunResult(int Resolved, int Unresolved, int Redos);
 
-/// <summary>Answers every unresolved review thread of a pull request within three Redos.</summary>
-public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextWriter? progress = null)
+/// <summary>Answers every unresolved review thread of a pull request within three Redos. The <paramref name="time"/>, the
+/// <paramref name="handler"/> and the <paramref name="delay"/> serve the Managed Agents path, when the request holds its settings.</summary>
+public sealed class FeedbackRun(
+    CommandRunner runner,
+    GitHubClient client,
+    TextWriter? progress = null,
+    TimeProvider? time = null,
+    HttpMessageHandler? handler = null,
+    Func<TimeSpan, CancellationToken, Task>? delay = null)
 {
     private const int RedoBudget = 3;
     private const string ReportPath = ".factory/threads.json";
@@ -75,15 +83,17 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
         string body = Describe(threads);
         string reportFile = Path.Combine(request.Directory, ".factory", "threads.json");
 
-        await Say("sandbox: start").ConfigureAwait(false);
-        Sandbox sandbox = await Sandbox.StartAsync(runner, request.ImageTag, request.RootDirectory, request.Directory, cancellationToken).ConfigureAwait(false);
-        await using (sandbox.ConfigureAwait(false))
+        var setup = new RunAgentsSetup(
+            runner, git, request.Owner, request.Repo, request.Token, request.Directory, request.RootDirectory, request.ImageTag,
+            request.SecretNames, baseCommit, $"{branch}-session", request.Managed, handler, delay, time, progress);
+        RunAgents agents = await RunAgents.StartAsync(setup, cancellationToken).ConfigureAwait(false);
+        await using (agents.ConfigureAwait(false))
         {
-            var agent = new ClaudeCodeAgent(sandbox);
-            var buildPhase = new BuildPhase(agent, cleanup, refactor, readsPlan: false);
-            var lintGate = new LintGate(sandbox, git);
+            CommandHost sandbox = agents.Host;
+            var buildPhase = new BuildPhase(agents.Builder, cleanup, refactor, readsPlan: false);
+            LintGate lintGate = agents.Lint(null);
             var testGate = new TestGate(sandbox, skipIntegration: request.SkipIntegration);
-            var reviewPhase = new ReviewPhase(agent, git, cleanup, refactor, readsPlan: false);
+            var reviewPhase = new ReviewPhase(agents.Reviewer, git, cleanup, refactor, readsPlan: false);
 
             IReadOnlySet<string> basePassed = cleanup
                 ? await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false)
@@ -108,7 +118,8 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
                 else
                 {
                     await Say("lint: start").ConfigureAwait(false);
-                    await lintGate.RunAsync(request.Directory, title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
+                    bool linted = await lintGate.RunAsync(request.Directory, title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
+                    await agents.AfterLintAsync(linted, cancellationToken).ConfigureAwait(false);
                     IReadOnlyList<string> scopeFaults = cleanup
                         ? await CleanupGate.ScopeFaultsAsync(git, baseCommit, request.Directory, scope, cancellationToken).ConfigureAwait(false)
                         : [];
@@ -155,6 +166,7 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
                     }
                 }
 
+                redoTexts = agents.NoteBuild(redoTexts);
                 if (redos >= RedoBudget)
                 {
                     string comment = CommentText.Fit($"The budget of {RedoBudget} Redos is spent. The last build still fails:", redoTexts);
@@ -167,6 +179,7 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
                 await Say($"redo: {redos}").ConfigureAwait(false);
             }
 
+            await agents.MoveToAsync(branch, cancellationToken).ConfigureAwait(false);
             await git.PushAsync(branch, request.Directory, request.Token, cancellationToken).ConfigureAwait(false);
             int resolved = 0;
             foreach (ReviewThread thread in threads)
