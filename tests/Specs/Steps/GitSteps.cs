@@ -90,6 +90,10 @@ public sealed class GitSteps(ExceptionState exceptionState, WorkTreeState workTr
     public Task WhenGitChecksOutTheNewBranch(string branch, string directory)
         => RunAsync(() => _git!.CheckoutBranchAsync(branch, directory));
 
+    [When("Git checks out the commit {string} in {string}")]
+    public Task WhenGitChecksOutTheCommit(string commit, string directory)
+        => RunAsync(() => _git!.CheckoutCommitAsync(commit, directory));
+
     [When("Git commits all changes in {string} with the message {string} and the author name {string} and the author email {string}")]
     public Task WhenGitCommitsAllChanges(string directory, string message, string authorName, string authorEmail)
         => RunAsync(() => _git!.CommitAllAsync(directory, message, authorName, authorEmail));

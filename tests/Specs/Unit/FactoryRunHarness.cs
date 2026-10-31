@@ -66,6 +66,9 @@ public sealed class FactoryRunHarness : IDisposable
 
     public string HeadSha { get; set; } = "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c";
 
+    /// <summary>The base commit the caller gives the run, or null for the head of the clone.</summary>
+    public string? BaseCommit { get; set; }
+
     public HashSet<string> Lacks { get; } = [];
 
     public bool AgentWritesPlan { get; set; } = true;
@@ -198,7 +201,7 @@ public sealed class FactoryRunHarness : IDisposable
         var request = new FactoryRunRequest(
             Owner, Repo, Issue, Token, RunId, _clone.FullName, BaseBranch, "factory-sandbox:test", _root.FullName,
             PlanModel, PlanTurns, BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames, SkipIntegration,
-            Managed is null ? null : ManagedRunFake.Settings());
+            Managed is null ? null : ManagedRunFake.Settings(), BaseCommit);
         return new FactoryRun(mock.Object, client, Progress, handler: new Handler(this), delay: (_, _) => Task.CompletedTask).RunAsync(request, cancellationToken);
     }
 
@@ -253,6 +256,9 @@ public sealed class FactoryRunHarness : IDisposable
 
                 Layout(spec.Arguments[2]);
                 AfterClone?.Invoke(spec.Arguments[2]);
+                return new CommandResult();
+            case "checkout" when spec.Arguments is ["checkout", "--detach", string commit]:
+                HeadSha = commit;
                 return new CommandResult();
             case "rev-parse":
                 return new CommandResult { StandardOutput = HeadSha + "\n" };

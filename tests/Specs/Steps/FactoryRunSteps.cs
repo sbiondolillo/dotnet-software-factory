@@ -170,6 +170,9 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     public void GivenScenariosBlock(string path) =>
         _h.Body += $"\n\n## Scenarios\n\n```gherkin\n# {path}\nFeature: Checkout total\n\n  Scenario: An empty cart totals zero\n    Given an empty cart\n```\n";
 
+    [Given("the caller gives the base commit {string}")]
+    public void GivenBase(string commit) => _h.BaseCommit = commit;
+
     [When("a caller starts a run")]
     public async Task WhenStarts()
     {
@@ -265,6 +268,21 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
         Assert.Equal(baseBranch, json.RootElement.GetProperty("base").GetString());
         Assert.Equal(title, json.RootElement.GetProperty("title").GetString());
     }
+
+    [Then("git runs {string} in the directory that the caller gave, after the clone and before the head read")]
+    public void ThenRunsBetween(string command)
+    {
+        List<CommandSpec> git = [.. _h.Commands.Where(c => c.Command is "git")];
+        int clone = git.FindIndex(c => c.Arguments[0] is "clone");
+        int found = git.FindIndex(c => string.Join(' ', c.Arguments) == command);
+        int read = git.FindIndex(c => c.Arguments[0] is "rev-parse");
+        Assert.True(clone >= 0 && found > clone && read > found, $"git commands: {string.Join(" | ", git.Select(c => string.Join(' ', c.Arguments)))}");
+        Assert.Equal(_h.CloneDirectory, git[found].WorkingDirectory);
+    }
+
+    [Then("git runs no {string}")]
+    public void ThenRunsNo(string prefix) =>
+        Assert.DoesNotContain(_h.Commands, c => c.Command is "git" && string.Join(' ', c.Arguments).StartsWith(prefix, StringComparison.Ordinal));
 
     [Then("FactoryRun gives back a result with the pull request of the number {int} and the web address {string}, and {int} Redo(s)")]
     public void ThenPullUrl(int number, string url, int redos)

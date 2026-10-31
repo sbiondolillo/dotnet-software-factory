@@ -65,6 +65,10 @@ adds a git operation to `src/Core/Git.cs` follows them too.
 - A new branch is `checkout -b <branch>`. `checkout <branch>` creates a branch only when a
   remote branch of that name exists, and fails in a fresh clone with
   `did not match any file(s) known to git`.
+- A checkout of a commit is `checkout --detach <sha>`, with the full SHA. The head is then
+  detached at that commit, and a later `checkout -b <branch>` starts the branch there. A
+  run with `--base <sha>` checks the base out this way after the clone, so the base commit
+  is the SHA it names, in place of the head of the default branch.
 - A push of a branch is `push origin <branch>`, and it sends the local branch of that
   name. A branch that origin lacks is created there. With no local branch of that name,
   git exits with the code 1 and `error: src refspec <branch> does not match any`.

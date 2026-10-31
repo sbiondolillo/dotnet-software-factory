@@ -3,11 +3,12 @@ using System.CommandLine.Parsing;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Core;
 
 /// <summary>The command tree of the console program: the verbs <c>run</c> and <c>feedback</c>, over a <see cref="ConsoleHost"/>.</summary>
-public static class ConsoleCommands
+public static partial class ConsoleCommands
 {
     private const string TokenName = "FACTORY_GITHUB_TOKEN";
     private const string ChecksTokenName = "FACTORY_CHECKS_TOKEN";
@@ -129,20 +130,38 @@ public static class ConsoleCommands
                 result.AddError("Option '--review-rounds' must be 0 or more.");
             }
         });
+        var baseCommit = new Option<string>("--base")
+        {
+            Description = "The full SHA of the commit the run builds on, in place of the head of the default branch.",
+        };
+        baseCommit.Validators.Add(result =>
+        {
+            if (result.Tokens is [{ } token] && !FullSha().IsMatch(token.Value))
+            {
+                result.AddError("Option '--base' must be the full SHA of a commit: 40 lowercase hexadecimal characters.");
+            }
+        });
         if (verb is "run")
         {
             command.Options.Add(rounds);
+            command.Options.Add(baseCommit);
         }
 
         command.SetAction(async (parse, token) =>
         {
             string[] names = parse.GetValue(passEnv) ?? [];
             string[] repoParts = parse.GetValue(repo)!.Split('/');
-            var options = new Options(verb, new RepoName(repoParts[0], repoParts[1]), parse.GetValue(number), names, TimeSpan.FromMinutes(parse.GetValue(timeout)), verb is "run" ? parse.GetValue(rounds) : 0, parse.GetValue(copilotReview) is not "off", parse.GetValue(skipIntegration) is not "off", parse.GetValue(agent) is "managed");
+            var options = new Options(verb, new RepoName(repoParts[0], repoParts[1]), parse.GetValue(number), names, TimeSpan.FromMinutes(parse.GetValue(timeout)), verb is "run" ? parse.GetValue(rounds) : 0, parse.GetValue(copilotReview) is not "off", parse.GetValue(skipIntegration) is not "off", parse.GetValue(agent) is "managed")
+            {
+                BaseCommit = verb is "run" ? parse.GetValue(baseCommit) : null,
+            };
             return await RunVerbAsync(options, host, token).ConfigureAwait(false);
         });
         return command;
     }
+
+    [GeneratedRegex("^[0-9a-f]{40}$")]
+    private static partial Regex FullSha();
 
     /// <summary>The informational version of the entry assembly, the text that <c>--version</c> prints.</summary>
     private static string? EntryVersion() =>
@@ -214,7 +233,7 @@ public static class ConsoleCommands
             {
                 var request = new FactoryRunRequest(
                     owner, repo, options.Number, token, runId, directory.FullName, baseBranch, ImageTag, host.RootDirectory,
-                    Model, 50, Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration, options.Settings);
+                    Model, 50, Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration, options.Settings, options.BaseCommit);
                 result = await new FactoryRun(host.Runner, client, host.Out, host.Error, host.Time, host.Environment("GITHUB_STEP_SUMMARY"), EntryVersion(), host.Handler, host.Delay)
                     .RunAsync(request, cancellationToken).ConfigureAwait(false);
                 localHead = result.PullRequest is null ? null : await git.ReadHeadShaAsync(directory.FullName, cancellationToken).ConfigureAwait(false);
@@ -393,5 +412,8 @@ public static class ConsoleCommands
     {
         /// <summary>The settings of the managed path, or null for the path of Claude Code in a sandbox.</summary>
         public ManagedAgentsSettings? Settings { get; init; }
+
+        /// <summary>The full SHA of the commit a run builds on, or null for the head of the default branch.</summary>
+        public string? BaseCommit { get; init; }
     }
 }
