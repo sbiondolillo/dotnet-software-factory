@@ -205,8 +205,9 @@ internal sealed class RunAgents : IAsyncDisposable
     /// <summary>
     /// A session agent with the branch work of the host around each prompt: the push of the scratch branch before the first prompt, and
     /// for the builder the pull after each prompt, the check that no commit tracks a file under <c>.factory/</c>, and the read of the
-    /// remote head around each build prompt. A tracked file under <c>.factory/</c> throws <see cref="SessionBranchException"/>, which
-    /// stops the run whatever the phase.
+    /// remote head around each build prompt. A tracked file under <c>.factory/</c>, before a prompt or after a pull, throws
+    /// <see cref="SessionBranchException"/>, which stops the run whatever the phase. The session uploads what <c>.factory/</c> holds and
+    /// follows a link there, so a head branch that tracks a file there stops before the first session starts.
     /// </summary>
     private sealed class BranchAgent(RunAgents owner, ManagedAgentsAgent inner, bool pulls) : Agent
     {
@@ -219,6 +220,7 @@ internal sealed class RunAgents : IAsyncDisposable
         {
             RunAgentsSetup setup = owner._setup;
             await owner.PushScratchAsync(cancellationToken).ConfigureAwait(false);
+            await RefuseTrackedFilesAsync(setup, cancellationToken).ConfigureAwait(false);
             bool build = pulls && phase is "build";
             string? before = build
                 ? await setup.Git.ReadRemoteHeadAsync(setup.ScratchBranch, setup.Directory, setup.Token, cancellationToken).ConfigureAwait(false)
@@ -236,11 +238,18 @@ internal sealed class RunAgents : IAsyncDisposable
                 owner._pushedNothing = after == before;
             }
 
+            await RefuseTrackedFilesAsync(setup, cancellationToken).ConfigureAwait(false);
+            return answer;
+        }
+
+        private static async Task RefuseTrackedFilesAsync(RunAgentsSetup setup, CancellationToken cancellationToken)
+        {
             string[] tracked = await setup.Git.ListTrackedAsync(".factory", setup.Directory, cancellationToken).ConfigureAwait(false);
-            return tracked.Length is 0
-                ? answer
-                : throw new SessionBranchException(
+            if (tracked.Length is not 0)
+            {
+                throw new SessionBranchException(
                     $"The session committed files under .factory/, which only the factory writes: {string.Join(", ", tracked)}. The run stops.");
+            }
         }
     }
 }

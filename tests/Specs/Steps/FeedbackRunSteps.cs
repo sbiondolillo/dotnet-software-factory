@@ -389,6 +389,9 @@ public sealed class FeedbackRunSteps : IDisposable
     [Then("FeedbackRun throws GitHubGraphQLException")]
     public void ThenThrows() => Assert.IsType<GitHubGraphQLException>(_exception);
 
+    [Then("the run starts no session")]
+    public void ThenNoSession() => Assert.Empty(_h.Managed!.Sessions);
+
     [Then("FeedbackRun removes the container")]
     public void ThenRemoved() => Assert.Contains("rm", _h.Events);
 }

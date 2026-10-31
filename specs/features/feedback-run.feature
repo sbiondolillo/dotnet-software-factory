@@ -255,3 +255,11 @@ Feature: A feedback run answers every unresolved review thread
     And git pushes the session branch "factory/a1b2c3d4-session" before the first session starts
     And FeedbackRun gives back a result with 2 threads resolved, 0 threads unresolved and 0 Redos
     And FeedbackRun removes the container
+
+  @managed
+  Scenario: A file under .factory/ on the head branch stops a managed feedback run before the first session starts
+    Given the run uses Managed Agents sessions
+    And the session branch tracks the file ".factory/leak.txt"
+    When a caller starts a feedback run
+    Then FeedbackRun throws SessionBranchException with a message that holds "The session committed files under .factory/, which only the factory writes: .factory/leak.txt. The run stops."
+    And the run starts no session
