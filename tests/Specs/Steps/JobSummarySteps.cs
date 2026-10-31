@@ -10,6 +10,8 @@ public sealed class JobSummarySteps : IDisposable
 {
     private readonly JobSummaryHarness _h = new();
     private FactoryRunResult? _result;
+    private readonly JobSummary _summary = new();
+    private string _rendered = "";
 
     public void Dispose() => _h.Dispose();
 
@@ -138,6 +140,30 @@ public sealed class JobSummarySteps : IDisposable
         Assert.NotNull(_result.PullRequest);
         Assert.Equal(redos, _result.Redos);
     }
+
+    [Given("the summary of a run holds the row of a passed plan of {int} seconds")]
+    public void GivenPlanRow(int seconds) => _summary.AddRow("plan", TimeSpan.FromSeconds(seconds), "passed");
+
+    [When("the summary gets the session {string} of the role {string} at {int} cents and the session {string} of the role {string} at {int} cents")]
+    public void WhenSessions(string first, string firstRole, int firstCents, string second, string secondRole, int secondCents)
+    {
+        _summary.AddSessions([new SessionCost(first, firstRole, firstCents), new SessionCost(second, secondRole, secondCents)]);
+        _rendered = _summary.Render();
+    }
+
+    [When("the summary gets no session")]
+    public void WhenNoSession()
+    {
+        _summary.AddSessions([]);
+        _rendered = _summary.Render();
+    }
+
+    [Then("the rendered summary ends with the lines")]
+    public void ThenRenderedEnds(string expected) =>
+        Assert.EndsWith(expected.Replace("\r\n", "\n", StringComparison.Ordinal) + "\n", _rendered, StringComparison.Ordinal);
+
+    [Then("the rendered summary does not hold {string}")]
+    public void ThenRenderedLacks(string text) => Assert.DoesNotContain(text, _rendered, StringComparison.Ordinal);
 
     [When("the run ends")]
     public async Task WhenEnds()

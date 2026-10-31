@@ -10,6 +10,12 @@ public sealed class ManagedAgentsClient(
     /// <summary>The beta header every request carries.</summary>
     public const string Beta = "managed-agents-2026-04-01";
 
+    /// <summary>The id of the agent that each new session runs.</summary>
+    public string? AgentId { get; init; }
+
+    /// <summary>The id of the environment that each new session runs in.</summary>
+    public string? EnvironmentId { get; init; }
+
     internal HttpClient Http { get; } = http;
 
     internal string ApiKey { get; } = apiKey;

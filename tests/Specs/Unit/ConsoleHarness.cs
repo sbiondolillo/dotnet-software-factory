@@ -138,6 +138,32 @@ public sealed class ConsoleHarness : IDisposable
 
     public string Root => _root.FullName;
 
+    /// <summary>The fake of the Managed Agents API, or null on the path of Claude Code in a sandbox.</summary>
+    public ManagedRunFake? Managed { get; private set; }
+
+    /// <summary>The requests that the fake of the Managed Agents API and of the App tokens got, apart from <see cref="Requests"/>.</summary>
+    public List<TimedRequest> ManagedRequests { get; } = [];
+
+    /// <summary>Each git command, as its words, and each request to the fake of the Managed Agents API, as its method and path, in order.</summary>
+    public List<string> Timeline { get; } = [];
+
+    /// <summary>The cost in cents of one answer of a session, by prompt kind.</summary>
+    public Dictionary<string, int> SessionCents { get; } = [];
+
+    /// <summary>The builds, by number, after which the session pushes no commit.</summary>
+    public HashSet<int> NoPushBuilds { get; } = [];
+
+    /// <summary>Puts the run on the managed path: the variables of the sessions in the environment, and the fake API.</summary>
+    public void UseManaged()
+    {
+        foreach ((string name, string value) in ManagedRunFake.Environment())
+        {
+            Environment[name] = value;
+        }
+
+        Managed = new ManagedRunFake { OnMessage = SessionMessage };
+    }
+
     public List<CommandSpec> Commands { get; } = [];
 
     public List<TimedRequest> Requests { get; } = [];
@@ -198,7 +224,13 @@ public sealed class ConsoleHarness : IDisposable
         OutAtCommand.Add(Out.ToString());
         if (spec.Command is "git")
         {
+            Timeline.Add(string.Join(' ', ["git", .. spec.Arguments]));
             return AnswerGit(spec);
+        }
+
+        if (spec.Command is not "docker")
+        {
+            return Program([spec.Command, .. spec.Arguments], directory => directory);
         }
 
         return spec.Arguments[0] switch
@@ -230,6 +262,13 @@ public sealed class ConsoleHarness : IDisposable
             case "push":
                 PushTimes.Add(Time.Now);
                 return new CommandResult();
+            case "pull":
+                Managed?.Pull(_clone);
+                return new CommandResult();
+            case "ls-remote" when Managed is not null:
+                return new CommandResult { StandardOutput = Managed.LsRemote(spec.Arguments) };
+            case "ls-files" when Managed is not null:
+                return new CommandResult { StandardOutput = string.Concat(Managed.TrackedFactoryFiles.Select(path => path + "\n")) };
             default:
                 return new CommandResult();
         }
@@ -260,28 +299,34 @@ public sealed class ConsoleHarness : IDisposable
             return Claude(arguments);
         }
 
-        if (arguments[id + 1] is "sh" && arguments[id + 2] is "-c")
+        return Program(arguments[(id + 1)..], directory => Path.Combine(_clone, directory["/work/".Length..]));
+    }
+
+    /// <summary>Answers a program with its words, in the container or on the host. <paramref name="results"/> maps the TRX directory to the host.</summary>
+    private CommandResult Program(List<string> command, Func<string, string> results)
+    {
+        if (command[0] is "sh" && command[1] is "-c")
         {
             (int code, string output, string error) = CheckResults.TryGetValue(_builds, out (int Code, string Out, string Err) given) ? given : _builds is 0 ? (1, "", "check failed") : (0, "", "");
             return new CommandResult { ExitCode = code, StandardOutput = output, StandardError = error };
         }
 
-        if (arguments[id + 1] is "git" && arguments[id + 2] is "worktree" && arguments[id + 3] is "add")
+        if (command[0] is "git" && command[1] is "worktree" && command[2] is "add")
         {
             return new CommandResult { ExitCode = WorktreeAddExit, StandardError = "no worktree" };
         }
 
-        if (arguments[id + 1] is "dotnet" && arguments[id + 2] is "/opt/api-printer/ApiPrinter.dll")
+        if (command[0] is "dotnet" && command[1] is "/opt/api-printer/ApiPrinter.dll")
         {
             return new CommandResult { StandardOutput = ApiOutputs.GetValueOrDefault(_builds, "") };
         }
 
-        if (arguments[id + 1] is "dotnet" && DotnetExits.TryGetValue(string.Join(' ', arguments.Skip(id + 1)), out int exit))
+        if (command[0] is "dotnet" && DotnetExits.TryGetValue(string.Join(' ', command), out int exit))
         {
             return new CommandResult { ExitCode = exit };
         }
 
-        if (arguments[id + 2] is not "test")
+        if (command.Count < 2 || command[1] is not "test")
         {
             return new CommandResult();
         }
@@ -294,7 +339,7 @@ public sealed class ConsoleHarness : IDisposable
             tests.Add(("Specs.Unit.CheckoutTests", "AddsTwoPrices", "Failed", FailureText));
         }
 
-        string directory = Path.Combine(_clone, arguments[arguments.IndexOf("--results-directory") + 1]["/work/".Length..]);
+        string directory = results(command[command.IndexOf("--results-directory") + 1]);
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, "this-run.trx"), Steps.TrxBuilder.Build(tests));
         return new CommandResult { ExitCode = red ? 1 : 0, StandardOutput = red ? FailureText : "" };
@@ -307,6 +352,31 @@ public sealed class ConsoleHarness : IDisposable
         string turns = arguments[arguments.IndexOf("--max-turns") + 1];
         string kind = text.StartsWith("Plan the work", StringComparison.Ordinal) ? "plan"
             : text.StartsWith("Review the build", StringComparison.Ordinal) ? "review" : "build";
+        Turn(kind, model, turns, text);
+        if (!Answers.TryGetValue(kind, out (int Turns, string Cost, TimeSpan Elapsed) answer))
+        {
+            return new CommandResult { StandardOutput = Json("done") };
+        }
+
+        Time.WaitAsync(answer.Elapsed, CancellationToken.None).GetAwaiter().GetResult();
+        return new CommandResult
+        {
+            StandardOutput = $"{{\"is_error\":false,\"result\":\"done\",\"num_turns\":{answer.Turns},\"total_cost_usd\":{answer.Cost}}}",
+        };
+    }
+
+    /// <summary>Plays the agent of a session for one message. A preamble may come before the prompt, so the kind is found anywhere in the text.</summary>
+    private ManagedTurn SessionMessage(string text, string model)
+    {
+        string kind = text.Contains("Plan the work", StringComparison.Ordinal) ? "plan"
+            : text.Contains("Review the build", StringComparison.Ordinal) ? "review" : "build";
+        Turn(kind, model, "", text);
+        return new ManagedTurn("done", Cents: SessionCents.GetValueOrDefault(kind), Pushes: kind is "build" && !NoPushBuilds.Contains(_builds));
+    }
+
+    /// <summary>Records one prompt and writes what the agent writes for it.</summary>
+    private void Turn(string kind, string model, string turns, string text)
+    {
         if (kind is "build")
         {
             _builds++;
@@ -342,21 +412,18 @@ public sealed class ConsoleHarness : IDisposable
                     ? JsonSerializer.Serialize(new { approved = false, blocking = new[] { ThreadABody } })
                     : """{"approved":true,"blocking":[]}""");
         }
-
-        if (!Answers.TryGetValue(kind, out (int Turns, string Cost, TimeSpan Elapsed) answer))
-        {
-            return new CommandResult { StandardOutput = Json("done") };
-        }
-
-        Time.WaitAsync(answer.Elapsed, CancellationToken.None).GetAwaiter().GetResult();
-        return new CommandResult
-        {
-            StandardOutput = $"{{\"is_error\":false,\"result\":\"done\",\"num_turns\":{answer.Turns},\"total_cost_usd\":{answer.Cost}}}",
-        };
     }
 
+    /// <summary>Writes a file of the agent. On the managed path a tracked file waits for the pull, and a file under .factory/ is also an output of the session.</summary>
     private void Write(string relative, string text)
     {
+        if (Managed is not null && !relative.StartsWith(".factory/", StringComparison.Ordinal))
+        {
+            Managed.Stage(relative, text);
+            return;
+        }
+
+        Managed?.AddOutput(relative, text);
         string full = Path.Combine(_clone, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
         File.WriteAllText(full, text);
@@ -452,6 +519,14 @@ public sealed class ConsoleHarness : IDisposable
         {
             string? content = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             string path = request.RequestUri!.AbsolutePath;
+            if (harness.Managed is { } managed && ManagedRunFake.Handles(request.RequestUri))
+            {
+                harness.ManagedRequests.Add(new TimedRequest(request.Method.Method, request.RequestUri.PathAndQuery, content, harness.Time.Now));
+                harness.Timeline.Add($"{request.Method.Method} {path}");
+                (int code, string answer) = managed.Route(request.Method.Method, request.RequestUri, content);
+                return new HttpResponseMessage((HttpStatusCode)code) { Content = new StringContent(answer, Encoding.UTF8, "application/json") };
+            }
+
             harness.Requests.Add(new TimedRequest(request.Method.Method, path, content, harness.Time.Now, request.Headers.Authorization?.ToString()));
             (int status, string body) = harness.Route(request.Method.Method, path, content);
             return new HttpResponseMessage((HttpStatusCode)status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };

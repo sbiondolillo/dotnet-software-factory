@@ -128,3 +128,13 @@ Feature: The pull request of a run states its scenarios, gates, Redos, factory v
     And the review answer has the cost "0.09" and comes 89 seconds after its prompt
     When a caller delivers the run with the token "token"
     Then the last line of the body of the pull request is "Total: $0.2165 in 209 s"
+
+  Scenario: The body names each Managed Agents session of the run after the total
+    Given the run spent "4.49" in 856 seconds over the session "sesn_01" of the role "builder" at 412 cents and the session "sesn_02" of the role "reviewer" at 37 cents
+    When a caller delivers the run with the token "token"
+    Then the last two lines of the body of the pull request are "Total: $4.49 in 856 s" and "Sessions: sesn_01 (builder, $4.12), sesn_02 (reviewer, $0.37)"
+
+  Scenario: The body of a run with no session ends with the total
+    Given the run spent "0.75" in 31 seconds over no session
+    When a caller delivers the run with the token "token"
+    Then the last line of the body of the pull request that Deliver opened is "Total: $0.75 in 31 s"
