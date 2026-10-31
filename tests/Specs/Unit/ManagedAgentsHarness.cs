@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -47,6 +48,13 @@ public sealed class ScriptedTurn
 public sealed partial class ManagedAgentsHarness : IDisposable
 {
     private static readonly DateTimeOffset Epoch = new(2026, 10, 30, 12, 0, 0, TimeSpan.Zero);
+
+    // One test RSA key signs the JWT of every mint. A new key for each harness costs a key generation for each scenario.
+    private static readonly Lazy<string> Key = new(() =>
+    {
+        using var rsa = RSA.Create(2048);
+        return rsa.ExportRSAPrivateKeyPem();
+    });
 
     private readonly DirectoryInfo _directory = Directory.CreateTempSubdirectory("factory-managed-agents-");
     private readonly List<JsonObject> _events = [];
@@ -129,23 +137,10 @@ public sealed partial class ManagedAgentsHarness : IDisposable
     {
         var http = new HttpClient(new Handler(this));
         var client = new ManagedAgentsClient(http, "sk-test", WaitAsync) { AgentId = "agent_test", EnvironmentId = "env_test" };
-        var tokens = new GitHubAppTokens(new Handler(this), "1", "2", "unused", Time);
+        var tokens = new GitHubAppTokens(new GitHubHandler(this), "1", "2", Key.Value, Time, TimeSpan.Zero);
         var git = new Git(Mock.Of<CommandRunner>(MockBehavior.Strict));
         return new ManagedAgentsAgent(
-            client, tokens, Owner, Repo, SessionBranch, BaseCommit, WorkTree, RootDirectory, role, budgetCents, Log, Time)
-        {
-            MintToken = (write, _) =>
-            {
-                string token = $"ghs_token_{Minted.Count + 1}";
-                Minted.Add((token, write));
-                return Task.FromResult(token);
-            },
-            RevokeToken = (token, _) =>
-            {
-                Revoked.Add(token);
-                return Task.CompletedTask;
-            },
-        };
+            client, tokens, Owner, Repo, SessionBranch, BaseCommit, WorkTree, RootDirectory, role, budgetCents, Log, Time);
     }
 
     /// <summary>Adds a file to the outputs of the session now, before the next message.</summary>
@@ -356,5 +351,38 @@ public sealed partial class ManagedAgentsHarness : IDisposable
                     : harness.Route(request.Method.Method, uri.AbsolutePath, uri.Query, body);
             return new HttpResponseMessage((HttpStatusCode)status) { Content = new StringContent(text, Encoding.UTF8, "application/json") };
         }
+    }
+    /// <summary>Answers the routes of GitHub that <see cref="GitHubAppTokens"/> sends: the installation read, the mint and the
+    /// revoke. It records each mint into <see cref="Minted"/> and each revoke into <see cref="Revoked"/>.</summary>
+    private sealed class GitHubHandler(ManagedAgentsHarness harness) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            string? body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
+            Uri uri = request.RequestUri!;
+            (HttpStatusCode status, string text) = (request.Method.Method, uri.Host, uri.AbsolutePath) switch
+            {
+                ("GET", "api.github.com", "/app/installations/2") =>
+                    (HttpStatusCode.OK, """{"permissions":{"contents":"write","metadata":"read"}}"""),
+                ("POST", "api.github.com", "/app/installations/2/access_tokens") => (HttpStatusCode.Created, harness.Mint(body!)),
+                ("DELETE", "api.github.com", "/installation/token") => (HttpStatusCode.NoContent, harness.Revoke(request)),
+                _ => (HttpStatusCode.NotFound, "{}"),
+            };
+            return new HttpResponseMessage(status) { Content = new StringContent(text, Encoding.UTF8, "application/json") };
+        }
+    }
+
+    private string Mint(string body)
+    {
+        bool write = JsonNode.Parse(body)!["permissions"]!["contents"]!.GetValue<string>() is "write";
+        string token = $"ghs_token_{Minted.Count + 1}";
+        Minted.Add((token, write));
+        return new JsonObject { ["token"] = token, ["expires_at"] = Epoch.AddHours(1).ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture) }.ToJsonString();
+    }
+
+    private string Revoke(HttpRequestMessage request)
+    {
+        Revoked.Add(request.Headers.Authorization!.Parameter!);
+        return "";
     }
 }

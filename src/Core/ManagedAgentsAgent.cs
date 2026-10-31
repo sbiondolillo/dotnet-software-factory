@@ -44,13 +44,6 @@ public sealed class ManagedAgentsAgent(
 
     private readonly TimeProvider _time = time ?? TimeProvider.System;
 
-    /// <summary>Mints an App token, with write access when the argument is true. A test replaces it.</summary>
-    internal Func<bool, CancellationToken, Task<string>> MintToken { get; init; } =
-        (write, cancellationToken) => tokens.MintAsync(repo, write, cancellationToken);
-
-    /// <summary>Revokes an App token. A test replaces it.</summary>
-    internal Func<string, CancellationToken, Task> RevokeToken { get; init; } = tokens.RevokeAsync;
-
     /// <summary>The sessions this agent opened, with the cost each one reached.</summary>
     public IReadOnlyList<SessionCost> Sessions =>
         _sessionId is null ? [] : [new SessionCost(_sessionId, RoleName, (int)Math.Round(_cents, MidpointRounding.AwayFromZero))];
@@ -272,7 +265,7 @@ public sealed class ManagedAgentsAgent(
             }
         }
 
-        _token = await MintToken(role is SessionRole.Builder, cancellationToken).ConfigureAwait(false);
+        _token = await tokens.MintAsync(repo, role is SessionRole.Builder, cancellationToken).ConfigureAwait(false);
         _tokenStamp = _time.GetTimestamp();
         resources.Insert(0, new JsonObject
         {
@@ -330,7 +323,7 @@ public sealed class ManagedAgentsAgent(
                 ?? throw new ClaudeCodeException($"The session {_sessionId} lists no github_repository resource, so its token cannot be rotated.");
         }
 
-        string fresh = await MintToken(role is SessionRole.Builder, cancellationToken).ConfigureAwait(false);
+        string fresh = await tokens.MintAsync(repo, role is SessionRole.Builder, cancellationToken).ConfigureAwait(false);
         try
         {
             await client.SendAsync(
@@ -355,7 +348,7 @@ public sealed class ManagedAgentsAgent(
     {
         try
         {
-            await RevokeToken(token, CancellationToken.None).ConfigureAwait(false);
+            await tokens.RevokeAsync(token, CancellationToken.None).ConfigureAwait(false);
         }
         catch (HttpRequestException)
         {
