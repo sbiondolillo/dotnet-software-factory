@@ -2,7 +2,10 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Core;
 
-/// <summary>What <see cref="RunAgents.StartAsync"/> needs: the clone, the branches, the path and what each agent reports to.</summary>
+/// <summary>
+/// What <see cref="RunAgents.StartAsync"/> needs: the clone, the branches, the path and what each agent reports to. The title and the
+/// author name the commit of a work tree change before the push of the scratch branch.
+/// </summary>
 internal sealed record RunAgentsSetup(
     CommandRunner Runner,
     Git Git,
@@ -15,6 +18,9 @@ internal sealed record RunAgentsSetup(
     IReadOnlyList<string> SecretNames,
     string BaseCommit,
     string ScratchBranch,
+    string Title,
+    string AuthorName,
+    string AuthorEmail,
     ManagedAgentsSettings? Settings,
     HttpMessageHandler? Handler = null,
     Func<TimeSpan, CancellationToken, Task>? Delay = null,
@@ -180,6 +186,10 @@ internal sealed class RunAgents : IAsyncDisposable
         _setup.Time,
         _setup.OnAnswer);
 
+    /// <summary>
+    /// Checks out the scratch branch, commits a change of the work tree, such as the scenarios that FactoryRun applied, and pushes the
+    /// branch once. The base commit stays as it was, so the diff against the base still holds that change.
+    /// </summary>
     private async Task PushScratchAsync(CancellationToken cancellationToken)
     {
         if (_pushed)
@@ -188,6 +198,12 @@ internal sealed class RunAgents : IAsyncDisposable
         }
 
         await _setup.Git.CheckoutBranchAsync(_setup.ScratchBranch, _setup.Directory, cancellationToken).ConfigureAwait(false);
+        if (await _setup.Git.HasChangesAsync(_setup.Directory, cancellationToken).ConfigureAwait(false))
+        {
+            await _setup.Git.CommitAllAsync(
+                _setup.Directory, $"{_setup.Title}: the scenarios of the issue", _setup.AuthorName, _setup.AuthorEmail, cancellationToken).ConfigureAwait(false);
+        }
+
         await _setup.Git.PushAsync(_setup.ScratchBranch, _setup.Directory, _setup.Token, cancellationToken).ConfigureAwait(false);
         _pushed = true;
     }

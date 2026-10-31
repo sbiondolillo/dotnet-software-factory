@@ -254,7 +254,7 @@ public sealed class ConsoleHarness : IDisposable
             case "rev-parse":
                 return new CommandResult { StandardOutput = DefaultSha + "\n" };
             case "status":
-                return new CommandResult { StandardOutput = " M src/Checkout.cs\n" };
+                return new CommandResult { StandardOutput = _builds is 0 ? "" : " M src/Checkout.cs\n" };
             case "diff" when spec.Arguments.Contains("--name-only"):
                 return new CommandResult();
             case "diff":

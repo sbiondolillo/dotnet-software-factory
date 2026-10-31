@@ -222,6 +222,19 @@ Feature: Factory run
     And git deletes the branch "factory/a1b2c3d4-session" on origin as its last git command
 
   @managed
+  Scenario: A managed run commits the scenarios of the issue before it pushes the session branch
+    Given the run uses Managed Agents sessions
+    And the issue holds a block under ## Scenarios for "specs/features/checkout-total.feature"
+    When a caller starts a run
+    Then git commits the work tree with the message "Add a checkout total: the scenarios of the issue" before the first push of "factory/a1b2c3d4-session"
+
+  @managed
+  Scenario: A managed run with no change in the work tree commits nothing before it pushes the session branch
+    Given the run uses Managed Agents sessions
+    When a caller starts a run
+    Then git runs no commit before the first push of "factory/a1b2c3d4-session"
+
+  @managed
   Scenario: A build that pushes no commit puts that fact in the next build prompt
     Given the run uses Managed Agents sessions
     And the session pushes no commit on the first build

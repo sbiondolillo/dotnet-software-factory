@@ -86,7 +86,8 @@ public sealed class FeedbackRun(
 
         var setup = new RunAgentsSetup(
             runner, git, request.Owner, request.Repo, request.Token, request.Directory, request.RootDirectory, request.ImageTag,
-            request.SecretNames, baseCommit, $"{branch}-session", request.Managed, handler, delay, time, progress);
+            request.SecretNames, baseCommit, $"{branch}-session", title, request.AuthorName, request.AuthorEmail, request.Managed, handler,
+            delay, time, progress);
         RunAgents agents = await RunAgents.StartAsync(setup, cancellationToken).ConfigureAwait(false);
         await using (agents.ConfigureAwait(false))
         {

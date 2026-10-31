@@ -262,7 +262,12 @@ public sealed class FactoryRunHarness : IDisposable
             case "rev-parse":
                 return new CommandResult { StandardOutput = HeadSha + "\n" };
             case "status":
-                return new CommandResult { StandardOutput = ChangeAfterBuild ? " M src/Checkout.cs\n" : "" };
+                return new CommandResult
+                {
+                    StandardOutput = _builds is 0
+                        ? Body.Contains("## Scenarios", StringComparison.Ordinal) ? "?? specs/features/\n" : ""
+                        : ChangeAfterBuild ? " M src/Checkout.cs\n" : "",
+                };
             case "diff" when spec.Arguments.Contains("--name-only"):
                 return new CommandResult { StandardOutput = _builds is 1 ? string.Join('\n', FirstBuildChanges) + "\n" : "" };
             case "diff":

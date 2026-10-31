@@ -166,6 +166,10 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     [Given("the session branch tracks the file {string}")]
     public void GivenTracked(string path) => _h.Managed!.TrackedFactoryFiles.Add(path);
 
+    [Given("the issue holds a block under ## Scenarios for {string}")]
+    public void GivenScenariosBlock(string path) =>
+        _h.Body += $"\n\n## Scenarios\n\n```gherkin\n# {path}\nFeature: Checkout total\n\n  Scenario: An empty cart totals zero\n    Given an empty cart\n```\n";
+
     [When("a caller starts a run")]
     public async Task WhenStarts()
     {
@@ -344,6 +348,13 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
         Assert.Contains("rm", _h.Events);
     }
 
+    private int FirstPush(string branch)
+    {
+        int push = Commands.FindIndex(c => c.Command is "git" && c.Arguments is ["push", "origin", var name] && name == branch);
+        Assert.True(push >= 0, $"no push of {branch}");
+        return push;
+    }
+
     [Then("FactoryRun throws ClaudeCodeException with a message that holds {string}")]
     public void ThenThrowsClaudeCode(string text) =>
         Assert.Contains(text, Assert.IsType<ClaudeCodeException>(_exception).Message, StringComparison.Ordinal);
@@ -359,6 +370,18 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
         Assert.True(push >= 0, $"no push of {branch}: {string.Join(" | ", Timeline)}");
         Assert.True(start > push, $"the first session started before the push of {branch}");
     }
+
+    [Then("git commits the work tree with the message {string} before the first push of {string}")]
+    public void ThenCommitsBeforePush(string message, string branch)
+    {
+        int push = FirstPush(branch);
+        int commit = Commands.FindIndex(c => c.Command is "git" && c.Arguments is ["commit", "-m", var text] && text == message);
+        Assert.InRange(commit, 0, push - 1);
+    }
+
+    [Then("git runs no commit before the first push of {string}")]
+    public void ThenNoCommitBeforePush(string branch) =>
+        Assert.DoesNotContain(Commands.Take(FirstPush(branch)), c => c.Command is "git" && c.Arguments[0] is "commit");
 
     [Then("git pulls the branch {string} {int} times")]
     public void ThenPulls(string branch, int count) =>
