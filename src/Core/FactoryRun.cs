@@ -237,7 +237,7 @@ public sealed class FactoryRun(
         await Say("plan: passed").ConfigureAwait(false);
         var buildPhase = new BuildPhase(agent);
         LintGate lintGate = agents.Lint(log);
-        var testGate = new TestGate(agents.Host, log, request.SkipIntegration);
+        var testGate = new TestGate(agents.Sandbox, log, request.SkipIntegration);
         var reviewPhase = new ReviewPhase(agents.Reviewer, git);
 
         int redos = 0;
@@ -314,12 +314,12 @@ public sealed class FactoryRun(
         string baseCommit,
         CancellationToken cancellationToken)
     {
-        CommandHost host = agents.Host;
+        Sandbox sandbox = agents.Sandbox;
         Agent agent = agents.Builder;
         string? check = CleanupBody.ReadCheck(issue.Body);
         if (check is not null)
         {
-            CommandResult first = await RunCheckAsync(host, check, cancellationToken).ConfigureAwait(false);
+            CommandResult first = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
             await Say(first.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
             if (first.ExitCode is 0)
             {
@@ -350,7 +350,7 @@ public sealed class FactoryRun(
         var pin = Pin.TakeRefactor(request.Directory);
         var buildPhase = new BuildPhase(agent, refactor: true);
         LintGate lintGate = agents.Lint(log);
-        var testGate = new TestGate(agents.Host, log, request.SkipIntegration);
+        var testGate = new TestGate(agents.Sandbox, log, request.SkipIntegration);
         var reviewPhase = new ReviewPhase(agents.Reviewer, git, refactor: true);
 
         int redos = 0;
@@ -387,7 +387,7 @@ public sealed class FactoryRun(
                 if (check is not null)
                 {
                     long checkStart = _clock.GetTimestamp();
-                    after = await RunCheckAsync(host, check, cancellationToken).ConfigureAwait(false);
+                    after = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
                     await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
                     producer = _summary.AddRow("check", _clock.GetElapsedTime(checkStart), after.ExitCode is 0 ? "green" : "red");
                 }
@@ -445,9 +445,9 @@ public sealed class FactoryRun(
         string baseCommit,
         CancellationToken cancellationToken)
     {
-        CommandHost host = agents.Host;
+        Sandbox sandbox = agents.Sandbox;
         Agent agent = agents.Builder;
-        CommandResult first = await RunCheckAsync(host, check, cancellationToken).ConfigureAwait(false);
+        CommandResult first = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
         await Say(first.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
         if (first.ExitCode is 0)
         {
@@ -463,7 +463,7 @@ public sealed class FactoryRun(
 
         var buildPhase = new BuildPhase(agent, cleanup: true);
         LintGate lintGate = agents.Lint(log);
-        var testGate = new TestGate(agents.Host, log, request.SkipIntegration);
+        var testGate = new TestGate(agents.Sandbox, log, request.SkipIntegration);
         var reviewPhase = new ReviewPhase(agents.Reviewer, git, cleanup: true);
         var pin = Pin.Take(request.Directory);
         IReadOnlySet<string> basePassed = await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false);
@@ -502,7 +502,7 @@ public sealed class FactoryRun(
                 if (redoTexts.Count is 0)
                 {
                     long checkStart = _clock.GetTimestamp();
-                    CommandResult after = await RunCheckAsync(host, check, cancellationToken).ConfigureAwait(false);
+                    CommandResult after = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
                     await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
                     producer = _summary.AddRow("check", _clock.GetElapsedTime(checkStart), after.ExitCode is 0 ? "green" : "red");
                     if (after.ExitCode is 0)
@@ -559,9 +559,9 @@ public sealed class FactoryRun(
         string baseCommit,
         CancellationToken cancellationToken)
     {
-        CommandHost host = agents.Host;
+        Sandbox sandbox = agents.Sandbox;
         Agent agent = agents.Builder;
-        CommandResult first = await RunCheckAsync(host, check, cancellationToken).ConfigureAwait(false);
+        CommandResult first = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
         await Say(first.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
         if (first.ExitCode is 0)
         {
@@ -577,11 +577,11 @@ public sealed class FactoryRun(
 
         var buildPhase = new BuildPhase(agent, reframe: true);
         LintGate lintGate = agents.Lint(log);
-        var testGate = new TestGate(agents.Host, log, request.SkipIntegration);
+        var testGate = new TestGate(agents.Sandbox, log, request.SkipIntegration);
         var reviewPhase = new ReviewPhase(agents.Reviewer, git, reframe: true);
         var pin = Pin.Take(request.Directory);
         IReadOnlySet<string> basePassed = await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false);
-        ApiListing baseApi = await ListApiAsync(host, cancellationToken).ConfigureAwait(false);
+        ApiListing baseApi = await ListApiAsync(sandbox, cancellationToken).ConfigureAwait(false);
         if (baseApi.Lines is null)
         {
             await CommentAsync(request, "The public API of the base commit could not be listed, so there is no build:", [baseApi.Fault ?? ""], cancellationToken).ConfigureAwait(false);
@@ -625,7 +625,7 @@ public sealed class FactoryRun(
             if (redoTexts.Count is 0)
             {
                 long apiStart = _clock.GetTimestamp();
-                ApiListing api = await ListApiAsync(host, cancellationToken).ConfigureAwait(false);
+                ApiListing api = await ListApiAsync(sandbox, cancellationToken).ConfigureAwait(false);
                 redoTexts = api.Lines is null ? [api.Fault ?? ""] : ApiGate.Compare(baseApi.Lines, api.Lines);
                 if (api.Lines is not null)
                 {
@@ -638,7 +638,7 @@ public sealed class FactoryRun(
             if (redoTexts.Count is 0 && gate is not null)
             {
                 long checkStart = _clock.GetTimestamp();
-                CommandResult after = await RunCheckAsync(host, check, cancellationToken).ConfigureAwait(false);
+                CommandResult after = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
                 await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
                 producer = _summary.AddRow("check", _clock.GetElapsedTime(checkStart), after.ExitCode is 0 ? "green" : "red");
                 if (after.ExitCode is 0)
@@ -684,8 +684,8 @@ public sealed class FactoryRun(
         }
     }
 
-    private Task<ApiListing> ListApiAsync(CommandHost host, CancellationToken cancellationToken) =>
-        ApiGate.ListAsync(host, progress, log, cancellationToken);
+    private Task<ApiListing> ListApiAsync(Sandbox sandbox, CancellationToken cancellationToken) =>
+        ApiGate.ListAsync(sandbox, progress, log, cancellationToken);
 
     private DeliveryFacts Facts(RunAgents agents, string baseCommit, TestGateResult gate, bool checkGreen, int redos) => new(
         baseCommit,
@@ -704,8 +704,8 @@ public sealed class FactoryRun(
         return new FactoryRunResult(null, redos);
     }
 
-    private Task<CommandResult> RunCheckAsync(CommandHost host, string command, CancellationToken cancellationToken) =>
-        CleanupGate.RunCheckAsync(host, command, progress, cancellationToken, log);
+    private Task<CommandResult> RunCheckAsync(Sandbox sandbox, string command, CancellationToken cancellationToken) =>
+        CleanupGate.RunCheckAsync(sandbox, command, progress, cancellationToken, log);
 
     private async Task WriteSummaryAsync()
     {

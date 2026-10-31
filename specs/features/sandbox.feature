@@ -112,3 +112,9 @@ Feature: A sandbox container starts, runs commands on the work tree, and is remo
     When a caller runs "claude" with the argument "-p" and an empty list of names
     And a caller disposes the sandbox
     Then the file ".claude/projects/-work/session.jsonl" is under ".factory/sandbox-home/" of the root directory
+
+  Scenario: A sandbox for the gates holds no Anthropic variable
+    Given a Sandbox built over a mock of CommandRunner
+    When a caller starts a sandbox for the gates with the image tag "factory-sandbox:test" and the work tree "/tmp/factory-work-tree"
+    Then the arguments of the docker run hold neither "ANTHROPIC_API_KEY" nor "ANTHROPIC_BASE_URL"
+    And the arguments of the docker run hold "--volume" and then "/tmp/factory-work-tree:/work", and "--workdir" and then "/work"

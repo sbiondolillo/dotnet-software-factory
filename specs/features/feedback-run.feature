@@ -214,14 +214,6 @@ Feature: A feedback run answers every unresolved review thread
     And FeedbackRun removes the container
 
   @managed
-  Scenario: A managed feedback run starts no container and builds on the session branch of the head branch
-    Given the run uses Managed Agents sessions
-    When a caller starts a feedback run
-    Then the run sends no command to docker
-    And git pushes the session branch "factory/a1b2c3d4-session" before the first session starts
-    And FeedbackRun gives back a result with 2 threads resolved, 0 threads unresolved and 0 Redos
-
-  @managed
   Scenario: A managed feedback run moves the head branch to the session's work and pushes it once before the first reply
     Given the run uses Managed Agents sessions
     When a caller starts a feedback run
@@ -252,3 +244,13 @@ Feature: A feedback run answers every unresolved review thread
     And FeedbackRun throws SessionBranchException with a message that holds "The session committed files under .factory/, which only the factory writes: .factory/threads.json. The run stops."
     And FeedbackRun adds no reply
     And FeedbackRun resolves no thread
+
+  @managed
+  Scenario: A managed feedback run runs the gates in a container with no key and builds on the session branch of the head branch
+    Given the run uses Managed Agents sessions
+    When a caller starts a feedback run
+    Then the docker run of the run holds neither "ANTHROPIC_API_KEY" nor "ANTHROPIC_BASE_URL"
+    And every dotnet command of the run goes through docker exec
+    And git pushes the session branch "factory/a1b2c3d4-session" before the first session starts
+    And FeedbackRun gives back a result with 2 threads resolved, 0 threads unresolved and 0 Redos
+    And FeedbackRun removes the container

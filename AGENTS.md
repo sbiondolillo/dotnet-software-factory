@@ -110,10 +110,6 @@ adds a git operation to `src/Core/Git.cs` follows them too.
   symlink named `.git` other than the work tree's own, or a directory that it cannot
   read, throws `GitCommandException` with each path, and no command runs. Git runs the
   hooks and the config of a nested repo on the runner, with the secrets of the job.
-- A gate that runs on the runner runs its own `git`, such as `git worktree add`, through
-  a `HostShell`. Before each `git` program, `HostShell` runs the same nested check on
-  the work tree and throws the same `GitCommandException`. Each `git` program of
-  `HostShell` gets `core.hooksPath=/dev/null` as its one `GIT_CONFIG_*` entry.
 - An integration test reads the git author of a branch from GitHub's branch API at
   `commit.commit.author`. The API's `commit.author` is the GitHub account, and it is
   `null` for an email that no account owns.
@@ -131,7 +127,15 @@ inspect exits with a code other than 0, then `docker run`. Each command runs as
 `docker exec`, and the disposal runs `docker rm --force`. The `docker run` carries
 `--env HOME=<home>`, `--env ANTHROPIC_API_KEY` and `--env ANTHROPIC_BASE_URL`. So a mock `CommandRunner` under
 a `Sandbox` answers `run` and `exec` by name and every other `docker` command with the
-code 0, as `tests/Specs/Steps/LintGateSteps.cs` does.
+code 0, as `tests/Specs/Steps/LintGateSteps.cs` does. `Sandbox.StartForGatesAsync` does
+the same, and its `docker run` carries neither Anthropic variable.
+
+The gates of every run run in a `Sandbox`, since they run an agent's code. A Managed
+Agents run starts one with `Sandbox.StartForGatesAsync`, before the first session. No
+agent's code runs on the runner, which holds the job's secrets. A pid namespace on the
+runner is no boundary: run 41209505070 on `factory-scratch` left one, as the runner's
+user, with `no_new_privs` and no extra group, by `systemd-run --user` and by `ssh` to
+`127.0.0.1`, and each one then ran `sudo` as root (#391).
 
 - Every command is a `CommandSpec` whose program is `docker`, run through the
   `CommandRunner` that the class is built over.
@@ -261,25 +265,10 @@ that runs `dotnet` through a `Sandbox` follows them too.
   `Integration  Total: <n>, Errors: <n>, Failed: <n>, Skipped: <n>, Not Run: <n>, Time: <s>`.
 - The restore puts the packages in the NuGet cache under the home directory of the
   container, so a command that needs them runs in the container that ran the restore.
-- Before work on a `dotnet new` template, such as one under `templates/`, read
-  `docs/agents/dotnet-templates.md`.
-
-### The host shell
-
-A `HostShell` runs the gates' commands on the runner, when a Managed Agents session
-writes the code. It follows the rules above too, and these:
-
-- A command with no working directory runs in the work tree. A null working directory
-  in a `CommandSpec` is the factory's own checkout, and a gate there judges the wrong
-  tree.
-- Each command starts from an empty environment, with `ClearEnvironment` true. It gets
-  back `PATH`, `HOME`, `TMPDIR`, `LANG`, each variable whose name starts `DOTNET_` or
-  `NUGET_`, and each name that the caller passes, with the values of the factory's
-  environment. A name that the factory's environment lacks stays out. So the agent's
-  build, tests and checks get no job secret from the environment unless the command
-  names it.
-- A scratch path is under `Path.GetTempPath()`, outside the work tree.
-- The host tree has no `obj/` after a pull, because `.gitignore` names it. So the lint
-  gate on a host runs with `restoreFirst` true: `dotnet restore --locked-mode` before
+- A work tree that a Managed Agents session wrote has no `obj/` after the pull, because
+  `.gitignore` names it, and its container has no NuGet cache. So the lint gate of that
+  run has `restoreFirst` true: `dotnet restore --locked-mode` before
   `dotnet format --no-restore`. A restore that exits with a code other than 0 throws
   `LintGateException`, and the format does not run.
+- Before work on a `dotnet new` template, such as one under `templates/`, read
+  `docs/agents/dotnet-templates.md`.

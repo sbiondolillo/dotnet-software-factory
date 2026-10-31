@@ -4,8 +4,11 @@ using System.Runtime.InteropServices;
 namespace Core;
 
 /// <summary>A running container that holds a work tree at <c>/work</c>, runs commands in it and removes it on disposal.</summary>
-public sealed class Sandbox : CommandHost, IAsyncDisposable
+public sealed class Sandbox : IAsyncDisposable
 {
+    /// <summary>The path of the work tree in the container.</summary>
+    public const string WorkDirectory = "/work";
+
     private const string Home = "/tmp/sandbox-home";
     private readonly CommandRunner _runner;
     private readonly string _id;
@@ -16,13 +19,78 @@ public sealed class Sandbox : CommandHost, IAsyncDisposable
         _id = id;
     }
 
-    /// <summary>Makes sure the image <paramref name="tag"/> exists, then starts a container over <paramref name="workTree"/>.</summary>
-    public static async Task<Sandbox> StartAsync(
+    /// <summary>Makes sure the image <paramref name="tag"/> exists, then starts a container over <paramref name="workTree"/> that holds
+    /// <c>ANTHROPIC_API_KEY</c> and <c>ANTHROPIC_BASE_URL</c> for Claude Code.</summary>
+    public static Task<Sandbox> StartAsync(
         CommandRunner runner,
         string tag,
         string rootDirectory,
         string workTree,
+        CancellationToken cancellationToken = default) =>
+        StartAsync(runner, tag, rootDirectory, workTree, ["--env", "ANTHROPIC_API_KEY", "--env", "ANTHROPIC_BASE_URL"], cancellationToken);
+
+    /// <summary>Starts a container as <see cref="StartAsync(CommandRunner, string, string, string, CancellationToken)"/> does, with no
+    /// Anthropic variable: the gates run an agent's code, and a Managed Agents run needs no key in the container.</summary>
+    public static Task<Sandbox> StartForGatesAsync(
+        CommandRunner runner,
+        string tag,
+        string rootDirectory,
+        string workTree,
+        CancellationToken cancellationToken = default) =>
+        StartAsync(runner, tag, rootDirectory, workTree, [], cancellationToken);
+
+    /// <summary>A path for a scratch directory named <paramref name="name"/>, outside the work tree, as a command sees it.</summary>
+    public static string ScratchPath(string name) => $"/tmp/{name}";
+
+    /// <summary>Runs <paramref name="program"/> in the work tree, holding each variable of <paramref name="names"/> by name.</summary>
+    public Task<CommandResult> RunAsync(
+        string program,
+        IReadOnlyList<string> arguments,
+        IReadOnlyList<string> names,
+        CancellationToken cancellationToken = default) =>
+        RunAsync(program, arguments, names, null, cancellationToken);
+
+    /// <summary>Runs <paramref name="program"/> in the container, in <paramref name="workingDirectory"/> when it is not null.</summary>
+    public Task<CommandResult> RunAsync(
+        string program,
+        IReadOnlyList<string> arguments,
+        IReadOnlyList<string> names,
+        string? workingDirectory,
         CancellationToken cancellationToken = default)
+    {
+        List<string> dockerArguments = ["exec"];
+        if (workingDirectory is not null)
+        {
+            dockerArguments.Add("--workdir");
+            dockerArguments.Add(workingDirectory);
+        }
+
+        foreach (string name in names)
+        {
+            dockerArguments.Add("--env");
+            dockerArguments.Add(name);
+        }
+
+        dockerArguments.Add(_id);
+        dockerArguments.Add(program);
+        dockerArguments.AddRange(arguments);
+        return _runner.RunAsync(
+            new CommandSpec { Command = "docker", Arguments = dockerArguments },
+            cancellationToken);
+    }
+
+    /// <summary>Removes the container.</summary>
+    public async ValueTask DisposeAsync() =>
+        await _runner.RunAsync(
+            new CommandSpec { Command = "docker", Arguments = ["rm", "--force", _id] }).ConfigureAwait(false);
+
+    private static async Task<Sandbox> StartAsync(
+        CommandRunner runner,
+        string tag,
+        string rootDirectory,
+        string workTree,
+        IReadOnlyList<string> agentEnvironment,
+        CancellationToken cancellationToken)
     {
         await new SandboxImage(runner).EnsureAsync(tag, rootDirectory, cancellationToken).ConfigureAwait(false);
 
@@ -56,8 +124,7 @@ public sealed class Sandbox : CommandHost, IAsyncDisposable
                     .. volumes,
                     "--workdir", "/work",
                     "--env", $"HOME={Home}",
-                    "--env", "ANTHROPIC_API_KEY",
-                    "--env", "ANTHROPIC_BASE_URL",
+                    .. agentEnvironment,
                     tag,
                     "sh", "-c", $"mkdir -p {Home}/.config && exec sleep infinity",
                 ],
@@ -70,46 +137,6 @@ public sealed class Sandbox : CommandHost, IAsyncDisposable
 
         return new Sandbox(runner, run.StandardOutput.Trim());
     }
-
-    /// <inheritdoc />
-    public override string WorkDirectory => "/work";
-
-    /// <inheritdoc />
-    public override string ScratchPath(string name) => $"/tmp/{name}";
-
-    /// <summary>Runs <paramref name="program"/> in the container, in <paramref name="workingDirectory"/> when it is not null.</summary>
-    public override Task<CommandResult> RunAsync(
-        string program,
-        IReadOnlyList<string> arguments,
-        IReadOnlyList<string> names,
-        string? workingDirectory,
-        CancellationToken cancellationToken = default)
-    {
-        List<string> dockerArguments = ["exec"];
-        if (workingDirectory is not null)
-        {
-            dockerArguments.Add("--workdir");
-            dockerArguments.Add(workingDirectory);
-        }
-
-        foreach (string name in names)
-        {
-            dockerArguments.Add("--env");
-            dockerArguments.Add(name);
-        }
-
-        dockerArguments.Add(_id);
-        dockerArguments.Add(program);
-        dockerArguments.AddRange(arguments);
-        return _runner.RunAsync(
-            new CommandSpec { Command = "docker", Arguments = dockerArguments },
-            cancellationToken);
-    }
-
-    /// <summary>Removes the container.</summary>
-    public async ValueTask DisposeAsync() =>
-        await _runner.RunAsync(
-            new CommandSpec { Command = "docker", Arguments = ["rm", "--force", _id] }).ConfigureAwait(false);
 
     [DllImport("libc", EntryPoint = "getuid")]
     private static extern uint GetUid();

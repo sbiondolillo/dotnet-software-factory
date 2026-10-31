@@ -9,8 +9,9 @@
 # of the agent `dsf-builder` in the environment `dsf-builder`. Their ids come
 # from .github/agents/claude-lock.json. The job holds the key of the dedicated
 # workspace and the private key of the App `dsf-builder`. The session gets only
-# an installation token of the App, for this repo. docs/agents/sessions.md
-# states what each session holds.
+# an installation token of the App, for this repo. The gates run in a Docker
+# container that holds no key, so the job builds the sandbox image.
+# docs/agents/sessions.md states what each session holds.
 #
 # A starter repo's copy, templates/starter/.github/workflows/factory.yml, runs
 # the factory at the tag v1.

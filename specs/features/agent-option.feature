@@ -59,60 +59,11 @@ Feature: The option --agent runs the agent phases as Claude Code in a sandbox or
     And the exit code is 0
 
   @managed
-  Scenario: A managed run starts no container and writes the line of the sessions in place of the sandbox
-    Given the environment holds the variables of the managed agent
-    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --agent managed"
-    Then docker runs no command
-    And standard output holds exactly these lines in this order
-      | line                                                    |
-      | clone: start                                            |
-      | sessions: start                                         |
-      | plan: start                                             |
-      | plan: passed                                            |
-      | build: start                                            |
-      | lint: start                                             |
-      | test: start                                             |
-      | test: passed                                            |
-      | review: start                                           |
-      | review: approved                                        |
-      | deliver: start                                          |
-      | https://github.com/sbiondolillo/factory-scratch/pull/10 |
-      | watch: start                                            |
-      | checks: green, unresolved threads: 0                    |
-    And the exit code is 0
-
-  @managed
-  Scenario: A managed feedback run starts no container and writes the line of the sessions in place of the sandbox
-    Given the environment holds the variables of the managed agent
-    And GitHub answers each read of the review threads with the thread A until the resolve of the thread A, and with no thread after it
-    When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10 --agent managed"
-    Then docker runs no command
-    And standard output holds exactly these lines in this order
-      | line                                 |
-      | feedback: start                      |
-      | clone: start                         |
-      | sessions: start                      |
-      | build: start                         |
-      | lint: start                          |
-      | test: start                          |
-      | test: passed                         |
-      | review: start                        |
-      | review: approved                     |
-      | watch: start                         |
-      | checks: green, unresolved threads: 0 |
-
-  @managed
   Scenario: A managed run pushes the session branch before the plan prompt and deletes it after the delivery
     Given the environment holds the variables of the managed agent
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --agent managed"
     Then git pushes the session branch, the name of the delivery branch with "-session" after it, before the first session starts
     And git deletes the session branch on origin after the push of the delivery branch
-
-  @managed
-  Scenario: A managed run restores the work tree on the host before the lint gate formats it
-    Given the environment holds the variables of the managed agent
-    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --agent managed"
-    Then the host runs "dotnet restore --locked-mode" before "dotnet format --no-restore"
 
   @managed
   Scenario: The pull request body of a managed run sums the sessions and names each one
@@ -150,3 +101,52 @@ Feature: The option --agent runs the agent phases as Claude Code in a sandbox or
       - sesn_01, builder, $3.00
       - sesn_02, reviewer, $0.37
       """
+
+  @managed
+  Scenario: A managed run starts a container with no key and writes the line of the sessions in place of the sandbox
+    Given the environment holds the variables of the managed agent
+    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --agent managed"
+    Then the docker run of the program holds neither "ANTHROPIC_API_KEY" nor "ANTHROPIC_BASE_URL"
+    And standard output holds exactly these lines in this order
+      | line                                                    |
+      | clone: start                                            |
+      | sessions: start                                         |
+      | plan: start                                             |
+      | plan: passed                                            |
+      | build: start                                            |
+      | lint: start                                             |
+      | test: start                                             |
+      | test: passed                                            |
+      | review: start                                           |
+      | review: approved                                        |
+      | deliver: start                                          |
+      | https://github.com/sbiondolillo/factory-scratch/pull/10 |
+      | watch: start                                            |
+      | checks: green, unresolved threads: 0                    |
+    And the exit code is 0
+
+  @managed
+  Scenario: A managed feedback run starts a container with no key and writes the line of the sessions in place of the sandbox
+    Given the environment holds the variables of the managed agent
+    And GitHub answers each read of the review threads with the thread A until the resolve of the thread A, and with no thread after it
+    When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10 --agent managed"
+    Then the docker run of the program holds neither "ANTHROPIC_API_KEY" nor "ANTHROPIC_BASE_URL"
+    And standard output holds exactly these lines in this order
+      | line                                 |
+      | feedback: start                      |
+      | clone: start                         |
+      | sessions: start                      |
+      | build: start                         |
+      | lint: start                          |
+      | test: start                          |
+      | test: passed                         |
+      | review: start                        |
+      | review: approved                     |
+      | watch: start                         |
+      | checks: green, unresolved threads: 0 |
+
+  @managed
+  Scenario: A managed run restores the work tree in the container before the lint gate formats it
+    Given the environment holds the variables of the managed agent
+    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --agent managed"
+    Then the container runs "dotnet restore --locked-mode" before "dotnet format --no-restore"

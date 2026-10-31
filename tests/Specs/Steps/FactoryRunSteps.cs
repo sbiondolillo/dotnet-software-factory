@@ -355,8 +355,27 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
         return push;
     }
 
-    [Then("the run sends no command to docker")]
-    public void ThenNoDocker() => Assert.DoesNotContain(Commands, c => c.Command is "docker");
+    [Then("the docker run of the run holds neither {string} nor {string}")]
+    public void ThenDockerRunLacks(string first, string second)
+    {
+        CommandSpec run = Assert.Single(Commands, c => c.Command is "docker" && c.Arguments[0] is "run");
+        Assert.DoesNotContain(first, run.Arguments);
+        Assert.DoesNotContain(second, run.Arguments);
+    }
+
+    [Then("every dotnet command of the run goes through docker exec")]
+    public void ThenDotnetInContainer()
+    {
+        Assert.DoesNotContain(Commands, c => c.Command is "dotnet");
+        Assert.Contains(Commands, c => c.Command is "docker" && c.Arguments[0] is "exec" && c.Arguments.Contains("dotnet"));
+    }
+
+    [Then("the API printer runs through docker exec")]
+    public void ThenPrinterInContainer() =>
+        Assert.Contains(Commands, c => c.Command is "docker" && c.Arguments[0] is "exec" && c.Arguments.Contains("/opt/api-printer/ApiPrinter.dll"));
+
+    [Then("the run removes the container")]
+    public void ThenContainerRemoved() => Assert.Contains("rm", _h.Events);
 
     [Then("git pushes the session branch {string} before the first session starts")]
     public void ThenSessionBranchFirst(string branch)

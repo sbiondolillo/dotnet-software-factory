@@ -12,11 +12,11 @@ public static class ApiGate
     public const string Printer = "/opt/api-printer/ApiPrinter.dll";
 
     /// <summary>Builds a detached copy of the head commit and runs the printer over its src/.</summary>
-    public static async Task<ApiListing> ListAsync(CommandHost host, TextWriter? progress, TextWriter? log, CancellationToken cancellationToken)
+    public static async Task<ApiListing> ListAsync(Sandbox sandbox, TextWriter? progress, TextWriter? log, CancellationToken cancellationToken)
     {
         await ProgressLine.WriteAsync(progress, "api: start").ConfigureAwait(false);
-        string copy = host.ScratchPath($"api-{Guid.NewGuid():N}");
-        CommandResult add = await host.RunAsync("git", ["worktree", "add", "--detach", copy, "HEAD"], [], cancellationToken).ConfigureAwait(false);
+        string copy = Sandbox.ScratchPath($"api-{Guid.NewGuid():N}");
+        CommandResult add = await sandbox.RunAsync("git", ["worktree", "add", "--detach", copy, "HEAD"], [], cancellationToken).ConfigureAwait(false);
         if (add.ExitCode is not 0)
         {
             throw new SandboxException(add.StandardError);
@@ -26,7 +26,7 @@ public static class ApiGate
         {
             foreach (string[] arguments in new string[][] { ["restore", "--locked-mode"], ["build", "--no-restore"] })
             {
-                CommandResult result = await RunAsync(host, arguments, copy, log, cancellationToken).ConfigureAwait(false);
+                CommandResult result = await RunAsync(sandbox, arguments, copy, log, cancellationToken).ConfigureAwait(false);
                 if (result.ExitCode is not 0)
                 {
                     return new ApiListing(null, string.Create(
@@ -35,7 +35,7 @@ public static class ApiGate
                 }
             }
 
-            CommandResult printed = await RunAsync(host, [Printer, "src"], copy, log, cancellationToken).ConfigureAwait(false);
+            CommandResult printed = await RunAsync(sandbox, [Printer, "src"], copy, log, cancellationToken).ConfigureAwait(false);
             if (printed.ExitCode is not 0)
             {
                 return new ApiListing(null, string.Create(
@@ -47,7 +47,7 @@ public static class ApiGate
         }
         finally
         {
-            await host.RunAsync("git", ["worktree", "remove", "--force", copy], [], CancellationToken.None).ConfigureAwait(false);
+            await sandbox.RunAsync("git", ["worktree", "remove", "--force", copy], [], CancellationToken.None).ConfigureAwait(false);
         }
     }
 
@@ -62,9 +62,9 @@ public static class ApiGate
         ];
     }
 
-    private static async Task<CommandResult> RunAsync(CommandHost host, IReadOnlyList<string> arguments, string copy, TextWriter? log, CancellationToken cancellationToken)
+    private static async Task<CommandResult> RunAsync(Sandbox sandbox, IReadOnlyList<string> arguments, string copy, TextWriter? log, CancellationToken cancellationToken)
     {
-        CommandResult result = await host.RunAsync("dotnet", arguments, [], copy, cancellationToken).ConfigureAwait(false);
+        CommandResult result = await sandbox.RunAsync("dotnet", arguments, [], copy, cancellationToken).ConfigureAwait(false);
         await ProgressLine.WriteAsync(
             log,
             string.Create(CultureInfo.InvariantCulture, $"command: dotnet {string.Join(' ', arguments)} exited {result.ExitCode}")).ConfigureAwait(false);

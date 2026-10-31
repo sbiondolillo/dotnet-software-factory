@@ -10,7 +10,7 @@ public sealed record TestGateResult(bool Passed, IReadOnlyList<string> Evidence,
 
 /// <summary>Judges a work tree the way CI does: the pin, the four build commands, the TRX file and the integration suite,
 /// which <c>skipIntegration</c> true leaves out.</summary>
-public sealed class TestGate(CommandHost host, TextWriter? log = null, bool skipIntegration = false)
+public sealed class TestGate(Sandbox sandbox, TextWriter? log = null, bool skipIntegration = false)
 {
     /// <summary>Runs the gate over <paramref name="workTree"/>; the integration command alone gets <paramref name="secretNames"/>.</summary>
     public Task<TestGateResult> RunAsync(
@@ -61,7 +61,7 @@ public sealed class TestGate(CommandHost host, TextWriter? log = null, bool skip
         try
         {
             CommandResult test = await RunDotnetAsync(
-                ["test", "--no-restore", "--logger", "trx", "--results-directory", $"{host.WorkDirectory}/{resultsName}"],
+                ["test", "--no-restore", "--logger", "trx", "--results-directory", $"{Sandbox.WorkDirectory}/{resultsName}"],
                 [],
                 cancellationToken).ConfigureAwait(false);
             if (test.ExitCode is not 0)
@@ -143,7 +143,7 @@ public sealed class TestGate(CommandHost host, TextWriter? log = null, bool skip
         try
         {
             await RunDotnetAsync(
-                ["test", "--no-restore", "--logger", "trx", "--results-directory", $"{host.WorkDirectory}/{resultsName}"],
+                ["test", "--no-restore", "--logger", "trx", "--results-directory", $"{Sandbox.WorkDirectory}/{resultsName}"],
                 [],
                 cancellationToken).ConfigureAwait(false);
             if (Directory.Exists(hostResults))
@@ -170,7 +170,7 @@ public sealed class TestGate(CommandHost host, TextWriter? log = null, bool skip
 
     private async Task<CommandResult> RunDotnetAsync(string[] arguments, IReadOnlyList<string> secretNames, CancellationToken cancellationToken)
     {
-        CommandResult result = await host.RunAsync("dotnet", arguments, secretNames, cancellationToken).ConfigureAwait(false);
+        CommandResult result = await sandbox.RunAsync("dotnet", arguments, secretNames, cancellationToken).ConfigureAwait(false);
         await ProgressLine.WriteAsync(
             log,
             string.Create(CultureInfo.InvariantCulture, $"command: dotnet {string.Join(' ', arguments)} exited {result.ExitCode}")).ConfigureAwait(false);

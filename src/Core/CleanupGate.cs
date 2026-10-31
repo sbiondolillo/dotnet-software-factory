@@ -43,11 +43,11 @@ internal static class CleanupGate
             CultureInfo.InvariantCulture,
             $"The check command exited with the code {result.ExitCode}\nstandard output: {result.StandardOutput}\nstandard error: {result.StandardError}");
 
-    public static async Task<CommandResult> RunCheckAsync(CommandHost host, string command, TextWriter? progress, CancellationToken cancellationToken, TextWriter? log = null)
+    public static async Task<CommandResult> RunCheckAsync(Sandbox sandbox, string command, TextWriter? progress, CancellationToken cancellationToken, TextWriter? log = null)
     {
         await ProgressLine.WriteAsync(progress, "check: start").ConfigureAwait(false);
-        string copy = host.ScratchPath($"check-{Guid.NewGuid():N}");
-        CommandResult add = await host.RunAsync("git", ["worktree", "add", "--detach", copy, "HEAD"], [], cancellationToken).ConfigureAwait(false);
+        string copy = Sandbox.ScratchPath($"check-{Guid.NewGuid():N}");
+        CommandResult add = await sandbox.RunAsync("git", ["worktree", "add", "--detach", copy, "HEAD"], [], cancellationToken).ConfigureAwait(false);
         if (add.ExitCode is not 0)
         {
             throw new SandboxException(add.StandardError);
@@ -55,13 +55,13 @@ internal static class CleanupGate
 
         try
         {
-            CommandResult ran = await host.RunAsync("sh", ["-c", command], [], copy, cancellationToken).ConfigureAwait(false);
+            CommandResult ran = await sandbox.RunAsync("sh", ["-c", command], [], copy, cancellationToken).ConfigureAwait(false);
             await ProgressLine.WriteAsync(log, string.Create(CultureInfo.InvariantCulture, $"command: check exited {ran.ExitCode}")).ConfigureAwait(false);
             return ran;
         }
         finally
         {
-            await host.RunAsync("git", ["worktree", "remove", "--force", copy], [], CancellationToken.None).ConfigureAwait(false);
+            await sandbox.RunAsync("git", ["worktree", "remove", "--force", copy], [], CancellationToken.None).ConfigureAwait(false);
         }
     }
 }

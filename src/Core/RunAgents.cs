@@ -29,10 +29,10 @@ internal sealed record RunAgentsSetup(
     Action<TimeSpan, ClaudeCodeResult>? OnAnswer = null);
 
 /// <summary>
-/// The agents and the command host of one run. With no settings, both agents are Claude Code in one <see cref="Sandbox"/>, and the
+/// The agents and the sandbox of one run. With no settings, both agents are Claude Code in one <see cref="Core.Sandbox"/>, and the
 /// gates run in it. With settings, the builder and the reviewer are two Managed Agents sessions over a scratch branch, and the gates
-/// run on the host through a <see cref="HostShell"/>. The host pushes the scratch branch before the first prompt, pulls it after each
-/// prompt of the builder, and deletes it on origin at the end.
+/// run in a sandbox that holds no key. The host pushes the scratch branch before the first prompt, pulls it after each prompt of the
+/// builder, and deletes it on origin at the end.
 /// </summary>
 internal sealed class RunAgents : IAsyncDisposable
 {
@@ -40,7 +40,6 @@ internal sealed class RunAgents : IAsyncDisposable
     public const string NoCommitText = "The build pushed no commit to the session branch. Commit the work and push it to that branch.";
 
     private readonly RunAgentsSetup _setup;
-    private readonly Sandbox? _sandbox;
     private readonly ManagedAgentsAgent? _builder;
     private readonly ManagedAgentsAgent? _reviewer;
     private readonly HttpClient? _http;
@@ -51,17 +50,16 @@ internal sealed class RunAgents : IAsyncDisposable
     private RunAgents(RunAgentsSetup setup, Sandbox sandbox)
     {
         _setup = setup;
-        _sandbox = sandbox;
-        Host = sandbox;
+        Sandbox = sandbox;
         var agent = new ClaudeCodeAgent(sandbox, setup.Log, setup.Time, setup.OnAnswer);
         Builder = agent;
         Reviewer = agent;
     }
 
-    private RunAgents(RunAgentsSetup setup, ManagedAgentsSettings settings)
+    private RunAgents(RunAgentsSetup setup, ManagedAgentsSettings settings, Sandbox sandbox)
     {
         _setup = setup;
-        Host = new HostShell(setup.Runner, setup.Directory);
+        Sandbox = sandbox;
         HttpMessageHandler handler = setup.Handler ?? (_ownHandler = new SocketsHttpHandler());
         _http = new HttpClient(handler, disposeHandler: false);
         var tokens = new GitHubAppTokens(handler, settings.AppId, settings.InstallationId, settings.PrivateKeyPem, setup.Time);
@@ -76,8 +74,8 @@ internal sealed class RunAgents : IAsyncDisposable
         Reviewer = new BranchAgent(this, _reviewer, pulls: false);
     }
 
-    /// <summary>The host the gates run their commands on.</summary>
-    public CommandHost Host { get; }
+    /// <summary>The container the gates run their commands in.</summary>
+    public Sandbox Sandbox { get; }
 
     /// <summary>The agent of the plan and the build prompts.</summary>
     public Agent Builder { get; }
@@ -88,14 +86,15 @@ internal sealed class RunAgents : IAsyncDisposable
     /// <summary>The Managed Agents sessions of the run, the builder's first; none for Claude Code.</summary>
     public IReadOnlyList<SessionCost> Sessions => _builder is null || _reviewer is null ? [] : [.. _builder.Sessions, .. _reviewer.Sessions];
 
-    /// <summary>Starts the sandbox, or builds the two sessions' agents, after the progress line of the path.</summary>
+    /// <summary>Starts the sandbox, and builds the two sessions' agents with settings, after the progress line of the path.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The RunAgents that the method gives back owns the sandbox, and its DisposeAsync removes it.")]
     public static async Task<RunAgents> StartAsync(RunAgentsSetup setup, CancellationToken cancellationToken = default)
     {
         if (setup.Settings is ManagedAgentsSettings settings)
         {
             await ProgressLine.WriteAsync(setup.Progress, "sessions: start").ConfigureAwait(false);
-            return new RunAgents(setup, settings);
+            Sandbox gates = await Sandbox.StartForGatesAsync(setup.Runner, setup.ImageTag, setup.RootDirectory, setup.Directory, cancellationToken).ConfigureAwait(false);
+            return new RunAgents(setup, settings, gates);
         }
 
         await ProgressLine.WriteAsync(setup.Progress, "sandbox: start").ConfigureAwait(false);
@@ -103,8 +102,8 @@ internal sealed class RunAgents : IAsyncDisposable
         return new RunAgents(setup, sandbox);
     }
 
-    /// <summary>The lint gate over <see cref="Host"/>.</summary>
-    public LintGate Lint(TextWriter? log) => new(Host, _setup.Git, log, restoreFirst: _builder is not null);
+    /// <summary>The lint gate over <see cref="Sandbox"/>.</summary>
+    public LintGate Lint(TextWriter? log) => new(Sandbox, _setup.Git, log, restoreFirst: _builder is not null);
 
     /// <summary>Pushes the commit of the lint gate to the scratch branch, so the next session message builds on it.</summary>
     public async Task AfterLintAsync(bool committed, CancellationToken cancellationToken = default)
@@ -162,10 +161,7 @@ internal sealed class RunAgents : IAsyncDisposable
         {
             _http?.Dispose();
             _ownHandler?.Dispose();
-            if (_sandbox is not null)
-            {
-                await _sandbox.DisposeAsync().ConfigureAwait(false);
-            }
+            await Sandbox.DisposeAsync().ConfigureAwait(false);
         }
     }
 

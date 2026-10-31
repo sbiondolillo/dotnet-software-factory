@@ -86,6 +86,25 @@ public sealed class SandboxIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task ASandboxForTheGatesHoldsNoKeyAndReachesNoProcessOfTheRunner()
+    {
+        await EnsureImageAsync();
+        var runner = new KeyRunner();
+        await using Sandbox keyed = await Sandbox.StartAsync(runner, Tag, RepoRoot(), _tree.FullName, TestContext.Current.CancellationToken);
+        await using Sandbox gates = await Sandbox.StartForGatesAsync(runner, Tag, RepoRoot(), _tree.FullName, TestContext.Current.CancellationToken);
+
+        Assert.Equal(KeyRunner.Key + "\n", (await ExecAsync(keyed, "printenv", ["ANTHROPIC_API_KEY"])).StandardOutput);
+        Assert.Equal(1, (await ExecAsync(gates, "printenv", ["ANTHROPIC_API_KEY"])).ExitCode);
+
+        CommandResult pids = await ExecAsync(gates, "sh", ["-c", "ls -d /proc/[0-9]*"]);
+        Assert.Equal(0, pids.ExitCode);
+        Assert.DoesNotContain($"/proc/{Environment.ProcessId}", pids.StandardOutput.Split('\n'));
+
+        Assert.NotEqual(0, (await ExecAsync(gates, "sh", ["-c", "command -v sudo"])).ExitCode);
+        Assert.NotEqual(0, (await ExecAsync(gates, "test", ["-e", "/var/run/docker.sock"])).ExitCode);
+    }
+
+    [Fact]
     public async Task ExecAnswersHoldInTheContainer()
     {
         await using Sandbox sandbox = await StartAsync();
@@ -233,6 +252,18 @@ public sealed class SandboxIntegrationTests : IDisposable
         catch (SystemException)
         {
             return [];
+        }
+    }
+
+    /// <summary>Puts a key in the environment of each <c>docker</c> command, so a container gets it when its <c>docker run</c> names it.</summary>
+    private sealed class KeyRunner : CommandRunner
+    {
+        public const string Key = "sk-sandbox-test";
+
+        public override Task<CommandResult> RunAsync(CommandSpec spec, CancellationToken cancellationToken = default)
+        {
+            spec.EnvironmentVariables["ANTHROPIC_API_KEY"] = Key;
+            return base.RunAsync(spec, cancellationToken);
         }
     }
 }

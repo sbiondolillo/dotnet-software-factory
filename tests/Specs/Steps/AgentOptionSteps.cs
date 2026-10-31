@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Core;
 using Reqnroll;
 using Specs.Unit;
 using Xunit;
@@ -46,8 +47,13 @@ public sealed partial class AgentOptionSteps(ConsoleProgramSteps console)
     [Then("docker runs a command")]
     public void ThenDocker() => Assert.Contains(H.Commands, c => c.Command is "docker");
 
-    [Then("docker runs no command")]
-    public void ThenNoDocker() => Assert.DoesNotContain(H.Commands, c => c.Command is "docker");
+    [Then("the docker run of the program holds neither {string} nor {string}")]
+    public void ThenDockerRunLacks(string first, string second)
+    {
+        CommandSpec run = Assert.Single(H.Commands, c => c.Command is "docker" && c.Arguments[0] is "run");
+        Assert.DoesNotContain(first, run.Arguments);
+        Assert.DoesNotContain(second, run.Arguments);
+    }
 
     [Then("git pushes the session branch, the name of the delivery branch with {string} after it, before the first session starts")]
     public void ThenSessionBranchFirst(string suffix)
@@ -71,13 +77,18 @@ public sealed partial class AgentOptionSteps(ConsoleProgramSteps console)
         Assert.True(delete > deliveryPush, $"pushes: {string.Join(" | ", Pushes)}");
     }
 
-    [Then("the host runs {string} before {string}")]
-    public void ThenHostOrder(string first, string second)
+    [Then("the container runs {string} before {string}")]
+    public void ThenContainerOrder(string first, string second)
     {
-        List<string> host = [.. H.Commands.Where(c => c.Command is "dotnet").Select(c => string.Join(' ', ["dotnet", .. c.Arguments]))];
-        int a = host.IndexOf(first);
-        int b = host.IndexOf(second);
-        Assert.True(a >= 0 && b > a, $"host commands: {string.Join(" | ", host)}");
+        List<string> container =
+        [
+            .. H.Commands
+                .Where(c => c.Command is "docker" && c.Arguments[0] is "exec" && c.Arguments.Contains("dotnet"))
+                .Select(c => string.Join(' ', c.Arguments.SkipWhile(argument => argument is not "dotnet"))),
+        ];
+        int a = container.IndexOf(first);
+        int b = container.IndexOf(second);
+        Assert.True(a >= 0 && b > a, $"container commands: {string.Join(" | ", container)}");
     }
 
     [Then("the body of the pull request holds a line that starts with {string}")]

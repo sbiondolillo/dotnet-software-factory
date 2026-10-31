@@ -124,6 +124,11 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
         }
     }
 
+    [When("a caller starts a sandbox for the gates with the image tag {string} and the work tree {string}")]
+    public async Task WhenStartsForGates(string tag, string workTree) =>
+        _sandbox = await Sandbox.StartForGatesAsync(
+            Runner(), tag, _directory.FullName, workTree, TestContext.Current.CancellationToken);
+
     [When("a caller starts a sandbox with the image tag {string} over that work tree")]
     public Task WhenStartsOverWorkTree(string tag) => WhenStarts(tag, workTree.Path);
 
@@ -188,6 +193,14 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
         AssertFollows(Docker("run"), flag, home + suffix);
         Assert.StartsWith(Path.Combine(_directory.FullName, parent), home, StringComparison.Ordinal);
         Assert.NotEqual(Path.Combine(_directory.FullName, parent), home + "/");
+    }
+
+    [Then("the arguments of the docker run hold neither {string} nor {string}")]
+    public void ThenRunHoldsNeither(string first, string second)
+    {
+        CommandSpec run = Docker("run");
+        Assert.DoesNotContain(first, run.Arguments);
+        Assert.DoesNotContain(second, run.Arguments);
     }
 
     [Then("no argument of the docker run is {string}")]
