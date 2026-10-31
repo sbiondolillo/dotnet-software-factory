@@ -45,8 +45,8 @@ internal static class SessionPrompt
 
             ```
             cd /workspace/{{repo}}
-            git config user.name "dsf-repair[bot]"
-            git config user.email "350419598+dsf-repair[bot]@users.noreply.github.com"
+            git config user.name "dsf-builder[bot]"
+            git config user.email "350419598+dsf-builder[bot]@users.noreply.github.com"
             mkdir -p .git/info
             grep -qxF '.factory/' .git/info/exclude || echo '.factory/' >> .git/info/exclude
             git fetch --depth=400 origin +refs/heads/{{branch}}:refs/remotes/origin/{{branch}} {{baseCommit}}
