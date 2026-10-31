@@ -42,29 +42,7 @@ public sealed class ManagedAgentsAgent(
     private decimal _cents;
     private bool _disposed;
 
-    private ManagedAgentsClient Client { get; } = client;
-
-    private string Owner { get; } = owner;
-
-    private string Repo { get; } = repo;
-
-    private string SessionBranch { get; } = sessionBranch;
-
-    private string BaseCommit { get; } = baseCommit;
-
-    private string WorkTree { get; } = workTree;
-
-    private string RootDirectory { get; } = rootDirectory;
-
-    private SessionRole Role { get; } = role;
-
-    private int BudgetCents { get; } = budgetCents;
-
-    private TextWriter? Log { get; } = log;
-
-    private TimeProvider Time { get; } = time ?? TimeProvider.System;
-
-    private Action<TimeSpan, ClaudeCodeResult>? OnAnswer { get; } = onAnswer;
+    private readonly TimeProvider _time = time ?? TimeProvider.System;
 
     /// <summary>Mints an App token, with write access when the argument is true. A test replaces it.</summary>
     internal Func<bool, CancellationToken, Task<string>> MintToken { get; init; } =
@@ -77,7 +55,7 @@ public sealed class ManagedAgentsAgent(
     public IReadOnlyList<SessionCost> Sessions =>
         _sessionId is null ? [] : [new SessionCost(_sessionId, RoleName, (int)Math.Round(_cents, MidpointRounding.AwayFromZero))];
 
-    private string RoleName => Role is SessionRole.Builder ? "builder" : "reviewer";
+    private string RoleName => role is SessionRole.Builder ? "builder" : "reviewer";
 
     private string SessionPath => $"/v1/sessions/{_sessionId}";
 
@@ -96,8 +74,8 @@ public sealed class ManagedAgentsAgent(
                 $"The session {_sessionId} runs the model {_model}, and the {phase} prompt asks for the model {model}. A session keeps the model of its first prompt.");
         }
 
-        await ProgressLine.WriteAsync(Log, $"agent: {phase} start").ConfigureAwait(false);
-        long started = Time.GetTimestamp();
+        await ProgressLine.WriteAsync(log, $"agent: {phase} start").ConfigureAwait(false);
+        long started = _time.GetTimestamp();
         decimal before = _cents;
         if (_sessionId is null)
         {
@@ -107,29 +85,29 @@ public sealed class ManagedAgentsAgent(
         {
             await RotateWhenOldAsync(cancellationToken).ConfigureAwait(false);
             var body = new JsonObject { ["events"] = new JsonArray(UserMessage(Compose(prompt))) };
-            await Client.SendAsync(HttpMethod.Post, $"{SessionPath}/events", body, cancellationToken).ConfigureAwait(false);
+            await client.SendAsync(HttpMethod.Post, $"{SessionPath}/events", body, cancellationToken).ConfigureAwait(false);
         }
 
         await ProgressLine.WriteAsync(
-            Log,
+            log,
             string.Create(CultureInfo.InvariantCulture, $"session: {phase} max turns {maxTurns}, not enforced: the budget bounds the session")).ConfigureAwait(false);
 
         Turn turn = await WaitForTurnAsync(cancellationToken).ConfigureAwait(false);
         await WriteEventsAsync(turn.NewEvents, cancellationToken).ConfigureAwait(false);
         bool pushedAgain = false;
-        if (Role is SessionRole.Builder && PushFailed(turn))
+        if (role is SessionRole.Builder && PushFailed(turn))
         {
-            await ProgressLine.WriteAsync(Log, $"session: {phase} push failed with {SessionPrompt.AuthenticationFailed}, token rotated").ConfigureAwait(false);
+            await ProgressLine.WriteAsync(log, $"session: {phase} push failed with {SessionPrompt.AuthenticationFailed}, token rotated").ConfigureAwait(false);
             await RotateAsync(cancellationToken).ConfigureAwait(false);
-            var again = new JsonObject { ["events"] = new JsonArray(UserMessage(SessionPrompt.PushAgain(Repo, SessionBranch))) };
-            await Client.SendAsync(HttpMethod.Post, $"{SessionPath}/events", again, cancellationToken).ConfigureAwait(false);
+            var again = new JsonObject { ["events"] = new JsonArray(UserMessage(SessionPrompt.PushAgain(repo, sessionBranch))) };
+            await client.SendAsync(HttpMethod.Post, $"{SessionPath}/events", again, cancellationToken).ConfigureAwait(false);
             Turn retry = await WaitForTurnAsync(cancellationToken).ConfigureAwait(false);
             await WriteEventsAsync(retry.NewEvents, cancellationToken).ConfigureAwait(false);
             turn = new Turn([.. turn.NewEvents, .. retry.NewEvents], [.. turn.Events, .. retry.Events]);
             pushedAgain = true;
         }
 
-        JsonElement session = await Client.SendAsync(HttpMethod.Get, SessionPath, null, cancellationToken).ConfigureAwait(false);
+        JsonElement session = await client.SendAsync(HttpMethod.Get, SessionPath, null, cancellationToken).ConfigureAwait(false);
         _cents = Math.Max(_cents, ListCost(session));
 
         ClaudeCodeResult answer = await AnswerAsync(turn, Normalize((_cents - before) / 100m), cancellationToken).ConfigureAwait(false);
@@ -138,11 +116,11 @@ public sealed class ManagedAgentsAgent(
             answer = answer with { IsError = true };
         }
 
-        TimeSpan elapsed = Time.GetElapsedTime(started);
+        TimeSpan elapsed = _time.GetElapsedTime(started);
         long seconds = (long)elapsed.TotalSeconds;
-        OnAnswer?.Invoke(elapsed, answer);
+        onAnswer?.Invoke(elapsed, answer);
         await ProgressLine.WriteAsync(
-            Log,
+            log,
             string.Create(CultureInfo.InvariantCulture, $"agent: {phase} end, {answer.NumTurns} turns, ${answer.CostUsd}, {seconds} s")).ConfigureAwait(false);
         return answer;
     }
@@ -160,11 +138,11 @@ public sealed class ManagedAgentsAgent(
         {
             try
             {
-                JsonElement session = await Client.SendAsync(HttpMethod.Get, SessionPath, null, CancellationToken.None).ConfigureAwait(false);
+                JsonElement session = await client.SendAsync(HttpMethod.Get, SessionPath, null, CancellationToken.None).ConfigureAwait(false);
                 if (Text(session, "status") is "running" or "rescheduling")
                 {
                     var body = new JsonObject { ["events"] = new JsonArray(new JsonObject { ["type"] = "user.interrupt" }) };
-                    await Client.SendAsync(HttpMethod.Post, $"{SessionPath}/events", body, CancellationToken.None).ConfigureAwait(false);
+                    await client.SendAsync(HttpMethod.Post, $"{SessionPath}/events", body, CancellationToken.None).ConfigureAwait(false);
                 }
             }
             catch (ClaudeCodeException)
@@ -267,17 +245,17 @@ public sealed class ManagedAgentsAgent(
     private static bool IsSafeName(string name) =>
         name.Length > 0 && name is not "." and not ".." && Path.GetFileName(name) == name && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
 
-    private string Compose(string prompt) => SessionPrompt.Compose(prompt, Repo, SessionBranch, BaseCommit, _uploads, Role);
+    private string Compose(string prompt) => SessionPrompt.Compose(prompt, repo, sessionBranch, baseCommit, _uploads, role);
 
     private async Task CreateSessionAsync(string prompt, string model, CancellationToken cancellationToken)
     {
-        if (Client.AgentId.Length is 0 || Client.EnvironmentId.Length is 0)
+        if (client.AgentId.Length is 0 || client.EnvironmentId.Length is 0)
         {
             throw new ClaudeCodeException("ManagedAgentsClient has no AgentId or no EnvironmentId, so no session can start.");
         }
 
         var resources = new JsonArray();
-        string factory = Path.Combine(WorkTree, ".factory");
+        string factory = Path.Combine(workTree, ".factory");
         if (Directory.Exists(factory))
         {
             foreach (string path in Directory.EnumerateFiles(factory).Order(StringComparer.Ordinal))
@@ -288,40 +266,40 @@ public sealed class ManagedAgentsAgent(
                     continue;
                 }
 
-                string fileId = await Client.UploadAsync(path, cancellationToken).ConfigureAwait(false);
+                string fileId = await client.UploadAsync(path, cancellationToken).ConfigureAwait(false);
                 _uploads.Add(name);
                 resources.Add(new JsonObject { ["type"] = "file", ["file_id"] = fileId, ["mount_path"] = $"/{name}" });
             }
         }
 
-        _token = await MintToken(Role is SessionRole.Builder, cancellationToken).ConfigureAwait(false);
-        _tokenStamp = Time.GetTimestamp();
+        _token = await MintToken(role is SessionRole.Builder, cancellationToken).ConfigureAwait(false);
+        _tokenStamp = _time.GetTimestamp();
         resources.Insert(0, new JsonObject
         {
             ["type"] = "github_repository",
-            ["url"] = $"https://github.com/{Owner}/{Repo}",
-            ["mount_path"] = $"/workspace/{Repo}",
+            ["url"] = $"https://github.com/{owner}/{repo}",
+            ["mount_path"] = $"/workspace/{repo}",
             ["authorization_token"] = _token,
         });
         var body = new JsonObject
         {
-            ["agent"] = new JsonObject { ["type"] = "agent_with_overrides", ["id"] = Client.AgentId, ["model"] = new JsonObject { ["id"] = model } },
-            ["environment_id"] = Client.EnvironmentId,
-            ["title"] = $"dsf {Owner}/{Repo} {RoleName} {SessionBranch}",
-            ["metadata"] = new JsonObject { ["repo"] = $"{Owner}/{Repo}", ["branch"] = SessionBranch, ["role"] = RoleName },
+            ["agent"] = new JsonObject { ["type"] = "agent_with_overrides", ["id"] = client.AgentId, ["model"] = new JsonObject { ["id"] = model } },
+            ["environment_id"] = client.EnvironmentId,
+            ["title"] = $"dsf {owner}/{repo} {RoleName} {sessionBranch}",
+            ["metadata"] = new JsonObject { ["repo"] = $"{owner}/{repo}", ["branch"] = sessionBranch, ["role"] = RoleName },
             ["budget"] = new JsonObject
             {
                 ["type"] = "limit",
-                ["max_list_cost"] = new JsonObject { ["amount"] = BudgetCents.ToString(CultureInfo.InvariantCulture), ["currency"] = "USD" },
+                ["max_list_cost"] = new JsonObject { ["amount"] = budgetCents.ToString(CultureInfo.InvariantCulture), ["currency"] = "USD" },
             },
             ["resources"] = resources,
             ["initial_events"] = new JsonArray(UserMessage(Compose(prompt))),
         };
-        JsonElement session = await Client.SendAsync(HttpMethod.Post, "/v1/sessions", body, cancellationToken).ConfigureAwait(false);
+        JsonElement session = await client.SendAsync(HttpMethod.Post, "/v1/sessions", body, cancellationToken).ConfigureAwait(false);
         _sessionId = Text(session, "id") ?? throw new ClaudeCodeException("POST /v1/sessions answered with no session id.");
         _model = model;
         _resourceId = RepositoryResourceId(session);
-        await ProgressLine.WriteAsync(Log, $"session: start {_sessionId}").ConfigureAwait(false);
+        await ProgressLine.WriteAsync(log, $"session: start {_sessionId}").ConfigureAwait(false);
     }
 
     private static string? RepositoryResourceId(JsonElement session) =>
@@ -331,7 +309,7 @@ public sealed class ManagedAgentsAgent(
 
     private async Task RotateWhenOldAsync(CancellationToken cancellationToken)
     {
-        if (Time.GetElapsedTime(_tokenStamp) >= TokenAge)
+        if (_time.GetElapsedTime(_tokenStamp) >= TokenAge)
         {
             await RotateAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -347,15 +325,15 @@ public sealed class ManagedAgentsAgent(
 
         if (_resourceId is null)
         {
-            JsonElement session = await Client.SendAsync(HttpMethod.Get, SessionPath, null, cancellationToken).ConfigureAwait(false);
+            JsonElement session = await client.SendAsync(HttpMethod.Get, SessionPath, null, cancellationToken).ConfigureAwait(false);
             _resourceId = RepositoryResourceId(session)
                 ?? throw new ClaudeCodeException($"The session {_sessionId} lists no github_repository resource, so its token cannot be rotated.");
         }
 
-        string fresh = await MintToken(Role is SessionRole.Builder, cancellationToken).ConfigureAwait(false);
+        string fresh = await MintToken(role is SessionRole.Builder, cancellationToken).ConfigureAwait(false);
         try
         {
-            await Client.SendAsync(
+            await client.SendAsync(
                 HttpMethod.Post,
                 $"{SessionPath}/resources/{_resourceId}",
                 new JsonObject { ["authorization_token"] = fresh },
@@ -369,7 +347,7 @@ public sealed class ManagedAgentsAgent(
 
         string old = _token;
         _token = fresh;
-        _tokenStamp = Time.GetTimestamp();
+        _tokenStamp = _time.GetTimestamp();
         await RevokeQuietlyAsync(old).ConfigureAwait(false);
     }
 
@@ -402,7 +380,7 @@ public sealed class ManagedAgentsAgent(
         do
         {
             string path = $"{SessionPath}/events?order=desc&limit=100" + (page is null ? "" : $"&page={Uri.EscapeDataString(page)}");
-            JsonElement answer = await Client.SendAsync(HttpMethod.Get, path, null, cancellationToken).ConfigureAwait(false);
+            JsonElement answer = await client.SendAsync(HttpMethod.Get, path, null, cancellationToken).ConfigureAwait(false);
             if (answer.TryGetProperty("data", out JsonElement data) && data.ValueKind is JsonValueKind.Array)
             {
                 foreach (JsonElement e in data.EnumerateArray())
@@ -426,7 +404,7 @@ public sealed class ManagedAgentsAgent(
     private async Task<Turn> WaitForTurnAsync(CancellationToken cancellationToken)
     {
         string messageId;
-        long waitStarted = Time.GetTimestamp();
+        long waitStarted = _time.GetTimestamp();
         while (true)
         {
             (List<JsonElement> newest, bool found) = await ReadBackAsync(e => Type(e) is "user.message", cancellationToken).ConfigureAwait(false);
@@ -437,20 +415,20 @@ public sealed class ManagedAgentsAgent(
                 break;
             }
 
-            JsonElement session = await Client.SendAsync(HttpMethod.Get, SessionPath, null, cancellationToken).ConfigureAwait(false);
+            JsonElement session = await client.SendAsync(HttpMethod.Get, SessionPath, null, cancellationToken).ConfigureAwait(false);
             if (Text(session, "status") is "terminated")
             {
                 throw new ClaudeCodeException($"The session {_sessionId} ended with the status terminated before its turn went idle.");
             }
 
-            if (Time.GetElapsedTime(waitStarted) >= TurnWait)
+            if (_time.GetElapsedTime(waitStarted) >= TurnWait)
             {
                 throw new ClaudeCodeException(string.Create(
                     CultureInfo.InvariantCulture,
                     $"The turn of the session {_sessionId} did not go idle within {TurnWait.TotalHours} hours."));
             }
 
-            await Client.Delay(ManagedAgentsClient.PollDelay, cancellationToken).ConfigureAwait(false);
+            await client.Delay(ManagedAgentsClient.PollDelay, cancellationToken).ConfigureAwait(false);
             await RotateWhenOldAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -475,7 +453,7 @@ public sealed class ManagedAgentsAgent(
 
     private async Task WriteEventsAsync(List<JsonElement> events, CancellationToken cancellationToken)
     {
-        string directory = Path.Combine(RootDirectory, ".factory", "sandbox-home", _sessionId!);
+        string directory = Path.Combine(rootDirectory, ".factory", "sandbox-home", _sessionId!);
         Directory.CreateDirectory(directory);
         var lines = new StringBuilder();
         foreach (JsonElement e in events)
@@ -532,7 +510,7 @@ public sealed class ManagedAgentsAgent(
             await DownloadAsync(turn, [], cancellationToken).ConfigureAwait(false);
             string budget = string.Create(
                 CultureInfo.InvariantCulture,
-                $"The session {_sessionId} reached its budget of {BudgetCents} cents (${Normalize(BudgetCents / 100m)}) before the agent finished.");
+                $"The session {_sessionId} reached its budget of {budgetCents} cents (${Normalize(budgetCents / 100m)}) before the agent finished.");
             return new ClaudeCodeResult(result.Length > 0 ? $"{budget} {result}" : budget, turns, cost, true);
         }
 
@@ -577,13 +555,13 @@ public sealed class ManagedAgentsAgent(
                 break;
             }
 
-            await Client.Delay(ManagedAgentsClient.PollDelay, cancellationToken).ConfigureAwait(false);
+            await client.Delay(ManagedAgentsClient.PollDelay, cancellationToken).ConfigureAwait(false);
         }
 
-        string factory = Path.Combine(WorkTree, ".factory");
+        string factory = Path.Combine(workTree, ".factory");
         foreach ((string name, (string id, _)) in files)
         {
-            byte[] bytes = await Client.DownloadAsync(id, cancellationToken).ConfigureAwait(false);
+            byte[] bytes = await client.DownloadAsync(id, cancellationToken).ConfigureAwait(false);
             Directory.CreateDirectory(factory);
             await File.WriteAllBytesAsync(Path.Combine(factory, name), bytes, cancellationToken).ConfigureAwait(false);
         }
@@ -598,7 +576,7 @@ public sealed class ManagedAgentsAgent(
         string? cursor = null;
         do
         {
-            JsonElement answer = await Client.SendAsync(HttpMethod.Get, query + (cursor ?? ""), null, cancellationToken).ConfigureAwait(false);
+            JsonElement answer = await client.SendAsync(HttpMethod.Get, query + (cursor ?? ""), null, cancellationToken).ConfigureAwait(false);
             if (answer.TryGetProperty("data", out JsonElement data) && data.ValueKind is JsonValueKind.Array)
             {
                 foreach (JsonElement file in data.EnumerateArray())

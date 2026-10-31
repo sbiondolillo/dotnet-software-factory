@@ -26,10 +26,6 @@ public sealed class ManagedAgentsClient(
     /// <summary>The id of the environment each session runs in. A session cannot start while it is empty.</summary>
     public string EnvironmentId { get; init; } = "";
 
-    private HttpClient Http { get; } = http;
-
-    private string ApiKey { get; } = apiKey;
-
     internal Func<TimeSpan, CancellationToken, Task> Delay { get; } = delay ?? ((wait, token) => Task.Delay(wait, token));
 
     /// <summary>The wait between two reads of a list that the agent polls, and the base of the wait before a request is sent again.</summary>
@@ -108,7 +104,7 @@ public sealed class ManagedAgentsClient(
             using HttpRequestMessage request = Request(method, path, content());
             try
             {
-                using HttpResponseMessage response = await Http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                using HttpResponseMessage response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
                 if (response.IsSuccessStatusCode)
                 {
                     return await read(response.Content, cancellationToken).ConfigureAwait(false);
@@ -133,9 +129,9 @@ public sealed class ManagedAgentsClient(
 
     private HttpRequestMessage Request(HttpMethod method, string path, HttpContent? content)
     {
-        Uri uri = Http.BaseAddress is null ? new Uri(Root + path, UriKind.Absolute) : new Uri(Http.BaseAddress, path);
+        Uri uri = http.BaseAddress is null ? new Uri(Root + path, UriKind.Absolute) : new Uri(http.BaseAddress, path);
         var request = new HttpRequestMessage(method, uri) { Content = content };
-        request.Headers.TryAddWithoutValidation("x-api-key", ApiKey);
+        request.Headers.TryAddWithoutValidation("x-api-key", apiKey);
         request.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
         request.Headers.TryAddWithoutValidation(
             "anthropic-beta",
