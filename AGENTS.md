@@ -92,8 +92,8 @@ adds a git operation to `src/Core/Git.cs` follows them too.
   `diff --git a/<path> b/<path>`, and no section for a file that git does not track. A
   work tree with no change since the base gives an empty output and the exit code 0.
 - A fast-forward from a branch on origin is `pull --ff-only origin <branch>`, with the
-  credential helper. A local branch that has a commit the remote branch lacks makes git
-  exit with the code 128 and `fatal: Not possible to fast-forward, aborting.`
+  credential helper. A local branch and a branch on origin that each have a commit the
+  other lacks make git exit with the code 128 and `fatal: Not possible to fast-forward, aborting.`
 - The removal of a branch on origin is `push origin --delete <branch>`, with the
   credential helper. For a branch that origin lacks, git exits with the code 1 and
   `remote ref does not exist`.

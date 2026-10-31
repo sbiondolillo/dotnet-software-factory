@@ -9,4 +9,11 @@ public sealed record ManagedAgentsSettings(
     string InstallationId,
     string PrivateKeyPem,
     int BuilderBudgetCents = 1500,
-    int ReviewBudgetCents = 300);
+    int ReviewBudgetCents = 300)
+{
+    /// <summary>The ids and the budgets alone, so no text of this record holds the key or the private key.</summary>
+    public override string ToString() =>
+        string.Create(
+            System.Globalization.CultureInfo.InvariantCulture,
+            $"ManagedAgentsSettings {{ AgentId = {AgentId}, EnvironmentId = {EnvironmentId}, AppId = {AppId}, InstallationId = {InstallationId}, BuilderBudgetCents = {BuilderBudgetCents}, ReviewBudgetCents = {ReviewBudgetCents} }}");
+}

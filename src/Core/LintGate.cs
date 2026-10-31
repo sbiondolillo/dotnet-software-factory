@@ -23,7 +23,8 @@ public sealed class LintGate(CommandHost host, Git git, TextWriter? log = null, 
                 // The restore writes its errors, such as NU1004, to standard output.
                 throw new LintGateException(
                     restore.ExitCode,
-                    $"dotnet restore --locked-mode failed before the format\nstandard output: {restore.StandardOutput}\nstandard error: {restore.StandardError}");
+                    $"standard output: {restore.StandardOutput}\nstandard error: {restore.StandardError}",
+                    "dotnet restore --locked-mode, before the format,");
             }
         }
 

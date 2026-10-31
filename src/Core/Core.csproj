@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <InternalsVisibleTo Include="Specs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- FeatureFiles reads feature files with Gherkin's own parser and computes Reqnroll's own
          test method names with Reqnroll's own identifier logic, so the two stay in lock-step
          with what Reqnroll.xunit.v3 (pinned in tests/Specs/Specs.csproj) actually generates. -->
