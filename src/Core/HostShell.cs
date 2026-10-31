@@ -15,7 +15,7 @@ public sealed class HostShell(CommandRunner runner, string workTree) : CommandHo
 
     private static readonly string[] AllowedPrefixes = ["DOTNET_", "NUGET_"];
 
-    internal CommandRunner Runner { get; } = runner;
+    private CommandRunner Runner { get; } = runner;
 
     /// <inheritdoc />
     public override string WorkDirectory => workTree;

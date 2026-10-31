@@ -42,29 +42,29 @@ public sealed class ManagedAgentsAgent(
     private decimal _cents;
     private bool _disposed;
 
-    internal ManagedAgentsClient Client { get; } = client;
+    private ManagedAgentsClient Client { get; } = client;
 
-    internal string Owner { get; } = owner;
+    private string Owner { get; } = owner;
 
-    internal string Repo { get; } = repo;
+    private string Repo { get; } = repo;
 
-    internal string SessionBranch { get; } = sessionBranch;
+    private string SessionBranch { get; } = sessionBranch;
 
-    internal string BaseCommit { get; } = baseCommit;
+    private string BaseCommit { get; } = baseCommit;
 
-    internal string WorkTree { get; } = workTree;
+    private string WorkTree { get; } = workTree;
 
-    internal string RootDirectory { get; } = rootDirectory;
+    private string RootDirectory { get; } = rootDirectory;
 
-    internal SessionRole Role { get; } = role;
+    private SessionRole Role { get; } = role;
 
-    internal int BudgetCents { get; } = budgetCents;
+    private int BudgetCents { get; } = budgetCents;
 
-    internal TextWriter? Log { get; } = log;
+    private TextWriter? Log { get; } = log;
 
-    internal TimeProvider Time { get; } = time ?? TimeProvider.System;
+    private TimeProvider Time { get; } = time ?? TimeProvider.System;
 
-    internal Action<TimeSpan, ClaudeCodeResult>? OnAnswer { get; } = onAnswer;
+    private Action<TimeSpan, ClaudeCodeResult>? OnAnswer { get; } = onAnswer;
 
     /// <summary>Mints an App token, with write access when the argument is true. A test replaces it.</summary>
     internal Func<bool, CancellationToken, Task<string>> MintToken { get; init; } =

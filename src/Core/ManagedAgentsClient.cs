@@ -26,9 +26,9 @@ public sealed class ManagedAgentsClient(
     /// <summary>The id of the environment each session runs in. A session cannot start while it is empty.</summary>
     public string EnvironmentId { get; init; } = "";
 
-    internal HttpClient Http { get; } = http;
+    private HttpClient Http { get; } = http;
 
-    internal string ApiKey { get; } = apiKey;
+    private string ApiKey { get; } = apiKey;
 
     internal Func<TimeSpan, CancellationToken, Task> Delay { get; } = delay ?? ((wait, token) => Task.Delay(wait, token));
 
