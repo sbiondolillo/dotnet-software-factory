@@ -226,24 +226,6 @@ between requests and the reading of `Retry-After`.
 `AGENTS.md` states the rules every `dotnet` command in a sandbox follows, so a class
 that runs `dotnet` through a `Sandbox` follows them too.
 
-A `HostShell` runs the gates' commands on the runner, when a Managed Agents session
-writes the code. It follows the rules below too, and these:
-
-- A command with no working directory runs in the work tree. A null working directory
-  in a `CommandSpec` is the factory's own checkout, and a gate there judges the wrong
-  tree.
-- Each command starts from an empty environment, with `ClearEnvironment` true. It gets
-  back `PATH`, `HOME`, `TMPDIR`, `LANG`, each variable whose name starts `DOTNET_` or
-  `NUGET_`, and each name that the caller passes, with the values of the factory's
-  environment. A name that the factory's environment lacks stays out. So the agent's
-  build, tests and checks get no job secret from the environment unless the command
-  names it.
-- A scratch path is under `Path.GetTempPath()`, outside the work tree.
-- The host tree has no `obj/` after a pull, because `.gitignore` names it. So the lint
-  gate on a host runs with `restoreFirst` true: `dotnet restore --locked-mode` before
-  `dotnet format --no-restore`. A restore that exits with a code other than 0 throws
-  `LintGateException`, and the format does not run.
-
 - The exit code alone says whether a command passed. The first `dotnet build` or
   `dotnet format` of a container exits with the code 0 and writes a line to standard
   error that starts `An issue was encountered verifying workloads`.
@@ -281,3 +263,23 @@ writes the code. It follows the rules below too, and these:
   container, so a command that needs them runs in the container that ran the restore.
 - Before work on a `dotnet new` template, such as one under `templates/`, read
   `docs/agents/dotnet-templates.md`.
+
+### The host shell
+
+A `HostShell` runs the gates' commands on the runner, when a Managed Agents session
+writes the code. It follows the rules above too, and these:
+
+- A command with no working directory runs in the work tree. A null working directory
+  in a `CommandSpec` is the factory's own checkout, and a gate there judges the wrong
+  tree.
+- Each command starts from an empty environment, with `ClearEnvironment` true. It gets
+  back `PATH`, `HOME`, `TMPDIR`, `LANG`, each variable whose name starts `DOTNET_` or
+  `NUGET_`, and each name that the caller passes, with the values of the factory's
+  environment. A name that the factory's environment lacks stays out. So the agent's
+  build, tests and checks get no job secret from the environment unless the command
+  names it.
+- A scratch path is under `Path.GetTempPath()`, outside the work tree.
+- The host tree has no `obj/` after a pull, because `.gitignore` names it. So the lint
+  gate on a host runs with `restoreFirst` true: `dotnet restore --locked-mode` before
+  `dotnet format --no-restore`. A restore that exits with a code other than 0 throws
+  `LintGateException`, and the format does not run.

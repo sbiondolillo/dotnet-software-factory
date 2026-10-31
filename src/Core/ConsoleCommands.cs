@@ -12,8 +12,11 @@ public static class ConsoleCommands
     private const string TokenName = "FACTORY_GITHUB_TOKEN";
     private const string ChecksTokenName = "FACTORY_CHECKS_TOKEN";
     private const string KeyName = "ANTHROPIC_API_KEY";
-    private static readonly string[] ManagedNames =
-        ["FACTORY_AGENT_ID", "FACTORY_ENVIRONMENT_ID", "FACTORY_APP_ID", "FACTORY_APP_INSTALLATION_ID", "FACTORY_APP_PRIVATE_KEY"];
+    private const string AgentIdName = "FACTORY_AGENT_ID";
+    private const string EnvironmentIdName = "FACTORY_ENVIRONMENT_ID";
+    private const string AppIdName = "FACTORY_APP_ID";
+    private const string InstallationIdName = "FACTORY_APP_INSTALLATION_ID";
+    private const string PrivateKeyName = "FACTORY_APP_PRIVATE_KEY";
     private const string Model = "claude-sonnet-5-5";
     private const string AuthorName = "dotnet-software-factory";
     private const string AuthorEmail = "dotnet-software-factory@noreply.github.com";
@@ -153,7 +156,7 @@ public static class ConsoleCommands
 
     private static async Task<int> RunVerbAsync(Options options, ConsoleHost host, CancellationToken cancellationToken)
     {
-        string[] required = options.Managed ? [TokenName, KeyName, .. ManagedNames] : [TokenName, KeyName];
+        string[] required = options.Managed ? [TokenName, KeyName, AgentIdName, EnvironmentIdName, AppIdName, InstallationIdName, PrivateKeyName] : [TokenName, KeyName];
         foreach (string name in required)
         {
             if (string.IsNullOrEmpty(host.Environment(name)))
@@ -369,11 +372,11 @@ public static class ConsoleCommands
     /// <summary>The settings of the managed path, from the variables that <see cref="RunVerbAsync"/> found set.</summary>
     private static ManagedAgentsSettings ReadSettings(ConsoleHost host) => new(
         host.Environment(KeyName)!,
-        host.Environment(ManagedNames[0])!,
-        host.Environment(ManagedNames[1])!,
-        host.Environment(ManagedNames[2])!,
-        host.Environment(ManagedNames[3])!,
-        host.Environment(ManagedNames[4])!);
+        host.Environment(AgentIdName)!,
+        host.Environment(EnvironmentIdName)!,
+        host.Environment(AppIdName)!,
+        host.Environment(InstallationIdName)!,
+        host.Environment(PrivateKeyName)!);
 
     private static void Remove(DirectoryInfo directory)
     {

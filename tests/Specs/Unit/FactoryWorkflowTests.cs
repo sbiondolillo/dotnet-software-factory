@@ -54,6 +54,7 @@ public sealed class FactoryWorkflowTests
     [Fact]
     public async Task TheLockfileStepWritesTheTwoIdsOfTheBuilderToGitHubEnv()
     {
+        Assert.SkipWhen(FindOnPath("jq") is null, "jq is not on PATH; the step's text is pinned by the tests above.");
         DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-lockstep-");
         try
         {
@@ -105,4 +106,10 @@ public sealed class FactoryWorkflowTests
         Assert.True(start >= 0, $"{workflow} has no step {StoreStep}");
         return text[start..];
     }
+
+    private static string? FindOnPath(string program) =>
+        (Environment.GetEnvironmentVariable("PATH") ?? "")
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Select(directory => Path.Combine(directory, program))
+            .FirstOrDefault(File.Exists);
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Core;
 using Moq;
@@ -67,13 +68,13 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
     [Given("the run spent {string} in {int} seconds over the session {string} of the role {string} at {int} cents and the session {string} of the role {string} at {int} cents")]
     public void GivenSessions(string spend, int seconds, string first, string firstRole, int firstCents, string second, string secondRole, int secondCents) =>
         _facts = new DeliveryFacts(
-            Spend: decimal.Parse(spend, System.Globalization.CultureInfo.InvariantCulture),
+            Spend: decimal.Parse(spend, CultureInfo.InvariantCulture),
             Seconds: seconds,
             Sessions: [new SessionCost(first, firstRole, firstCents), new SessionCost(second, secondRole, secondCents)]);
 
     [Given("the run spent {string} in {int} seconds over no session")]
     public void GivenNoSession(string spend, int seconds) =>
-        _facts = new DeliveryFacts(Spend: decimal.Parse(spend, System.Globalization.CultureInfo.InvariantCulture), Seconds: seconds, Sessions: []);
+        _facts = new DeliveryFacts(Spend: decimal.Parse(spend, CultureInfo.InvariantCulture), Seconds: seconds, Sessions: []);
 
     [When("a caller delivers the run with the token {string}")]
     public async Task WhenDelivers(string token)

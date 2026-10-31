@@ -309,12 +309,12 @@ public sealed class FactoryRun(
         string baseCommit,
         CancellationToken cancellationToken)
     {
-        CommandHost sandbox = agents.Host;
+        CommandHost host = agents.Host;
         Agent agent = agents.Builder;
         string? check = CleanupBody.ReadCheck(issue.Body);
         if (check is not null)
         {
-            CommandResult first = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
+            CommandResult first = await RunCheckAsync(host, check, cancellationToken).ConfigureAwait(false);
             await Say(first.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
             if (first.ExitCode is 0)
             {
@@ -382,7 +382,7 @@ public sealed class FactoryRun(
                 if (check is not null)
                 {
                     long checkStart = _clock.GetTimestamp();
-                    after = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
+                    after = await RunCheckAsync(host, check, cancellationToken).ConfigureAwait(false);
                     await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
                     producer = _summary.AddRow("check", _clock.GetElapsedTime(checkStart), after.ExitCode is 0 ? "green" : "red");
                 }
@@ -440,9 +440,9 @@ public sealed class FactoryRun(
         string baseCommit,
         CancellationToken cancellationToken)
     {
-        CommandHost sandbox = agents.Host;
+        CommandHost host = agents.Host;
         Agent agent = agents.Builder;
-        CommandResult first = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
+        CommandResult first = await RunCheckAsync(host, check, cancellationToken).ConfigureAwait(false);
         await Say(first.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
         if (first.ExitCode is 0)
         {
@@ -497,7 +497,7 @@ public sealed class FactoryRun(
                 if (redoTexts.Count is 0)
                 {
                     long checkStart = _clock.GetTimestamp();
-                    CommandResult after = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
+                    CommandResult after = await RunCheckAsync(host, check, cancellationToken).ConfigureAwait(false);
                     await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
                     producer = _summary.AddRow("check", _clock.GetElapsedTime(checkStart), after.ExitCode is 0 ? "green" : "red");
                     if (after.ExitCode is 0)
@@ -554,9 +554,9 @@ public sealed class FactoryRun(
         string baseCommit,
         CancellationToken cancellationToken)
     {
-        CommandHost sandbox = agents.Host;
+        CommandHost host = agents.Host;
         Agent agent = agents.Builder;
-        CommandResult first = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
+        CommandResult first = await RunCheckAsync(host, check, cancellationToken).ConfigureAwait(false);
         await Say(first.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
         if (first.ExitCode is 0)
         {
@@ -576,7 +576,7 @@ public sealed class FactoryRun(
         var reviewPhase = new ReviewPhase(agents.Reviewer, git, reframe: true);
         var pin = Pin.Take(request.Directory);
         IReadOnlySet<string> basePassed = await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false);
-        ApiListing baseApi = await ListApiAsync(sandbox, cancellationToken).ConfigureAwait(false);
+        ApiListing baseApi = await ListApiAsync(host, cancellationToken).ConfigureAwait(false);
         if (baseApi.Lines is null)
         {
             await CommentAsync(request, "The public API of the base commit could not be listed, so there is no build:", [baseApi.Fault ?? ""], cancellationToken).ConfigureAwait(false);
@@ -620,7 +620,7 @@ public sealed class FactoryRun(
             if (redoTexts.Count is 0)
             {
                 long apiStart = _clock.GetTimestamp();
-                ApiListing api = await ListApiAsync(sandbox, cancellationToken).ConfigureAwait(false);
+                ApiListing api = await ListApiAsync(host, cancellationToken).ConfigureAwait(false);
                 redoTexts = api.Lines is null ? [api.Fault ?? ""] : ApiGate.Compare(baseApi.Lines, api.Lines);
                 if (api.Lines is not null)
                 {
@@ -633,7 +633,7 @@ public sealed class FactoryRun(
             if (redoTexts.Count is 0 && gate is not null)
             {
                 long checkStart = _clock.GetTimestamp();
-                CommandResult after = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
+                CommandResult after = await RunCheckAsync(host, check, cancellationToken).ConfigureAwait(false);
                 await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
                 producer = _summary.AddRow("check", _clock.GetElapsedTime(checkStart), after.ExitCode is 0 ? "green" : "red");
                 if (after.ExitCode is 0)
