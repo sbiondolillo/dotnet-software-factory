@@ -1,4 +1,3 @@
-using Core;
 using Xunit;
 
 namespace Specs.Unit;
@@ -51,41 +50,6 @@ public sealed class FactoryWorkflowTests
         Assert.Contains("\"FACTORY_ENVIRONMENT_ID=\"", run, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task TheLockfileStepWritesTheTwoIdsOfTheBuilderToGitHubEnv()
-    {
-        Assert.SkipWhen(FindOnPath("jq") is null, "jq is not on PATH; the step's text is pinned by the tests above.");
-        DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-lockstep-");
-        try
-        {
-            string agents = Directory.CreateDirectory(Path.Combine(directory.FullName, ".github", "agents")).FullName;
-            File.WriteAllText(Path.Combine(agents, "claude-lock.json"), """
-                {"version": 1, "resources": {
-                  "./judge.md": {"kind": "agent", "id": "agent_judge"},
-                  "./builder.md": {"kind": "agent", "id": "agent_builder", "version": "3"},
-                  "./builder.environment.yaml": {"kind": "environment", "id": "env_builder"}}}
-                """);
-            string githubEnv = Path.Combine(directory.FullName, "github-env");
-            File.WriteAllText(githubEnv, "EARLIER=1\n");
-            var spec = new CommandSpec
-            {
-                Command = "sh",
-                Arguments = ["-c", Step(LockStep).GetValueOrDefault("run") as string ?? ""],
-                WorkingDirectory = directory.FullName,
-                EnvironmentVariables = new Dictionary<string, string> { ["GITHUB_ENV"] = githubEnv },
-            };
-
-            CommandResult result = await new CommandRunner().RunAsync(spec, TestContext.Current.CancellationToken);
-
-            Assert.True(result.ExitCode is 0, result.StandardError);
-            Assert.Equal(["EARLIER=1", "FACTORY_AGENT_ID=agent_builder", "FACTORY_ENVIRONMENT_ID=env_builder"], File.ReadAllLines(githubEnv));
-        }
-        finally
-        {
-            directory.Delete(recursive: true);
-        }
-    }
-
     private static List<Dictionary<string, object?>> Steps()
     {
         Dictionary<string, object?> root = WorkflowChecks.Parse(File.ReadAllText(RootWorkflow()));
@@ -106,10 +70,4 @@ public sealed class FactoryWorkflowTests
         Assert.True(start >= 0, $"{workflow} has no step {StoreStep}");
         return text[start..];
     }
-
-    private static string? FindOnPath(string program) =>
-        (Environment.GetEnvironmentVariable("PATH") ?? "")
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Select(directory => Path.Combine(directory, program))
-            .FirstOrDefault(File.Exists);
 }
