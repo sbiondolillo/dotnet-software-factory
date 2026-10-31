@@ -19,6 +19,7 @@ Feature: The host shell runs the gates' commands on the runner
       | HOSTSHELL_SPEC_OTHER  | o-1   |
       | DOTNET_HOSTSHELL_SPEC | d-1   |
       | NUGET_HOSTSHELL_SPEC  | n-1   |
+    And the process environment holds each of PATH, HOME, TMPDIR and LANG
     When the host shell runs "dotnet" with the arguments "run --no-restore" and the names "HOSTSHELL_SPEC_SECRET"
     Then the host shell's CommandSpec clears the environment
     And the host shell's CommandSpec holds these environment variables:
@@ -26,7 +27,7 @@ Feature: The host shell runs the gates' commands on the runner
       | HOSTSHELL_SPEC_SECRET | s-1   |
       | DOTNET_HOSTSHELL_SPEC | d-1   |
       | NUGET_HOSTSHELL_SPEC  | n-1   |
-    And the host shell's CommandSpec holds each of PATH, HOME, TMPDIR and LANG that the process environment holds, with its value
+    And the host shell's CommandSpec holds each of PATH, HOME, TMPDIR and LANG with its value in the process environment
     And every other variable of the host shell's CommandSpec has a name that starts "DOTNET_" or "NUGET_"
 
   Scenario: A passed name that the process environment lacks is not in the environment of the command

@@ -173,6 +173,14 @@ Feature: ManagedAgentsAgent runs each prompt as one message of a Managed Agents 
     Then the API got one POST to "/v1/sessions/sesn_1/resources/sesrsc_1" with the second minted token, before the POST to "/v1/sessions/sesn_1/events"
     And the first minted token was revoked
 
+  Scenario: A token that is exactly 50 minutes old is rotated before the send
+    Given a builder agent with the budget 1500 cents
+    When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5"
+    And 50 minutes pass
+    And the caller runs the prompt "Fix the build." with the model "claude-sonnet-5-5"
+    Then the API got one POST to "/v1/sessions/sesn_1/resources/sesrsc_1" with the second minted token, before the POST to "/v1/sessions/sesn_1/events"
+    And the first minted token was revoked
+
   Scenario: A push that fails with Authentication failed rotates the token and asks for the push again
     Given a builder agent with the budget 1500 cents
     And the next turn holds the agent messages "The push failed: fatal: Authentication failed for 'https://github.com/sbiondolillo/factory-scratch/'\noutputs: plan.md"

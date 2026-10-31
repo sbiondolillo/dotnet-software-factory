@@ -57,6 +57,7 @@ public sealed class LintGateTests : IDisposable
         LintGateException exception = await Assert.ThrowsAsync<LintGateException>(
             () => gate.RunAsync("/tree", "m", "n", "e@x", TestContext.Current.CancellationToken));
 
+        Assert.StartsWith("dotnet format failed", exception.Message, StringComparison.Ordinal);
         Assert.Contains(code.ToString(System.Globalization.CultureInfo.InvariantCulture), exception.Message, StringComparison.Ordinal);
         Assert.Contains(error, exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(_recorded, s => s.Command == "git");
@@ -133,7 +134,7 @@ public sealed class LintGateTests : IDisposable
         LintGateException exception = await Assert.ThrowsAsync<LintGateException>(
             () => gate.RunAsync("/tree", "m", "n", "e@x", TestContext.Current.CancellationToken));
 
-        Assert.Contains("restore", exception.Message, StringComparison.Ordinal);
+        Assert.StartsWith("dotnet restore --locked-mode", exception.Message, StringComparison.Ordinal);
         Assert.Contains("error NU1004", exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(_recorded, s => s.Command == "docker" && s.Arguments.Contains("format"));
         Assert.DoesNotContain(_recorded, s => s.Command == "git");

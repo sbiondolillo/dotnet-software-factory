@@ -49,6 +49,24 @@ public sealed class HostShellSteps(ExceptionState exceptionState) : IDisposable
         }
     }
 
+    [Given("the process environment holds each of PATH, HOME, TMPDIR and LANG")]
+    public void GivenTheProcessEnvironmentHoldsTheAllowlist()
+    {
+        // A name that the process lacks gets a value that changes nothing: TMPDIR names the temp directory that the process already uses.
+        Dictionary<string, string> fallbacks = new(StringComparer.Ordinal)
+        {
+            ["PATH"] = "/usr/bin:/bin",
+            ["HOME"] = Path.GetTempPath(),
+            ["TMPDIR"] = Path.GetTempPath(),
+            ["LANG"] = "C.UTF-8",
+        };
+        foreach (string name in Allowlist.Where(name => Environment.GetEnvironmentVariable(name) is null))
+        {
+            _setNames.Add(name);
+            Environment.SetEnvironmentVariable(name, fallbacks[name]);
+        }
+    }
+
     [Given("the work tree of the host shell holds a directory {string}")]
     public void GivenTheWorkTreeHoldsADirectory(string path) =>
         Directory.CreateDirectory(Path.Combine(_workTree.FullName, path));
@@ -111,18 +129,14 @@ public sealed class HostShellSteps(ExceptionState exceptionState) : IDisposable
         }
     }
 
-    [Then("the host shell's CommandSpec holds each of PATH, HOME, TMPDIR and LANG that the process environment holds, with its value")]
+    [Then("the host shell's CommandSpec holds each of PATH, HOME, TMPDIR and LANG with its value in the process environment")]
     public void ThenHoldsTheAllowlist()
     {
         CommandSpec spec = Assert.Single(_recorded);
-        Assert.NotNull(Environment.GetEnvironmentVariable("PATH"));
         foreach (string name in Allowlist)
         {
-            string? value = Environment.GetEnvironmentVariable(name);
-            if (value is not null)
-            {
-                Assert.Equal(value, spec.EnvironmentVariables[name]);
-            }
+            Assert.True(spec.EnvironmentVariables.TryGetValue(name, out string? value), $"no variable {name}");
+            Assert.Equal(Environment.GetEnvironmentVariable(name), value);
         }
     }
 
