@@ -1,5 +1,4 @@
 using Core;
-using Gherkin;
 using Xunit;
 
 namespace Specs.Unit;
@@ -26,7 +25,7 @@ public sealed class FeatureFilesTests
     }
 
     [Fact]
-    public void ReadScenarioTitlesExceptionMessageHoldsTheParsersOwnMessage()
+    public void ReadScenarioTitlesExceptionMessageHoldsThePositionAndNoTextOfTheFile()
     {
         string directory = Directory.CreateTempSubdirectory("feature-files-tests-").FullName;
         try
@@ -37,8 +36,8 @@ public sealed class FeatureFilesTests
 
             FeatureFileException exception = Assert.Throws<FeatureFileException>(() => FeatureFiles.ReadScenarioTitles(path));
 
-            string parserMessage = Assert.ThrowsAny<ParserException>(() => new Parser().Parse(new StringReader(content))).Message;
-            Assert.Contains(parserMessage, exception.Message, StringComparison.Ordinal);
+            Assert.Contains("(1:1)", exception.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain(content, exception.Message, StringComparison.Ordinal);
         }
         finally
         {

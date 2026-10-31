@@ -1,5 +1,4 @@
 using Core;
-using Gherkin;
 using Reqnroll;
 using Xunit;
 
@@ -10,7 +9,6 @@ public sealed class FeatureFilesSteps(ExceptionState exceptionState) : IDisposab
 {
     private readonly string _root = Directory.CreateTempSubdirectory("feature-files-").FullName;
 
-    private string? _lastContent;
     private string _scenarioTitle = "";
     private string _testName = "";
     private IReadOnlyList<string> _titles = [];
@@ -117,21 +115,6 @@ public sealed class FeatureFilesSteps(ExceptionState exceptionState) : IDisposab
         Assert.Equal(path, exception.Path);
     }
 
-    [Then("the exception message holds the parser's message")]
-    public void ThenTheExceptionMessageHoldsTheParsersMessage()
-    {
-        FeatureFileException exception = Assert.IsType<FeatureFileException>(exceptionState.Exception);
-        try
-        {
-            new Parser().Parse(new StringReader(_lastContent!));
-            Assert.Fail("expected Gherkin's parser to reject the content");
-        }
-        catch (ParserException parserException)
-        {
-            Assert.Contains(parserException.Message, exception.Message, StringComparison.Ordinal);
-        }
-    }
-
     [Then("FeatureFiles returns the test name {string}")]
     public void ThenFeatureFilesReturnsTheTestName(string expected) => Assert.Equal(expected, _testName);
 
@@ -142,6 +125,5 @@ public sealed class FeatureFilesSteps(ExceptionState exceptionState) : IDisposab
         string fullPath = Path.Combine(_root, relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         File.WriteAllText(fullPath, content);
-        _lastContent = content;
     }
 }

@@ -141,7 +141,8 @@ The factory on the runner follows a link in the work tree, and a container can w
 the work tree. So `Sandbox.StartForGatesAsync` mounts `.factory` and `specs/features`
 read-only, and throws `SandboxException` when either one, or `specs`, is a symbolic link,
 since Docker resolves a bind source on the host. `FeatureFiles.ReadScenarioTitles` refuses
-a symbolic link, since a parser error quotes the text of the file. A new host read of a work tree file whose text can
+a symbolic link, and its parse error holds positions and no text, since a parser error
+quotes the file and a process of a gate outlives its `docker exec`. A new host read of a work tree file whose text can
 reach a message, a comment or a session keeps to a read-only path and refuses a link.
 
 - Every command is a `CommandSpec` whose program is `docker`, run through the
