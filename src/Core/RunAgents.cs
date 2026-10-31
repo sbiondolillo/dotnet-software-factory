@@ -99,7 +99,7 @@ internal sealed class RunAgents : IAsyncDisposable
     }
 
     /// <summary>The lint gate over <see cref="Host"/>.</summary>
-    public LintGate Lint(TextWriter? log) => new(Host, _setup.Git, log);
+    public LintGate Lint(TextWriter? log) => new(Host, _setup.Git, log, restoreFirst: _builder is not null);
 
     /// <summary>Pushes the commit of the lint gate to the scratch branch, so the next session message builds on it.</summary>
     public async Task AfterLintAsync(bool committed, CancellationToken cancellationToken = default)
