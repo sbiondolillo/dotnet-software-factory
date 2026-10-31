@@ -198,7 +198,7 @@ public sealed class FeedbackRunSteps : IDisposable
 
     [Then("FeedbackRun gives back a result with {int} thread(s) resolved, {int} thread(s) unresolved and {int} Redo(s)")]
     public void ThenResult(int resolved, int unresolved, int redos) =>
-        Assert.Equal(new FeedbackRunResult(resolved, unresolved, redos), Result);
+        Assert.Equal(new FeedbackRunResult(resolved, unresolved, redos), Result with { Sessions = null });
 
     [Then("FeedbackRun gives back a result with {int} Redo(s)")]
     public void ThenRedos(int redos) => Assert.Equal(redos, Result.Redos);
@@ -207,7 +207,7 @@ public sealed class FeedbackRunSteps : IDisposable
     public void ThenNoResolve(int resolved, int unresolved, int redos)
     {
         Assert.Empty(Resolves);
-        Assert.Equal(new FeedbackRunResult(resolved, unresolved, redos), Result);
+        Assert.Equal(new FeedbackRunResult(resolved, unresolved, redos), Result with { Sessions = null });
     }
 
     [Then("git clones {string} into the directory that the caller gave and checks out the branch {string} in it")]

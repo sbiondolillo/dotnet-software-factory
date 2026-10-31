@@ -135,3 +135,18 @@ Feature: The option --agent runs the agent phases as Claude Code in a sandbox or
       - sesn_01, builder, $4.12
       - sesn_02, reviewer, $0.37
       """
+
+  @managed
+  Scenario: The job summary of a managed feedback run lists its sessions
+    Given the environment holds the variables of the managed agent
+    And the environment variable GITHUB_STEP_SUMMARY of the program names an empty file
+    And a session answer costs 0 cents for the plan, 300 cents for a build and 37 cents for a review
+    And GitHub answers each read of the review threads with the thread A until the resolve of the thread A, and with no thread after it
+    When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10 --agent managed"
+    Then the job summary of the program ends with the lines
+      """
+      ### Sessions
+
+      - sesn_01, builder, $3.00
+      - sesn_02, reviewer, $0.37
+      """

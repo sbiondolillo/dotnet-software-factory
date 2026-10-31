@@ -23,8 +23,9 @@ public sealed record FeedbackRunRequest(
     bool SkipIntegration = false,
     ManagedAgentsSettings? Managed = null);
 
-/// <summary>The outcome of a <see cref="FeedbackRun"/>: the threads resolved, the threads left unresolved and the Redos spent.</summary>
-public sealed record FeedbackRunResult(int Resolved, int Unresolved, int Redos);
+/// <summary>The outcome of a <see cref="FeedbackRun"/>: the threads resolved, the threads left unresolved, the Redos spent, and
+/// the Managed Agents sessions of the run with their cost, or null when no session ran.</summary>
+public sealed record FeedbackRunResult(int Resolved, int Unresolved, int Redos, IReadOnlyList<SessionCost>? Sessions = null);
 
 /// <summary>Answers every unresolved review thread of a pull request within three Redos. The <paramref name="time"/>, the
 /// <paramref name="handler"/> and the <paramref name="delay"/> serve the Managed Agents path, when the request holds its settings.</summary>
@@ -172,7 +173,7 @@ public sealed class FeedbackRun(
                     string comment = CommentText.Fit($"The budget of {RedoBudget} Redos is spent. The last build still fails:", redoTexts);
                     await Say(comment).ConfigureAwait(false);
                     await client.PostCommentAsync(request.Owner, request.Repo, request.PullNumber, comment, cancellationToken).ConfigureAwait(false);
-                    return new FeedbackRunResult(0, threads.Count, redos);
+                    return new FeedbackRunResult(0, threads.Count, redos, Sessions(agents));
                 }
 
                 redos++;
@@ -193,11 +194,13 @@ public sealed class FeedbackRun(
                 }
             }
 
-            return new FeedbackRunResult(resolved, threads.Count - resolved, redos);
+            return new FeedbackRunResult(resolved, threads.Count - resolved, redos, Sessions(agents));
         }
     }
 
     private Task Say(string line) => ProgressLine.WriteAsync(progress, line);
+
+    private static IReadOnlyList<SessionCost>? Sessions(RunAgents agents) => agents.Sessions is { Count: > 0 } sessions ? sessions : null;
 
     private static string Describe(IReadOnlyList<ReviewThread> threads)
     {

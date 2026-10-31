@@ -276,6 +276,11 @@ public static class ConsoleCommands
                 Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration, options.Settings);
             FeedbackRunResult result = await new FeedbackRun(host.Runner, client, host.Out, host.Time, host.Handler, host.Delay)
                 .RunAsync(request, cancellationToken).ConfigureAwait(false);
+            if (result.Sessions is { Count: > 0 } sessions)
+            {
+                await WriteSessionsAsync(host, sessions).ConfigureAwait(false);
+            }
+
             return result.Resolved + result.Unresolved is 0
                 ? null
                 : await new Git(host.Runner).ReadHeadShaAsync(directory.FullName, cancellationToken).ConfigureAwait(false);
@@ -283,6 +288,28 @@ public static class ConsoleCommands
         finally
         {
             Remove(directory);
+        }
+    }
+
+    /// <summary>Appends the section of the sessions to the job summary, when <c>GITHUB_STEP_SUMMARY</c> names a file.</summary>
+    private static async Task WriteSessionsAsync(ConsoleHost host, IReadOnlyList<SessionCost> sessions)
+    {
+        if (host.Environment("GITHUB_STEP_SUMMARY") is not { Length: > 0 } path)
+        {
+            return;
+        }
+
+        var summary = new JobSummary();
+        summary.AddSessions(sessions);
+        try
+        {
+            string earlier = File.Exists(path) ? await File.ReadAllTextAsync(path).ConfigureAwait(false) : "";
+            string gap = earlier.Length is 0 ? "" : earlier.EndsWith('\n') ? "\n" : "\n\n";
+            await File.AppendAllTextAsync(path, gap + summary.RenderSessions()).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            await host.Error.WriteLineAsync($"summary: cannot write {path}: {exception.Message}").ConfigureAwait(false);
         }
     }
 

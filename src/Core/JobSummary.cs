@@ -76,11 +76,24 @@ public sealed class JobSummary
 
         if (_sessions.Count > 0)
         {
-            text.Append("\n### Sessions\n\n");
-            foreach (SessionCost session in _sessions)
-            {
-                text.Append(CultureInfo.InvariantCulture, $"- {session.Id}, {session.Role}, {Deliver.Dollars(session.Cents)}\n");
-            }
+            text.Append('\n').Append(RenderSessions());
+        }
+
+        return text.ToString();
+    }
+
+    /// <summary>The Markdown section of the sessions alone, ending with a line feed, or the empty string with no session.</summary>
+    public string RenderSessions()
+    {
+        if (_sessions.Count is 0)
+        {
+            return "";
+        }
+
+        var text = new StringBuilder("### Sessions\n\n");
+        foreach (SessionCost session in _sessions)
+        {
+            text.Append(CultureInfo.InvariantCulture, $"- {session.Id}, {session.Role}, {Deliver.Dollars(session.Cents)}\n");
         }
 
         return text.ToString();
