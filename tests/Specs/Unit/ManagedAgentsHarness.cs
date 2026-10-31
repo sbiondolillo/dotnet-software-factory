@@ -37,6 +37,9 @@ public sealed class ScriptedTurn
     public bool NeverIdle { get; set; }
 
     public List<ScriptedFile> Files { get; } = [];
+
+    /// <summary>More events of the turn, after its agent messages. The stub adds the id, the type and the time.</summary>
+    public List<(string Type, JsonObject Extra)> Events { get; } = [];
 }
 
 /// <summary>A <see cref="ManagedAgentsAgent"/> over a stub <see cref="HttpMessageHandler"/> that records each request and
@@ -208,6 +211,11 @@ public sealed partial class ManagedAgentsHarness : IDisposable
             foreach (string message in turn.Messages.Count > 0 ? turn.Messages : ["ok"])
             {
                 _events.Add(Event("agent.message", Text(message)));
+            }
+
+            foreach ((string type, JsonObject extra) in turn.Events)
+            {
+                _events.Add(Event(type, extra));
             }
         }
 

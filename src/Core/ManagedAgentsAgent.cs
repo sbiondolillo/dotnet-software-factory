@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -26,6 +27,10 @@ public sealed class ManagedAgentsAgent(
     private static readonly TimeSpan TokenAge = TimeSpan.FromMinutes(50);
     private static readonly TimeSpan FileWait = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan TurnWait = TimeSpan.FromHours(6);
+    private const string Redacted = "<redacted>";
+
+    // A line of events.jsonl keeps < and > as they are, so a reader of the store sees the text that the API sent.
+    private static readonly JsonSerializerOptions EventLine = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     private readonly List<string> _uploads = [];
     private string? _sessionId;
@@ -474,10 +479,44 @@ public sealed class ManagedAgentsAgent(
         var lines = new StringBuilder();
         foreach (JsonElement e in events)
         {
-            lines.Append(JsonSerializer.Serialize(e)).Append('\n');
+            JsonNode? node = JsonSerializer.SerializeToNode(e);
+            Redact(node);
+            lines.Append(node is null ? "null" : node.ToJsonString(EventLine)).Append('\n');
         }
 
         await File.AppendAllTextAsync(Path.Combine(directory, "events.jsonl"), lines.ToString(), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Sets each property named <c>authorization_token</c> in <paramref name="node"/>, at any depth, to the string
+    /// <c>&lt;redacted&gt;</c>. The events go to a store, and a token in them would reach it.</summary>
+    private static void Redact(JsonNode? node)
+    {
+        switch (node)
+        {
+            case JsonObject value:
+                foreach (string key in value.Select(property => property.Key).ToList())
+                {
+                    if (key is "authorization_token")
+                    {
+                        value[key] = Redacted;
+                    }
+                    else
+                    {
+                        Redact(value[key]);
+                    }
+                }
+
+                break;
+            case JsonArray items:
+                foreach (JsonNode? item in items)
+                {
+                    Redact(item);
+                }
+
+                break;
+            default:
+                break;
+        }
     }
 
     private async Task<ClaudeCodeResult> AnswerAsync(Turn turn, decimal cost, CancellationToken cancellationToken)

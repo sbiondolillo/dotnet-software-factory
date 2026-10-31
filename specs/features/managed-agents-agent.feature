@@ -179,6 +179,13 @@ Feature: ManagedAgentsAgent runs each prompt as one message of a Managed Agents 
     And the caller runs the prompt "Fix the build." with the model "claude-sonnet-5-5"
     Then the root file ".factory/sandbox-home/sesn_1/events.jsonl" holds every event of the session once, in the order the API processed them
 
+  Scenario: An event that holds an authorization token is written with the token redacted
+    Given a builder agent with the budget 1500 cents
+    And the next turn holds an event with the authorization token "ghs_secret_in_event" nested in an array of objects
+    When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5"
+    Then the root file ".factory/sandbox-home/sesn_1/events.jsonl" holds "<redacted>"
+    And the root file ".factory/sandbox-home/sesn_1/events.jsonl" does not hold "ghs_secret_in_event"
+
   Scenario: A token older than 50 minutes is rotated with one POST to the resource before the send
     Given a builder agent with the budget 1500 cents
     When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5"

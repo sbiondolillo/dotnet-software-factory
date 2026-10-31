@@ -138,6 +138,16 @@ public sealed class ManagedAgentsAgentSteps(ExceptionState exceptionState) : IDi
         File.WriteAllText(full, content);
     }
 
+    [Given("the next turn holds an event with the authorization token {string} nested in an array of objects")]
+    public void GivenTokenEvent(string token) =>
+        _harness.Next.Events.Add(("agent.tool_use", new JsonObject
+        {
+            ["input"] = new JsonObject
+            {
+                ["resources"] = new JsonArray(new JsonObject { ["type"] = "github_repository", ["authorization_token"] = token }),
+            },
+        }));
+
     [Given("the next turn never goes idle")]
     public void GivenNoIdle() => _harness.Next.NeverIdle = true;
 
@@ -345,6 +355,14 @@ public sealed class ManagedAgentsAgentSteps(ExceptionState exceptionState) : IDi
         })];
         Assert.Equal([.. _harness.Events.Select(e => e["id"]!.GetValue<string>())], ids);
     }
+
+    [Then("the root file {string} holds {string}")]
+    public void ThenRootHolds(string path, string text) =>
+        Assert.Contains(text, File.ReadAllText(Path.Combine(_harness.RootDirectory, path)), StringComparison.Ordinal);
+
+    [Then("the root file {string} does not hold {string}")]
+    public void ThenRootNotHolds(string path, string text) =>
+        Assert.DoesNotContain(text, File.ReadAllText(Path.Combine(_harness.RootDirectory, path)), StringComparison.Ordinal);
 
     [Then("the API got one POST to {string} with the second minted token, before the POST to {string}")]
     public void ThenRotated(string resource, string events)
