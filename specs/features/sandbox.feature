@@ -112,3 +112,37 @@ Feature: A sandbox container starts, runs commands on the work tree, and is remo
     When a caller runs "claude" with the argument "-p" and an empty list of names
     And a caller disposes the sandbox
     Then the file ".claude/projects/-work/session.jsonl" is under ".factory/sandbox-home/" of the root directory
+
+  Scenario: A sandbox for the gates holds no Anthropic variable
+    Given a Sandbox built over a mock of CommandRunner
+    And a work tree in a new directory that holds a directory ".git"
+    When a caller starts a sandbox for the gates with the image tag "factory-sandbox:test" over that work tree
+    Then the arguments of the docker run hold neither "ANTHROPIC_API_KEY" nor "ANTHROPIC_BASE_URL"
+    And the arguments of the docker run hold "--volume" and then the path of that work tree followed by ":/work"
+
+  Scenario: A sandbox for the gates mounts .factory and specs read-only
+    Given a Sandbox built over a mock of CommandRunner
+    And a work tree in a new directory that holds a directory ".git"
+    When a caller starts a sandbox for the gates with the image tag "factory-sandbox:test" over that work tree
+    Then the arguments of the docker run hold "--volume" and then the path of that work tree followed by "/.factory:/work/.factory:ro"
+    And the arguments of the docker run hold "--volume" and then the path of that work tree followed by "/specs:/work/specs:ro"
+    And the directory ".factory" of that work tree existed when the docker run started
+    And the directory "specs" of that work tree existed when the docker run started
+
+  Scenario: A sandbox of the Claude Code path keeps .factory writable
+    Given a Sandbox built over a mock of CommandRunner
+    And a work tree in a new directory that holds a directory ".git"
+    When a caller starts a sandbox with the image tag "factory-sandbox:test" over that work tree
+    Then no argument of the docker run ends with ".factory:/work/.factory:ro"
+
+  Scenario Outline: A sandbox for the gates refuses a symbolic link in a read-only path
+    Given a Sandbox built over a mock of CommandRunner
+    And a work tree in a new directory that holds a symlink "<link>"
+    When a caller starts a sandbox for the gates with the image tag "factory-sandbox:test" over that work tree
+    Then the start throws a SandboxException whose message holds "<link>"
+    And the runner ran no docker run
+
+    Examples:
+      | link     |
+      | .factory |
+      | specs    |

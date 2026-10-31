@@ -212,7 +212,7 @@ public sealed class Git(CommandRunner runner)
     /// Adds <c>core.hooksPath=/dev/null</c> to <paramref name="environment"/> as the next <c>GIT_CONFIG_*</c> entry, after the
     /// entries it holds, so git runs no hook that a build or an agent wrote into the work tree.
     /// </summary>
-    internal static void TurnHooksOff(Dictionary<string, string> environment)
+    private static void TurnHooksOff(Dictionary<string, string> environment)
     {
         int count = environment.TryGetValue("GIT_CONFIG_COUNT", out string? text)
             ? int.Parse(text, NumberStyles.None, CultureInfo.InvariantCulture)
@@ -286,7 +286,7 @@ public sealed class Git(CommandRunner runner)
     /// Lists each directory, file or symlink named <c>.git</c> under <paramref name="workTree"/> other than its own,
     /// and each directory that cannot be read. Git runs the hooks and the config of a nested repo, outside the sandbox.
     /// </summary>
-    internal static List<string> NestedGitEntries(string workTree)
+    private static List<string> NestedGitEntries(string workTree)
     {
         List<string> found = [];
         if (!Directory.Exists(workTree))

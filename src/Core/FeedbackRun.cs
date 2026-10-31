@@ -109,10 +109,10 @@ public sealed class FeedbackRun(
         RunAgents agents = await RunAgents.StartAsync(setup, cancellationToken).ConfigureAwait(false);
         await using (agents.ConfigureAwait(false))
         {
-            CommandHost host = agents.Host;
+            Sandbox sandbox = agents.Sandbox;
             var buildPhase = new BuildPhase(agents.Builder, cleanup, refactor, readsPlan: false);
             LintGate lintGate = agents.Lint(null);
-            var testGate = new TestGate(host, skipIntegration: request.SkipIntegration);
+            var testGate = new TestGate(sandbox, skipIntegration: request.SkipIntegration);
             var reviewPhase = new ReviewPhase(agents.Reviewer, git, cleanup, refactor, readsPlan: false);
 
             IReadOnlySet<string> basePassed = cleanup
@@ -160,7 +160,7 @@ public sealed class FeedbackRun(
                             gateFaults = cleanup ? CleanupGate.LostTests(basePassed, gate) : [];
                             if (gateFaults.Count is 0 && check is not null)
                             {
-                                CommandResult after = await CleanupGate.RunCheckAsync(host, check, progress, cancellationToken).ConfigureAwait(false);
+                                CommandResult after = await CleanupGate.RunCheckAsync(sandbox, check, progress, cancellationToken).ConfigureAwait(false);
                                 await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
                                 gateFaults = after.ExitCode is 0 ? [] : [CleanupGate.CheckRedo(after)];
                             }

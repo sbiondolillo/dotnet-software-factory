@@ -1,5 +1,4 @@
 using Core;
-using Gherkin;
 using Reqnroll;
 using Xunit;
 
@@ -10,7 +9,6 @@ public sealed class FeatureFilesSteps(ExceptionState exceptionState) : IDisposab
 {
     private readonly string _root = Directory.CreateTempSubdirectory("feature-files-").FullName;
 
-    private string? _lastContent;
     private string _scenarioTitle = "";
     private string _testName = "";
     private IReadOnlyList<string> _titles = [];
@@ -28,6 +26,10 @@ public sealed class FeatureFilesSteps(ExceptionState exceptionState) : IDisposab
 
     [Given("a file {string} with the content:")]
     public void GivenAFileWithTheContent(string fileName, string content) => WriteFile(fileName, content);
+
+    [Given("{string} is a symbolic link to the file {string}")]
+    public void GivenASymbolicLink(string fileName, string target) =>
+        File.CreateSymbolicLink(Path.Combine(_root, fileName), Path.Combine(_root, target));
 
     [Given("the scenario title {string}")]
     public void GivenTheScenarioTitle(string title) => _scenarioTitle = title;
@@ -98,26 +100,19 @@ public sealed class FeatureFilesSteps(ExceptionState exceptionState) : IDisposab
         Assert.Equal(2, _directoryResults.Count);
     }
 
+    [Then("FeatureFiles throws a FeatureFileException that holds {string} and lacks {string}")]
+    public void ThenFeatureFilesThrowsAFeatureFileExceptionThatHoldsAndLacks(string held, string lacked)
+    {
+        FeatureFileException exception = Assert.IsType<FeatureFileException>(exceptionState.Exception);
+        Assert.Contains(held, exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(lacked, exception.Message, StringComparison.Ordinal);
+    }
+
     [Then("FeatureFiles throws a FeatureFileException naming the path {string}")]
     public void ThenFeatureFilesThrowsAFeatureFileExceptionNamingThePath(string path)
     {
         FeatureFileException exception = Assert.IsType<FeatureFileException>(exceptionState.Exception);
         Assert.Equal(path, exception.Path);
-    }
-
-    [Then("the exception message holds the parser's message")]
-    public void ThenTheExceptionMessageHoldsTheParsersMessage()
-    {
-        FeatureFileException exception = Assert.IsType<FeatureFileException>(exceptionState.Exception);
-        try
-        {
-            new Parser().Parse(new StringReader(_lastContent!));
-            Assert.Fail("expected Gherkin's parser to reject the content");
-        }
-        catch (ParserException parserException)
-        {
-            Assert.Contains(parserException.Message, exception.Message, StringComparison.Ordinal);
-        }
     }
 
     [Then("FeatureFiles returns the test name {string}")]
@@ -130,6 +125,5 @@ public sealed class FeatureFilesSteps(ExceptionState exceptionState) : IDisposab
         string fullPath = Path.Combine(_root, relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         File.WriteAllText(fullPath, content);
-        _lastContent = content;
     }
 }

@@ -12,10 +12,7 @@ public sealed class CommandSpec
     /// <summary>The directory the program runs in, or null for the caller's directory.</summary>
     public string? WorkingDirectory { get; init; }
 
-    /// <summary>True to start from an empty environment, so the program sees <see cref="EnvironmentVariables"/> alone.</summary>
-    public bool ClearEnvironment { get; init; }
-
-    /// <summary>Extra environment variables, overlaid on the caller's environment, or on an empty one when <see cref="ClearEnvironment"/> is true.</summary>
+    /// <summary>Extra environment variables, overlaid on the caller's environment.</summary>
     public Dictionary<string, string> EnvironmentVariables { get; init; } = [];
 
     /// <summary>The time the program is given to finish, or null for no limit.</summary>

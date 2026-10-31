@@ -179,13 +179,6 @@ Feature: Factory run
     Then FactoryRun throws GitHubRequestException and removes the container
 
   @managed
-  Scenario: A managed run starts no container and delivers the approved build
-    Given the run uses Managed Agents sessions
-    When a caller starts a run
-    Then the run sends no command to docker
-    And FactoryRun gives back a result with the pull request of the number 10 and 0 Redos
-
-  @managed
   Scenario: A managed run pushes the session branch before the first session starts
     Given the run uses Managed Agents sessions
     When a caller starts a run
@@ -254,4 +247,25 @@ Feature: Factory run
     And FactoryRun gives back a result with no pull request and 0 Redos
     And git pushes no branch "factory/a1b2c3d4"
     And git pushes no branch "factory/a1b2c3d4-session"
-    And the run sends no command to docker
+
+  @managed
+  Scenario: A managed run runs the gates in a container with no key and delivers the approved build
+    Given the run uses Managed Agents sessions
+    When a caller starts a run
+    Then the docker run of the run holds neither "ANTHROPIC_API_KEY" nor "ANTHROPIC_BASE_URL"
+    And the docker run of the run mounts the clone at /work and names the image "factory-sandbox:test"
+    And every dotnet command of the run goes through docker exec
+    And FactoryRun gives back a result with the pull request of the number 10 and 0 Redos
+    And the run removes the container
+
+  @managed
+  Scenario: A managed reframe run lists the public API of the base commit in the container
+    Given the run uses Managed Agents sessions
+    And the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
+    And the check command exits with the code 1 before the build
+    When a caller starts a run
+    Then the API printer runs through docker exec
+
+  Scenario: A Claude Code run gives its container the two Anthropic variables
+    When a caller starts a run
+    Then the arguments of the docker run of the run hold "--env" and then "ANTHROPIC_API_KEY", and "--env" and then "ANTHROPIC_BASE_URL"

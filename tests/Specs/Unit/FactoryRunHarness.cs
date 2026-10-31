@@ -226,11 +226,6 @@ public sealed class FactoryRunHarness : IDisposable
             return AnswerGit(spec);
         }
 
-        if (spec.Command is not "docker")
-        {
-            return Program([spec.Command, .. spec.Arguments], directory => directory, spec.WorkingDirectory is { } at && at != _clone.FullName);
-        }
-
         return spec.Arguments[0] switch
         {
             "run" => new CommandResult { StandardOutput = ContainerId + "\n" },
@@ -323,7 +318,7 @@ public sealed class FactoryRunHarness : IDisposable
         return Program(arguments[(id + 1)..], directory => Path.Combine(_clone.FullName, directory["/work/".Length..]), arguments.Contains("--workdir"));
     }
 
-    /// <summary>Answers a program with its words, in the container or on the host. <paramref name="results"/> maps the TRX directory to the host,
+    /// <summary>Answers a program with its words, in the container. <paramref name="results"/> maps the TRX directory to the host,
     /// and <paramref name="inCopy"/> is true for a command that runs in a directory other than the work tree.</summary>
     private CommandResult Program(List<string> arguments, Func<string, string> results, bool inCopy)
     {

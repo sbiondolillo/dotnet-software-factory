@@ -4,9 +4,17 @@ using System.Runtime.InteropServices;
 namespace Core;
 
 /// <summary>A running container that holds a work tree at <c>/work</c>, runs commands in it and removes it on disposal.</summary>
-public sealed class Sandbox : CommandHost, IAsyncDisposable
+public sealed class Sandbox : IAsyncDisposable
 {
+    /// <summary>The path of the work tree in the container.</summary>
+    internal const string WorkDirectory = "/work";
+
     private const string Home = "/tmp/sandbox-home";
+
+    // The factory reads and writes these directories on the runner and follows a link in them, so no process of a gate writes them.
+    // Each one is a child of /work: a gate cannot rename a mount, and it can rename the writable parent of one.
+    private static readonly string[] GateReadOnlyPaths = [".factory", "specs"];
+
     private readonly CommandRunner _runner;
     private readonly string _id;
 
@@ -16,69 +24,40 @@ public sealed class Sandbox : CommandHost, IAsyncDisposable
         _id = id;
     }
 
-    /// <summary>Makes sure the image <paramref name="tag"/> exists, then starts a container over <paramref name="workTree"/>.</summary>
-    public static async Task<Sandbox> StartAsync(
+    /// <summary>Makes sure the image <paramref name="tag"/> exists, then starts a container over <paramref name="workTree"/> that holds
+    /// <c>ANTHROPIC_API_KEY</c> and <c>ANTHROPIC_BASE_URL</c> for Claude Code.</summary>
+    public static Task<Sandbox> StartAsync(
         CommandRunner runner,
         string tag,
         string rootDirectory,
         string workTree,
-        CancellationToken cancellationToken = default)
-    {
-        await new SandboxImage(runner).EnsureAsync(tag, rootDirectory, cancellationToken).ConfigureAwait(false);
+        CancellationToken cancellationToken = default) =>
+        StartAsync(runner, tag, rootDirectory, workTree, ["--env", "ANTHROPIC_API_KEY", "--env", "ANTHROPIC_BASE_URL"], [], cancellationToken);
 
-        string user = string.Create(CultureInfo.InvariantCulture, $"{GetUid()}:{GetGid()}");
+    /// <summary>Starts a container as <see cref="StartAsync(CommandRunner, string, string, string, CancellationToken)"/> does, with no
+    /// Anthropic variable and with <c>.factory</c> and <c>specs</c> read-only: the gates run an agent's code, and a Managed
+    /// Agents run needs no key in the container.</summary>
+    public static Task<Sandbox> StartForGatesAsync(
+        CommandRunner runner,
+        string tag,
+        string rootDirectory,
+        string workTree,
+        CancellationToken cancellationToken = default) =>
+        StartAsync(runner, tag, rootDirectory, workTree, [], GateReadOnlyPaths, cancellationToken);
 
-        // The home is a directory on the host, so the transcript that Claude Code writes under it outlives the container.
-        // The process that creates it owns it, and that is the user the container runs as.
-        string home = Path.Combine(rootDirectory, ".factory", "sandbox-home", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(home);
-        List<string> volumes = ["--volume", $"{workTree}:/work", "--volume", $"{home}:{Home}"];
-        string gitDirectory = Path.Combine(workTree, ".git");
-        if (Directory.Exists(gitDirectory))
-        {
-            // The agent cannot write a hook or a config line that the git commands of the factory read on the runner.
-            // `git worktree add` in the container still writes .git/worktrees, which docker would create as root.
-            string worktrees = Path.Combine(gitDirectory, "worktrees");
-            Directory.CreateDirectory(worktrees);
-            volumes.AddRange(["--volume", $"{gitDirectory}:/work/.git:ro", "--volume", $"{worktrees}:/work/.git/worktrees"]);
-        }
+    /// <summary>A path for a scratch directory named <paramref name="name"/>, outside the work tree, as a command sees it.</summary>
+    internal static string ScratchPath(string name) => $"/tmp/{name}";
 
-        CommandResult run = await runner.RunAsync(
-            new CommandSpec
-            {
-                Command = "docker",
-                Arguments =
-                [
-                    "run",
-                    "--detach",
-                    "--init",
-                    "--user", user,
-                    .. volumes,
-                    "--workdir", "/work",
-                    "--env", $"HOME={Home}",
-                    "--env", "ANTHROPIC_API_KEY",
-                    "--env", "ANTHROPIC_BASE_URL",
-                    tag,
-                    "sh", "-c", $"mkdir -p {Home}/.config && exec sleep infinity",
-                ],
-            },
-            cancellationToken).ConfigureAwait(false);
-        if (run.ExitCode is not 0)
-        {
-            throw new SandboxException(run.StandardError);
-        }
-
-        return new Sandbox(runner, run.StandardOutput.Trim());
-    }
-
-    /// <inheritdoc />
-    public override string WorkDirectory => "/work";
-
-    /// <inheritdoc />
-    public override string ScratchPath(string name) => $"/tmp/{name}";
+    /// <summary>Runs <paramref name="program"/> in the work tree, holding each variable of <paramref name="names"/> by name.</summary>
+    public Task<CommandResult> RunAsync(
+        string program,
+        IReadOnlyList<string> arguments,
+        IReadOnlyList<string> names,
+        CancellationToken cancellationToken = default) =>
+        RunAsync(program, arguments, names, null, cancellationToken);
 
     /// <summary>Runs <paramref name="program"/> in the container, in <paramref name="workingDirectory"/> when it is not null.</summary>
-    public override Task<CommandResult> RunAsync(
+    public Task<CommandResult> RunAsync(
         string program,
         IReadOnlyList<string> arguments,
         IReadOnlyList<string> names,
@@ -110,6 +89,83 @@ public sealed class Sandbox : CommandHost, IAsyncDisposable
     public async ValueTask DisposeAsync() =>
         await _runner.RunAsync(
             new CommandSpec { Command = "docker", Arguments = ["rm", "--force", _id] }).ConfigureAwait(false);
+
+    private static async Task<Sandbox> StartAsync(
+        CommandRunner runner,
+        string tag,
+        string rootDirectory,
+        string workTree,
+        IReadOnlyList<string> agentEnvironment,
+        IReadOnlyList<string> readOnlyPaths,
+        CancellationToken cancellationToken)
+    {
+        foreach (string path in readOnlyPaths)
+        {
+            RefuseLink(workTree, path);
+        }
+
+        await new SandboxImage(runner).EnsureAsync(tag, rootDirectory, cancellationToken).ConfigureAwait(false);
+
+        string user = string.Create(CultureInfo.InvariantCulture, $"{GetUid()}:{GetGid()}");
+
+        // The home is a directory on the host, so the transcript that Claude Code writes under it outlives the container.
+        // The process that creates it owns it, and that is the user the container runs as.
+        string home = Path.Combine(rootDirectory, ".factory", "sandbox-home", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(home);
+        List<string> volumes = ["--volume", $"{workTree}:/work", "--volume", $"{home}:{Home}"];
+        string gitDirectory = Path.Combine(workTree, ".git");
+        if (Directory.Exists(gitDirectory))
+        {
+            // The agent cannot write a hook or a config line that the git commands of the factory read on the runner.
+            // `git worktree add` in the container still writes .git/worktrees, which docker would create as root.
+            string worktrees = Path.Combine(gitDirectory, "worktrees");
+            Directory.CreateDirectory(worktrees);
+            volumes.AddRange(["--volume", $"{gitDirectory}:/work/.git:ro", "--volume", $"{worktrees}:/work/.git/worktrees"]);
+        }
+
+        foreach (string path in readOnlyPaths)
+        {
+            // Docker would create a missing source as root, and the factory then could not write in it.
+            string source = Path.Combine(workTree, path);
+            Directory.CreateDirectory(source);
+            volumes.AddRange(["--volume", $"{source}:/work/{path}:ro"]);
+        }
+
+        CommandResult run = await runner.RunAsync(
+            new CommandSpec
+            {
+                Command = "docker",
+                Arguments =
+                [
+                    "run",
+                    "--detach",
+                    "--init",
+                    "--user", user,
+                    .. volumes,
+                    "--workdir", "/work",
+                    "--env", $"HOME={Home}",
+                    .. agentEnvironment,
+                    tag,
+                    "sh", "-c", $"mkdir -p {Home}/.config && exec sleep infinity",
+                ],
+            },
+            cancellationToken).ConfigureAwait(false);
+        if (run.ExitCode is not 0)
+        {
+            throw new SandboxException(run.StandardError);
+        }
+
+        return new Sandbox(runner, run.StandardOutput.Trim());
+    }
+
+    // Docker resolves a bind source on the host, so a link that a branch commits would mount a directory of the runner.
+    private static void RefuseLink(string workTree, string path)
+    {
+        if (new DirectoryInfo(Path.Combine(workTree, path)).LinkTarget is not null)
+        {
+            throw new SandboxException($"{path} is a symbolic link, so the gates do not start");
+        }
+    }
 
     [DllImport("libc", EntryPoint = "getuid")]
     private static extern uint GetUid();

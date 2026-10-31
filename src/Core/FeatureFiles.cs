@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Gherkin;
 using Gherkin.Ast;
 using Reqnroll.Tracing;
@@ -17,16 +18,34 @@ public sealed record FeatureOutline(bool HasFeature, bool HasRule, bool HasBackg
 /// which scenarios it holds, and which test method Reqnroll generates for a scenario's title.
 /// Reads with Gherkin's own parser and names with Reqnroll's own identifier logic, so both
 /// answers stay in lock-step with what Reqnroll.xunit.v3 actually compiles.</summary>
-public static class FeatureFiles
+public static partial class FeatureFiles
 {
+    [GeneratedRegex(@"^\(\d+:\d+\)", RegexOptions.Multiline)]
+    private static partial Regex Position();
+
     /// <summary>Reads the scenario titles of the feature file at <paramref name="featureFilePath"/>, in the
     /// order they appear. A <c>Background</c> contributes no title. A <c>Scenario Outline</c> contributes
     /// its one title regardless of its example rows. A scenario under a <c>Rule</c> is a scenario of the
-    /// file. Throws <see cref="FeatureFileException"/> when the parser rejects the file's content.</summary>
+    /// file. Throws <see cref="FeatureFileException"/> when the path is a symbolic link, or when the parser rejects the file's content.</summary>
     public static IReadOnlyList<string> ReadScenarioTitles(string featureFilePath)
     {
+        // A parser error quotes the text, so a link to a file of the runner would put that file in a message.
+        if (new FileInfo(featureFilePath).LinkTarget is not null)
+        {
+            throw new FeatureFileException(featureFilePath, "the file is a symbolic link");
+        }
+
         string content = File.ReadAllText(featureFilePath);
-        return ReadScenarioTitles(featureFilePath, content);
+        try
+        {
+            return ReadScenarioTitles(featureFilePath, content);
+        }
+        catch (FeatureFileException exception)
+        {
+            // A linked directory, or a swap after the check above, can put a file of the runner here, so the error holds no text of the file.
+            IEnumerable<string> positions = Position().Matches(exception.Message).Select(match => match.Value);
+            throw new FeatureFileException(featureFilePath, $"the parser rejects the text at {string.Join(", ", positions)}");
+        }
     }
 
     /// <summary>Scans <paramref name="directoryPath"/> at any depth for files named <c>*.feature</c>, and

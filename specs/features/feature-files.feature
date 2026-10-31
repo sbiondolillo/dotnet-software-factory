@@ -78,7 +78,6 @@ Feature: FeatureFiles reads scenario titles and computes Reqnroll test names
       """
     When FeatureFiles reads the scenario titles of "invalid.feature"
     Then FeatureFiles throws a FeatureFileException naming the path "invalid.feature"
-    And the exception message holds the parser's message
 
   Scenario: The test name for a plain title
     Given the scenario title "The greeter greets by name"
@@ -129,3 +128,20 @@ Feature: FeatureFiles reads scenario titles and computes Reqnroll test names
     Given the scenario title "The greeter greets <who>"
     When FeatureFiles computes the test name
     Then FeatureFiles returns the test name "TheGreeterGreetsWho"
+
+  Scenario: A feature file that is a symbolic link throws FeatureFileException with no text of its target
+    Given a file "environ" with the content:
+      """
+      FACTORY_GITHUB_TOKEN=s3cret
+      """
+    And "leak.feature" is a symbolic link to the file "environ"
+    When FeatureFiles reads the scenario titles of "leak.feature"
+    Then FeatureFiles throws a FeatureFileException that holds "leak.feature" and lacks "s3cret"
+
+  Scenario: A parse error of a feature file holds its position and no text of the file
+    Given a feature file "environ.feature" with the content:
+      """
+      FACTORY_GITHUB_TOKEN=s3cret
+      """
+    When FeatureFiles reads the scenario titles of "environ.feature"
+    Then FeatureFiles throws a FeatureFileException that holds "(1:1)" and lacks "s3cret"

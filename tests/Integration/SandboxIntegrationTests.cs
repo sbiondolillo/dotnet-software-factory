@@ -86,6 +86,41 @@ public sealed class SandboxIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task ASandboxForTheGatesHoldsNoKeyAndReachesNoProcessOfTheRunner()
+    {
+        await EnsureImageAsync();
+        var runner = new KeyRunner();
+        await using Sandbox keyed = await Sandbox.StartAsync(runner, Tag, RepoRoot(), _tree.FullName, TestContext.Current.CancellationToken);
+        await using Sandbox gates = await Sandbox.StartForGatesAsync(runner, Tag, RepoRoot(), _tree.FullName, TestContext.Current.CancellationToken);
+
+        Assert.Equal(KeyRunner.Key + "\n", (await ExecAsync(keyed, "printenv", ["ANTHROPIC_API_KEY"])).StandardOutput);
+        Assert.Equal(KeyRunner.Key + "\n", (await ExecAsync(keyed, "printenv", ["ANTHROPIC_BASE_URL"])).StandardOutput);
+        Assert.Equal(1, (await ExecAsync(gates, "printenv", ["ANTHROPIC_API_KEY"])).ExitCode);
+        Assert.Equal(1, (await ExecAsync(gates, "printenv", ["ANTHROPIC_BASE_URL"])).ExitCode);
+
+        CommandResult pids = await ExecAsync(gates, "sh", ["-c", "ls -d /proc/[0-9]*"]);
+        Assert.Equal(0, pids.ExitCode);
+        Assert.DoesNotContain($"/proc/{Environment.ProcessId}", pids.StandardOutput.Split('\n'));
+
+        Assert.NotEqual(0, (await ExecAsync(gates, "sh", ["-c", "command -v sudo"])).ExitCode);
+        Assert.NotEqual(0, (await ExecAsync(gates, "test", ["-e", "/var/run/docker.sock"])).ExitCode);
+
+        foreach (string path in new[] { ".factory", "specs" })
+        {
+            CommandResult link = await ExecAsync(gates, "ln", ["-s", "/proc/self/environ", $"/work/{path}/link"]);
+            Assert.NotEqual(0, link.ExitCode);
+            Assert.Contains("Read-only file system", link.StandardError, StringComparison.Ordinal);
+
+            CommandResult rename = await ExecAsync(gates, "mv", [$"/work/{path}", $"/work/{path}-old"]);
+            Assert.NotEqual(0, rename.ExitCode);
+            Assert.Contains("busy", rename.StandardError, StringComparison.Ordinal);
+        }
+
+        await File.WriteAllTextAsync(Path.Combine(_tree.FullName, ".factory", "plan.md"), "plan", TestContext.Current.CancellationToken);
+        Assert.Equal("plan", (await ExecAsync(gates, "cat", ["/work/.factory/plan.md"])).StandardOutput);
+    }
+
+    [Fact]
     public async Task ExecAnswersHoldInTheContainer()
     {
         await using Sandbox sandbox = await StartAsync();
@@ -233,6 +268,19 @@ public sealed class SandboxIntegrationTests : IDisposable
         catch (SystemException)
         {
             return [];
+        }
+    }
+
+    /// <summary>Puts a value in both Anthropic variables of each <c>docker</c> command, so a container gets it when its <c>docker run</c> names them.</summary>
+    private sealed class KeyRunner : CommandRunner
+    {
+        public const string Key = "sk-sandbox-test";
+
+        public override Task<CommandResult> RunAsync(CommandSpec spec, CancellationToken cancellationToken = default)
+        {
+            spec.EnvironmentVariables["ANTHROPIC_API_KEY"] = Key;
+            spec.EnvironmentVariables["ANTHROPIC_BASE_URL"] = Key;
+            return base.RunAsync(spec, cancellationToken);
         }
     }
 }
