@@ -38,10 +38,12 @@ Feature: Git
     And Git pushes the branch "feature-5" from "/tmp/factory-clone-5" with the token "token-5"
     Then the clone's CommandSpec and the push's CommandSpec each hold these environment variables:
       | name               | value             |
-      | GIT_CONFIG_COUNT    | 2                 |
+      | GIT_CONFIG_COUNT    | 3                 |
       | GIT_CONFIG_KEY_0    | credential.helper |
       | GIT_CONFIG_VALUE_0  |                   |
       | GIT_CONFIG_KEY_1    | credential.helper |
+      | GIT_CONFIG_KEY_2    | core.hooksPath    |
+      | GIT_CONFIG_VALUE_2  | /dev/null         |
     And each GIT_CONFIG_VALUE_1 holds "$FACTORY_GITHUB_TOKEN"
 
   Scenario: The clone's and the push's CommandSpecs' credential helper hands git a username and the token as a password
@@ -105,3 +107,61 @@ Feature: Git
     Then the file ".git/info/exclude" in that work tree holds the lines:
       | line      |
       | .factory/ |
+
+  Scenario: A git command with no credential helper turns the hooks off in one GIT_CONFIG entry
+    When Git checks out the new branch "feature-12" in "/tmp/factory-clone-12"
+    Then the "checkout" CommandSpec holds these environment variables:
+      | name               | value          |
+      | GIT_CONFIG_COUNT   | 1              |
+      | GIT_CONFIG_KEY_0   | core.hooksPath |
+      | GIT_CONFIG_VALUE_0 | /dev/null      |
+
+  Scenario: The pull fast-forwards from the branch on origin with the credential helper
+    When Git pulls the branch "factory/7-session" into "/tmp/factory-clone-13" with the token "token-13"
+    Then the "pull" CommandSpec holds the arguments "pull --ff-only origin factory/7-session" and the working directory "/tmp/factory-clone-13"
+    And the "pull" CommandSpec holds the environment variable "FACTORY_GITHUB_TOKEN" set to "token-13" and a GIT_CONFIG_VALUE_1 that holds "$FACTORY_GITHUB_TOKEN"
+
+  Scenario: The delete of a remote branch pushes --delete with the credential helper
+    When Git deletes the branch "factory/7-session" on origin from "/tmp/factory-clone-14" with the token "token-14"
+    Then the "push" CommandSpec holds the arguments "push origin --delete factory/7-session" and the working directory "/tmp/factory-clone-14"
+    And the "push" CommandSpec holds the environment variable "FACTORY_GITHUB_TOKEN" set to "token-14" and a GIT_CONFIG_VALUE_1 that holds "$FACTORY_GITHUB_TOKEN"
+
+  Scenario: The remote head is the SHA before the tab on the line that ls-remote prints for the full name of the branch
+    Given git answers "ls-remote" with exit code 0 and the standard output "903c6f7ea009814ad6cff2d387717be8f34bab03\trefs/heads/factory/7-session\n"
+    When Git reads the remote head of the branch "factory/7-session" in "/tmp/factory-clone-15" with the token "token-15"
+    Then the remote head is "903c6f7ea009814ad6cff2d387717be8f34bab03"
+    And the "ls-remote" CommandSpec holds the arguments "ls-remote --heads origin refs/heads/factory/7-session" and the working directory "/tmp/factory-clone-15"
+    And the "ls-remote" CommandSpec holds the environment variable "FACTORY_GITHUB_TOKEN" set to "token-15" and a GIT_CONFIG_VALUE_1 that holds "$FACTORY_GITHUB_TOKEN"
+
+  Scenario: The remote head is null when origin lacks the branch
+    Given git answers "ls-remote" with exit code 0 and the standard output ""
+    When Git reads the remote head of the branch "factory/8-session" in "/tmp/factory-clone-16" with the token "token-16"
+    Then the remote head is null
+
+  Scenario: The tracked files under a path are the lines that ls-files prints
+    Given git answers "ls-files" with exit code 0 and the standard output ".factory/plan.md\n.factory/review.json\n"
+    When Git lists the tracked files under ".factory" in "/tmp/factory-clone-17"
+    Then the list of tracked files is ".factory/plan.md" and ".factory/review.json"
+    And the "ls-files" CommandSpec holds the arguments "ls-files -- .factory" and the working directory "/tmp/factory-clone-17"
+
+  Scenario: No tracked file under a path gives an empty list
+    Given git answers "ls-files" with exit code 0 and the standard output ""
+    When Git lists the tracked files under ".factory" in "/tmp/factory-clone-18"
+    Then the list of tracked files is empty
+
+  Scenario: A pull that git refuses throws a GitCommandException naming pull and holding its standard error
+    Given git answers "pull" with exit code 128 and the standard error "fatal: Not possible to fast-forward, aborting."
+    When Git pulls the branch "factory/7-session" into "/tmp/factory-clone-19" with the token "token-19"
+    Then Git throws a GitCommandException whose message contains "pull"
+    And the exception message contains "fatal: Not possible to fast-forward, aborting."
+
+  Scenario: A delete of a branch that origin lacks throws a GitCommandException holding its standard error
+    Given git answers "push" with exit code 1 and the standard error "error: unable to delete 'factory/9-session': remote ref does not exist"
+    When Git deletes the branch "factory/9-session" on origin from "/tmp/factory-clone-20" with the token "token-20"
+    Then Git throws a GitCommandException whose message contains "push"
+    And the exception message contains "remote ref does not exist"
+
+  Scenario: A remote head read that git refuses throws a GitCommandException
+    Given git answers "ls-remote" with exit code 128 and the standard error "fatal: could not read Username"
+    When Git reads the remote head of the branch "factory/7-session" in "/tmp/factory-clone-21" with the token "token-21"
+    Then Git throws a GitCommandException whose message contains "ls-remote"

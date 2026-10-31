@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Core;
 
 /// <summary>Runs the git operations the app needs, over a <see cref="CommandRunner"/>.</summary>
@@ -196,6 +198,7 @@ public sealed class Git(CommandRunner runner)
             }
         }
 
+        TurnHooksOff(spec.EnvironmentVariables);
         CommandResult result = await runner.RunAsync(spec, cancellationToken).ConfigureAwait(false);
         if (result.ExitCode is not 0)
         {
@@ -205,21 +208,79 @@ public sealed class Git(CommandRunner runner)
         return result;
     }
 
+    /// <summary>
+    /// Adds <c>core.hooksPath=/dev/null</c> to <paramref name="environment"/> as the next <c>GIT_CONFIG_*</c> entry, after the
+    /// entries it holds, so git runs no hook that a build or an agent wrote into the work tree.
+    /// </summary>
+    internal static void TurnHooksOff(Dictionary<string, string> environment)
+    {
+        int count = environment.TryGetValue("GIT_CONFIG_COUNT", out string? text)
+            ? int.Parse(text, NumberStyles.None, CultureInfo.InvariantCulture)
+            : 0;
+        string index = count.ToString(CultureInfo.InvariantCulture);
+        environment[$"GIT_CONFIG_KEY_{index}"] = "core.hooksPath";
+        environment[$"GIT_CONFIG_VALUE_{index}"] = "/dev/null";
+        environment["GIT_CONFIG_COUNT"] = (count + 1).ToString(CultureInfo.InvariantCulture);
+    }
+
     /// <summary>Fast-forwards the current branch of <paramref name="directory"/> to <c>origin/<paramref name="branch"/></c>.</summary>
-    public Task PullAsync(string branch, string directory, string token, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+    public async Task PullAsync(string branch, string directory, string token, CancellationToken cancellationToken = default)
+    {
+        var spec = new CommandSpec
+        {
+            Command = "git",
+            Arguments = ["pull", "--ff-only", "origin", branch],
+            WorkingDirectory = directory,
+            EnvironmentVariables = CredentialEnvironment(token),
+        };
+
+        await RunAsync(spec, cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>Deletes <paramref name="branch"/> on origin.</summary>
-    public Task DeleteRemoteBranchAsync(string branch, string directory, string token, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+    public async Task DeleteRemoteBranchAsync(string branch, string directory, string token, CancellationToken cancellationToken = default)
+    {
+        var spec = new CommandSpec
+        {
+            Command = "git",
+            Arguments = ["push", "origin", "--delete", branch],
+            WorkingDirectory = directory,
+            EnvironmentVariables = CredentialEnvironment(token),
+        };
+
+        await RunAsync(spec, cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>Reads the commit at the tip of <paramref name="branch"/> on origin, or null when origin lacks the branch.</summary>
-    public Task<string?> ReadRemoteHeadAsync(string branch, string directory, string token, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+    public async Task<string?> ReadRemoteHeadAsync(string branch, string directory, string token, CancellationToken cancellationToken = default)
+    {
+        // The full name of the ref, because a short pattern also matches the tail of a longer name, such as x/<branch>.
+        var spec = new CommandSpec
+        {
+            Command = "git",
+            Arguments = ["ls-remote", "--heads", "origin", $"refs/heads/{branch}"],
+            WorkingDirectory = directory,
+            EnvironmentVariables = CredentialEnvironment(token),
+        };
+
+        CommandResult result = await RunAsync(spec, cancellationToken).ConfigureAwait(false);
+        string? line = result.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+        return line?.Split('\t')[0];
+    }
 
     /// <summary>Lists the tracked files under <paramref name="path"/> in <paramref name="directory"/>.</summary>
-    public Task<string[]> ListTrackedAsync(string path, string directory, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+    public async Task<string[]> ListTrackedAsync(string path, string directory, CancellationToken cancellationToken = default)
+    {
+        var spec = new CommandSpec
+        {
+            Command = "git",
+            Arguments = ["ls-files", "--", path],
+            WorkingDirectory = directory,
+        };
+
+        CommandResult result = await RunAsync(spec, cancellationToken).ConfigureAwait(false);
+        return result.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+    }
 
     /// <summary>
     /// Lists each directory, file or symlink named <c>.git</c> under <paramref name="workTree"/> other than its own,
