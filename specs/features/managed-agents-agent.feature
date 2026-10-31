@@ -173,6 +173,35 @@ Feature: ManagedAgentsAgent runs each prompt as one message of a Managed Agents 
     Then the API got one POST to "/v1/sessions/sesn_1/resources/sesrsc_1" with the second minted token, before the POST to "/v1/sessions/sesn_1/events"
     And the first minted token was revoked
 
+  Scenario: A push that fails with Authentication failed rotates the token and asks for the push again
+    Given a builder agent with the budget 1500 cents
+    And the next turn holds the agent messages "The push failed: fatal: Authentication failed for 'https://github.com/sbiondolillo/factory-scratch/'\noutputs: plan.md"
+    And the next turn holds 2 model requests
+    And the next turn ends with the session cost at "40" cents
+    And the next turn creates the file "plan.md" holding "the plan"
+    And the turn after it holds the agent messages "Pushed.\noutputs: plan.md"
+    And the turn after it holds 1 model requests
+    And the turn after it ends with the session cost at "55" cents
+    When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5"
+    Then the API got one POST to "/v1/sessions/sesn_1/resources/sesrsc_1" with the second minted token, before the POST to "/v1/sessions/sesn_1/events"
+    And the first minted token was revoked
+    And the API got one POST to "/v1/sessions/sesn_1/events" with one user.message whose text holds "git push origin HEAD:factory/7-session"
+    And the answer text is "Pushed."
+    And the answer error flag is false
+    And the answer has the turn count 3
+    And the answer has the cost 0.55
+    And the work tree file ".factory/plan.md" holds "the plan"
+
+  Scenario: A second Authentication failed after the rotation is the answer with an error
+    Given a builder agent with the budget 1500 cents
+    And the next turn holds the agent messages "fatal: Authentication failed for 'https://github.com/sbiondolillo/factory-scratch/'\noutputs:"
+    And the turn after it holds the agent messages "fatal: Authentication failed for 'https://github.com/sbiondolillo/factory-scratch/'\noutputs:"
+    When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5"
+    Then the answer error flag is true
+    And the answer text holds "Authentication failed"
+    And the API got one POST to "/v1/sessions/sesn_1/resources/sesrsc_1"
+    And the API got one POST to "/v1/sessions/sesn_1/events" with one user.message whose text holds "git push origin HEAD:factory/7-session"
+
   Scenario: A token younger than 50 minutes is kept
     Given a builder agent with the budget 1500 cents
     When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5"

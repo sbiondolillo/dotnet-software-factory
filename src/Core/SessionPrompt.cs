@@ -13,6 +13,9 @@ internal static class SessionPrompt
     /// <summary>The start of the last line of an answer, which names the files the agent copied to the outputs.</summary>
     public const string OutputsLine = "outputs:";
 
+    /// <summary>The text of a push that GitHub refused for the token.</summary>
+    public const string AuthenticationFailed = "Authentication failed";
+
     /// <summary>Where a session finds the dotnet SDK.</summary>
     public const string Dotnet = "/root/.dotnet/dotnet";
 
@@ -88,6 +91,19 @@ internal static class SessionPrompt
         2. Always: `git push origin HEAD:{branch}`.
 
         When the push fails, put the output of the push in your final message.
+        """;
+
+    /// <summary>The message that asks the builder to push again, after the host renewed the token of the repository.</summary>
+    public static string PushAgain(string repo, string branch) =>
+        $"""
+        The host renewed the GitHub token of the repository. Run this shell command in `/workspace/{repo}` again:
+
+        ```
+        git push origin HEAD:{branch}
+        ```
+
+        When the push fails, put the output of the push in your final message. End your final message with the same
+        `{OutputsLine}` line as your last final message.
         """;
 
     /// <summary>The instruction for the last line of the final message.</summary>

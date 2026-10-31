@@ -49,6 +49,7 @@ public sealed partial class ManagedAgentsHarness : IDisposable
     private readonly List<JsonObject> _events = [];
     private readonly List<StoredFile> _files = [];
     private ScriptedTurn? _next;
+    private ScriptedTurn? _after;
     private Pending? _pending;
     private int _seconds;
     private int _eventIds;
@@ -105,6 +106,9 @@ public sealed partial class ManagedAgentsHarness : IDisposable
 
     /// <summary>The turn the next message gets. A step that sets up a turn changes this one.</summary>
     public ScriptedTurn Next => _next ??= new ScriptedTurn();
+
+    /// <summary>The turn the message after the next one gets. It becomes <see cref="Next"/> when the next message posts.</summary>
+    public ScriptedTurn After => _after ??= new ScriptedTurn();
 
     /// <summary>Every event the event list holds, oldest first.</summary>
     public IReadOnlyList<JsonObject> Events => _events;
@@ -172,7 +176,8 @@ public sealed partial class ManagedAgentsHarness : IDisposable
     private void StartTurn(string text)
     {
         ScriptedTurn turn = Next;
-        _next = null;
+        _next = _after;
+        _after = null;
         _status = "running";
         _pending = new Pending(turn, text);
     }

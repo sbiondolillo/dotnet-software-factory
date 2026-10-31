@@ -84,6 +84,15 @@ public sealed class ManagedAgentsAgentSteps(ExceptionState exceptionState) : IDi
         _harness.Next.Messages.Add(Unescape(second));
     }
 
+    [Given("the turn after it holds the agent messages {string}")]
+    public void GivenAfterMessage(string text) => _harness.After.Messages.Add(Unescape(text));
+
+    [Given("the turn after it holds {int} model requests")]
+    public void GivenAfterRequests(int count) => _harness.After.ModelRequests = count;
+
+    [Given("the turn after it ends with the session cost at {string} cents")]
+    public void GivenAfterCost(string cents) => _harness.After.CostCents = cents;
+
     [Given("the event list answers {int} events a page")]
     public void GivenPageSize(int size) => _harness.PageSize = size;
 

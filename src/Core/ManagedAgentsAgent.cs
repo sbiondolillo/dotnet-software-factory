@@ -119,11 +119,28 @@ public sealed class ManagedAgentsAgent(
 
         Turn turn = await WaitForTurnAsync(cancellationToken).ConfigureAwait(false);
         await WriteEventsAsync(turn.NewEvents, cancellationToken).ConfigureAwait(false);
+        bool pushedAgain = false;
+        if (Role is SessionRole.Builder && PushFailed(turn))
+        {
+            await ProgressLine.WriteAsync(Log, $"session: {phase} push failed with {SessionPrompt.AuthenticationFailed}, token rotated").ConfigureAwait(false);
+            await RotateAsync(cancellationToken).ConfigureAwait(false);
+            var again = new JsonObject { ["events"] = new JsonArray(UserMessage(SessionPrompt.PushAgain(Repo, SessionBranch))) };
+            await Client.SendAsync(HttpMethod.Post, $"{SessionPath}/events", again, cancellationToken).ConfigureAwait(false);
+            Turn retry = await WaitForTurnAsync(cancellationToken).ConfigureAwait(false);
+            await WriteEventsAsync(retry.NewEvents, cancellationToken).ConfigureAwait(false);
+            turn = new Turn([.. turn.NewEvents, .. retry.NewEvents], [.. turn.Events, .. retry.Events]);
+            pushedAgain = true;
+        }
 
         JsonElement session = await Client.SendAsync(HttpMethod.Get, SessionPath, null, cancellationToken).ConfigureAwait(false);
         _cents = Math.Max(_cents, ListCost(session));
 
         ClaudeCodeResult answer = await AnswerAsync(turn, Normalize((_cents - before) / 100m), cancellationToken).ConfigureAwait(false);
+        if (pushedAgain && PushFailed(turn))
+        {
+            answer = answer with { IsError = true };
+        }
+
         TimeSpan elapsed = Time.GetElapsedTime(started);
         long seconds = (long)elapsed.TotalSeconds;
         OnAnswer?.Invoke(elapsed, answer);
@@ -204,6 +221,13 @@ public sealed class ManagedAgentsAgent(
         e.TryGetProperty("content", out JsonElement content) && content.ValueKind is JsonValueKind.Array
             ? string.Concat(content.EnumerateArray().Where(c => Type(c) is "text").Select(c => Text(c, "text") ?? ""))
             : "";
+
+    private static string LastText(Turn turn) => turn.Events.Where(e => Type(e) is "agent.message").Select(MessageText).LastOrDefault() ?? "";
+
+    /// <summary>True when the turn ended by itself and its final answer holds the text of a push that GitHub refused for the token.</summary>
+    private static bool PushFailed(Turn turn) =>
+        turn.Events.Where(e => Type(e) is "session.status_idle").Select(StopReason).LastOrDefault() is null or "end_turn"
+        && LastText(turn).Contains(SessionPrompt.AuthenticationFailed, StringComparison.Ordinal);
 
     private static string? StopReason(JsonElement idle)
     {
@@ -307,7 +331,16 @@ public sealed class ManagedAgentsAgent(
 
     private async Task RotateWhenOldAsync(CancellationToken cancellationToken)
     {
-        if (_sessionId is null || _token is null || Time.GetElapsedTime(_tokenStamp) < TokenAge)
+        if (Time.GetElapsedTime(_tokenStamp) >= TokenAge)
+        {
+            await RotateAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Mints a new token, gives it to the repository resource of the session, and revokes the old one.</summary>
+    private async Task RotateAsync(CancellationToken cancellationToken)
+    {
+        if (_sessionId is null || _token is null)
         {
             return;
         }
@@ -452,7 +485,7 @@ public sealed class ManagedAgentsAgent(
 
     private async Task<ClaudeCodeResult> AnswerAsync(Turn turn, decimal cost, CancellationToken cancellationToken)
     {
-        string text = turn.Events.Where(e => Type(e) is "agent.message").Select(MessageText).LastOrDefault() ?? "";
+        string text = LastText(turn);
         int turns = turn.Events.Count(e => Type(e) is "span.model_request_end");
         string? stop = turn.Events.Where(e => Type(e) is "session.status_idle").Select(StopReason).LastOrDefault();
         (string result, IReadOnlyList<string>? outputs) = SplitOutputs(text);
