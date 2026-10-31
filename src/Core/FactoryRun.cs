@@ -718,9 +718,7 @@ public sealed class FactoryRun(
 
         try
         {
-            string earlier = File.Exists(summaryPath) ? await File.ReadAllTextAsync(summaryPath).ConfigureAwait(false) : "";
-            string gap = earlier.Length is 0 ? "" : earlier.EndsWith('\n') ? "\n" : "\n\n";
-            await File.AppendAllTextAsync(summaryPath, gap + _summary.Render()).ConfigureAwait(false);
+            await JobSummary.AppendToFileAsync(summaryPath, _summary.Render()).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {

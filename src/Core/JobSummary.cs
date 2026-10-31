@@ -56,6 +56,14 @@ public sealed class JobSummary
     /// <summary>Adds the Managed Agents sessions of the run, one line with each id, role and cost.</summary>
     public void AddSessions(IReadOnlyList<SessionCost> sessions) => _sessions.AddRange(sessions);
 
+    /// <summary>Appends <paramref name="text"/> to the file at <paramref name="path"/>, after one blank line when the file holds text.</summary>
+    public static async Task AppendToFileAsync(string path, string text, CancellationToken cancellationToken = default)
+    {
+        string earlier = File.Exists(path) ? await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false) : "";
+        string gap = earlier.Length is 0 ? "" : earlier.EndsWith('\n') ? "\n" : "\n\n";
+        await File.AppendAllTextAsync(path, gap + text, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>The Markdown text, ending with a line feed.</summary>
     public string Render()
     {

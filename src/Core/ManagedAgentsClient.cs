@@ -11,8 +11,7 @@ namespace Core;
 public sealed class ManagedAgentsClient(
     HttpClient http,
     string apiKey,
-    Func<TimeSpan, CancellationToken, Task>? delay = null,
-    TimeProvider? time = null)
+    Func<TimeSpan, CancellationToken, Task>? delay = null)
 {
     /// <summary>The beta header every request carries.</summary>
     public const string Beta = "managed-agents-2026-04-01";
@@ -32,8 +31,6 @@ public sealed class ManagedAgentsClient(
     internal string ApiKey { get; } = apiKey;
 
     internal Func<TimeSpan, CancellationToken, Task> Delay { get; } = delay ?? ((wait, token) => Task.Delay(wait, token));
-
-    internal TimeProvider Time { get; } = time ?? TimeProvider.System;
 
     /// <summary>The wait between two reads of a list that the agent polls, and the base of the wait before a request is sent again.</summary>
     internal static TimeSpan PollDelay { get; } = TimeSpan.FromSeconds(5);

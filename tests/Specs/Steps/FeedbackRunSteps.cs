@@ -379,7 +379,6 @@ public sealed class FeedbackRunSteps : IDisposable
         Assert.True(rm >= 0);
     }
 
-
     [Then("FeedbackRun throws SessionBranchException with a message that holds {string}")]
     public void ThenThrowsSessionBranch(string text) =>
         Assert.Contains(text, Assert.IsType<SessionBranchException>(_exception).Message, StringComparison.Ordinal);

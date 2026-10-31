@@ -65,7 +65,7 @@ internal sealed class RunAgents : IAsyncDisposable
         HttpMessageHandler handler = setup.Handler ?? (_ownHandler = new SocketsHttpHandler());
         _http = new HttpClient(handler, disposeHandler: false);
         var tokens = new GitHubAppTokens(handler, settings.AppId, settings.InstallationId, settings.PrivateKeyPem, setup.Time);
-        var client = new ManagedAgentsClient(_http, settings.ApiKey, setup.Delay, setup.Time)
+        var client = new ManagedAgentsClient(_http, settings.ApiKey, setup.Delay)
         {
             AgentId = settings.AgentId,
             EnvironmentId = settings.EnvironmentId,
@@ -172,7 +172,6 @@ internal sealed class RunAgents : IAsyncDisposable
     private ManagedAgentsAgent Session(ManagedAgentsClient client, GitHubAppTokens tokens, SessionRole role, int budgetCents) => new(
         client,
         tokens,
-        _setup.Git,
         _setup.Owner,
         _setup.Repo,
         _setup.ScratchBranch,

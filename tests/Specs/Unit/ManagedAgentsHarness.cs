@@ -128,11 +128,11 @@ public sealed partial class ManagedAgentsHarness : IDisposable
     public ManagedAgentsAgent Build(SessionRole role, int budgetCents)
     {
         var http = new HttpClient(new Handler(this));
-        var client = new ManagedAgentsClient(http, "sk-test", WaitAsync, Time) { AgentId = "agent_test", EnvironmentId = "env_test" };
+        var client = new ManagedAgentsClient(http, "sk-test", WaitAsync) { AgentId = "agent_test", EnvironmentId = "env_test" };
         var tokens = new GitHubAppTokens(new Handler(this), "1", "2", "unused", Time);
         var git = new Git(Mock.Of<CommandRunner>(MockBehavior.Strict));
         return new ManagedAgentsAgent(
-            client, tokens, git, Owner, Repo, SessionBranch, BaseCommit, WorkTree, RootDirectory, role, budgetCents, Log, Time)
+            client, tokens, Owner, Repo, SessionBranch, BaseCommit, WorkTree, RootDirectory, role, budgetCents, Log, Time)
         {
             MintToken = (write, _) =>
             {

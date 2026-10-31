@@ -355,7 +355,6 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
         return push;
     }
 
-
     [Then("the run sends no command to docker")]
     public void ThenNoDocker() => Assert.DoesNotContain(Commands, c => c.Command is "docker");
 

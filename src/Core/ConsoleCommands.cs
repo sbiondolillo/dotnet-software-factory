@@ -306,9 +306,7 @@ public static class ConsoleCommands
         summary.AddSessions(sessions);
         try
         {
-            string earlier = File.Exists(path) ? await File.ReadAllTextAsync(path).ConfigureAwait(false) : "";
-            string gap = earlier.Length is 0 ? "" : earlier.EndsWith('\n') ? "\n" : "\n\n";
-            await File.AppendAllTextAsync(path, gap + summary.RenderSessions()).ConfigureAwait(false);
+            await JobSummary.AppendToFileAsync(path, summary.RenderSessions()).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {

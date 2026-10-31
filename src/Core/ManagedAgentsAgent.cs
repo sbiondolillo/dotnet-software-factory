@@ -11,7 +11,6 @@ namespace Core;
 public sealed class ManagedAgentsAgent(
     ManagedAgentsClient client,
     GitHubAppTokens tokens,
-    Git git,
     string owner,
     string repo,
     string sessionBranch,
@@ -44,10 +43,6 @@ public sealed class ManagedAgentsAgent(
     private bool _disposed;
 
     internal ManagedAgentsClient Client { get; } = client;
-
-    internal GitHubAppTokens Tokens { get; } = tokens;
-
-    internal Git Git { get; } = git;
 
     internal string Owner { get; } = owner;
 
@@ -174,12 +169,15 @@ public sealed class ManagedAgentsAgent(
             }
             catch (ClaudeCodeException)
             {
+                // The interrupt is best effort: a session that refuses it ends on its own at the budget.
             }
             catch (HttpRequestException)
             {
+                // The same, for a transport fault on the way to the API.
             }
             catch (TaskCanceledException)
             {
+                // The same, for a timeout of the request.
             }
         }
 
@@ -383,12 +381,15 @@ public sealed class ManagedAgentsAgent(
         }
         catch (HttpRequestException)
         {
+            // The revoke is best effort: an installation token expires on its own within an hour.
         }
         catch (GitHubRequestException)
         {
+            // The same, for a status GitHub answers, such as a token that is revoked already.
         }
         catch (TaskCanceledException)
         {
+            // The same, for a timeout of the request.
         }
     }
 
