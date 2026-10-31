@@ -12,7 +12,8 @@ public sealed class Sandbox : IAsyncDisposable
     private const string Home = "/tmp/sandbox-home";
 
     // The factory reads and writes these directories on the runner and follows a link in them, so no process of a gate writes them.
-    private static readonly string[] GateReadOnlyPaths = [".factory", "specs/features"];
+    // Each one is a child of /work: a gate cannot rename a mount, and it can rename the writable parent of one.
+    private static readonly string[] GateReadOnlyPaths = [".factory", "specs"];
 
     private readonly CommandRunner _runner;
     private readonly string _id;
@@ -34,7 +35,7 @@ public sealed class Sandbox : IAsyncDisposable
         StartAsync(runner, tag, rootDirectory, workTree, ["--env", "ANTHROPIC_API_KEY", "--env", "ANTHROPIC_BASE_URL"], [], cancellationToken);
 
     /// <summary>Starts a container as <see cref="StartAsync(CommandRunner, string, string, string, CancellationToken)"/> does, with no
-    /// Anthropic variable and with <c>.factory</c> and <c>specs/features</c> read-only: the gates run an agent's code, and a Managed
+    /// Anthropic variable and with <c>.factory</c> and <c>specs</c> read-only: the gates run an agent's code, and a Managed
     /// Agents run needs no key in the container.</summary>
     public static Task<Sandbox> StartForGatesAsync(
         CommandRunner runner,
@@ -160,14 +161,9 @@ public sealed class Sandbox : IAsyncDisposable
     // Docker resolves a bind source on the host, so a link that a branch commits would mount a directory of the runner.
     private static void RefuseLink(string workTree, string path)
     {
-        string current = workTree;
-        foreach (string segment in path.Split('/'))
+        if (new DirectoryInfo(Path.Combine(workTree, path)).LinkTarget is not null)
         {
-            current = Path.Combine(current, segment);
-            if (new DirectoryInfo(current).LinkTarget is not null)
-            {
-                throw new SandboxException($"{Path.GetRelativePath(workTree, current)} is a symbolic link, so the gates do not start");
-            }
+            throw new SandboxException($"{path} is a symbolic link, so the gates do not start");
         }
     }
 
