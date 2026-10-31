@@ -253,6 +253,7 @@ Feature: Factory run
     Given the run uses Managed Agents sessions
     When a caller starts a run
     Then the docker run of the run holds neither "ANTHROPIC_API_KEY" nor "ANTHROPIC_BASE_URL"
+    And the docker run of the run mounts the clone at /work and names the image "factory-sandbox:test"
     And every dotnet command of the run goes through docker exec
     And FactoryRun gives back a result with the pull request of the number 10 and 0 Redos
     And the run removes the container
@@ -264,3 +265,7 @@ Feature: Factory run
     And the check command exits with the code 1 before the build
     When a caller starts a run
     Then the API printer runs through docker exec
+
+  Scenario: A Claude Code run gives its container the two Anthropic variables
+    When a caller starts a run
+    Then the arguments of the docker run of the run hold "--env" and then "ANTHROPIC_API_KEY", and "--env" and then "ANTHROPIC_BASE_URL"

@@ -199,8 +199,8 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
     public void ThenRunHoldsNeither(string first, string second)
     {
         CommandSpec run = Docker("run");
-        Assert.DoesNotContain(first, run.Arguments);
-        Assert.DoesNotContain(second, run.Arguments);
+        Assert.DoesNotContain(run.Arguments, argument => argument.Contains(first, StringComparison.Ordinal));
+        Assert.DoesNotContain(run.Arguments, argument => argument.Contains(second, StringComparison.Ordinal));
     }
 
     [Then("no argument of the docker run ends with {string}")]

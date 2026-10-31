@@ -250,6 +250,7 @@ Feature: A feedback run answers every unresolved review thread
     Given the run uses Managed Agents sessions
     When a caller starts a feedback run
     Then the docker run of the run holds neither "ANTHROPIC_API_KEY" nor "ANTHROPIC_BASE_URL"
+    And the docker run of the run mounts the clone at /work and names the image "factory-sandbox:test"
     And every dotnet command of the run goes through docker exec
     And git pushes the session branch "factory/a1b2c3d4-session" before the first session starts
     And FeedbackRun gives back a result with 2 threads resolved, 0 threads unresolved and 0 Redos

@@ -150,3 +150,9 @@ Feature: The option --agent runs the agent phases as Claude Code in a sandbox or
     Given the environment holds the variables of the managed agent
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --agent managed"
     Then the container runs "dotnet restore --locked-mode" before "dotnet format --no-restore"
+
+  @managed
+  Scenario: A managed run writes the line of the sessions before it starts the container
+    Given the environment holds the variables of the managed agent
+    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --agent managed"
+    Then standard output held the line "sessions: start" when the docker run started

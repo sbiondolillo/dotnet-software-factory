@@ -94,7 +94,9 @@ public sealed class SandboxIntegrationTests : IDisposable
         await using Sandbox gates = await Sandbox.StartForGatesAsync(runner, Tag, RepoRoot(), _tree.FullName, TestContext.Current.CancellationToken);
 
         Assert.Equal(KeyRunner.Key + "\n", (await ExecAsync(keyed, "printenv", ["ANTHROPIC_API_KEY"])).StandardOutput);
+        Assert.Equal(KeyRunner.Key + "\n", (await ExecAsync(keyed, "printenv", ["ANTHROPIC_BASE_URL"])).StandardOutput);
         Assert.Equal(1, (await ExecAsync(gates, "printenv", ["ANTHROPIC_API_KEY"])).ExitCode);
+        Assert.Equal(1, (await ExecAsync(gates, "printenv", ["ANTHROPIC_BASE_URL"])).ExitCode);
 
         CommandResult pids = await ExecAsync(gates, "sh", ["-c", "ls -d /proc/[0-9]*"]);
         Assert.Equal(0, pids.ExitCode);
@@ -265,7 +267,7 @@ public sealed class SandboxIntegrationTests : IDisposable
         }
     }
 
-    /// <summary>Puts a key in the environment of each <c>docker</c> command, so a container gets it when its <c>docker run</c> names it.</summary>
+    /// <summary>Puts a value in both Anthropic variables of each <c>docker</c> command, so a container gets it when its <c>docker run</c> names them.</summary>
     private sealed class KeyRunner : CommandRunner
     {
         public const string Key = "sk-sandbox-test";
@@ -273,6 +275,7 @@ public sealed class SandboxIntegrationTests : IDisposable
         public override Task<CommandResult> RunAsync(CommandSpec spec, CancellationToken cancellationToken = default)
         {
             spec.EnvironmentVariables["ANTHROPIC_API_KEY"] = Key;
+            spec.EnvironmentVariables["ANTHROPIC_BASE_URL"] = Key;
             return base.RunAsync(spec, cancellationToken);
         }
     }

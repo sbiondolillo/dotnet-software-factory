@@ -359,8 +359,29 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     public void ThenDockerRunLacks(string first, string second)
     {
         CommandSpec run = Assert.Single(Commands, c => c.Command is "docker" && c.Arguments[0] is "run");
-        Assert.DoesNotContain(first, run.Arguments);
-        Assert.DoesNotContain(second, run.Arguments);
+        Assert.DoesNotContain(run.Arguments, argument => argument.Contains(first, StringComparison.Ordinal));
+        Assert.DoesNotContain(run.Arguments, argument => argument.Contains(second, StringComparison.Ordinal));
+    }
+
+    [Then("the docker run of the run mounts the clone at \\/work and names the image {string}")]
+    public void ThenDockerRunMountsTheClone(string image)
+    {
+        CommandSpec run = Assert.Single(Commands, c => c.Command is "docker" && c.Arguments[0] is "run");
+        CommandSpec clone = Assert.Single(Commands, c => c.Command is "git" && c.Arguments[0] is "clone");
+        Assert.Contains($"{clone.Arguments[2]}:/work", run.Arguments);
+        Assert.Contains(image, run.Arguments);
+    }
+
+    [Then("the arguments of the docker run of the run hold {string} and then {string}, and {string} and then {string}")]
+    public void ThenDockerRunHolds(string firstFlag, string firstValue, string secondFlag, string secondValue)
+    {
+        CommandSpec run = Assert.Single(Commands, c => c.Command is "docker" && c.Arguments[0] is "run");
+        List<string> arguments = [.. run.Arguments];
+        foreach ((string flag, string value) in new[] { (firstFlag, firstValue), (secondFlag, secondValue) })
+        {
+            int index = arguments.IndexOf(value);
+            Assert.True(index > 0 && arguments[index - 1] == flag, $"docker run: {string.Join(' ', arguments)}");
+        }
     }
 
     [Then("every dotnet command of the run goes through docker exec")]

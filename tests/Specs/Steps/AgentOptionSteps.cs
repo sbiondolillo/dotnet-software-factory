@@ -51,8 +51,8 @@ public sealed partial class AgentOptionSteps(ConsoleProgramSteps console)
     public void ThenDockerRunLacks(string first, string second)
     {
         CommandSpec run = Assert.Single(H.Commands, c => c.Command is "docker" && c.Arguments[0] is "run");
-        Assert.DoesNotContain(first, run.Arguments);
-        Assert.DoesNotContain(second, run.Arguments);
+        Assert.DoesNotContain(run.Arguments, argument => argument.Contains(first, StringComparison.Ordinal));
+        Assert.DoesNotContain(run.Arguments, argument => argument.Contains(second, StringComparison.Ordinal));
     }
 
     [Then("git pushes the session branch, the name of the delivery branch with {string} after it, before the first session starts")]
@@ -75,6 +75,14 @@ public sealed partial class AgentOptionSteps(ConsoleProgramSteps console)
         int delete = H.Timeline.FindLastIndex(line => line.StartsWith("git push", StringComparison.Ordinal)
             && line.Contains("--delete", StringComparison.Ordinal) && line.EndsWith(" " + session, StringComparison.Ordinal));
         Assert.True(delete > deliveryPush, $"pushes: {string.Join(" | ", Pushes)}");
+    }
+
+    [Then("standard output held the line {string} when the docker run started")]
+    public void ThenLineBeforeDockerRun(string line)
+    {
+        int run = H.Commands.FindIndex(c => c.Command is "docker" && c.Arguments[0] is "run");
+        Assert.True(run >= 0, "the program sent no docker run");
+        Assert.Contains(line, H.OutAtCommand[run].Split(Environment.NewLine));
     }
 
     [Then("the container runs {string} before {string}")]
