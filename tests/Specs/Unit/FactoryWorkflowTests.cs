@@ -10,7 +10,7 @@ public sealed class FactoryWorkflowTests
     public void TheRunCommandAndThenTheStoreStepEndTheJob()
         => WorkflowChecks.LastTwoSteps(
             RootWorkflow(),
-            "dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --skip-integration on --copilot-review ${{ inputs.copilot || 'off' }}",
+            "dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --skip-integration on --copilot-review ${{ inputs.copilot || 'off' }} --agent managed",
             StoreStep,
             "always()");
 
