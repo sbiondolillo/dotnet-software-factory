@@ -177,7 +177,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
             _result = await _h.RunAsync(TestContext.Current.CancellationToken);
             promptState.Text = _h.Prompts.FirstOrDefault(p => p.Kind is "review")?.Text;
         }
-        catch (GitHubRequestException ex)
+        catch (Exception ex) when (ex is GitHubRequestException or ClaudeCodeException)
         {
             _exception = ex;
         }
@@ -343,6 +343,10 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
         Assert.IsType<GitHubRequestException>(_exception);
         Assert.Contains("rm", _h.Events);
     }
+
+    [Then("FactoryRun throws ClaudeCodeException with a message that holds {string}")]
+    public void ThenThrowsClaudeCode(string text) =>
+        Assert.Contains(text, Assert.IsType<ClaudeCodeException>(_exception).Message, StringComparison.Ordinal);
 
     [Then("the run sends no command to docker")]
     public void ThenNoDocker() => Assert.DoesNotContain(Commands, c => c.Command is "docker");

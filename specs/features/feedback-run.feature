@@ -242,3 +242,12 @@ Feature: A feedback run answers every unresolved review thread
     Then git pushes no branch "factory/a1b2c3d4"
     And git deletes the branch "factory/a1b2c3d4-session" on origin as its last git command
     And FeedbackRun adds no reply
+
+  @managed
+  Scenario: A session commit of a file under .factory/ stops a managed feedback run before any thread is resolved
+    Given the run uses Managed Agents sessions
+    And the session branch tracks the file ".factory/threads.json"
+    When a caller starts a feedback run
+    Then FeedbackRun throws ClaudeCodeException with a message that holds "The session committed files under .factory/, which only the factory writes: .factory/threads.json. The run stops."
+    And FeedbackRun adds no reply
+    And FeedbackRun resolves no thread

@@ -186,7 +186,7 @@ public sealed class FeedbackRunSteps : IDisposable
         {
             _result = await _h.RunAsync(TestContext.Current.CancellationToken);
         }
-        catch (Exception ex) when (ex is GitHubGraphQLException or GitHubRequestException or GitCommandException)
+        catch (Exception ex) when (ex is GitHubGraphQLException or GitHubRequestException or GitCommandException or ClaudeCodeException)
         {
             _exception = ex;
         }
@@ -378,6 +378,13 @@ public sealed class FeedbackRunSteps : IDisposable
         Assert.True(rm > _h.Events.FindLastIndex(e => e.StartsWith("reply:", StringComparison.Ordinal)));
         Assert.True(rm >= 0);
     }
+
+    [Then("FeedbackRun throws ClaudeCodeException with a message that holds {string}")]
+    public void ThenThrowsClaudeCode(string text) =>
+        Assert.Contains(text, Assert.IsType<ClaudeCodeException>(_exception).Message, StringComparison.Ordinal);
+
+    [Then("FeedbackRun resolves no thread")]
+    public void ThenNoResolveAtAll() => Assert.Empty(Resolves);
 
     [Then("FeedbackRun throws GitHubGraphQLException")]
     public void ThenThrows() => Assert.IsType<GitHubGraphQLException>(_exception);

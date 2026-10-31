@@ -213,13 +213,13 @@ Feature: Factory run
     And FactoryRun gives back a result with no pull request and 3 Redos
 
   @managed
-  Scenario: A session commit of a file under .factory/ stops the run with a comment that names the file
+  Scenario: A session commit of a file under .factory/ stops the run with an error that names the file
     Given the run uses Managed Agents sessions
     And the session branch tracks the file ".factory/plan.md"
     When a caller starts a run
-    Then FactoryRun posts one comment on the issue that holds ".factory/plan.md"
+    Then FactoryRun throws ClaudeCodeException with a message that holds "The session committed files under .factory/, which only the factory writes: .factory/plan.md. The run stops."
     And FactoryRun runs no build prompt
-    And FactoryRun gives back a result with no pull request and 0 Redos
+    And git deletes the branch "factory/a1b2c3d4-session" on origin as its last git command
 
   @managed
   Scenario: A build that pushes no commit puts that fact in the next build prompt
