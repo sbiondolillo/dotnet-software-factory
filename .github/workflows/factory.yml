@@ -16,9 +16,11 @@
 # The run name is the number of the issue, `#<n>`, on both paths. So the
 # `workflow_run` payload of a failed run names its issue in `display_title`.
 #
-# The input `base`, a branch, a tag or a commit, names the commit the run builds
-# on. The job resolves it to a full SHA and passes `--base <sha>`, and the run
-# checks that commit out in its clone. The repair loop dispatches this workflow
+# The input `base`, a branch, a tag or a commit on one of them, names the commit
+# the run builds on. The job resolves it to the full SHA of its commit and passes
+# `--base <sha>`, and the run checks that commit out in its clone. The clone
+# holds the branches and the tags alone, so a ref such as `refs/pull/<n>/head`
+# fails the checkout. The repair loop dispatches this workflow
 # at the last green ref of the factory with `base=main`: the factory of that ref
 # builds, and the change lands on the head of main. With no `base`, the run
 # builds on the head of the default branch, as the clone checks it out.
@@ -44,7 +46,7 @@ on:
         options: ['on', 'off']
         default: 'off'
       base:
-        description: The ref the run builds on, such as main. Empty builds on the head of the default branch.
+        description: The branch, tag or commit on one of them that the run builds on, such as main. Empty builds on the head of the default branch.
         required: false
         type: string
         default: ''
@@ -68,12 +70,7 @@ jobs:
         if: inputs.base
         env:
           BASE: ${{ inputs.base }}
-        run: |
-          case "$BASE" in -*) echo "The input base must not start with -: $BASE" >&2; exit 1 ;; esac
-          git fetch --no-tags --depth=1 origin "$BASE"
-          sha=$(git rev-parse FETCH_HEAD)
-          echo "base: $BASE is $sha"
-          echo "FACTORY_BASE_ARGS=--base $sha" >> "$GITHUB_ENV"
+        run: case "$BASE" in -*) echo "The input base starts with -, so it is no ref" >&2; exit 1 ;; esac; git fetch --no-tags --depth=1 origin "$BASE" && sha=$(git rev-parse "FETCH_HEAD^{commit}") && echo "base $BASE is the commit $sha" && echo "FACTORY_BASE_ARGS=--base $sha" >> "$GITHUB_ENV"
       - name: Run the factory
         env:
           FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_SELF_TOKEN }}
