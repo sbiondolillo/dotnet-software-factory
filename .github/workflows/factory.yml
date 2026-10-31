@@ -5,6 +5,13 @@
 # adds `--copilot-review on`, and the run then requests a Copilot code review
 # and answers its threads through FeedbackRun. The label path passes none.
 #
+# The run uses `--agent managed`: each agent phase is a Managed Agents session
+# of the agent `dsf-builder` in the environment `dsf-builder`. Their ids come
+# from .github/agents/claude-lock.json. The job holds the key of the dedicated
+# workspace and the private key of the App `dsf-repair`. The session gets only
+# an installation token of the App, for this repo. docs/agents/sessions.md
+# states what each session holds.
+#
 # A starter repo's copy, templates/starter/.github/workflows/factory.yml, runs
 # the factory at the tag v1.
 name: factory
@@ -38,12 +45,17 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
+      - name: Read the builder's ids from the lockfile
+        run: jq -r '"FACTORY_AGENT_ID=" + (.resources["./builder.md"].id // error("claude-lock.json has no id for builder.md")), "FACTORY_ENVIRONMENT_ID=" + (.resources["./builder.environment.yaml"].id // error("claude-lock.json has no id for builder.environment.yaml"))' .github/agents/claude-lock.json >> "$GITHUB_ENV"
       - name: Run the factory
         env:
           FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_SELF_TOKEN }}
           FACTORY_CHECKS_TOKEN: ${{ github.token }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --skip-integration on --copilot-review ${{ inputs.copilot || 'off' }}
+          ANTHROPIC_API_KEY: ${{ secrets.JUDGE_ANTHROPIC_API_KEY }}
+          FACTORY_APP_PRIVATE_KEY: ${{ secrets.DSF_REPAIR_APP_PRIVATE_KEY }}
+          FACTORY_APP_ID: ${{ vars.DSF_REPAIR_APP_ID }}
+          FACTORY_APP_INSTALLATION_ID: ${{ vars.DSF_REPAIR_APP_INSTALLATION_ID }}
+        run: dotnet run --project src/App -c Release -- run --repo ${{ github.repository }} --issue ${{ inputs.issue || github.event.issue.number }} --skip-integration on --copilot-review ${{ inputs.copilot || 'off' }} --agent managed
       - name: Push the transcripts to the store
         # The store is a private repo. With no store, the step exits 0 at once. The log prints no transcript.
         if: always()

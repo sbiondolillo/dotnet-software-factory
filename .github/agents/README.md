@@ -6,9 +6,11 @@ The Managed Agents definitions of this repo, in the form that `ant apply` reads.
 |---|---|
 | `judge.md` | the judge's agent: the model, the tools and the system prompt. Its id is the repository variable `JUDGE_AGENT_ID` |
 | `judge.environment.yaml` | the judge's environment: the networking and the packages. Its id is the repository variable `JUDGE_ENVIRONMENT_ID` |
+| `builder.md` | the builder's agent, `dsf-builder`: the model, the tools and the system prompt. `factory.yml` reads its id from `claude-lock.json` |
+| `builder.environment.yaml` | the builder's environment, `dsf-builder`: the networking, and the hosts of the SDK and of NuGet. `factory.yml` reads its id from `claude-lock.json` |
 | `claude-lock.json` | the lockfile: the id of each file's resource, and the organization and the workspace that hold them |
 
-The reader of `.github/repair/read.py` uses the same agent and the same environment. The builder's agent and environment come with #370.
+The reader of `.github/repair/read.py` uses the judge's agent and environment. The factory's sessions under `--agent managed` use the builder's agent and environment (#379).
 
 ## Check the files against the live resources
 
@@ -19,6 +21,8 @@ ant apply --lock-file .github/agents/claude-lock.json < /dev/null
 ```
 
 The pass condition is the line `Everything is up to date.` and the exit code 0. `ant apply` finds no `claude-lock.json` at the root, so the command names it. Each id in the lockfile must equal its variable. `gh variable list` shows the two variables.
+
+`ant apply` created the builder's agent and environment, so their entries in the lockfile hold hashes. The judge's entries do not.
 
 ## A hand-written lockfile
 
