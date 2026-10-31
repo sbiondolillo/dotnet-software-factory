@@ -67,10 +67,11 @@ def pull_request(repo, number):
 
 
 def spec_for(repo, pr):
-    """The spec is the body of the issue the pull request closes, or of the issue a line `Part of #<n>` names, or the
-    pull request body. A pull request names its issue with `Part of #<n>` when a check after the merge keeps it open."""
+    """The spec is the body of the issue a line `Closes #<n>` names, or a line `Part of #<n>`, or the pull request body.
+    A pull request names its issue with `Part of #<n>` when a check after the merge keeps it open. Each pattern starts
+    a line, so prose that quotes another pull request's `Closes #<n>` names no spec."""
     body = pr["body"] or ""
-    match = re.search(r"(?i)\b(?:closes|fixes|resolves)\s+#(\d+)", body) or re.search(
+    match = re.search(r"(?im)^(?:closes|fixes|resolves)\s+#(\d+)", body) or re.search(
         r"^Part of #(\d+)\s*$", body, re.M
     )
     if match:
