@@ -6,7 +6,7 @@ namespace Core;
 public sealed record BuildPhaseResult(bool Passed, string Failure);
 
 /// <summary>Asks the agent to implement the plan and bind every pinned scenario.</summary>
-public sealed class BuildPhase(ClaudeCodeAgent agent, bool cleanup = false, bool refactor = false, bool readsPlan = true, bool reframe = false)
+public sealed class BuildPhase(Agent agent, bool cleanup = false, bool refactor = false, bool readsPlan = true, bool reframe = false)
 {
     private const int PromptLimit = 131071;
     private const string CutMarker = "[cut]";

@@ -20,19 +20,46 @@ public sealed record FeedbackRunRequest(
     string AuthorName,
     string AuthorEmail,
     IReadOnlyList<string> SecretNames,
-    bool SkipIntegration = false);
+    bool SkipIntegration = false,
+    ManagedAgentsSettings? Managed = null);
 
-/// <summary>The outcome of a <see cref="FeedbackRun"/>: the threads resolved, the threads left unresolved and the Redos spent.</summary>
-public sealed record FeedbackRunResult(int Resolved, int Unresolved, int Redos);
+/// <summary>The outcome of a <see cref="FeedbackRun"/>: the threads resolved, the threads left unresolved, the Redos spent, and
+/// the Managed Agents sessions of the run with their cost, or null when no session ran.</summary>
+public sealed record FeedbackRunResult(int Resolved, int Unresolved, int Redos, IReadOnlyList<SessionCost>? Sessions = null);
 
-/// <summary>Answers every unresolved review thread of a pull request within three Redos.</summary>
-public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextWriter? progress = null)
+/// <summary>Answers every unresolved review thread of a pull request within three Redos. The <paramref name="time"/>, the
+/// <paramref name="handler"/> and the <paramref name="delay"/> serve the Managed Agents path, when the request holds its settings.</summary>
+public sealed class FeedbackRun(
+    CommandRunner runner,
+    GitHubClient client,
+    TextWriter? progress = null,
+    TimeProvider? time = null,
+    HttpMessageHandler? handler = null,
+    Func<TimeSpan, CancellationToken, Task>? delay = null)
 {
     private const int RedoBudget = 3;
     private const string ReportPath = ".factory/threads.json";
 
-    /// <summary>Builds an answer to each unresolved thread, gates and reviews it, pushes it, and replies to each thread.</summary>
+    /// <summary>
+    /// Builds an answer to each unresolved thread, gates and reviews it, pushes it, and replies to each thread. A
+    /// <see cref="SessionBranchException"/> posts its message on the pull request, and the run then throws it.
+    /// </summary>
     public async Task<FeedbackRunResult> RunAsync(FeedbackRunRequest request, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await RunCoreAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (SessionBranchException exception)
+        {
+            string comment = CommentText.Fit(exception.Message, []);
+            await Say(comment).ConfigureAwait(false);
+            await client.PostCommentAsync(request.Owner, request.Repo, request.PullNumber, comment, cancellationToken).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private async Task<FeedbackRunResult> RunCoreAsync(FeedbackRunRequest request, CancellationToken cancellationToken)
     {
         var reviewThreads = new ReviewThreads(client);
         IReadOnlyList<ReviewThread> all = await reviewThreads.ReadThreadsAsync(request.Owner, request.Repo, request.PullNumber, cancellationToken).ConfigureAwait(false);
@@ -75,15 +102,18 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
         string body = Describe(threads);
         string reportFile = Path.Combine(request.Directory, ".factory", "threads.json");
 
-        await Say("sandbox: start").ConfigureAwait(false);
-        Sandbox sandbox = await Sandbox.StartAsync(runner, request.ImageTag, request.RootDirectory, request.Directory, cancellationToken).ConfigureAwait(false);
-        await using (sandbox.ConfigureAwait(false))
+        var setup = new RunAgentsSetup(
+            runner, git, request.Owner, request.Repo, request.Token, request.Directory, request.RootDirectory, request.ImageTag,
+            baseCommit, $"{branch}-session", title, request.AuthorName, request.AuthorEmail, request.Managed, handler,
+            delay, time, progress);
+        RunAgents agents = await RunAgents.StartAsync(setup, cancellationToken).ConfigureAwait(false);
+        await using (agents.ConfigureAwait(false))
         {
-            var agent = new ClaudeCodeAgent(sandbox);
-            var buildPhase = new BuildPhase(agent, cleanup, refactor, readsPlan: false);
-            var lintGate = new LintGate(sandbox, git);
-            var testGate = new TestGate(sandbox, skipIntegration: request.SkipIntegration);
-            var reviewPhase = new ReviewPhase(agent, git, cleanup, refactor, readsPlan: false);
+            CommandHost host = agents.Host;
+            var buildPhase = new BuildPhase(agents.Builder, cleanup, refactor, readsPlan: false);
+            LintGate lintGate = agents.Lint(null);
+            var testGate = new TestGate(host, skipIntegration: request.SkipIntegration);
+            var reviewPhase = new ReviewPhase(agents.Reviewer, git, cleanup, refactor, readsPlan: false);
 
             IReadOnlySet<string> basePassed = cleanup
                 ? await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false)
@@ -108,7 +138,8 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
                 else
                 {
                     await Say("lint: start").ConfigureAwait(false);
-                    await lintGate.RunAsync(request.Directory, title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
+                    bool linted = await lintGate.RunAsync(request.Directory, title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
+                    await agents.AfterLintAsync(linted, cancellationToken).ConfigureAwait(false);
                     IReadOnlyList<string> scopeFaults = cleanup
                         ? await CleanupGate.ScopeFaultsAsync(git, baseCommit, request.Directory, scope, cancellationToken).ConfigureAwait(false)
                         : [];
@@ -129,7 +160,7 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
                             gateFaults = cleanup ? CleanupGate.LostTests(basePassed, gate) : [];
                             if (gateFaults.Count is 0 && check is not null)
                             {
-                                CommandResult after = await CleanupGate.RunCheckAsync(sandbox, check, progress, cancellationToken).ConfigureAwait(false);
+                                CommandResult after = await CleanupGate.RunCheckAsync(host, check, progress, cancellationToken).ConfigureAwait(false);
                                 await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
                                 gateFaults = after.ExitCode is 0 ? [] : [CleanupGate.CheckRedo(after)];
                             }
@@ -155,18 +186,20 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
                     }
                 }
 
+                redoTexts = agents.NoteBuild(redoTexts);
                 if (redos >= RedoBudget)
                 {
                     string comment = CommentText.Fit($"The budget of {RedoBudget} Redos is spent. The last build still fails:", redoTexts);
                     await Say(comment).ConfigureAwait(false);
                     await client.PostCommentAsync(request.Owner, request.Repo, request.PullNumber, comment, cancellationToken).ConfigureAwait(false);
-                    return new FeedbackRunResult(0, threads.Count, redos);
+                    return new FeedbackRunResult(0, threads.Count, redos, Sessions(agents));
                 }
 
                 redos++;
                 await Say($"redo: {redos}").ConfigureAwait(false);
             }
 
+            await agents.MoveToAsync(branch, cancellationToken).ConfigureAwait(false);
             await git.PushAsync(branch, request.Directory, request.Token, cancellationToken).ConfigureAwait(false);
             int resolved = 0;
             foreach (ReviewThread thread in threads)
@@ -180,11 +213,13 @@ public sealed class FeedbackRun(CommandRunner runner, GitHubClient client, TextW
                 }
             }
 
-            return new FeedbackRunResult(resolved, threads.Count - resolved, redos);
+            return new FeedbackRunResult(resolved, threads.Count - resolved, redos, Sessions(agents));
         }
     }
 
     private Task Say(string line) => ProgressLine.WriteAsync(progress, line);
+
+    private static IReadOnlyList<SessionCost>? Sessions(RunAgents agents) => agents.Sessions is { Count: > 0 } sessions ? sessions : null;
 
     private static string Describe(IReadOnlyList<ReviewThread> threads)
     {

@@ -83,4 +83,31 @@ public sealed class CommandRunnerTests
 
         Assert.Contains("factory-unit-missing-xyz", exception.Message, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData(true, "unset")]
+    [InlineData(false, "s-1")]
+    public async Task TheProgramGetsAVariableOfTheProcessOnlyWhenTheEnvironmentIsNotCleared(bool clear, string expected)
+    {
+        string name = clear ? "FACTORY_TEST_SECRET_CLEAR" : "FACTORY_TEST_SECRET_KEEP";
+        Environment.SetEnvironmentVariable(name, "s-1");
+        try
+        {
+            var spec = new CommandSpec
+            {
+                Command = "/bin/sh",
+                Arguments = ["-c", $"echo ${{{name}-unset}}"],
+                ClearEnvironment = clear,
+            };
+
+            CommandResult result = await new CommandRunner().RunAsync(spec, TestContext.Current.CancellationToken);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Equal(expected, result.StandardOutput.Trim());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(name, null);
+        }
+    }
 }

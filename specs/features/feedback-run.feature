@@ -212,3 +212,43 @@ Feature: A feedback run answers every unresolved review thread
     When a caller starts a feedback run
     Then FeedbackRun throws GitHubGraphQLException
     And FeedbackRun removes the container
+
+  @managed
+  Scenario: A managed feedback run starts no container and builds on the session branch of the head branch
+    Given the run uses Managed Agents sessions
+    When a caller starts a feedback run
+    Then the run sends no command to docker
+    And git pushes the session branch "factory/a1b2c3d4-session" before the first session starts
+    And FeedbackRun gives back a result with 2 threads resolved, 0 threads unresolved and 0 Redos
+
+  @managed
+  Scenario: A managed feedback run moves the head branch to the session's work and pushes it once before the first reply
+    Given the run uses Managed Agents sessions
+    When a caller starts a feedback run
+    Then git checks out "factory/a1b2c3d4", pulls "factory/a1b2c3d4-session" into it and pushes "factory/a1b2c3d4", in this order
+    And git pushes the head branch "factory/a1b2c3d4" once, before FeedbackRun adds the first reply
+
+  @managed
+  Scenario: A managed feedback run deletes the session branch after the last reply
+    Given the run uses Managed Agents sessions
+    When a caller starts a feedback run
+    Then git deletes the branch "factory/a1b2c3d4-session" on origin as its last git command
+
+  @managed
+  Scenario: A managed feedback run with a spent budget pushes no head branch
+    Given the run uses Managed Agents sessions
+    And the test gate is red after each of four builds
+    When a caller starts a feedback run
+    Then git pushes no branch "factory/a1b2c3d4"
+    And git deletes the branch "factory/a1b2c3d4-session" on origin as its last git command
+    And FeedbackRun adds no reply
+
+  @managed
+  Scenario: A session commit of a file under .factory/ stops a managed feedback run with a comment on the pull request before any thread is resolved
+    Given the run uses Managed Agents sessions
+    And the session branch tracks the file ".factory/threads.json"
+    When a caller starts a feedback run
+    Then FeedbackRun posts one comment on the pull request 10 that holds "The session committed files under .factory/, which only the factory writes: .factory/threads.json. The run stops."
+    And FeedbackRun throws SessionBranchException with a message that holds "The session committed files under .factory/, which only the factory writes: .factory/threads.json. The run stops."
+    And FeedbackRun adds no reply
+    And FeedbackRun resolves no thread

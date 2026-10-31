@@ -18,12 +18,17 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     /// <summary>The commands of another run, so a feature of that run shares the git steps of this class.</summary>
     public List<CommandSpec>? OtherCommands { get; set; }
 
+    /// <summary>The git commands and session requests of another run, in order, so a feature of that run shares the steps of the managed path.</summary>
+    public List<string>? OtherTimeline { get; set; }
+
     /// <summary>The prompts of another run, so a feature of that run shares the prompt steps of this class.</summary>
     public List<Specs.Unit.SeenPrompt>? OtherPrompts { get; set; }
 
     public void Dispose() => _h.Dispose();
 
     private List<CommandSpec> Commands => OtherCommands ?? _h.Commands;
+
+    private List<string> Timeline => OtherTimeline ?? _h.Timeline;
 
     /// <summary>The result of the run, for a step class of another feature of the same run.</summary>
     public FactoryRunResult LastResult => Result;
@@ -152,6 +157,19 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     [Given("the test command writes the letter {string} {int} times to its standard output")]
     public void GivenStdout(string letter, int count) => _h.TestStdout = string.Concat(Enumerable.Repeat(letter, count));
 
+    [Given("the run uses Managed Agents sessions")]
+    public void GivenManaged() => _h.UseManaged();
+
+    [Given("the session pushes no commit on the first build")]
+    public void GivenNoPush() => _h.NoPushBuilds.Add(1);
+
+    [Given("the session branch tracks the file {string}")]
+    public void GivenTracked(string path) => _h.Managed!.TrackedFactoryFiles.Add(path);
+
+    [Given("the issue holds a block under ## Scenarios for {string}")]
+    public void GivenScenariosBlock(string path) =>
+        _h.Body += $"\n\n## Scenarios\n\n```gherkin\n# {path}\nFeature: Checkout total\n\n  Scenario: An empty cart totals zero\n    Given an empty cart\n```\n";
+
     [When("a caller starts a run")]
     public async Task WhenStarts()
     {
@@ -163,7 +181,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
             _result = await _h.RunAsync(TestContext.Current.CancellationToken);
             promptState.Text = _h.Prompts.FirstOrDefault(p => p.Kind is "review")?.Text;
         }
-        catch (GitHubRequestException ex)
+        catch (Exception ex) when (ex is GitHubRequestException or ClaudeCodeException)
         {
             _exception = ex;
         }
@@ -329,4 +347,68 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
         Assert.IsType<GitHubRequestException>(_exception);
         Assert.Contains("rm", _h.Events);
     }
+
+    private int FirstPush(string branch)
+    {
+        int push = Commands.FindIndex(c => c.Command is "git" && c.Arguments is ["push", "origin", var name] && name == branch);
+        Assert.True(push >= 0, $"no push of {branch}");
+        return push;
+    }
+
+    [Then("the run sends no command to docker")]
+    public void ThenNoDocker() => Assert.DoesNotContain(Commands, c => c.Command is "docker");
+
+    [Then("git pushes the session branch {string} before the first session starts")]
+    public void ThenSessionBranchFirst(string branch)
+    {
+        int push = Timeline.IndexOf($"git push origin {branch}");
+        int start = Timeline.IndexOf("POST /v1/sessions");
+        Assert.True(push >= 0, $"no push of {branch}: {string.Join(" | ", Timeline)}");
+        Assert.True(start > push, $"the first session started before the push of {branch}");
+    }
+
+    [Then("git commits the work tree with the message {string} before the first push of {string}")]
+    public void ThenCommitsBeforePush(string message, string branch)
+    {
+        int push = FirstPush(branch);
+        int commit = Commands.FindIndex(c => c.Command is "git" && c.Arguments is ["commit", "-m", var text] && text == message);
+        Assert.InRange(commit, 0, push - 1);
+    }
+
+    [Then("git runs no commit before the first push of {string}")]
+    public void ThenNoCommitBeforePush(string branch) =>
+        Assert.DoesNotContain(Commands.Take(FirstPush(branch)), c => c.Command is "git" && c.Arguments[0] is "commit");
+
+    [Then("git pulls the branch {string} {int} times")]
+    public void ThenPulls(string branch, int count) =>
+        Assert.Equal(count, Commands.Count(c => c.Command is "git" && c.Arguments[0] is "pull" && c.Arguments[^1] == branch));
+
+    [Then("git deletes the branch {string} on origin after the push of {string}")]
+    public void ThenDeletedAfter(string branch, string pushed)
+    {
+        int push = Timeline.IndexOf($"git push origin {pushed}");
+        int delete = Timeline.FindIndex(line => IsDelete(line, branch));
+        Assert.True(push >= 0, $"no push of {pushed}: {string.Join(" | ", Timeline)}");
+        Assert.True(delete > push, $"git commands: {string.Join(" | ", Timeline)}");
+    }
+
+    [Then("git deletes the branch {string} on origin as its last git command")]
+    public void ThenDeletedLast(string branch) =>
+        Assert.True(IsDelete(Timeline.Last(line => line.StartsWith("git ", StringComparison.Ordinal)), branch), $"git commands: {string.Join(" | ", Timeline)}");
+
+    [Then("git pushes no branch {string}")]
+    public void ThenNoPushOf(string branch) =>
+        Assert.DoesNotContain(Commands, c => c.Command is "git" && c.Arguments is ["push", "origin", var name] && name == branch);
+
+    [Then("git checks out {string}, pulls {string} into it and pushes {string}, in this order")]
+    public void ThenMoves(string branch, string session, string pushed)
+    {
+        int checkout = Timeline.LastIndexOf($"git checkout {branch}");
+        int pull = Timeline.FindIndex(Math.Max(checkout, 0), line => line.StartsWith("git pull", StringComparison.Ordinal) && line.EndsWith(" " + session, StringComparison.Ordinal));
+        int push = Timeline.FindIndex(Math.Max(pull, 0), line => line == $"git push origin {pushed}");
+        Assert.True(checkout >= 0 && pull > checkout && push > pull, $"git commands: {string.Join(" | ", Timeline)}");
+    }
+
+    private static bool IsDelete(string line, string branch) =>
+        line.StartsWith("git push", StringComparison.Ordinal) && line.Contains("--delete", StringComparison.Ordinal) && line.EndsWith(" " + branch, StringComparison.Ordinal);
 }

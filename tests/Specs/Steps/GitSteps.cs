@@ -18,6 +18,8 @@ public sealed class GitSteps(ExceptionState exceptionState, WorkTreeState workTr
     private Git? _git;
     private string _headSha = "";
     private string[] _changedFiles = [];
+    private string[]? _trackedFiles;
+    private string? _remoteHead = "unread";
 
     [Given("a caller has a Git built over a mock of CommandRunner that records every CommandSpec it runs")]
     public void GivenACallerHasAGitBuiltOverAMockOfCommandRunner()
@@ -179,6 +181,90 @@ public sealed class GitSteps(ExceptionState exceptionState, WorkTreeState workTr
         }
     }
 
+    [Given("git answers {string} with exit code {int} and the standard output {string}")]
+    public void GivenGitAnswersWithTheStandardOutput(string subcommand, int exitCode, string standardOutput)
+        => _results[subcommand] = new CommandResult { ExitCode = exitCode, StandardOutput = Unescape(standardOutput) };
+
+    [Given("git answers {string} with exit code {int} and the standard error {string}")]
+    public void GivenGitAnswersWithTheStandardError(string subcommand, int exitCode, string standardError)
+        => _results[subcommand] = new CommandResult { ExitCode = exitCode, StandardError = standardError };
+
+    [When("Git pulls the branch {string} into {string} with the token {string}")]
+    public Task WhenGitPullsTheBranch(string branch, string directory, string token)
+        => RunAsync(() => _git!.PullAsync(branch, directory, token));
+
+    [When("Git deletes the branch {string} on origin from {string} with the token {string}")]
+    public Task WhenGitDeletesTheRemoteBranch(string branch, string directory, string token)
+        => RunAsync(() => _git!.DeleteRemoteBranchAsync(branch, directory, token));
+
+    [When("Git reads the remote head of the branch {string} in {string} with the token {string}")]
+    public Task WhenGitReadsTheRemoteHead(string branch, string directory, string token)
+        => RunAsync(async () => _remoteHead = await _git!.ReadRemoteHeadAsync(branch, directory, token));
+
+    [When("Git lists the tracked files under {string} in {string}")]
+    public Task WhenGitListsTheTrackedFiles(string path, string directory)
+        => RunAsync(async () => _trackedFiles = await _git!.ListTrackedAsync(path, directory));
+
+    [Then("the {string} CommandSpec holds these environment variables:")]
+    public void ThenTheCommandSpecHoldsTheseEnvironmentVariables(string operation, Table table)
+    {
+        CommandSpec spec = FindSpec(operation);
+        foreach (DataTableRow? row in table.Rows)
+        {
+            Assert.True(spec.EnvironmentVariables.TryGetValue(row["name"], out string? value), $"no variable {row["name"]}");
+            Assert.Equal(row["value"], value);
+        }
+    }
+
+    [Then("the {string} CommandSpec holds the arguments {string} and the working directory {string}")]
+    public void ThenTheCommandSpecHoldsTheArgumentsAndTheWorkingDirectory(string operation, string arguments, string directory)
+    {
+        Assert.Null(exceptionState.Exception);
+        CommandSpec spec = FindSpec(operation);
+        Assert.Equal(arguments.Split(' '), spec.Arguments);
+        Assert.Equal(directory, spec.WorkingDirectory);
+    }
+
+    [Then("the {string} CommandSpec holds the environment variable {string} set to {string} and a GIT_CONFIG_VALUE_1 that holds {string}")]
+    public void ThenTheCommandSpecHoldsTheCredentialHelper(string operation, string name, string value, string helper)
+    {
+        CommandSpec spec = FindSpec(operation);
+        Assert.Equal(value, spec.EnvironmentVariables[name]);
+        Assert.Equal("credential.helper", spec.EnvironmentVariables["GIT_CONFIG_KEY_1"]);
+        Assert.Contains(helper, spec.EnvironmentVariables["GIT_CONFIG_VALUE_1"], StringComparison.Ordinal);
+        Assert.DoesNotContain(value, spec.Arguments);
+    }
+
+    [Then("the remote head is {string}")]
+    public void ThenTheRemoteHeadIs(string expected)
+    {
+        Assert.Null(exceptionState.Exception);
+        Assert.Equal(expected, _remoteHead);
+    }
+
+    [Then("the remote head is null")]
+    public void ThenTheRemoteHeadIsNull()
+    {
+        Assert.Null(exceptionState.Exception);
+        Assert.Null(_remoteHead);
+    }
+
+    [Then("the list of tracked files is {string} and {string}")]
+    public void ThenTheListOfTrackedFilesIs(string first, string second)
+    {
+        Assert.Null(exceptionState.Exception);
+        Assert.NotNull(_trackedFiles);
+        Assert.Equal([first, second], _trackedFiles);
+    }
+
+    [Then("the list of tracked files is empty")]
+    public void ThenTheListOfTrackedFilesIsEmpty()
+    {
+        Assert.Null(exceptionState.Exception);
+        Assert.NotNull(_trackedFiles);
+        Assert.Empty(_trackedFiles);
+    }
+
     [Then("every CommandSpec the mock CommandRunner recorded has the program {string}")]
     public void ThenEveryCommandSpecRecordedHasTheProgram(string program)
     {
@@ -307,6 +393,8 @@ public sealed class GitSteps(ExceptionState exceptionState, WorkTreeState workTr
 
     private CommandSpec FindSpec(string operation)
         => _recorded.Last(spec => spec.Arguments.Count > 0 && spec.Arguments[0] == operation);
+
+    private static string Unescape(string text) => text.Replace("\\t", "\t", StringComparison.Ordinal).Replace("\\n", "\n", StringComparison.Ordinal);
 
     private static string MapOperation(string operation) => operation switch
     {

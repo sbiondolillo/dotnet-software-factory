@@ -13,6 +13,7 @@ public sealed class JobSummary
 {
     private readonly List<string> _rows = [];
     private readonly List<string> _redos = [];
+    private readonly List<SessionCost> _sessions = [];
     private readonly Dictionary<string, int> _counts = [];
     private TimeSpan _pendingTime = TimeSpan.Zero;
     private int _pendingTurns;
@@ -52,6 +53,17 @@ public sealed class JobSummary
         }
     }
 
+    /// <summary>Adds the Managed Agents sessions of the run, one line with each id, role and cost.</summary>
+    public void AddSessions(IReadOnlyList<SessionCost> sessions) => _sessions.AddRange(sessions);
+
+    /// <summary>Appends <paramref name="text"/> to the file at <paramref name="path"/>, after one blank line when the file holds text.</summary>
+    public static async Task AppendToFileAsync(string path, string text, CancellationToken cancellationToken = default)
+    {
+        string earlier = File.Exists(path) ? await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false) : "";
+        string gap = earlier.Length is 0 ? "" : earlier.EndsWith('\n') ? "\n" : "\n\n";
+        await File.AppendAllTextAsync(path, gap + text, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>The Markdown text, ending with a line feed.</summary>
     public string Render()
     {
@@ -68,6 +80,28 @@ public sealed class JobSummary
             {
                 text.Append(item).Append('\n');
             }
+        }
+
+        if (_sessions.Count > 0)
+        {
+            text.Append('\n').Append(RenderSessions());
+        }
+
+        return text.ToString();
+    }
+
+    /// <summary>The Markdown section of the sessions alone, ending with a line feed, or the empty string with no session.</summary>
+    public string RenderSessions()
+    {
+        if (_sessions.Count is 0)
+        {
+            return "";
+        }
+
+        var text = new StringBuilder("### Sessions\n\n");
+        foreach (SessionCost session in _sessions)
+        {
+            text.Append(CultureInfo.InvariantCulture, $"- {session.Id}, {session.Role}, {Deliver.Dollars(session.Cents)}\n");
         }
 
         return text.ToString();

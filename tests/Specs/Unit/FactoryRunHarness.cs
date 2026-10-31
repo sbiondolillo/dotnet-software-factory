@@ -156,6 +156,22 @@ public sealed class FactoryRunHarness : IDisposable
 
     public string CloneDirectory => _clone.FullName;
 
+    /// <summary>The fake of the Managed Agents API, or null on the path of Claude Code in a sandbox.</summary>
+    public ManagedRunFake? Managed { get; private set; }
+
+    /// <summary>The builds, by number, after which the session pushes no commit.</summary>
+    public HashSet<int> NoPushBuilds { get; } = [];
+
+    /// <summary>Each git command, as its words, and each request to the fake of the Managed Agents API, as its method and path, in order.</summary>
+    public List<string> Timeline { get; } = [];
+
+    /// <summary>Puts the run on the managed path. The builder session keeps the model of its first prompt, so the build takes the plan model.</summary>
+    public void UseManaged()
+    {
+        Managed = new ManagedRunFake { OnMessage = SessionMessage };
+        BuildModel = PlanModel;
+    }
+
     public List<CommandSpec> Commands { get; } = [];
 
     public List<SeenPrompt> Prompts { get; } = [];
@@ -181,8 +197,9 @@ public sealed class FactoryRunHarness : IDisposable
         var client = new GitHubClient(new HttpClient(new Handler(this)), Token, TimeSpan.Zero);
         var request = new FactoryRunRequest(
             Owner, Repo, Issue, Token, RunId, _clone.FullName, BaseBranch, "factory-sandbox:test", _root.FullName,
-            PlanModel, PlanTurns, BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames, SkipIntegration);
-        return new FactoryRun(mock.Object, client, Progress).RunAsync(request, cancellationToken);
+            PlanModel, PlanTurns, BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames, SkipIntegration,
+            Managed is null ? null : ManagedRunFake.Settings());
+        return new FactoryRun(mock.Object, client, Progress, handler: new Handler(this), delay: (_, _) => Task.CompletedTask).RunAsync(request, cancellationToken);
     }
 
     public void Dispose()
@@ -205,7 +222,13 @@ public sealed class FactoryRunHarness : IDisposable
         Commands.Add(spec);
         if (spec.Command is "git")
         {
+            Timeline.Add(string.Join(' ', ["git", .. spec.Arguments]));
             return AnswerGit(spec);
+        }
+
+        if (spec.Command is not "docker")
+        {
+            return Program([spec.Command, .. spec.Arguments], directory => directory, spec.WorkingDirectory is { } at && at != _clone.FullName);
         }
 
         return spec.Arguments[0] switch
@@ -239,7 +262,12 @@ public sealed class FactoryRunHarness : IDisposable
             case "rev-parse":
                 return new CommandResult { StandardOutput = HeadSha + "\n" };
             case "status":
-                return new CommandResult { StandardOutput = ChangeAfterBuild ? " M src/Checkout.cs\n" : "" };
+                return new CommandResult
+                {
+                    StandardOutput = _builds is 0
+                        ? Body.Contains("## Scenarios", StringComparison.Ordinal) ? "?? specs/features/\n" : ""
+                        : ChangeAfterBuild ? " M src/Checkout.cs\n" : "",
+                };
             case "diff" when spec.Arguments.Contains("--name-only"):
                 return new CommandResult { StandardOutput = _builds is 1 ? string.Join('\n', FirstBuildChanges) + "\n" : "" };
             case "diff":
@@ -247,6 +275,13 @@ public sealed class FactoryRunHarness : IDisposable
             case "push":
                 Events.Add("push");
                 return new CommandResult();
+            case "pull":
+                Managed?.Pull(_clone.FullName);
+                return new CommandResult();
+            case "ls-remote" when Managed is not null:
+                return new CommandResult { StandardOutput = Managed.LsRemote(spec.Arguments) };
+            case "ls-files" when Managed is not null:
+                return new CommandResult { StandardOutput = string.Concat(Managed.TrackedFactoryFiles.Select(path => path + "\n")) };
             default:
                 return new CommandResult();
         }
@@ -280,20 +315,27 @@ public sealed class FactoryRunHarness : IDisposable
     {
         List<string> arguments = [.. spec.Arguments];
         int id = arguments.IndexOf(ContainerId);
-        string program = arguments[id + 1];
-        if (program is "claude")
+        if (arguments[id + 1] is "claude")
         {
             return Claude(arguments);
         }
 
-        string subcommand = arguments[id + 2];
+        return Program(arguments[(id + 1)..], directory => Path.Combine(_clone.FullName, directory["/work/".Length..]), arguments.Contains("--workdir"));
+    }
+
+    /// <summary>Answers a program with its words, in the container or on the host. <paramref name="results"/> maps the TRX directory to the host,
+    /// and <paramref name="inCopy"/> is true for a command that runs in a directory other than the work tree.</summary>
+    private CommandResult Program(List<string> arguments, Func<string, string> results, bool inCopy)
+    {
+        string program = arguments[0];
+        string subcommand = arguments.Count > 1 ? arguments[1] : "";
         if (program is "sh" && subcommand is "-c")
         {
             (int code, string output, string error) = CheckResults.TryGetValue(_builds, out (int Code, string Out, string Err) given) ? given : _builds is 0 ? (1, "", "check failed") : (0, "", "");
             return new CommandResult { ExitCode = code, StandardOutput = output, StandardError = error };
         }
 
-        if (program is "git" && subcommand is "worktree" && arguments[id + 3] is "add" && WorktreeAddFails)
+        if (program is "git" && subcommand is "worktree" && arguments[2] is "add" && WorktreeAddFails)
         {
             return new CommandResult { ExitCode = 128, StandardError = "fatal: cannot add the worktree" };
         }
@@ -309,7 +351,7 @@ public sealed class FactoryRunHarness : IDisposable
             return new CommandResult { StandardOutput = string.Concat(lines.Select(line => line + "\n")) };
         }
 
-        if (program is "dotnet" && subcommand is "build" && arguments.Contains("--workdir") && CopyBuildResults.TryGetValue(_builds, out (int Code, string Out) copy))
+        if (program is "dotnet" && subcommand is "build" && inCopy && CopyBuildResults.TryGetValue(_builds, out (int Code, string Out) copy))
         {
             return new CommandResult { ExitCode = copy.Code, StandardOutput = copy.Out };
         }
@@ -338,7 +380,7 @@ public sealed class FactoryRunHarness : IDisposable
         }
 
         int at = arguments.IndexOf("--results-directory");
-        string directory = Path.Combine(_clone.FullName, arguments[at + 1]["/work/".Length..]);
+        string directory = results(arguments[at + 1]);
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, "this-run.trx"), Steps.TrxBuilder.Build(tests));
         return new CommandResult { ExitCode = red ? 1 : 0, StandardOutput = TestStdout ?? (red ? RedText : "") };
@@ -351,6 +393,22 @@ public sealed class FactoryRunHarness : IDisposable
         string turns = arguments[arguments.IndexOf("--max-turns") + 1];
         string kind = text.StartsWith("Plan the work", StringComparison.Ordinal) ? "plan"
             : text.StartsWith("Review the build", StringComparison.Ordinal) ? "review" : "build";
+        (bool isError, string result) = Turn(kind, model, turns, text);
+        return new CommandResult { StandardOutput = Json(isError, result) };
+    }
+
+    /// <summary>Plays the agent of a session for one message. A preamble may come before the prompt, so the kind is found anywhere in the text.</summary>
+    private ManagedTurn SessionMessage(string text, string model)
+    {
+        string kind = text.Contains("Plan the work", StringComparison.Ordinal) ? "plan"
+            : text.Contains("Review the build", StringComparison.Ordinal) ? "review" : "build";
+        (bool isError, string result) = Turn(kind, model, "", text);
+        return new ManagedTurn(result, isError, Pushes: kind is "build" && !NoPushBuilds.Contains(_builds));
+    }
+
+    /// <summary>Records one prompt, writes what the agent writes for it and gives the error flag and the text of the answer.</summary>
+    private (bool IsError, string Result) Turn(string kind, string model, string turns, string text)
+    {
         if (kind is "build")
         {
             _builds++;
@@ -428,10 +486,10 @@ public sealed class FactoryRunHarness : IDisposable
 
         if ((kind is "build" && ErrorBuilds.Contains(_builds)) || (kind is "review" && ErrorReviews.Contains(_reviews)))
         {
-            return new CommandResult { StandardOutput = Json(true, ErrorText) };
+            return (true, ErrorText);
         }
 
-        return new CommandResult { StandardOutput = Json((kind is "build" && BuildIsError) || (kind is "plan" && PlanIsError), kind is "build" && BuildIsError ? "build error" : kind is "plan" && PlanIsError ? "plan went wrong" : "done") };
+        return ((kind is "build" && BuildIsError) || (kind is "plan" && PlanIsError), kind is "build" && BuildIsError ? "build error" : kind is "plan" && PlanIsError ? "plan went wrong" : "done");
     }
 
     private static void WriteIn(string directory, string relative, string text)
@@ -441,7 +499,18 @@ public sealed class FactoryRunHarness : IDisposable
         File.WriteAllText(full, text);
     }
 
-    private void Write(string relative, string text) => WriteIn(_clone.FullName, relative, text);
+    /// <summary>Writes a file of the agent. On the managed path a tracked file waits for the pull, and a file under .factory/ is also an output of the session.</summary>
+    private void Write(string relative, string text)
+    {
+        if (Managed is not null && !relative.StartsWith(".factory/", StringComparison.Ordinal))
+        {
+            Managed.Stage(relative, text);
+            return;
+        }
+
+        Managed?.AddOutput(relative, text);
+        WriteIn(_clone.FullName, relative, text);
+    }
 
     private sealed class Handler(FactoryRunHarness harness) : HttpMessageHandler
     {
@@ -449,6 +518,13 @@ public sealed class FactoryRunHarness : IDisposable
         {
             string? content = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             string uri = request.RequestUri!.AbsoluteUri;
+            if (harness.Managed is { } managed && ManagedRunFake.Handles(request.RequestUri))
+            {
+                harness.Timeline.Add($"{request.Method.Method} {request.RequestUri.AbsolutePath}");
+                (int code, string answer) = managed.Route(request.Method.Method, request.RequestUri, content);
+                return new HttpResponseMessage((HttpStatusCode)code) { Content = new StringContent(answer, Encoding.UTF8, "application/json") };
+            }
+
             harness.Requests.Add(new SeenRequest(request.Method.Method, uri, content));
             string path = request.RequestUri.AbsolutePath;
             (int status, string body) = (request.Method.Method, path) switch

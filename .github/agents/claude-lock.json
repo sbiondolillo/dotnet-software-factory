@@ -6,14 +6,29 @@
     "workspace_id": "wrkspc_019ARp1PpA5sEoGR4sLZMrw5"
   },
   "resources": {
+    "./builder.environment.yaml": {
+      "kind": "environment",
+      "id": "env_01HfX9b6TUTq88cnHfFjU4Bc",
+      "hash": "7577ade57da8e6040a815912736c6a9f",
+      "remote_hash": "67b10c8a1778e5704954827f652a7b0c"
+    },
+    "./builder.md": {
+      "kind": "agent",
+      "id": "agent_011WNxCWuyav7pkMT38nR5Sx",
+      "version": "1",
+      "hash": "47ef7b5e01d851764dc6a62c33d98a9d",
+      "remote_hash": "2a3977b0da0bb39887533741b1cd057e"
+    },
     "./judge.environment.yaml": {
       "kind": "environment",
-      "id": "env_01LppsRP6QAsjQcMATGMfiKj"
+      "id": "env_01LppsRP6QAsjQcMATGMfiKj",
+      "hash": "2811ac8be8a16b9adddff530c9885820"
     },
     "./judge.md": {
       "kind": "agent",
       "id": "agent_015ajBRYm99G5kMdMDSRsEY1",
-      "version": "1"
+      "version": "1",
+      "hash": "83b59c2b4322cedcbe8372061867a3f9"
     }
   }
 }

@@ -177,3 +177,81 @@ Feature: Factory run
     Given GitHub answers the open of the pull request with the status code 422
     When a caller starts a run
     Then FactoryRun throws GitHubRequestException and removes the container
+
+  @managed
+  Scenario: A managed run starts no container and delivers the approved build
+    Given the run uses Managed Agents sessions
+    When a caller starts a run
+    Then the run sends no command to docker
+    And FactoryRun gives back a result with the pull request of the number 10 and 0 Redos
+
+  @managed
+  Scenario: A managed run pushes the session branch before the first session starts
+    Given the run uses Managed Agents sessions
+    When a caller starts a run
+    Then git pushes the session branch "factory/a1b2c3d4-session" before the first session starts
+
+  @managed
+  Scenario: A managed run pulls the session branch after the plan prompt and after the build prompt
+    Given the run uses Managed Agents sessions
+    When a caller starts a run
+    Then git pulls the branch "factory/a1b2c3d4-session" 2 times
+
+  @managed
+  Scenario: A managed run pushes the delivery branch from the session's work and then deletes the session branch
+    Given the run uses Managed Agents sessions
+    When a caller starts a run
+    Then git deletes the branch "factory/a1b2c3d4-session" on origin after the push of "factory/a1b2c3d4"
+
+  @managed
+  Scenario: A managed run with a spent budget deletes the session branch and pushes no delivery branch
+    Given the run uses Managed Agents sessions
+    And the test gate is red after each of four builds
+    When a caller starts a run
+    Then git deletes the branch "factory/a1b2c3d4-session" on origin as its last git command
+    And git pushes no branch "factory/a1b2c3d4"
+    And FactoryRun gives back a result with no pull request and 3 Redos
+
+  @managed
+  Scenario: A session commit of a file under .factory/ stops the run with a comment on the issue that names the file
+    Given the run uses Managed Agents sessions
+    And the session branch tracks the file ".factory/plan.md"
+    When a caller starts a run
+    Then FactoryRun posts one comment on the issue that holds "The session committed files under .factory/, which only the factory writes: .factory/plan.md. The run stops." and gives back a result with no pull request and 0 Redos
+    And FactoryRun runs no build prompt
+    And git deletes the branch "factory/a1b2c3d4-session" on origin as its last git command
+
+  @managed
+  Scenario: A managed run commits the scenarios of the issue before it pushes the session branch
+    Given the run uses Managed Agents sessions
+    And the issue holds a block under ## Scenarios for "specs/features/checkout-total.feature"
+    When a caller starts a run
+    Then git commits the work tree with the message "Add a checkout total: the scenarios of the issue" before the first push of "factory/a1b2c3d4-session"
+
+  @managed
+  Scenario: A managed run with no change in the work tree commits nothing before it pushes the session branch
+    Given the run uses Managed Agents sessions
+    When a caller starts a run
+    Then git runs no commit before the first push of "factory/a1b2c3d4-session"
+
+  @managed
+  Scenario: A build that pushes no commit puts that fact in the next build prompt
+    Given the run uses Managed Agents sessions
+    And the session pushes no commit on the first build
+    And the test gate is red after the first build and passes after the second build
+    When a caller starts a run
+    Then FactoryRun runs a second build prompt that holds "The build pushed no commit to the session branch."
+
+  @managed
+  Scenario: A managed reframe run reports that the public API of the base commit could not be listed and delivers nothing
+    Given the run uses Managed Agents sessions
+    And the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
+    And the check command exits with the code 1 before the build
+    And the API printer exits with the code 1 before the build and writes the standard error "Could not execute because the specified command or file was not found."
+    When a caller starts a run
+    Then FactoryRun posts one comment on the issue that holds "The public API of the base commit could not be listed, so there is no build:" and the standard error of the API printer
+    And FactoryRun runs no build prompt
+    And FactoryRun gives back a result with no pull request and 0 Redos
+    And git pushes no branch "factory/a1b2c3d4"
+    And git pushes no branch "factory/a1b2c3d4-session"
+    And the run sends no command to docker

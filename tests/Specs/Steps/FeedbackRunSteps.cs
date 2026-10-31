@@ -25,6 +25,7 @@ public sealed class FeedbackRunSteps : IDisposable
         _shared = shared;
         shared.OtherCommands = _h.Commands;
         shared.OtherPrompts = _h.Prompts;
+        shared.OtherTimeline = _h.Timeline;
         buildPhase.FirstPrompt = () => Build(1).Text;
         reviewPrompt.Lookup = () => _h.Prompts.FirstOrDefault(p => p.Kind is "review")?.Text;
     }
@@ -159,6 +160,13 @@ public sealed class FeedbackRunSteps : IDisposable
     public async Task WhenStarts()
     {
         FactoryRunHarness f = _shared.Harness;
+        if (f.Managed is not null)
+        {
+            _h.UseManaged();
+            _h.Managed!.TrackedFactoryFiles.AddRange(f.Managed.TrackedFactoryFiles);
+            _h.NoPushBuilds.UnionWith(f.NoPushBuilds);
+        }
+
         _h.RedBuilds.UnionWith(f.RedBuilds);
         _h.RejectedBuilds.UnionWith(f.RejectedBuilds);
         _h.TestStdout = f.TestStdout;
@@ -178,7 +186,7 @@ public sealed class FeedbackRunSteps : IDisposable
         {
             _result = await _h.RunAsync(TestContext.Current.CancellationToken);
         }
-        catch (Exception ex) when (ex is GitHubGraphQLException or GitHubRequestException or GitCommandException)
+        catch (Exception ex) when (ex is GitHubGraphQLException or GitHubRequestException or GitCommandException or ClaudeCodeException or SessionBranchException)
         {
             _exception = ex;
         }
@@ -190,7 +198,7 @@ public sealed class FeedbackRunSteps : IDisposable
 
     [Then("FeedbackRun gives back a result with {int} thread(s) resolved, {int} thread(s) unresolved and {int} Redo(s)")]
     public void ThenResult(int resolved, int unresolved, int redos) =>
-        Assert.Equal(new FeedbackRunResult(resolved, unresolved, redos), Result);
+        Assert.Equal(new FeedbackRunResult(resolved, unresolved, redos), Result with { Sessions = null });
 
     [Then("FeedbackRun gives back a result with {int} Redo(s)")]
     public void ThenRedos(int redos) => Assert.Equal(redos, Result.Redos);
@@ -199,7 +207,7 @@ public sealed class FeedbackRunSteps : IDisposable
     public void ThenNoResolve(int resolved, int unresolved, int redos)
     {
         Assert.Empty(Resolves);
-        Assert.Equal(new FeedbackRunResult(resolved, unresolved, redos), Result);
+        Assert.Equal(new FeedbackRunResult(resolved, unresolved, redos), Result with { Sessions = null });
     }
 
     [Then("git clones {string} into the directory that the caller gave and checks out the branch {string} in it")]
@@ -267,6 +275,16 @@ public sealed class FeedbackRunSteps : IDisposable
         }
 
         Assert.Contains(_h.Commands, c => c.Arguments.Contains("--project") && c.Arguments.Contains("tests/Integration"));
+    }
+
+    [Then("git pushes the head branch {string} once, before FeedbackRun adds the first reply")]
+    public void ThenHeadPushBefore(string branch)
+    {
+        List<CommandSpec> pushes = [.. _h.Commands.Where(c => c.Command is "git" && c.Arguments[0] is "push")];
+        int head = Assert.Single(Enumerable.Range(0, pushes.Count), i => pushes[i].Arguments is ["push", "origin", var name] && name == branch);
+        List<int> pushEvents = [.. Enumerable.Range(0, _h.Events.Count).Where(i => _h.Events[i] is "push")];
+        int reply = _h.Events.FindIndex(e => e.StartsWith("reply:", StringComparison.Ordinal));
+        Assert.True(reply > pushEvents[head]);
     }
 
     [Then("git pushes the branch {string} before FeedbackRun adds the first reply")]
@@ -360,6 +378,13 @@ public sealed class FeedbackRunSteps : IDisposable
         Assert.True(rm > _h.Events.FindLastIndex(e => e.StartsWith("reply:", StringComparison.Ordinal)));
         Assert.True(rm >= 0);
     }
+
+    [Then("FeedbackRun throws SessionBranchException with a message that holds {string}")]
+    public void ThenThrowsSessionBranch(string text) =>
+        Assert.Contains(text, Assert.IsType<SessionBranchException>(_exception).Message, StringComparison.Ordinal);
+
+    [Then("FeedbackRun resolves no thread")]
+    public void ThenNoResolveAtAll() => Assert.Empty(Resolves);
 
     [Then("FeedbackRun throws GitHubGraphQLException")]
     public void ThenThrows() => Assert.IsType<GitHubGraphQLException>(_exception);

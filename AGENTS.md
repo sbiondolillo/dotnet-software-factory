@@ -58,6 +58,10 @@ adds a git operation to `src/Core/Git.cs` follows them too.
   `username=x-access-token` and `password=$FACTORY_GITHUB_TOKEN`. Git asks for a username
   first, and off a terminal a helper that answers only `password=` fails every push with
   `could not read Username`.
+- Every command of `Git` carries `core.hooksPath=/dev/null` as its last `GIT_CONFIG_*`
+  entry, so git runs no hook that a build wrote under `.git/hooks`. A command with the
+  credential helper has `GIT_CONFIG_COUNT` 3 and the hook entry at index 2. Any other
+  command has `GIT_CONFIG_COUNT` 1 and the hook entry at index 0.
 - A new branch is `checkout -b <branch>`. `checkout <branch>` creates a branch only when a
   remote branch of that name exists, and fails in a fresh clone with
   `did not match any file(s) known to git`.
@@ -87,12 +91,29 @@ adds a git operation to `src/Core/Git.cs` follows them too.
   it. Its standard output holds one section for each changed file, starting
   `diff --git a/<path> b/<path>`, and no section for a file that git does not track. A
   work tree with no change since the base gives an empty output and the exit code 0.
+- A fast-forward from a branch on origin is `pull --ff-only origin <branch>`, with the
+  credential helper. A local branch and a branch on origin that each have a commit the
+  other lacks make git exit with the code 128 and `fatal: Not possible to fast-forward, aborting.`
+- The removal of a branch on origin is `push origin --delete <branch>`, with the
+  credential helper. For a branch that origin lacks, git exits with the code 1 and
+  `remote ref does not exist`.
+- The head of a branch on origin is `ls-remote --heads origin refs/heads/<branch>`, with
+  the credential helper. Each line of the output is the SHA, a tab and the name of the
+  ref. A branch that origin lacks gives an empty output and the exit code 0. The pattern
+  is the full name of the ref: git matches a short pattern against the tail of each
+  name, so `<branch>` also matches `x/<branch>`.
+- The tracked files under a path are `ls-files -- <path>`, one file on each line of the
+  output. A path with no tracked file gives an empty output and the exit code 0.
 - A git command that exits with a code other than 0 throws `GitCommandException`, whose
   message names the subcommand and holds the standard error.
 - Before each command after the clone, `Git` reads the work tree. A directory, file or
   symlink named `.git` other than the work tree's own, or a directory that it cannot
   read, throws `GitCommandException` with each path, and no command runs. Git runs the
   hooks and the config of a nested repo on the runner, with the secrets of the job.
+- A gate that runs on the runner runs its own `git`, such as `git worktree add`, through
+  a `HostShell`. Before each `git` program, `HostShell` runs the same nested check on
+  the work tree and throws the same `GitCommandException`. Each `git` program of
+  `HostShell` gets `core.hooksPath=/dev/null` as its one `GIT_CONFIG_*` entry.
 - An integration test reads the git author of a branch from GitHub's branch API at
   `commit.commit.author`. The API's `commit.author` is the GitHub account, and it is
   `null` for an email that no account owns.
@@ -242,3 +263,23 @@ that runs `dotnet` through a `Sandbox` follows them too.
   container, so a command that needs them runs in the container that ran the restore.
 - Before work on a `dotnet new` template, such as one under `templates/`, read
   `docs/agents/dotnet-templates.md`.
+
+### The host shell
+
+A `HostShell` runs the gates' commands on the runner, when a Managed Agents session
+writes the code. It follows the rules above too, and these:
+
+- A command with no working directory runs in the work tree. A null working directory
+  in a `CommandSpec` is the factory's own checkout, and a gate there judges the wrong
+  tree.
+- Each command starts from an empty environment, with `ClearEnvironment` true. It gets
+  back `PATH`, `HOME`, `TMPDIR`, `LANG`, each variable whose name starts `DOTNET_` or
+  `NUGET_`, and each name that the caller passes, with the values of the factory's
+  environment. A name that the factory's environment lacks stays out. So the agent's
+  build, tests and checks get no job secret from the environment unless the command
+  names it.
+- A scratch path is under `Path.GetTempPath()`, outside the work tree.
+- The host tree has no `obj/` after a pull, because `.gitignore` names it. So the lint
+  gate on a host runs with `restoreFirst` true: `dotnet restore --locked-mode` before
+  `dotnet format --no-restore`. A restore that exits with a code other than 0 throws
+  `LintGateException`, and the format does not run.

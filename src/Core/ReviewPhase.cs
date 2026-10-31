@@ -7,7 +7,7 @@ namespace Core;
 public sealed record ReviewPhaseResult(bool Approved, IReadOnlyList<string> Blocking, bool IsError = false);
 
 /// <summary>Asks the agent to review the build against the issue, the scenarios and the plan, and reads its verdict.</summary>
-public sealed class ReviewPhase(ClaudeCodeAgent agent, Git git, bool cleanup = false, bool refactor = false, bool readsPlan = true, bool reframe = false)
+public sealed class ReviewPhase(Agent agent, Git git, bool cleanup = false, bool refactor = false, bool readsPlan = true, bool reframe = false)
 {
     private const string VerdictPath = ".factory/review.json";
     private const string CutMarker = "[cut]";
