@@ -167,7 +167,7 @@ public sealed class FactoryRun(
 
         var setup = new RunAgentsSetup(
             runner, git, request.Owner, request.Repo, request.Token, request.Directory, request.RootDirectory, request.ImageTag,
-            request.SecretNames, baseCommit, $"factory/{request.RunId}-session", issue.Title, request.AuthorName, request.AuthorEmail,
+            baseCommit, $"factory/{request.RunId}-session", issue.Title, request.AuthorName, request.AuthorEmail,
             request.Managed, handler, delay, time, progress, log,
             (elapsed, answer) =>
             {

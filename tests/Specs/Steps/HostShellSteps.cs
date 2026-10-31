@@ -36,7 +36,7 @@ public sealed class HostShellSteps(ExceptionState exceptionState) : IDisposable
                 _recorded.Add(spec);
                 return Task.FromResult(new CommandResult());
             });
-        _shell = new HostShell(_mock.Object, _workTree.FullName, ["HOSTSHELL_SPEC_SECRET"]);
+        _shell = new HostShell(_mock.Object, _workTree.FullName);
     }
 
     [Given("the process environment holds these variables:")]

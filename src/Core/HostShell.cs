@@ -3,22 +3,19 @@ using System.Collections;
 namespace Core;
 
 /// <summary>Runs the gates' commands on the host over <paramref name="workTree"/>, with a cleared environment that keeps an allowlist
-/// and <paramref name="secretNames"/> when a command asks for them.</summary>
+/// and the names that each command asks for.</summary>
 /// <remarks>
 /// A gate runs code that an agent wrote: MSBuild targets, tests and checks. So each command starts from an empty environment, and
 /// gets back only <c>PATH</c>, <c>HOME</c>, <c>TMPDIR</c>, <c>LANG</c>, each <c>DOTNET_*</c> and <c>NUGET_*</c> variable, and each
-/// name that the caller passes. No job secret reaches a command that does not name it.
+/// name that the command passes. No job secret reaches a command that does not name it.
 /// </remarks>
-public sealed class HostShell(CommandRunner runner, string workTree, IReadOnlyList<string> secretNames) : CommandHost
+public sealed class HostShell(CommandRunner runner, string workTree) : CommandHost
 {
     private static readonly string[] Allowlist = ["PATH", "HOME", "TMPDIR", "LANG"];
 
     private static readonly string[] AllowedPrefixes = ["DOTNET_", "NUGET_"];
 
     internal CommandRunner Runner { get; } = runner;
-
-    /// <summary>The names that the integration command of the test gate asks for.</summary>
-    internal IReadOnlyList<string> SecretNames { get; } = secretNames;
 
     /// <inheritdoc />
     public override string WorkDirectory => workTree;

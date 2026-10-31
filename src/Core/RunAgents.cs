@@ -15,7 +15,6 @@ internal sealed record RunAgentsSetup(
     string Directory,
     string RootDirectory,
     string ImageTag,
-    IReadOnlyList<string> SecretNames,
     string BaseCommit,
     string ScratchBranch,
     string Title,
@@ -62,7 +61,7 @@ internal sealed class RunAgents : IAsyncDisposable
     private RunAgents(RunAgentsSetup setup, ManagedAgentsSettings settings)
     {
         _setup = setup;
-        Host = new HostShell(setup.Runner, setup.Directory, setup.SecretNames);
+        Host = new HostShell(setup.Runner, setup.Directory);
         HttpMessageHandler handler = setup.Handler ?? (_ownHandler = new SocketsHttpHandler());
         _http = new HttpClient(handler, disposeHandler: false);
         var tokens = new GitHubAppTokens(handler, settings.AppId, settings.InstallationId, settings.PrivateKeyPem, setup.Time);
