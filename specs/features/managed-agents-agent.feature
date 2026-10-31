@@ -26,6 +26,14 @@ Feature: ManagedAgentsAgent runs each prompt as one message of a Managed Agents 
     Then the API got one POST to "/v1/sessions"
     And the API got one POST to "/v1/sessions/sesn_1/events" with one user.message whose text holds "Fix the build."
 
+  Scenario: A message post that gets 429 once is sent again
+    Given a builder agent with the budget 1500 cents
+    When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5"
+    And the next POST to "/v1/sessions/sesn_1/events" answers the status 429 once
+    And the caller runs the prompt "Fix the build." with the model "claude-sonnet-5-5"
+    Then the API got 2 POSTs to "/v1/sessions/sesn_1/events", each with one user.message whose text holds "Fix the build."
+    And the answer error flag is false
+
   Scenario: A second prompt with another model throws ClaudeCodeException and posts nothing
     Given a builder agent with the budget 1500 cents
     When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5"

@@ -164,6 +164,9 @@ public sealed class ManagedAgentsAgentSteps(ExceptionState exceptionState) : IDi
     public async Task WhenRunsLong(int count, string letter, string model) =>
         await RunAsync(string.Concat(Enumerable.Repeat(letter, count)), model);
 
+    [When("the next POST to {string} answers the status {int} once")]
+    public void WhenFailsOnce(string path, int status) => _harness.FailOnce[("POST", path)] = status;
+
     [When("{int} minutes pass")]
     public async Task WhenMinutesPass(int minutes) => await _harness.Time.WaitAsync(TimeSpan.FromMinutes(minutes), CancellationToken.None);
 
@@ -233,6 +236,19 @@ public sealed class ManagedAgentsAgentSteps(ExceptionState exceptionState) : IDi
         JsonNode e = Assert.Single(PostedEvents(Assert.Single(_harness.Posts(path))));
         Assert.Equal("user.message", e["type"]!.GetValue<string>());
         Assert.Contains(text, e["content"]![0]!["text"]!.GetValue<string>(), StringComparison.Ordinal);
+    }
+
+    [Then("the API got {int} POSTs to {string}, each with one user.message whose text holds {string}")]
+    public void ThenMessagePosts(int count, string path, string text)
+    {
+        List<ApiRequest> posts = [.. _harness.Posts(path)];
+        Assert.Equal(count, posts.Count);
+        Assert.All(posts, post =>
+        {
+            JsonNode e = Assert.Single(PostedEvents(post));
+            Assert.Equal("user.message", e["type"]!.GetValue<string>());
+            Assert.Contains(text, e["content"]![0]!["text"]!.GetValue<string>(), StringComparison.Ordinal);
+        });
     }
 
     [Then("the API got one POST to {string} with one user.interrupt")]

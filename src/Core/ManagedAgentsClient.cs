@@ -35,11 +35,12 @@ public sealed class ManagedAgentsClient(
 
     internal TimeProvider Time { get; } = time ?? TimeProvider.System;
 
-    /// <summary>The wait between two reads of a list that the agent polls, and the base of the wait before a GET is sent again.</summary>
+    /// <summary>The wait between two reads of a list that the agent polls, and the base of the wait before a request is sent again.</summary>
     internal static TimeSpan PollDelay { get; } = TimeSpan.FromSeconds(5);
 
     /// <summary>Sends a JSON request and gives back the JSON of the answer. A GET that gets 429, a status of 500 or more, or no
-    /// answer is sent again, up to 3 more times. Any other status outside 200 to 299 throws <see cref="ClaudeCodeException"/>.</summary>
+    /// answer is sent again, up to 3 more times. A POST that gets 429 or 529 is sent again in the same way. Any other status outside
+    /// 200 to 299 throws <see cref="ClaudeCodeException"/>.</summary>
     internal async Task<JsonElement> SendAsync(HttpMethod method, string path, JsonNode? body, CancellationToken cancellationToken)
     {
         string text = await SendCoreAsync(
@@ -87,6 +88,9 @@ public sealed class ManagedAgentsClient(
 
     private static bool IsTransient(HttpStatusCode status) => status is HttpStatusCode.TooManyRequests || (int)status >= 500;
 
+    /// <summary>A 429 or a 529 says that the API did not process the request, so a POST with that answer is safe to send again.</summary>
+    private static bool IsUnprocessed(HttpStatusCode status) => status is HttpStatusCode.TooManyRequests || (int)status is 529;
+
     private static ClaudeCodeException Failure(HttpMethod method, string path, int status, string text) =>
         new(string.Create(
             CultureInfo.InvariantCulture,
@@ -99,6 +103,8 @@ public sealed class ManagedAgentsClient(
         Func<HttpContent, CancellationToken, Task<T>> read,
         CancellationToken cancellationToken)
     {
+        // A GET is sent again on each transient failure. A POST is sent again only on an answer that says the API did not
+        // process it, so a retry never repeats a side effect.
         bool retries = method == HttpMethod.Get;
         for (int attempt = 1; ; attempt++)
         {
@@ -112,7 +118,7 @@ public sealed class ManagedAgentsClient(
                 }
 
                 string text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                if (!retries || attempt >= Attempts || !IsTransient(response.StatusCode))
+                if (attempt >= Attempts || !(retries ? IsTransient(response.StatusCode) : IsUnprocessed(response.StatusCode)))
                 {
                     throw Failure(method, path, (int)response.StatusCode, text);
                 }

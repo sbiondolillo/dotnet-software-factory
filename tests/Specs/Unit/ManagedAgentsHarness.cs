@@ -110,6 +110,9 @@ public sealed partial class ManagedAgentsHarness : IDisposable
     /// <summary>The turn the message after the next one gets. It becomes <see cref="Next"/> when the next message posts.</summary>
     public ScriptedTurn After => _after ??= new ScriptedTurn();
 
+    /// <summary>The status that the next request of each method and path gets in place of its answer, once.</summary>
+    public Dictionary<(string Method, string Path), int> FailOnce { get; } = [];
+
     /// <summary>Every event the event list holds, oldest first.</summary>
     public IReadOnlyList<JsonObject> Events => _events;
 
@@ -338,9 +341,11 @@ public sealed partial class ManagedAgentsHarness : IDisposable
             Uri uri = request.RequestUri!;
             harness.Requests.Add(new ApiRequest(request.Method.Method, uri.AbsolutePath, uri.Query, headers, body));
             harness._lastPath = uri.AbsolutePath;
-            (int status, string text) = uri.Host is "api.anthropic.com"
-                ? harness.Route(request.Method.Method, uri.AbsolutePath, uri.Query, body)
-                : (404, "{}");
+            (int status, string text) = uri.Host is not "api.anthropic.com"
+                ? (404, "{}")
+                : harness.FailOnce.Remove((request.Method.Method, uri.AbsolutePath), out int failure)
+                    ? (failure, """{"type":"error","error":{"type":"rate_limit_error"}}""")
+                    : harness.Route(request.Method.Method, uri.AbsolutePath, uri.Query, body);
             return new HttpResponseMessage((HttpStatusCode)status) { Content = new StringContent(text, Encoding.UTF8, "application/json") };
         }
     }
