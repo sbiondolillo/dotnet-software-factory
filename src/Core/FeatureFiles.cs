@@ -22,9 +22,15 @@ public static class FeatureFiles
     /// <summary>Reads the scenario titles of the feature file at <paramref name="featureFilePath"/>, in the
     /// order they appear. A <c>Background</c> contributes no title. A <c>Scenario Outline</c> contributes
     /// its one title regardless of its example rows. A scenario under a <c>Rule</c> is a scenario of the
-    /// file. Throws <see cref="FeatureFileException"/> when the parser rejects the file's content.</summary>
+    /// file. Throws <see cref="FeatureFileException"/> when the path is a symbolic link, or when the parser rejects the file's content.</summary>
     public static IReadOnlyList<string> ReadScenarioTitles(string featureFilePath)
     {
+        // A parser error quotes the text, so a link to a file of the runner would put that file in a message.
+        if (new FileInfo(featureFilePath).LinkTarget is not null)
+        {
+            throw new FeatureFileException(featureFilePath, "the file is a symbolic link");
+        }
+
         string content = File.ReadAllText(featureFilePath);
         return ReadScenarioTitles(featureFilePath, content);
     }

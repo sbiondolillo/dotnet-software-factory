@@ -7,9 +7,13 @@ namespace Core;
 public sealed class Sandbox : IAsyncDisposable
 {
     /// <summary>The path of the work tree in the container.</summary>
-    public const string WorkDirectory = "/work";
+    internal const string WorkDirectory = "/work";
 
     private const string Home = "/tmp/sandbox-home";
+
+    // The factory reads and writes these directories on the runner and follows a link in them, so no process of a gate writes them.
+    private static readonly string[] GateReadOnlyPaths = [".factory", "specs/features"];
+
     private readonly CommandRunner _runner;
     private readonly string _id;
 
@@ -27,20 +31,21 @@ public sealed class Sandbox : IAsyncDisposable
         string rootDirectory,
         string workTree,
         CancellationToken cancellationToken = default) =>
-        StartAsync(runner, tag, rootDirectory, workTree, ["--env", "ANTHROPIC_API_KEY", "--env", "ANTHROPIC_BASE_URL"], cancellationToken);
+        StartAsync(runner, tag, rootDirectory, workTree, ["--env", "ANTHROPIC_API_KEY", "--env", "ANTHROPIC_BASE_URL"], [], cancellationToken);
 
     /// <summary>Starts a container as <see cref="StartAsync(CommandRunner, string, string, string, CancellationToken)"/> does, with no
-    /// Anthropic variable: the gates run an agent's code, and a Managed Agents run needs no key in the container.</summary>
+    /// Anthropic variable and with <c>.factory</c> and <c>specs/features</c> read-only: the gates run an agent's code, and a Managed
+    /// Agents run needs no key in the container.</summary>
     public static Task<Sandbox> StartForGatesAsync(
         CommandRunner runner,
         string tag,
         string rootDirectory,
         string workTree,
         CancellationToken cancellationToken = default) =>
-        StartAsync(runner, tag, rootDirectory, workTree, [], cancellationToken);
+        StartAsync(runner, tag, rootDirectory, workTree, [], GateReadOnlyPaths, cancellationToken);
 
     /// <summary>A path for a scratch directory named <paramref name="name"/>, outside the work tree, as a command sees it.</summary>
-    public static string ScratchPath(string name) => $"/tmp/{name}";
+    internal static string ScratchPath(string name) => $"/tmp/{name}";
 
     /// <summary>Runs <paramref name="program"/> in the work tree, holding each variable of <paramref name="names"/> by name.</summary>
     public Task<CommandResult> RunAsync(
@@ -90,6 +95,7 @@ public sealed class Sandbox : IAsyncDisposable
         string rootDirectory,
         string workTree,
         IReadOnlyList<string> agentEnvironment,
+        IReadOnlyList<string> readOnlyPaths,
         CancellationToken cancellationToken)
     {
         await new SandboxImage(runner).EnsureAsync(tag, rootDirectory, cancellationToken).ConfigureAwait(false);
@@ -109,6 +115,14 @@ public sealed class Sandbox : IAsyncDisposable
             string worktrees = Path.Combine(gitDirectory, "worktrees");
             Directory.CreateDirectory(worktrees);
             volumes.AddRange(["--volume", $"{gitDirectory}:/work/.git:ro", "--volume", $"{worktrees}:/work/.git/worktrees"]);
+        }
+
+        foreach (string path in readOnlyPaths)
+        {
+            // Docker would create a missing source as root, and the factory then could not write in it.
+            string source = Path.Combine(workTree, path);
+            Directory.CreateDirectory(source);
+            volumes.AddRange(["--volume", $"{source}:/work/{path}:ro"]);
         }
 
         CommandResult run = await runner.RunAsync(

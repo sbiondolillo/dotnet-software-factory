@@ -124,10 +124,10 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
         }
     }
 
-    [When("a caller starts a sandbox for the gates with the image tag {string} and the work tree {string}")]
-    public async Task WhenStartsForGates(string tag, string workTree) =>
+    [When("a caller starts a sandbox for the gates with the image tag {string} over that work tree")]
+    public async Task WhenStartsForGates(string tag) =>
         _sandbox = await Sandbox.StartForGatesAsync(
-            Runner(), tag, _directory.FullName, workTree, TestContext.Current.CancellationToken);
+            Runner(), tag, _directory.FullName, workTree.Path, TestContext.Current.CancellationToken);
 
     [When("a caller starts a sandbox with the image tag {string} over that work tree")]
     public Task WhenStartsOverWorkTree(string tag) => WhenStarts(tag, workTree.Path);
@@ -202,6 +202,10 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
         Assert.DoesNotContain(first, run.Arguments);
         Assert.DoesNotContain(second, run.Arguments);
     }
+
+    [Then("no argument of the docker run ends with {string}")]
+    public void ThenNoArgumentEndsWith(string suffix) =>
+        Assert.DoesNotContain(Docker("run").Arguments, argument => argument.EndsWith(suffix, StringComparison.Ordinal));
 
     [Then("no argument of the docker run is {string}")]
     public void ThenRunLacks(string argument) => Assert.DoesNotContain(argument, Docker("run").Arguments);

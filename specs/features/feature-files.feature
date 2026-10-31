@@ -129,3 +129,12 @@ Feature: FeatureFiles reads scenario titles and computes Reqnroll test names
     Given the scenario title "The greeter greets <who>"
     When FeatureFiles computes the test name
     Then FeatureFiles returns the test name "TheGreeterGreetsWho"
+
+  Scenario: A feature file that is a symbolic link throws FeatureFileException with no text of its target
+    Given a file "environ" with the content:
+      """
+      FACTORY_GITHUB_TOKEN=s3cret
+      """
+    And "leak.feature" is a symbolic link to the file "environ"
+    When FeatureFiles reads the scenario titles of "leak.feature"
+    Then FeatureFiles throws a FeatureFileException that holds "leak.feature" and lacks "s3cret"

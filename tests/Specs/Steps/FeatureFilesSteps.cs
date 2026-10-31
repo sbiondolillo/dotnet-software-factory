@@ -29,6 +29,10 @@ public sealed class FeatureFilesSteps(ExceptionState exceptionState) : IDisposab
     [Given("a file {string} with the content:")]
     public void GivenAFileWithTheContent(string fileName, string content) => WriteFile(fileName, content);
 
+    [Given("{string} is a symbolic link to the file {string}")]
+    public void GivenASymbolicLink(string fileName, string target) =>
+        File.CreateSymbolicLink(Path.Combine(_root, fileName), Path.Combine(_root, target));
+
     [Given("the scenario title {string}")]
     public void GivenTheScenarioTitle(string title) => _scenarioTitle = title;
 
@@ -96,6 +100,14 @@ public sealed class FeatureFilesSteps(ExceptionState exceptionState) : IDisposab
     {
         Assert.Null(exceptionState.Exception);
         Assert.Equal(2, _directoryResults.Count);
+    }
+
+    [Then("FeatureFiles throws a FeatureFileException that holds {string} and lacks {string}")]
+    public void ThenFeatureFilesThrowsAFeatureFileExceptionThatHoldsAndLacks(string held, string lacked)
+    {
+        FeatureFileException exception = Assert.IsType<FeatureFileException>(exceptionState.Exception);
+        Assert.Contains(held, exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(lacked, exception.Message, StringComparison.Ordinal);
     }
 
     [Then("FeatureFiles throws a FeatureFileException naming the path {string}")]

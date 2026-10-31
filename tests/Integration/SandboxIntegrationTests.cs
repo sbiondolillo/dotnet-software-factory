@@ -102,6 +102,16 @@ public sealed class SandboxIntegrationTests : IDisposable
 
         Assert.NotEqual(0, (await ExecAsync(gates, "sh", ["-c", "command -v sudo"])).ExitCode);
         Assert.NotEqual(0, (await ExecAsync(gates, "test", ["-e", "/var/run/docker.sock"])).ExitCode);
+
+        foreach (string path in new[] { ".factory", "specs/features" })
+        {
+            CommandResult link = await ExecAsync(gates, "ln", ["-s", "/proc/self/environ", $"/work/{path}/link"]);
+            Assert.NotEqual(0, link.ExitCode);
+            Assert.Contains("Read-only file system", link.StandardError, StringComparison.Ordinal);
+        }
+
+        await File.WriteAllTextAsync(Path.Combine(_tree.FullName, ".factory", "plan.md"), "plan", TestContext.Current.CancellationToken);
+        Assert.Equal("plan", (await ExecAsync(gates, "cat", ["/work/.factory/plan.md"])).StandardOutput);
     }
 
     [Fact]

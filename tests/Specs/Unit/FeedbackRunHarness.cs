@@ -178,11 +178,6 @@ public sealed class FeedbackRunHarness : IDisposable
             return AnswerGit(spec);
         }
 
-        if (spec.Command is not "docker")
-        {
-            return Program([spec.Command, .. spec.Arguments], directory => directory);
-        }
-
         switch (spec.Arguments[0])
         {
             case "run":
@@ -254,7 +249,7 @@ public sealed class FeedbackRunHarness : IDisposable
         return Program(arguments[(id + 1)..], directory => Path.Combine(_clone.FullName, directory["/work/".Length..]));
     }
 
-    /// <summary>Answers a program with its words, in the container or on the host. <paramref name="results"/> maps the TRX directory to the host.</summary>
+    /// <summary>Answers a program with its words, in the container. <paramref name="results"/> maps the TRX directory to the host.</summary>
     private CommandResult Program(List<string> arguments, Func<string, string> results)
     {
         string program = arguments[0];
