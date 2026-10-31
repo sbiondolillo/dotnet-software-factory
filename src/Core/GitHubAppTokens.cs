@@ -1,74 +1,70 @@
 using System.Buffers.Text;
-using System.Net;
-using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
 namespace Core;
 
-/// <summary>Mints and revokes installation tokens of a GitHub App, with a JWT signed by the App's private key.</summary>
+/// <summary>
+/// Mints and revokes installation tokens of a GitHub App, with a JWT signed by the App's private key. Each request goes through a
+/// <see cref="GitHubClient"/>, so a transient failure is sent again.
+/// </summary>
 public sealed class GitHubAppTokens(
     HttpMessageHandler handler,
     string appId,
     string installationId,
     string privateKeyPem,
-    TimeProvider? time = null)
+    TimeProvider? time = null,
+    TimeSpan? baseWait = null)
 {
-    private const string Root = "https://api.github.com";
-
     private const string JwtHeader = """{"alg":"RS256","typ":"JWT"}""";
 
     private readonly TimeProvider _time = time ?? TimeProvider.System;
 
-    /// <summary>Mints a token for <paramref name="repo"/> alone: contents write when <paramref name="write"/> is true, read otherwise.</summary>
+    /// <summary>
+    /// Mints a token for <paramref name="repo"/> alone: contents write when <paramref name="write"/> is true, read otherwise. A token
+    /// with write access also holds workflows write when the installation of the App holds it, so a push of a change under
+    /// <c>.github/workflows/</c> passes.
+    /// </summary>
     public async Task<string> MintAsync(string repo, bool write, CancellationToken cancellationToken = default)
     {
         string path = $"/app/installations/{installationId}/access_tokens";
-        string body = JsonSerializer.Serialize(new
-        {
-            repositories = new[] { repo },
-            permissions = new { contents = write ? "write" : "read", metadata = "read" },
-        });
-        using HttpRequestMessage request = Request(HttpMethod.Post, path, CreateJwt());
-        request.Content = new StringContent(body, Encoding.UTF8, "application/json");
         using HttpClient http = Client();
-        using HttpResponseMessage response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        string text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        if (response.StatusCode is not HttpStatusCode.Created)
+        var client = new GitHubClient(http, CreateJwt(), baseWait);
+        var permissions = new Dictionary<string, string> { ["contents"] = write ? "write" : "read", ["metadata"] = "read" };
+        if (write && await HoldsWorkflowsWriteAsync(client, cancellationToken).ConfigureAwait(false))
         {
-            throw new GitHubRequestException("POST", path, (int)response.StatusCode, text);
+            permissions["workflows"] = "write";
         }
 
-        using var document = JsonDocument.Parse(text);
-        return document.RootElement.GetProperty("token").GetString()
-            ?? throw new GitHubRequestException("POST", path, (int)response.StatusCode, "the answer holds no token");
+        string body = JsonSerializer.Serialize(new { repositories = new[] { repo }, permissions });
+        JsonElement answer = await client.SendAsync(HttpMethod.Post, path, body, cancellationToken).ConfigureAwait(false);
+        return answer.ValueKind is JsonValueKind.Object && answer.TryGetProperty("token", out JsonElement token) && token.GetString() is string text
+            ? text
+            : throw new GitHubRequestException("POST", path, 201, "the answer holds no token");
     }
 
     /// <summary>Revokes <paramref name="token"/> with <c>DELETE /installation/token</c>.</summary>
     public async Task RevokeAsync(string token, CancellationToken cancellationToken = default)
     {
-        const string path = "/installation/token";
-        using HttpRequestMessage request = Request(HttpMethod.Delete, path, token);
         using HttpClient http = Client();
-        using HttpResponseMessage response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        if (response.StatusCode is not HttpStatusCode.NoContent)
-        {
-            string text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            throw new GitHubRequestException("DELETE", path, (int)response.StatusCode, text);
-        }
+        var client = new GitHubClient(http, token, baseWait);
+        await client.SendAsync(HttpMethod.Delete, "/installation/token", null, cancellationToken).ConfigureAwait(false);
     }
 
-    // The caller owns the handler, so the client leaves it open, and a client for each request costs no connection.
+    // The caller owns the handler, so the client leaves it open, and a client for each call costs no connection.
     private HttpClient Client() => new(handler, disposeHandler: false);
 
-    private static HttpRequestMessage Request(HttpMethod method, string path, string bearer)
+    /// <summary>Reads <c>permissions.workflows</c> of the installation with the JWT, and gives back whether it is <c>write</c>.</summary>
+    private async Task<bool> HoldsWorkflowsWriteAsync(GitHubClient client, CancellationToken cancellationToken)
     {
-        var request = new HttpRequestMessage(method, new Uri(Root + path, UriKind.Absolute));
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        request.Headers.TryAddWithoutValidation("User-Agent", "dotnet-software-factory");
-        return request;
+        JsonElement installation = await client.SendAsync(HttpMethod.Get, $"/app/installations/{installationId}", null, cancellationToken).ConfigureAwait(false);
+        return installation.ValueKind is JsonValueKind.Object
+            && installation.TryGetProperty("permissions", out JsonElement permissions)
+            && permissions.ValueKind is JsonValueKind.Object
+            && permissions.TryGetProperty("workflows", out JsonElement workflows)
+            && workflows.ValueKind is JsonValueKind.String
+            && workflows.GetString() is "write";
     }
 
     /// <summary>

@@ -28,12 +28,27 @@ public sealed class GitHubAppTokensSteps(ExceptionState exceptionState) : IDispo
     public void GivenAGitHubAppTokens(string appId, string installationId, string time)
     {
         _now = DateTimeOffset.Parse(time, CultureInfo.InvariantCulture);
-        _tokens = new GitHubAppTokens(_handler, appId, installationId, _key.ExportRSAPrivateKeyPem(), new FixedTime(_now));
+        _tokens = new GitHubAppTokens(_handler, appId, installationId, _key.ExportRSAPrivateKeyPem(), new FixedTime(_now), TimeSpan.FromMilliseconds(1));
     }
 
     [Given("GitHub answers the mint with the status {int} and the token {string}")]
     public void GivenGitHubAnswersTheMint(int status, string token) =>
         _handler.Answer = ((HttpStatusCode)status, JsonSerializer.Serialize(new { token, expires_at = "2026-10-30T13:00:00Z" }));
+
+    [Given("GitHub answers the mint first with the status {int} and then with the status {int} and the token {string}")]
+    public void GivenGitHubAnswersTheMintTwice(int first, int second, string token)
+    {
+        _handler.Queue.Enqueue(((HttpStatusCode)first, """{"message":"Service Unavailable"}"""));
+        GivenGitHubAnswersTheMint(second, token);
+    }
+
+    [Given("the installation of the App holds the permission {string} set to {string}")]
+    public void GivenTheInstallationHolds(string name, string value) =>
+        _handler.Installation = (HttpStatusCode.OK, JsonSerializer.Serialize(new
+        {
+            id = 7890,
+            permissions = new Dictionary<string, string> { ["contents"] = "write", ["metadata"] = "read", [name] = value },
+        }));
 
     [Given("GitHub answers with the status {int} and the body {string}")]
     public void GivenGitHubAnswers(int status, string body) => _handler.Answer = ((HttpStatusCode)status, body);
@@ -65,10 +80,26 @@ public sealed class GitHubAppTokensSteps(ExceptionState exceptionState) : IDispo
         Assert.Equal(request, $"{recorded.Method} {recorded.Uri}");
     }
 
+    [Then("the stub recorded the requests {string} and {string}, in this order")]
+    public void ThenTheStubRecordedTwoRequests(string first, string second) =>
+        Assert.Equal([first, second], _handler.Requests.Select(recorded => $"{recorded.Method} {recorded.Uri}"));
+
+    [Then("the stub recorded {int} requests {string}")]
+    public void ThenTheStubRecordedRequests(int count, string request) =>
+        Assert.Equal(Enumerable.Repeat(request, count), _handler.Requests.Select(recorded => $"{recorded.Method} {recorded.Uri}"));
+
+    [Then("both requests hold the same header {string}")]
+    public void ThenBothRequestsHoldTheSameHeader(string name)
+    {
+        Assert.Equal(2, _handler.Requests.Count);
+        Assert.True(_handler.Requests[0].Headers.TryGetValue(name, out string? first), $"the first request has no header {name}");
+        Assert.Equal(first, _handler.Requests[1].Headers.GetValueOrDefault(name));
+    }
+
     [Then("the request holds the header {string} set to {string}")]
     public void ThenTheRequestHoldsTheHeader(string name, string value)
     {
-        RecordedRequest recorded = Assert.Single(_handler.Requests);
+        RecordedRequest recorded = Last();
         Assert.True(recorded.Headers.TryGetValue(name, out string? actual), $"no header {name}");
         Assert.Equal(value, actual);
     }
@@ -110,7 +141,7 @@ public sealed class GitHubAppTokensSteps(ExceptionState exceptionState) : IDispo
     [Then("^the request body is (.*)$")]
     public void ThenTheRequestBodyIs(string body)
     {
-        RecordedRequest recorded = Assert.Single(_handler.Requests);
+        RecordedRequest recorded = Last();
         Assert.Equal(body, recorded.Body);
     }
 
@@ -142,9 +173,16 @@ public sealed class GitHubAppTokensSteps(ExceptionState exceptionState) : IDispo
         }
     }
 
+    /// <summary>The last request: the POST of a mint, after the GET of the installation that a mint with write access sends first.</summary>
+    private RecordedRequest Last()
+    {
+        Assert.NotEmpty(_handler.Requests);
+        return _handler.Requests[^1];
+    }
+
     private string[] Jwt(string scheme)
     {
-        RecordedRequest recorded = Assert.Single(_handler.Requests);
+        RecordedRequest recorded = Last();
         string authorization = recorded.Headers["Authorization"];
         Assert.StartsWith(scheme + " ", authorization, StringComparison.Ordinal);
         return authorization[(scheme.Length + 1)..].Split('.');
@@ -174,6 +212,13 @@ public sealed class GitHubAppTokensSteps(ExceptionState exceptionState) : IDispo
     {
         public (HttpStatusCode Status, string Body) Answer { get; set; } = (HttpStatusCode.OK, "");
 
+        /// <summary>The answer to <c>GET /app/installations/7890</c>: an installation that names no workflows permission, until a step sets it.</summary>
+        public (HttpStatusCode Status, string Body) Installation { get; set; } =
+            (HttpStatusCode.OK, """{"id":7890,"permissions":{"contents":"write","metadata":"read"}}""");
+
+        /// <summary>The answers to give before <see cref="Answer"/>, one for each request other than the GET of the installation.</summary>
+        public Queue<(HttpStatusCode Status, string Body)> Queue { get; } = [];
+
         public List<RecordedRequest> Requests { get; } = [];
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -186,7 +231,10 @@ public sealed class GitHubAppTokensSteps(ExceptionState exceptionState) : IDispo
 
             string? body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
             Requests.Add(new RecordedRequest(request.Method.Method, request.RequestUri!.ToString(), headers, body));
-            return new HttpResponseMessage(Answer.Status) { Content = new StringContent(Answer.Body, Encoding.UTF8, "application/json") };
+            (HttpStatusCode status, string text) = request.Method == HttpMethod.Get && request.RequestUri.AbsolutePath is "/app/installations/7890"
+                ? Installation
+                : Queue.Count > 0 ? Queue.Dequeue() : Answer;
+            return new HttpResponseMessage(status) { Content = new StringContent(text, Encoding.UTF8, "application/json") };
         }
     }
 }
