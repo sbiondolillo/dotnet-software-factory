@@ -20,7 +20,9 @@ Every repair lands on the head of main, so an issue whose target is a pull reque
 build.
 The Managed Agents builder, #370, builds at the red SHA.
 
-Environment: GH_TOKEN, GITHUB_REPOSITORY, REPAIR_BUILD_TIMEOUT_SECONDS (default 3600).
+Environment: GH_TOKEN, GITHUB_REPOSITORY, REPAIR_BUILD_TIMEOUT_SECONDS (default 3600), and REPAIR_REF_TOKEN, the
+token of the read, the create and the move of repair-base/<n>. With no REPAIR_REF_TOKEN, those calls use GH_TOKEN.
+The deletion always uses GH_TOKEN.
 Argument: the number of the repair issue. The pull request number goes to GITHUB_OUTPUT as `pr`, and the id of
 the factory run as `run` when this job started one, for the Copilot stage.
 """
@@ -121,13 +123,28 @@ def green_sha(repo):
     return runs[0]["headSha"] if runs else None
 
 
+def ref_env():
+    """The environment of the create and the move: GH_TOKEN is REPAIR_REF_TOKEN when it is set and not empty.
+
+    Else it is the environment of the process, unchanged.
+    """
+    token = os.environ.get("REPAIR_REF_TOKEN")
+    return {**os.environ, "GH_TOKEN": token} if token else dict(os.environ)
+
+
 def create_base_branch(repo, branch, sha):
     """Points the branch at the SHA, and exits with GitHub's error text when a call fails.
 
-    It reads the ref first. A 404 means no branch of that name, so a POST creates it at the SHA. A branch of that
-    name left by an earlier run gets a forced PATCH that moves it to the SHA. Any other error of the read exits.
+    The calls use REPAIR_REF_TOKEN when it is set: an installation token of the App dsf-builder with workflows
+    write. GITHUB_TOKEN holds no workflows permission, and GitHub refuses it a ref at a commit whose workflow files
+    differ from main (#403). It reads the ref first. A 404 means no branch of that name, so a POST creates it at the
+    SHA. A branch of that name left by an earlier run gets a forced PATCH that moves it to the SHA. Any other error of
+    the read exits.
     """
-    found = subprocess.run(["gh", "api", f"repos/{repo}/git/ref/heads/{branch}"], capture_output=True, text=True)
+    env = ref_env()
+    found = subprocess.run(
+        ["gh", "api", f"repos/{repo}/git/ref/heads/{branch}"], capture_output=True, text=True, env=env
+    )
     if found.returncode == 0:
         verb = "moved to"
         call = ["-X", "PATCH", f"repos/{repo}/git/refs/heads/{branch}", "-f", f"sha={sha}", "-F", "force=true"]
@@ -136,14 +153,19 @@ def create_base_branch(repo, branch, sha):
         call = ["-X", "POST", f"repos/{repo}/git/refs", "-f", f"ref=refs/heads/{branch}", "-f", f"sha={sha}"]
     else:
         sys.exit(f"repair: the branch {branch} could not be read: {found.stderr.strip()[:500]}")
-    sent = subprocess.run(["gh", "api", *call], capture_output=True, text=True)
+    sent = subprocess.run(["gh", "api", *call], capture_output=True, text=True, env=env)
     if sent.returncode != 0:
         sys.exit(f"repair: the branch {branch} could not be {verb} {sha}: {sent.stderr.strip()[:500]}")
     print(f"repair: the branch {branch} is at the green SHA {sha}")
 
 
 def delete_base_branch(repo, branch):
-    """Deletes the branch. A failure is a log line, so it hides no error of the build."""
+    """Deletes the branch with GH_TOKEN. A failure is a log line, so it hides no build error.
+
+    The deletion runs after the wait for the factory run, up to REPAIR_BUILD_TIMEOUT_SECONDS later. An installation
+    token lives one hour, so by then REPAIR_REF_TOKEN can be expired. GH_TOKEN lives for the job. A deletion adds no
+    workflow file, so it needs no workflows permission.
+    """
     deleted = subprocess.run(
         ["gh", "api", "-X", "DELETE", f"repos/{repo}/git/refs/heads/{branch}"], capture_output=True, text=True
     )
