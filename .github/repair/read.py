@@ -46,14 +46,13 @@ RECORD_LIMIT = 50000
 FACTORY_WORKFLOW = "factory.yml"
 STORY = re.compile(r"^#(\d+)$")
 HEADING = re.compile(r"#{1,6}\s")
-SHELL_TEXT = re.compile(r"""'[^']*'|"(?:\\.|[^"\\])*"|\\.|(?:^|(?<=\s))#[^\n]*""", re.M | re.S)
-SUBSTITUTION = re.compile(r"\$\([^)]*\)|`[^`]*`")
-ABSENT_COMMAND = re.compile(
-    r"(?:^|[|;&(`!]|\b(?:if|then|elif|else|do|while|until|env|exec|command|xargs)\s)\s*"
-    r"(?:\w+=\S*\s+)*(?:[\w./-]*/)?"
-    rf"({'|'.join(ABSENT_TOOLS)})(?=[\s;|&)`<>]|$)",
-    re.M,
+SHELL_TEXT = re.compile(
+    r"""'[^']*'|"(?:\\.|[^"\\])*"|\\.|(?:^|(?<=\s))#[^\n]*|<<-?\s*['"]?(\w+)['"]?([^\n]*)\n.*?^\s*\1\s*$""", re.M | re.S
 )
+SUBSTITUTION = re.compile(r"""\$\([^)"]*|(?<!\\)`[^`]*`""")
+SEPARATOR = re.compile(r"(?<![<>])&|[\n;|()`]")
+PREFIX_WORD = re.compile(r"\w+=\S*|\d*[<>]\S*|[!{]|if|then|elif|else|do|while|until")
+WRAPPERS = ("command", "env", "eval", "exec", "nohup", "time", "timeout", "type", "xargs")
 ANSWER = "Your final answer is one JSON object and nothing else, with no prose before or after it and no code fence:"
 CONTRACT = f"""{ANSWER}
 {{"class": "code" or "dependency" or "flake", "title": "the issue title", "body": "the issue body",
@@ -449,17 +448,41 @@ def first_block(lines):
     return None
 
 
+def code_of(match):
+    """The code that one match of SHELL_TEXT holds: a heredoc keeps the rest of its first line, and a double-quoted
+    string keeps each command substitution, since the shell runs it."""
+    text = match.group(0)
+    if text.startswith("<<"):
+        return shell_code(match.group(2))
+    if text[0] == '"':
+        return shell_code(" ".join(SUBSTITUTION.findall(text))) or "_"
+    return "_" if text[0] == "'" else " "
+
+
 def shell_code(check):
-    """The text of a check with no comment, no escaped character and no quoted string, so a pattern that names a tool
-    reads as no command. A command substitution in double quotes stays, since the shell runs it."""
+    """The text of a check with no comment, no escaped character, no quoted string and no heredoc body, so a pattern
+    that names a tool reads as no command."""
+    return SHELL_TEXT.sub(code_of, check)
 
-    def code(match):
-        text = match.group(0)
-        if text[0] == '"':
-            return " ".join(SUBSTITUTION.findall(text)) or "_"
-        return "_" if text[0] == "'" else " "
 
-    return SHELL_TEXT.sub(code, check)
+def absent_tool(check):
+    """The tool of ABSENT_TOOLS that a command of the check names in command position, or None. The first word of a
+    simple command is that position, after each assignment, redirect and shell keyword. A wrapper such as `timeout 5`
+    or `xargs -r` passes the position to the word after its options and numbers. Dash exits 127 on `command -v` and
+    `type` of an absent tool, so they count. A name in a variable or in a quoted script stays out of reach."""
+    for command in SEPARATOR.split(shell_code(check)):
+        wrapped = False
+        for word in command.split():
+            if PREFIX_WORD.fullmatch(word):
+                continue
+            if word in WRAPPERS:
+                wrapped = True
+            elif not wrapped or not (word[0] == "-" or word[0].isdigit()):
+                name = word.rsplit("/", 1)[-1]
+                if name in ABSENT_TOOLS:
+                    return name
+                break
+    return None
 
 
 def check_cleanup_body(body):
@@ -472,9 +495,9 @@ def check_cleanup_body(body):
     assert lines is not None, "the cleanup body has no `## Check` heading"
     check = first_block(lines)
     assert check is not None, "`## Check` holds no closed fenced block with a command"
-    absent = ABSENT_COMMAND.search(shell_code(check))
+    absent = absent_tool(check)
     assert absent is None, (
-        f"`## Check` runs `{absent.group(1)}`, which the image of `sandbox/Dockerfile` lacks. "
+        f"`## Check` runs `{absent}`, which the image of `sandbox/Dockerfile` lacks. "
         "Read a JSON file with `grep` or `node`"
     )
 
