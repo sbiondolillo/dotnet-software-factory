@@ -66,6 +66,7 @@ Then run every check of the `build` job of `.github/workflows/ci.yml` on the bra
 ```
 dotnet restore --locked-mode && dotnet build --no-restore && dotnet format --verify-no-changes --no-restore && dotnet test --no-restore
 ruff format . && ruff check .
+python3 -B -m unittest discover -s .github/repair -p 'test_*.py'
 ```
 
 `ruff format .` rewraps the Python under `.github/` to `ruff.toml`, and `ruff check .` names each line that it cannot wrap, such as a long docstring or a long string. Wrap each one by hand. The `build` job runs `ruff==0.16.2`, so a check with another version can differ.

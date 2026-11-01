@@ -11,6 +11,19 @@ The guards, decided in #355 and #366, run first: the pull request is open with t
 head. The job waits for the judge when its check run is not complete yet.
 A verdict other than success is one comment on the issue and no merge.
 
+The path rule, decided in #406: the job merges no repair pull request whose diff touches a path of GUARDED. The
+refusal is one comment on the issue that names each such path. judge.yml and ci.yml run on pull_request from the
+pull request's own copy, and judge.yml holds `checks: write`, so a repair that edits them, or .github/judge/, judges
+itself. repair.yml and .github/repair/ run from main, so an edit there acts only after a merge, and this rule is in
+.github/repair/. So a repair that edits the rule is refused by the rule. A change to a path of GUARDED stays the
+owner's direct change. factory.yml, .github/agents/, src/, sandbox/ and the other paths are open to a repair. The
+rule runs before the wait for the judge, so a refused pull request spends no wait and starts no gate run.
+The job reads the paths from `GET /repos/<repo>/pulls/<n>/files`, with `--paginate`, and not from
+`gh pr diff --name-only`. The API names both paths of a rename, `filename` and `previous_filename`, so a move of a
+guarded file is seen. `gh pr diff` reads the diff media type, which GitHub refuses for a large diff. The API lists at
+most 3000 files, so a list shorter than `changedFiles` of the pull request is a refusal too. The job reads the head
+again after the list, so the list belongs to the settled SHA.
+
 The loop bound: the job merges nothing on a pull request whose head branch is the branch of the red run that
 started the repair. The run is the `Run:` line under `## Run` of the issue, which read.py wrote.
 
@@ -65,7 +78,15 @@ WORKFLOW = "factory.yml"
 HEADS = ("repair/", "factory/")
 CHECK = "judge-verdict"
 MARKER = "<!-- repair-merge:{sha} -->"
-FIELDS = "number,state,headRefName,headRefOid,baseRefName,body,labels,url,mergeCommit,mergedBy"
+FIELDS = "number,state,headRefName,headRefOid,baseRefName,body,labels,url,mergeCommit,mergedBy,changedFiles"
+# The paths a repair never changes, as #406 decided. An entry that ends with a slash holds each path under it.
+GUARDED = (
+    ".github/workflows/judge.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/repair.yml",
+    ".github/judge/",
+    ".github/repair/",
+)
 
 
 def read_pull_request(repo, number):
@@ -79,6 +100,31 @@ def closing_issue(body):
 
 def read_issue(repo, issue):
     return json.loads(gh("issue", "view", str(issue), "-R", repo, "--json", "body,labels"))
+
+
+def guarded(paths):
+    """Each path of the list that GUARDED holds, sorted, and each one once."""
+    return sorted(
+        {
+            path
+            for path in paths
+            if any(path == entry or (entry.endswith("/") and path.startswith(entry)) for entry in GUARDED)
+        }
+    )
+
+
+def changed_files(repo, number):
+    """The files of the diff of the pull request, as (the count of entries, every path). A rename gives both paths.
+    Each line of the output is one entry as a JSON array, so a path that holds a line feed stays one path."""
+    lines = gh(
+        "api",
+        f"repos/{repo}/pulls/{number}/files?per_page=100",
+        "--paginate",
+        "--jq",
+        ".[] | [.filename, .previous_filename] | @json",
+    ).splitlines()
+    entries = [json.loads(line) for line in lines if line]
+    return len(entries), [path for entry in entries for path in entry if path]
 
 
 def red_run_branch(repo, body):
@@ -296,6 +342,32 @@ def main():
     issue = closing_issue(pr["body"])
     fields = read_issue(repo, issue) if issue is not None else {"body": "", "labels": []}
     gated = FACTORY_LABEL in labels or FACTORY_LABEL in [item["name"] for item in fields.get("labels") or []]
+    count, paths = changed_files(repo, number)
+    after = read_pull_request(repo, number)
+    if after["headRefOid"] != sha:
+        print(
+            f"repair: the head of pull request #{number} moved off {sha[:7]} while the job read its files; "
+            "nothing to merge"
+        )
+        return
+    touched = guarded(paths)
+    if touched or count < after["changedFiles"]:
+        stop(
+            repo,
+            number,
+            issue,
+            sha,
+            f"Pull request #{number} changes {', '.join(f'`{path}`' for path in touched)}. "
+            "A repair changes no file of the judge, of ci or of the repair loop. The judge and ci run from the "
+            "pull request's own copy, so such a repair judges itself, and the files of the loop hold this rule. "
+            "No merge. A change to these files is the owner's direct change."
+            if touched
+            else f"The list of the files of pull request #{number} holds {count} of its {after['changedFiles']} "
+            "files, so the job cannot read whether it changes a file of the judge, of ci or of the repair loop. "
+            "No merge. "
+            "The owner reads the pull request.",
+        )
+        return
     if issue is not None and red_run_branch(repo, fields["body"]) == pr["headRefName"]:
         stop(
             repo,
