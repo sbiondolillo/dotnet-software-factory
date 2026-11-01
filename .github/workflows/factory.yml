@@ -13,7 +13,7 @@
 # container that holds no key, so the job builds the sandbox image.
 # docs/agents/sessions.md states what each session holds.
 #
-# The run name is the number of the issue, `#<n>`, on both paths. So the
+# On both paths, the run name is the number of the issue, `#<n>`. So the
 # `workflow_run` payload of a failed run names its issue in `display_title`.
 #
 # The input `base`, a branch, a tag or a commit on one of them, names the commit

@@ -70,7 +70,7 @@ class FactoryKeyTests(unittest.TestCase):
         self.assertEqual(merge.key_blocks(FACTORY_TEXT, "permissions", False), [["permissions:", "  checks: read"]])
 
     def test_an_edit_outside_the_keys_passes(self):
-        head = self.edit("# The run name is", "# The name of the run is").replace(
+        head = self.edit("# On both paths, the run name is", "# On both paths, the name of the run is").replace(
             "    runs-on: ubuntu-latest", "    runs-on: ubuntu-24.04"
         )
         self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), [])
