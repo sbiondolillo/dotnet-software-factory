@@ -221,7 +221,8 @@ def changed_lines(base, head):
 def open_quote(text):
     """True when the text ends inside a quoted scalar. A quote opens a scalar only where a node starts: at the start
     of the text, or after `:`, `-`, `,`, `[`, `{` or `?` and spaces. A quote inside a plain scalar, such as the `'`
-    of `builder's`, is text, as in YAML. A backslash in a double-quoted scalar escapes the next character."""
+    of `builder's`, is text, as in YAML. A backslash in a double-quoted scalar escapes the next character, and a
+    doubled `''` inside a single-quoted scalar is one apostrophe, as in YAML."""
     quote = None
     skip = False
     for index, char in enumerate(text):
@@ -229,6 +230,8 @@ def open_quote(text):
             skip = False
         elif quote is not None:
             if quote == '"' and char == "\\":
+                skip = True
+            elif char == quote == "'" and text[index + 1 : index + 2] == "'":
                 skip = True
             elif char == quote:
                 quote = None

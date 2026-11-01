@@ -99,6 +99,11 @@ class FactoryKeyTests(unittest.TestCase):
         )
         self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), [])
 
+    def test_a_doubled_apostrophe_keeps_a_single_quoted_scalar_open(self):
+        head = self.edit("permissions:\n  checks: read\n", "x: 'x''\npermissions:\n  checks: read\ntail'\n")
+        self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), [merge.UNREADABLE])
+        self.assertFalse(merge.open_quote("x: 'it''s closed'"))
+
     def test_a_line_that_leaves_a_quote_open_is_refused(self):
         for quote in ('"', "'"):
             with self.subTest(quote=quote):
