@@ -88,7 +88,7 @@ public sealed class ConsoleHarness : IDisposable
     /// <summary>The answer to a read of the reviews from the number of reads after the review request (0 before it), or null for <see cref="Reviews"/>.</summary>
     public Func<int, string>? ReviewsByRead { get; set; }
 
-    /// <summary>"none", "always" or "until-resolved".</summary>
+    /// <summary>"none", "always", "until-resolved" (thread A until its resolve, then no thread) or "resolvable" (thread A on each read, with <c>isResolved</c> true after its resolve, as GitHub answers).</summary>
     public string Threads { get; set; } = "none";
 
     public bool Disputed { get; set; }
@@ -474,9 +474,10 @@ public sealed class ConsoleHarness : IDisposable
         string query = json.RootElement.GetProperty("query").GetString() ?? "";
         if (query.Contains("reviewThreads", StringComparison.Ordinal))
         {
-            bool listed = Threads is "always" || (Threads is "until-resolved" && !_resolved);
+            bool listed = Threads is "always" or "resolvable" || (Threads is "until-resolved" && !_resolved);
+            bool isResolved = Threads is "resolvable" && _resolved;
             var nodes = listed
-                ? new[] { new { id = ThreadA, isResolved = false, path = "src/Core/Checkout.cs", line = (int?)14, comments = new { nodes = new[] { new { author = new { login = "sbiondolillo" }, body = ThreadABody } } } } }
+                ? new[] { new { id = ThreadA, isResolved, path = "src/Core/Checkout.cs", line = (int?)14, comments = new { nodes = new[] { new { author = new { login = "sbiondolillo" }, body = ThreadABody } } } } }
                 : [];
             return (200, JsonSerializer.Serialize(new { data = new { repository = new { pullRequest = new { reviewThreads = new { nodes } } } } }));
         }

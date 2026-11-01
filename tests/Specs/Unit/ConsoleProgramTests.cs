@@ -200,14 +200,16 @@ public sealed class ConsoleProgramTests : IDisposable
     }
 
     [Fact]
-    public async Task ADisputedThreadGetsOneFeedbackRunAndTheSecondWatchIsTheResultLine()
+    public async Task ADisputedThreadIsResolvedAndTheSecondWatchReadsNoUnresolvedThread()
     {
-        _h.Threads = "always";
+        _h.Threads = "resolvable";
         _h.Disputed = true;
-        Assert.Equal(1, await StartAsync($"run {Repo} --issue 1"));
+        Assert.Equal(0, await StartAsync($"run {Repo} --issue 1"));
         Assert.Equal(2, _h.CloneDirectories.Count);
-        Assert.Single(ConsoleHarness.Lines(_h.Out), l => l.StartsWith("checks:", StringComparison.Ordinal));
-        Assert.Contains("checks: green, unresolved threads: 1", ConsoleHarness.Lines(_h.Out));
+        Assert.Contains(_h.Requests, r => r.Path.EndsWith("/graphql", StringComparison.Ordinal)
+            && r.Content!.Contains("resolveReviewThread", StringComparison.Ordinal)
+            && r.Content.Contains(ConsoleHarness.ThreadA, StringComparison.Ordinal));
+        Assert.Equal("checks: green, unresolved threads: 0", Assert.Single(ConsoleHarness.Lines(_h.Out), l => l.StartsWith("checks:", StringComparison.Ordinal)));
     }
 
     [Fact]
