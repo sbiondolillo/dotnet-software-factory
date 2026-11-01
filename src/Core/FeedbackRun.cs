@@ -24,7 +24,8 @@ public sealed record FeedbackRunRequest(
     ManagedAgentsSettings? Managed = null);
 
 /// <summary>The outcome of a <see cref="FeedbackRun"/>: the threads resolved, the threads left unresolved, the Redos spent, and
-/// the Managed Agents sessions of the run with their cost, or null when no session ran.</summary>
+/// the Managed Agents sessions of the run with their cost, or null when no session ran. The run resolves each thread that it
+/// replies to, so the threads left unresolved are the threads with no reply.</summary>
 public sealed record FeedbackRunResult(int Resolved, int Unresolved, int Redos, IReadOnlyList<SessionCost>? Sessions = null);
 
 /// <summary>Answers every unresolved review thread of a pull request within three Redos. The <paramref name="time"/>, the
@@ -41,7 +42,8 @@ public sealed class FeedbackRun(
     private const string ReportPath = ".factory/threads.json";
 
     /// <summary>
-    /// Builds an answer to each unresolved thread, gates and reviews it, pushes it, and replies to each thread. A
+    /// Builds an answer to each unresolved thread, gates and reviews it, pushes it, and replies to each thread. Then it
+    /// resolves each thread that it replied to, fixed or disputed. The reply of a disputed thread states the dispute. A
     /// <see cref="SessionBranchException"/> posts its message on the pull request, and the run then throws it.
     /// </summary>
     public async Task<FeedbackRunResult> RunAsync(FeedbackRunRequest request, CancellationToken cancellationToken = default)
@@ -206,11 +208,8 @@ public sealed class FeedbackRun(
             {
                 ReportItem item = items.First(i => i.Id == thread.Id);
                 await reviewThreads.ReplyAsync(thread.Id, item.Reply, cancellationToken).ConfigureAwait(false);
-                if (item.Fixed)
-                {
-                    await reviewThreads.ResolveAsync(thread.Id, cancellationToken).ConfigureAwait(false);
-                    resolved++;
-                }
+                await reviewThreads.ResolveAsync(thread.Id, cancellationToken).ConfigureAwait(false);
+                resolved++;
             }
 
             return new FeedbackRunResult(resolved, threads.Count - resolved, redos, Sessions(agents));
@@ -299,12 +298,12 @@ public sealed class FeedbackRun(
 
             if (statusOk && replyOk)
             {
-                items.Add(new ReportItem(thread.Id, status is "fixed", reply!));
+                items.Add(new ReportItem(thread.Id, reply!));
             }
         }
 
         return (items, faults);
     }
 
-    private sealed record ReportItem(string Id, bool Fixed, string Reply);
+    private sealed record ReportItem(string Id, string Reply);
 }

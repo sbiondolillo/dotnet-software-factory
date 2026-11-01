@@ -108,7 +108,7 @@ tr -d '\r' < <scratch>/spec | sed -nE 's/^ *Scenario( Outline)?: //p' | while re
 tr -d '\r' < <scratch>/spec | sed -n '/^## Removed scenarios/,/^## /p' | sed -nE 's/^- `[^`]*`: //p' | while read -r name; do grep -rhE '^ *Scenario( Outline)?: ' specs/features | sed -E 's/^ *Scenario( Outline)?: //' | grep -qxF -- "$name" && echo "still present: $name"; done
 ```
 
-Write the report to a file: what changed, the result of each suite, each reviewer's verdict, and each finding with its fix or its refutation. Then push the branch, `git push -u origin HEAD`. A push with no new commit prints `Everything up-to-date` and starts no check run, so the handover names each red check, and the owner reruns it with `gh run rerun <id> --failed`. For a failed run with an open pull request, each open review thread then gets a reply, as `## Review threads` says: the SHA of its pushed fix, or the evidence that refutes it. A fixed thread is resolved, and a refuted thread stays open for the reviewer, as the factory's feedback path does. Deliver the report by the case:
+Write the report to a file: what changed, the result of each suite, each reviewer's verdict, and each finding with its fix or its refutation. Then push the branch, `git push -u origin HEAD`. A push with no new commit prints `Everything up-to-date` and starts no check run, so the handover names each red check, and the owner reruns it with `gh run rerun <id> --failed`. For a failed run with an open pull request, each open review thread then gets a reply, as `## Review threads` says: the SHA of its pushed fix, or the evidence that refutes it. A fixed thread is resolved, and a refuted thread stays open for the reviewer. Deliver the report by the case:
 
 | Case | Delivery |
 |---|---|
