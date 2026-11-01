@@ -20,6 +20,7 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
     private int _issue;
     private string _title = "";
     private int _pushExit;
+    private string _pushError = "fatal: push failed";
     private string _changedFile = "";
     private PullRequest? _result;
     private Exception? _exception;
@@ -49,6 +50,13 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
 
     [Given("git answers the push with the exit code {int}")]
     public void GivenPushAnswers(int code) => _pushExit = code;
+
+    [Given("git answers the push with the exit code {int} and the standard error {string}")]
+    public void GivenPushAnswersWithError(int code, string standardError)
+    {
+        _pushExit = code;
+        _pushError = standardError;
+    }
 
     [Given("the run changed the file {string}")]
     public void GivenChangedFile(string path)
@@ -102,7 +110,7 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
                 _commands.Add(spec);
                 int exit = spec.Arguments[0] is "push" ? _pushExit : 0;
                 string changed = spec.Arguments[0] is "diff" ? _changedFile : "";
-                return Task.FromResult(new CommandResult { ExitCode = exit, StandardOutput = changed, StandardError = exit is 0 ? "" : "fatal: push failed" });
+                return Task.FromResult(new CommandResult { ExitCode = exit, StandardOutput = changed, StandardError = exit is 0 ? "" : _pushError });
             });
         var client = new GitHubClient(new HttpClient(_handler), token, TimeSpan.Zero);
         var deliver = new Deliver(new Git(mock.Object), new PullRequests(client), client, _facts);
@@ -171,6 +179,10 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
 
     [Then("Deliver throws GitCommandException")]
     public void ThenGitException() => Assert.IsType<GitCommandException>(_exception);
+
+    [Then("Deliver throws GitCommandException whose message holds {string}")]
+    public void ThenGitExceptionHolds(string text) =>
+        Assert.Contains(text, Assert.IsType<GitCommandException>(_exception).Message, StringComparison.Ordinal);
 
     [Then("Deliver sent no request to GitHub")]
     public void ThenNoRequest() => Assert.Empty(_handler.Requests);

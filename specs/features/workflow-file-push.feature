@@ -11,3 +11,10 @@ Feature: The factory delivers a run whose change is to a workflow file
     When a caller delivers the run with the token "token"
     Then git pushed the branch "factory/a1b2c3d4" from "/work" to origin
     And Deliver gives back the pull request with the number 408 and the web address "https://github.com/sbiondolillo/dotnet-software-factory/pull/408"
+
+  Scenario: A push that GitHub refuses for the workflows permission throws GitCommandException with the refusal and opens no pull request
+    Given the run changed the file ".github/workflows/factory.yml"
+    And git answers the push with the exit code 1 and the standard error "refusing to allow a GitHub App to create or update workflow `.github/workflows/factory.yml` without `workflows` permission"
+    When a caller delivers the run with the token "token"
+    Then Deliver throws GitCommandException whose message holds "without `workflows` permission"
+    And Deliver sent no request to GitHub
