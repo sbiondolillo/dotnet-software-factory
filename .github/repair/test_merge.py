@@ -1,5 +1,5 @@
 """Unit tests of the path rule of merge.py, decided in #406. The build job of ci.yml runs them with
-`python3 -m unittest discover -s .github/repair -p 'test_*.py'`. They use unittest, which the standard library holds,
+`python3 -B -m unittest discover -s .github/repair -p 'test_*.py'`. They use unittest, which the standard library holds,
 so the job installs nothing."""
 
 import unittest

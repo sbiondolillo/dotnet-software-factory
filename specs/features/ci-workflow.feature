@@ -73,7 +73,7 @@ Feature: CI workflow
             - name: Python
               run: pipx run --spec ruff==0.16.2 ruff format --check . && pipx run --spec ruff==0.16.2 ruff check .
             - name: Python tests
-              run: python3 -B -m unittest discover -s .github/repair -p 'test_*.py' -v
+              run: python3 -B -m unittest discover -s .github/repair -p 'test_*.py'
 
         integration:
           needs: build

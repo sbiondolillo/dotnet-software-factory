@@ -364,8 +364,7 @@ def main():
             if touched
             else f"The list of the files of pull request #{number} holds {count} of its {after['changedFiles']} "
             "files, so the job cannot read whether it changes a file of the judge, of ci or of the repair loop. "
-            "No merge. "
-            "The owner reads the pull request.",
+            "No merge. The owner reads the pull request.",
         )
         return
     if issue is not None and red_run_branch(repo, fields["body"]) == pr["headRefName"]:
