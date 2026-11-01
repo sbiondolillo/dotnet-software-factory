@@ -289,5 +289,30 @@ class BaseTests(unittest.TestCase):
         arm.assert_not_called()
 
 
+class WaitForMergeTests(unittest.TestCase):
+    def wait(self, base, head="a" * 40):
+        pr = {"state": "OPEN", "headRefOid": head, "baseRefName": base}
+        with (
+            mock.patch.object(merge, "read_pull_request", return_value=pr),
+            mock.patch.object(merge, "disarm") as disarm,
+        ):
+            result = merge.wait_for_merge("o/r", 7, "a" * 40, "main", 0, 0)
+        return result, disarm
+
+    def test_a_retarget_while_armed_disarms(self):
+        result, disarm = self.wait("dev")
+        self.assertIsNone(result)
+        disarm.assert_called_once_with("o/r", 7)
+
+    def test_a_moved_head_while_armed_disarms(self):
+        result, disarm = self.wait("main", head="c" * 40)
+        self.assertIsNone(result)
+        disarm.assert_called_once_with("o/r", 7)
+
+    def test_an_unmoved_pull_request_waits_to_the_timeout(self):
+        with self.assertRaises(SystemExit):
+            self.wait("main")
+
+
 if __name__ == "__main__":
     unittest.main()

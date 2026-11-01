@@ -54,7 +54,8 @@ or deletes factory.yml is a refusal.
 The base rule: the job reads the diff against the base of the pull request, and a retarget changes that diff with no
 new head. So the job requires the base to be the default branch of the repo, and refuses any other base with one
 comment. It reads the pull request after the list of files and again directly before it arms the merge, and it exits
-with no comment when the base or the head moved since the check.
+with no comment when the base or the head moved since the check. While the merge is armed, a move of the base disarms
+it, as a move of the head does.
 
 The job reads the paths from `GET /repos/<repo>/pulls/<n>/files`, with `--paginate`, and not from
 `gh pr diff --name-only`. The API names both paths of a rename, `filename` and `previous_filename`, so a move of a
@@ -376,7 +377,7 @@ def disarm(repo, number):
         print(f"repair: disarmed the auto-merge of pull request #{number}")
 
 
-def arm_and_wait(repo, number, sha, deadline, wait):
+def arm_and_wait(repo, number, sha, base, deadline, wait):
     """Arms the auto-merge and waits for the merge. Any exit before the merge, a timeout, a closed pull request, a
     failed read or a cancel of the job, disarms the auto-merge first, so no armed merge outlives the step. The arm is
     inside the try, so a cancel during the arm command disarms too. A cancel sends SIGINT, which is KeyboardInterrupt,
@@ -385,25 +386,26 @@ def arm_and_wait(repo, number, sha, deadline, wait):
     try:
         gh("pr", "merge", str(number), "-R", repo, "--auto", "--squash", "--delete-branch", "--match-head-commit", sha)
         print(f"repair: armed the auto-merge of pull request #{number} on {sha[:7]}")
-        return wait_for_merge(repo, number, sha, deadline, wait)
+        return wait_for_merge(repo, number, sha, base, deadline, wait)
     except BaseException:
         disarm(repo, number)
         raise
 
 
-def wait_for_merge(repo, number, sha, deadline, wait):
-    """The merged pull request, or None once its head moved off the settled SHA, with the auto-merge disarmed."""
+def wait_for_merge(repo, number, sha, base, deadline, wait):
+    """The merged pull request, or None once its head moved off the settled SHA or its base off the default branch,
+    with the auto-merge disarmed."""
     while True:
         pr = read_pull_request(repo, number)
         if pr["state"] == "MERGED":
             return pr
         if pr["state"] != "OPEN":
             sys.exit(f"repair: pull request #{number} is {pr['state'].lower()} before the merge")
-        if pr["headRefOid"] != sha:
+        if pr["headRefOid"] != sha or pr["baseRefName"] != base:
             disarm(repo, number)
             print(
-                f"repair: the head of pull request #{number} moved off {sha[:7]} while the auto-merge was armed; "
-                "no merge"
+                f"repair: the head or the base of pull request #{number} moved off {sha[:7]} on {base} while the "
+                "auto-merge was armed; no merge"
             )
             return None
         if time.time() >= deadline:
@@ -592,7 +594,7 @@ def main():
         )
         return
 
-    merged = arm_and_wait(repo, number, sha, deadline, wait)
+    merged = arm_and_wait(repo, number, sha, default, deadline, wait)
     if merged is None:
         return
     if merged["headRefOid"] != sha:
