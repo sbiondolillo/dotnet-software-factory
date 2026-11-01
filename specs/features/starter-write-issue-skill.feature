@@ -79,15 +79,15 @@ Feature: A repo made from the starter holds the skill write-issue
       ## Check
 
         ~~~sh
-        dotnet restore --locked-mode &&
-        dotnet build --no-restore
+      dotnet restore --locked-mode &&
+      dotnet build --no-restore
         ~~~
       """
     When the awk program of the copy's ".claude/skills/write-issue/PROOF.md" saves the check of that body
     Then the saved check is this text
       """
-        dotnet restore --locked-mode &&
-        dotnet build --no-restore
+      dotnet restore --locked-mode &&
+      dotnet build --no-restore
       """
     And CleanupBody reads the same check from that body
 
