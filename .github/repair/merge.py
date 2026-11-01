@@ -37,12 +37,12 @@ The kill switch REPAIR_ENABLED is read first, on every event. Any value other th
 exit code 0 and one line.
 
 The merge timeout covers the wait for the judge and the wait for the merge. The gate timeout covers the wait for the
-gate run, and that wait does not count against the merge timeout. The defaults of the six waits of the job, the
-rerun 3600 s, the reader 900 s, the build 3600 s, the Copilot stage 7200 s, the gate 3600 s and the merge 1800 s, add
-up to 20700 s. That is 900 s under GitHub's job limit of 21600 s, for the search of at most 180 s for the gate run
-and for the other steps of the job. The gate made the merge timeout 1800 s, down from 3600 s. The judge and the
-required checks start on each push, so in the usual case they ran during the Copilot stage, and the merge lands at
-once. A green run of factory.yml on a story took about 1350 s in October 2026.
+gate run, and that wait does not count against the merge timeout. The job has six waits. Their defaults are the
+rerun 3600 s, the reader 900 s, the build 3600 s, the Copilot stage 7200 s, the gate 3600 s and the merge 1800 s.
+They add up to 20700 s. That is 900 s under GitHub's job limit of 21600 s, for the search of at most 180 s for the
+gate run and for the other steps of the job. The gate made the merge timeout 1800 s, down from 3600 s. The judge and
+the required checks start on each push, so in the usual case they ran during the Copilot stage, and the merge lands
+at once. A green run of factory.yml on a story took about 1350 s in October 2026.
 
 Environment: GH_TOKEN, GITHUB_REPOSITORY, REPAIR_ENABLED, REPAIR_MERGE_TIMEOUT_SECONDS (default 1800),
 REPAIR_GATE_TIMEOUT_SECONDS (default 3600), REPAIR_POLL_SECONDS (default 30).
@@ -315,7 +315,10 @@ def main():
             issue,
             sha,
             f"Pull request #{number} is a repair of the factory, and its issue names no story in a line `Story: #<n>`. "
-            "No gate run, and no merge. The owner reads the issue.",
+            "No gate run, and no merge. The owner reads the issue."
+            if issue is not None
+            else f"Pull request #{number} is a repair of the factory, and it closes no issue, so it has no story. "
+            "No gate run, and no merge. The owner reads the pull request.",
         )
         return
 
