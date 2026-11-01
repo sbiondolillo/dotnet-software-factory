@@ -206,9 +206,14 @@ public sealed class ConsoleProgramTests : IDisposable
         _h.Disputed = true;
         Assert.Equal(0, await StartAsync($"run {Repo} --issue 1"));
         Assert.Equal(2, _h.CloneDirectories.Count);
-        Assert.Contains(_h.Requests, r => r.Path.EndsWith("/graphql", StringComparison.Ordinal)
+        int reply = _h.Requests.FindIndex(r => r.Path.EndsWith("/graphql", StringComparison.Ordinal)
+            && r.Content!.Contains("addPullRequestReviewThreadReply", StringComparison.Ordinal)
+            && r.Content.Contains(ConsoleHarness.ThreadA, StringComparison.Ordinal));
+        int resolve = _h.Requests.FindIndex(r => r.Path.EndsWith("/graphql", StringComparison.Ordinal)
             && r.Content!.Contains("resolveReviewThread", StringComparison.Ordinal)
             && r.Content.Contains(ConsoleHarness.ThreadA, StringComparison.Ordinal));
+        Assert.True(reply >= 0);
+        Assert.True(resolve > reply);
         Assert.Equal("checks: green, unresolved threads: 0", Assert.Single(ConsoleHarness.Lines(_h.Out), l => l.StartsWith("checks:", StringComparison.Ordinal)));
     }
 
