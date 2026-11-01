@@ -312,16 +312,16 @@ def factory_records(log, comments):
 
 
 def turn_events(sid):
-    """The events of the newest turn, newest first: the events after the newest user.message. The events come
-    oldest first by default, and a long session holds more than one page."""
+    """The id of the newest user.message and the events of its turn, newest first: the events after that message.
+    The events come oldest first by default, and a long session holds more than one page."""
     events = anthropic("GET", f"/v1/sessions/{sid}/events?limit=200&order=desc")["data"]
     newest = next((i for i, e in enumerate(events) if e.get("type") == "user.message"), len(events))
-    return events[:newest]
+    message = events[newest].get("id") if newest < len(events) else None
+    return message, events[:newest]
 
 
-def final_answer(sid):
-    """The last agent message and the last stop of the newest turn."""
-    events = turn_events(sid)
+def final_answer(events):
+    """The last agent message and the last stop of one turn, from its events newest first."""
     text = next(
         (
             c["text"]
@@ -336,15 +336,20 @@ def final_answer(sid):
     return text, stop
 
 
-def wait_turn(sid, timeout):
-    """Wait for the turn of a user.message posted to an idle session. The status can still read idle before the
-    session takes the message, so the turn ends at an idle event after the message, as in WaitForTurnAsync of
-    src/Core/ManagedAgentsAgent.cs."""
+def wait_turn(sid, before, timeout):
+    """The events of the turn of a user.message posted to an idle session, newest first. `before` is the id of the
+    newest user.message before the POST. Right after the POST the listing can still end at that message and its old
+    idle, so the turn ends at an idle event after a user.message with another id, as in WaitForTurnAsync of
+    src/Core/ManagedAgentsAgent.cs. A session that ends as terminated or error goes idle no more, so it exits."""
     deadline = time.time() + timeout
     while True:
         wait_idle([sid], max(1, int(deadline - time.time())))
-        if any(e.get("type") == "session.status_idle" for e in turn_events(sid)):
-            return
+        message, events = turn_events(sid)
+        if message != before and any(e.get("type") == "session.status_idle" for e in events):
+            return events
+        status = anthropic("GET", f"/v1/sessions/{sid}")["status"]
+        if status in ("terminated", "error"):
+            sys.exit(f"repair: session {sid} ended with the status {status} before its correction turn went idle")
         if time.time() >= deadline:
             sys.exit(f"repair: the correction turn of session {sid} is not idle after {timeout} s")
         time.sleep(15)
@@ -396,7 +401,8 @@ def read_answer(sid, classes, files, contract, timeout):
     """The reader's answer after its first turn. A message that fails the parse gets one correction turn in the
     same session: one user.message with the parser error and the contract, as the factory sends a follow-up turn in
     src/Core/ManagedAgentsAgent.cs. A second failure exits with both errors."""
-    text, stop = final_answer(sid)
+    before, events = turn_events(sid)
+    text, stop = final_answer(events)
     check_refusal(sid, stop)
     answer, error = parse_or_error(text, classes, files)
     if answer is not None:
@@ -404,8 +410,7 @@ def read_answer(sid, classes, files, contract, timeout):
     print(f"repair: the reader's final message is not the JSON object the contract names ({error}); one correction")
     message = {"type": "user.message", "content": [{"type": "text", "text": correction(error, contract)}]}
     anthropic("POST", f"/v1/sessions/{sid}/events", {"events": [message]})
-    wait_turn(sid, timeout)
-    text, stop = final_answer(sid)
+    text, stop = final_answer(wait_turn(sid, before, timeout))
     check_refusal(sid, stop)
     return parse_answer(text, classes, files, error)
 
