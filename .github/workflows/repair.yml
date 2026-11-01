@@ -40,7 +40,7 @@
 # also merges nothing on a diff of factory.yml that changes the block of its
 # top-level on: key or of a permissions: key at any depth, or whose added or
 # removed lines hold the token permissions, on as a key at column 0, a flow
-# collection, an anchor, an alias, a tag, an explicit key or an escape. That
+# collection, a quoted scalar, an anchor, an alias, a tag or an explicit key. That
 # check reads text and fails closed: a step edit that names permissions in a
 # scalar, or that uses flow style, is refused and stays the owner's direct
 # change. A changed line that opens a quoted scalar, or that holds a character

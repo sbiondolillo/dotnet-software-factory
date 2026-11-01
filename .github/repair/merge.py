@@ -57,7 +57,7 @@ The check refuses more than the two keys. A step edit that holds `permissions` i
 anchor or a tag.
 Such a refusal is false, and it is accepted: that edit becomes the owner's direct change. A comment-only edit and a
 plain step edit pass, so the planted fault of #407 stays repairable. factory.yml on main holds no anchor, alias, tag,
-explicit key or escape, and each flow collection on main closes on its own line, so no line of a flow on main
+explicit key, and each flow collection on main closes on its own line, so no line of a flow on main
 changes without its `{` or `[`. The base SHA is the tip of the base branch and not the merge base, so a change
 on main after the branch point is a changed line too. A file that is absent at a SHA has no lines, so a diff that adds
 or deletes factory.yml is a refusal.
