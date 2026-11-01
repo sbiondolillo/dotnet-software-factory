@@ -22,24 +22,39 @@ a repair that edits the rule is refused by the rule. A change to a path of GUARD
 .github/agents/, src/, sandbox/ and the other paths are open to a repair. The rule runs before the wait for the
 judge, so a refused pull request spends no wait and starts no gate run.
 
-factory.yml is open, so a fault in it stays repairable, except for two keys. The job refuses a diff of factory.yml
-that changes its top-level `on:` key or a `permissions:` key at any depth, and the comment names each changed key. A
-job-level `permissions:` is in, since a job-level grant of `checks: write` is the same fault. The job reads
-factory.yml at the base SHA and at the head SHA from the contents API, and compares the keys as text. It uses no YAML
-library, since the job installs nothing. The block of a key is its line and each later line indented deeper than the
-key. A line at the key's own indent that starts with `- ` stays in the block, for a sequence at that indent. Blank
-lines and lines that hold only a comment are left out, so an edit of a comment passes. `on:` counts at column 0
-alone. `permissions:` counts at the start of a line at any indent, after `- ` too, and inside a flow mapping such as
-`{permissions: {checks: write}}`. A key counts in quotes, after a tag or an anchor, and with spaces or tabs before
-its colon. Any other change of a block is a refusal, also a change of indent or of a comment at the end of a line.
-Three key forms hide the key's name from a text match: an explicit `? ` key, an alias as a key, and a key in double
-quotes that holds an escape. The job reads each line that holds one of them, and a change of those lines is a
-refusal too, as a key in a form the job cannot read. factory.yml on main holds no such line. The comparison still
-misses two forms. An alias in a block is compared as its text, so a change of the anchor that it names is missed.
-The blocks on main hold no alias, and a new alias is a change of the block. And `on:` inside a flow mapping that
-holds the whole document is missed. The base SHA is the tip of the base branch and not the merge base, so a change
-of a key on main after the branch point is a refusal too. A file that is absent at a SHA has no keys, so a diff that
-adds or deletes factory.yml is a refusal.
+factory.yml is open, so a fault in it stays repairable, except for its `on:` key and its `permissions:` keys. The
+job reads factory.yml at the base SHA and at the head SHA from the contents API. It uses no YAML library, since the
+job installs nothing. So the check reads text, and it fails closed: a form that it cannot read is a refusal. It
+refuses a diff of factory.yml for each of three causes, and the comment names each cause.
+
+1. A changed line, which is a line that the diff of the two texts adds or removes, that holds a key form. Before the
+   match, the job strips a comment from the line when the line holds no quote character. The forms are: the token
+   `permissions` anywhere, in any case and in any quoting; `on` as a key at column 0, in quotes, after a tag or an
+   anchor, and with spaces or tabs before its colon; a flow collection, `{` or `[`, where a node starts; an anchor
+   `&`, an alias `*` or a tag `!` where a node starts; an explicit key `? `; and a backslash after a double quote. A
+   node starts at the start of a line after its indent, after `- `, `? ` or `, `, and after a `:` and its spaces.
+   A node inside a flow collection needs no match, since the start of that collection is a refusal. `${{ }}` and
+   `.resources["x"]` start no node, so a step edit with an expression passes.
+2. The block of `on:` at column 0 differs. The block of a key is its line and each later line indented deeper than
+   the key. A line at the key's own indent that starts with `- ` stays in the block, for a sequence at that indent.
+   Blank lines and lines that hold only a comment are left out. So an added trigger under `on:` is a refusal, though
+   its line holds no key form.
+3. The block of a `permissions:` key at any depth differs, by the same rule. So `checks: read` changed to
+   `checks: write` under the top-level key is a refusal.
+
+The check refuses more than the two keys. A step edit that holds `permissions` in a scalar, such as
+`- run: 'echo permissions: read'`, is a refusal, and so is a step edit with a flow collection, an anchor or a tag.
+Such a refusal is false, and it is accepted: that edit becomes the owner's direct change. A comment-only edit and a
+plain step edit pass, so the planted fault of #407 stays repairable. factory.yml on main holds no anchor, alias, tag,
+explicit key or escape, and each flow collection on main closes on its own line, so no line of a flow on main
+changes without its `{` or `[`. The base SHA is the tip of the base branch and not the merge base, so a change
+on main after the branch point is a changed line too. A file that is absent at a SHA has no lines, so a diff that adds
+or deletes factory.yml is a refusal.
+
+The base rule: the job reads the diff against the base of the pull request, and a retarget changes that diff with no
+new head. So the job requires the base to be the default branch of the repo, and refuses any other base with one
+comment. It reads the pull request after the list of files and again directly before it arms the merge, and it exits
+with no comment when the base or the head moved since the check.
 
 The job reads the paths from `GET /repos/<repo>/pulls/<n>/files`, with `--paginate`, and not from
 `gh pr diff --name-only`. The API names both paths of a rename, `filename` and `previous_filename`, so a move of a
@@ -85,6 +100,7 @@ REPAIR_GATE_TIMEOUT_SECONDS (default 3600), REPAIR_POLL_SECONDS (default 30).
 Arguments: the number of the repair pull request, and the head SHA the Copilot stage settled on.
 """
 
+import difflib
 import json
 import os
 import re
@@ -114,16 +130,26 @@ GUARDED = (
 FACTORY = ".github/workflows/factory.yml"
 OPEN = (FACTORY,)
 KEYS = (("on", True), ("permissions", False))
-UNREADABLE = "a key in a form the job cannot read"
+UNREADABLE = "a line in a form the job cannot read"
 # A tag or an anchor before a key, such as `!!str ` or `&a `.
 PREFIX = r"(?:[!&][^ \t]*[ \t]+)*"
-# An explicit `? ` key or an alias as a key, at the start of a line or of a flow entry, or a key in double quotes
-# that holds an escape.
-HIDDEN = re.compile(r"""(?:^[ \t]*(?:-[ \t]+)*|[{,][ \t]*)(?:\?(?:[ \t]|$)|\*)|"[^"\n]*\\[^"\n]*"[ \t]*:""")
+# A comment: a `#` at the start of a line or after a space or a tab, to the end of the line.
+COMMENT = re.compile(r"(?:^|[ \t])#.*$")
+# A key form of the module docstring, in a changed line of factory.yml.
+PERMISSIONS = re.compile(r"permissions", re.I)
+ON = re.compile(rf"""^{PREFIX}(?P<quote>["']?)on(?P=quote)[ \t]*:""", re.I)
+# Where a node starts, then a flow collection, a tag, an anchor, an alias or an explicit key; or a backslash after a
+# double quote.
+NODE = r"(?:^[ \t]*|[-?,][ \t]+|:[ \t]*)"
+FORM = re.compile(rf"""{NODE}(?:[\[{{!&*]|\?(?:[ \t]|$))|"[^"]*\\""")
 
 
 def read_pull_request(repo, number):
     return json.loads(gh("pr", "view", str(number), "-R", repo, "--json", FIELDS))
+
+
+def default_branch(repo):
+    return gh("api", f"repos/{repo}", "--jq", ".default_branch").strip()
 
 
 def closing_issue(body):
@@ -149,9 +175,8 @@ def guarded(paths):
 
 def key_blocks(text, key, top_level):
     """The blocks of the key in the YAML text, each as a list of lines, in the order of the file. The module
-    docstring states what a block is, and what the comparison catches and misses."""
-    start = re.compile(rf"""^(?P<indent> *(?:-[ \t]+)*){PREFIX}(?P<quote>["']?){key}(?P=quote)[ \t]*:""")
-    inline = re.compile(rf"""[\s{{,]{PREFIX}["']?{key}["']?[ \t]*:""")
+    docstring states what a block is."""
+    start = re.compile(rf"""^(?P<indent> *(?:-[ \t]+)*){PREFIX}(?P<quote>["']?){key}(?P=quote)[ \t]*:""", re.I)
     lines = [line.rstrip() for line in (text or "").splitlines()]
     blocks = []
     for index, line in enumerate(lines):
@@ -170,23 +195,38 @@ def key_blocks(text, key, top_level):
                     break
                 block.append(later)
             blocks.append(block)
-        elif not top_level and inline.search(line):
-            blocks.append([line])
     return blocks
 
 
-def hidden_lines(text):
-    """Each line of the YAML text that holds a key form of HIDDEN, in the order of the file. A comment line holds
-    none."""
-    lines = [line.rstrip() for line in (text or "").splitlines()]
-    return [line for line in lines if not line.lstrip().startswith("#") and HIDDEN.search(line)]
+def changed_lines(base, head):
+    """Each line that the diff of the two texts adds or removes, in the order of the diff. A text of None has no
+    lines."""
+    old = (base or "").splitlines()
+    new = (head or "").splitlines()
+    matcher = difflib.SequenceMatcher(None, old, new, autojunk=False)
+    return [line for tag, i1, i2, j1, j2 in matcher.get_opcodes() if tag != "equal" for line in old[i1:i2] + new[j1:j2]]
+
+
+def line_causes(line):
+    """The causes of the module docstring that the changed line holds, as a set of `on:`, `permissions:` and
+    UNREADABLE. The comment goes first when the line holds no quote character."""
+    text = line if "'" in line or '"' in line else COMMENT.sub("", line)
+    causes = set()
+    if PERMISSIONS.search(text):
+        causes.add("permissions:")
+    if ON.match(text):
+        causes.add("on:")
+    if FORM.search(text):
+        causes.add(UNREADABLE)
+    return causes
 
 
 def changed_keys(base, head):
-    """Each key of KEYS whose blocks differ between the two texts of factory.yml, as `on:` or `permissions:`, then
-    UNREADABLE when the lines of HIDDEN differ. A text of None is a file that is absent at that SHA."""
-    keys = [f"{key}:" for key, top in KEYS if key_blocks(base, key, top) != key_blocks(head, key, top)]
-    return keys + ([UNREADABLE] if hidden_lines(base) != hidden_lines(head) else [])
+    """The causes of a refusal of the two texts of factory.yml, in the order `on:`, `permissions:`, UNREADABLE. A
+    text of None is a file that is absent at that SHA."""
+    causes = set().union(*(line_causes(line) for line in changed_lines(base, head)))
+    causes.update(f"{key}:" for key, top in KEYS if key_blocks(base, key, top) != key_blocks(head, key, top))
+    return [cause for cause in ("on:", "permissions:", UNREADABLE) if cause in causes]
 
 
 def file_at(repo, path, sha):
@@ -439,14 +479,25 @@ def main():
         )
         return
     issue = closing_issue(pr["body"])
+    default = default_branch(repo)
+    if pr["baseRefName"] != default:
+        stop(
+            repo,
+            number,
+            issue,
+            sha,
+            f"Pull request #{number} targets `{pr['baseRefName']}`, not `{default}`. The job reads the diff "
+            f"against the base, so a repair targets `{default}` alone. No merge. The owner reads the pull request.",
+        )
+        return
     fields = read_issue(repo, issue) if issue is not None else {"body": "", "labels": []}
     gated = FACTORY_LABEL in labels or FACTORY_LABEL in [item["name"] for item in fields.get("labels") or []]
     count, paths = changed_files(repo, number)
     after = read_pull_request(repo, number)
-    if after["headRefOid"] != sha:
+    if after["headRefOid"] != sha or after["baseRefName"] != default:
         print(
-            f"repair: the head of pull request #{number} moved off {sha[:7]} while the job read its files; "
-            "nothing to merge"
+            f"repair: the head or the base of pull request #{number} moved off {sha[:7]} on {default} while the "
+            "job read its files; nothing to merge"
         )
         return
     keys = (
@@ -463,6 +514,7 @@ def main():
             sha,
             f"Pull request #{number} changes {', '.join(touched)}. "
             f"A repair changes no workflow file other than `{FACTORY}`, no `on:` or `permissions:` key of it, "
+            "no line of it in a form the job cannot read, "
             "no file of the judge and no file of the repair loop. A workflow on pull_request runs from the pull "
             "request's own copy and can post the judge's check, so such a repair judges itself, and the files of "
             "the loop hold this rule. No merge. A change to these files is the owner's direct change."
@@ -532,9 +584,10 @@ def main():
             return
         print(f"repair: the gate run {run['url']} is success")
         deadline = time.time() + left
-    if read_pull_request(repo, number)["headRefOid"] != sha:
+    current = read_pull_request(repo, number)
+    if current["headRefOid"] != sha or current["baseRefName"] != default:
         print(
-            f"repair: the head of pull request #{number} moved off {sha[:7]} while the judge"
+            f"repair: the head or the base of pull request #{number} moved off {sha[:7]} on {default} while the judge"
             f"{' and the gate' if gated else ''} ran; nothing to merge"
         )
         return
