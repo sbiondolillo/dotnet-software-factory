@@ -34,6 +34,25 @@
 # A push by this token starts no run, so the step then starts ci on main with
 # workflow_dispatch. The step merges nothing on a pull request whose head
 # branch is the branch of the red run that started the repair.
+# The step merges nothing on a pull request whose diff touches a file under
+# .github/workflows/ other than factory.yml, or .github/judge/,
+# .github/repair/ or .claude/skills/change/JUDGES.md, as #406 decided. It
+# also merges nothing on a diff of factory.yml that changes the block of its
+# top-level on: key or of a permissions: key at any depth, or whose added or
+# removed lines hold the token permissions, on as a key at column 0, a flow
+# collection, a quoted scalar, an anchor, an alias, a tag or an explicit key. That
+# check reads text and fails closed: a step edit that names permissions in a
+# scalar, or that uses flow style, is refused and stays the owner's direct
+# change. A changed line that opens a quoted scalar, or that holds a character
+# outside printable ASCII, is refused too: an open quote can swallow the
+# permissions: block into a scalar, and a byte order mark can hide on:. It merges
+# nothing on a pull request whose base is not the default
+# branch, and it reads the base again before the arm. It posts one comment on
+# the issue that names each such file, key and base, before the wait for the
+# judge. A workflow on pull_request runs from the pull request's own copy and
+# can post judge-verdict, and judge.py reads .github/judge/ and JUDGES.md, so
+# such a repair judges itself. This file and .github/repair/ hold the rule. A
+# change to them stays the owner's direct change.
 # A repair of the factory, a pull request with the label factory or whose
 # issue has it, gets a gate after the judge approved, as #399 Q5 decided: the
 # step dispatches factory.yml at the head branch on the story of the issue's
