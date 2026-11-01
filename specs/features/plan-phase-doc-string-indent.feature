@@ -45,3 +45,26 @@ Feature: Plan phase doc string indent
     Then the result is failed
     And the plan phase reports one failure
     And the failure names "specs/features/ticks.feature", "line 9" and "the column of its opening delimiter"
+
+  Scenario: A doc string indented past its delimiter in a feature file that the agent leaves as it is passes
+    Given the work tree holds the file "specs/features/config.feature" with the text before the first prompt
+      ```
+      Feature: Config
+
+        Scenario: The config holds two keys
+          Given the config
+            """
+            name: app
+              port: 80
+            """
+          When the app starts
+          Then the config
+            """
+              name: app
+
+              port: 80
+            """
+      ```
+    And the agent on every run writes the sound feature file and the plan
+    When I run the plan phase
+    Then the result is passed
