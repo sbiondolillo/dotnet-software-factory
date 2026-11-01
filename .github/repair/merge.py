@@ -29,17 +29,19 @@ refuses a diff of factory.yml for each of three causes, and the comment names ea
 
 A text check sees no change in a block whose lines did not change. A new line that opens a quote above the top-level
 `permissions:` block, closed after it, swallows the block into a scalar, and the file then parses with no top-level
-permissions. So a changed line that leaves a quote open is a form the job cannot read, and the job refuses it. A
-whole-line comment is out of the match, and a `'` inside a double-quoted scalar is text, so a step edit with
-balanced quotes passes. A changed line with a character outside printable ASCII is refused the same way: a byte
-order mark before `on` hides the key from a match at column 0, and a homoglyph hides a key name. The file on
-`main` holds no such character outside its comments.
+permissions. YAML has several ways to keep a quote open, a backslash and a doubled apostrophe among them, and a
+scanner that follows them grows with each review. So the job follows none: a changed line that opens a quoted
+scalar where a node starts is a form the job cannot read, balanced or not, and the job refuses it. A quote inside
+a plain scalar, such as the `'` of `builder's` or the quotes of a `jq` filter after `-r`, is text and passes. A
+whole-line comment is out of the match. A changed line with a character outside printable ASCII is refused the same
+way: a byte order mark before `on` hides the key from a match at column 0, and a homoglyph hides a key name. The
+file on `main` holds no such character outside its comments.
 
 1. A changed line, which is a line that the diff of the two texts adds or removes, that holds a key form. Before the
    match, the job strips a comment from the line when the line holds no quote character. The forms are: the token
    `permissions` anywhere, in any case and in any quoting; `on` as a key at column 0, in quotes, after a tag or an
-   anchor, and with spaces or tabs before its colon; a flow collection, `{` or `[`, where a node starts; an anchor
-   `&`, an alias `*` or a tag `!` where a node starts; an explicit key `? `; and a backslash after a double quote. A
+   anchor, and with spaces or tabs before its colon; a flow collection, `{` or `[`, a quote, an anchor `&`, an
+   alias `*` or a tag `!` where a node starts; and an explicit key `? `. A
    node starts at the start of a line after its indent, after `- `, `? ` or `, `, and after a `:` and its spaces.
    A node inside a flow collection needs no match, since the start of that collection is a refusal. `${{ }}` and
    `.resources["x"]` start no node, so a step edit with an expression passes.
@@ -51,7 +53,8 @@ order mark before `on` hides the key from a match at column 0, and a homoglyph h
    `checks: write` under the top-level key is a refusal.
 
 The check refuses more than the two keys. A step edit that holds `permissions` in a scalar, such as
-`- run: 'echo permissions: read'`, is a refusal, and so is a step edit with a flow collection, an anchor or a tag.
+`- run: 'echo permissions: read'`, is a refusal, and so is a step edit with a flow collection, a quoted scalar, an
+anchor or a tag.
 Such a refusal is false, and it is accepted: that edit becomes the owner's direct change. A comment-only edit and a
 plain step edit pass, so the planted fault of #407 stays repairable. factory.yml on main holds no anchor, alias, tag,
 explicit key or escape, and each flow collection on main closes on its own line, so no line of a flow on main
@@ -149,10 +152,10 @@ NON_ASCII = re.compile(r"[^\t\x20-\x7e]")
 # A key form of the module docstring, in a changed line of factory.yml.
 PERMISSIONS = re.compile(r"permissions", re.I)
 ON = re.compile(rf"""^{PREFIX}(?P<quote>["']?)on(?P=quote)[ \t]*:""", re.I)
-# Where a node starts, then a flow collection, a tag, an anchor, an alias or an explicit key; or a backslash after a
-# double quote.
-NODE = r"(?:^[ \t]*|[-?,][ \t]+|:[ \t]*)"
-FORM = re.compile(rf"""{NODE}(?:[\[{{!&*]|\?(?:[ \t]|$))|"[^"]*\\""")
+# Where a node starts, then a flow collection, a quote, a tag, an anchor, an alias or an explicit key. A `,` is a node
+# start inside a flow collection alone, and the collection's opener is refused first.
+NODE = r"(?:^[ \t]*|[-?][ \t]+|:[ \t]*)"
+FORM = re.compile(rf"""{NODE}(?:[\[{{!&*"']|\?(?:[ \t]|$))""")
 
 
 def read_pull_request(repo, number):
@@ -218,39 +221,15 @@ def changed_lines(base, head):
     return [line for tag, i1, i2, j1, j2 in matcher.get_opcodes() if tag != "equal" for line in old[i1:i2] + new[j1:j2]]
 
 
-def open_quote(text):
-    """True when the text ends inside a quoted scalar. A quote opens a scalar only where a node starts: at the start
-    of the text, or after `:`, `-`, `,`, `[`, `{` or `?` and spaces. A quote inside a plain scalar, such as the `'`
-    of `builder's`, is text, as in YAML. A backslash in a double-quoted scalar escapes the next character, and a
-    doubled `''` inside a single-quoted scalar is one apostrophe, as in YAML."""
-    quote = None
-    skip = False
-    for index, char in enumerate(text):
-        if skip:
-            skip = False
-        elif quote is not None:
-            if quote == '"' and char == "\\":
-                skip = True
-            elif char == quote == "'" and text[index + 1 : index + 2] == "'":
-                skip = True
-            elif char == quote:
-                quote = None
-        elif char in "\"'":
-            before = text[:index].rstrip()
-            if not before or before[-1] in ":-,[{?":
-                quote = char
-    return quote is not None
-
-
 def line_causes(line):
     """The causes of the module docstring that the changed line holds, as a set of `on:`, `permissions:` and
     UNREADABLE. A whole-line comment holds none. A trailing comment goes first when the line holds no quote
-    character. A line that leaves a quote open, or that holds a character outside printable ASCII, is UNREADABLE."""
+    character. A line that opens a quoted scalar, or that holds a character outside printable ASCII, is UNREADABLE."""
     if line.lstrip().startswith("#"):
         return set()
     text = line if "'" in line or '"' in line else COMMENT.sub("", line)
     causes = set()
-    if open_quote(text) or NON_ASCII.search(text):
+    if NON_ASCII.search(text):
         causes.add(UNREADABLE)
     if PERMISSIONS.search(text):
         causes.add("permissions:")

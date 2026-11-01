@@ -91,26 +91,17 @@ class FactoryKeyTests(unittest.TestCase):
         head = self.edit("  factory:\n", "  factory:\n    # permissions: write\n")
         self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), [])
 
-    def test_a_step_edit_with_an_apostrophe_passes(self):
-        head = (
-            self.edit("Read the builder's ids", "Read the builder's two ids")
-            .replace("  factory:\n", "  factory:\n    # a comment that isn't a key\n")
-            .replace('github.event.issue.number }}"', "github.event.issue.number }} isn't\"")
+    def test_a_quote_inside_a_plain_scalar_passes(self):
+        head = self.edit("Read the builder's ids", "Read the builder's two ids").replace(
+            "  factory:\n", "  factory:\n    # a comment that isn't a key\n"
         )
         self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), [])
 
-    def test_a_doubled_apostrophe_keeps_a_single_quoted_scalar_open(self):
-        head = self.edit("permissions:\n  checks: read\n", "x: 'x''\npermissions:\n  checks: read\ntail'\n")
-        self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), [merge.UNREADABLE])
-        self.assertFalse(merge.open_quote("x: 'it''s closed'"))
-
-    def test_a_line_that_leaves_a_quote_open_is_refused(self):
-        for quote in ('"', "'"):
-            with self.subTest(quote=quote):
-                head = self.edit(
-                    "permissions:\n  checks: read\n", f"x: {quote}\npermissions:\n  checks: read\n{quote}\n"
-                )
-                self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), [merge.UNREADABLE])
+    def test_a_changed_line_that_opens_a_quoted_scalar_is_refused(self):
+        for line in ("x: 'x''\n", 'x: "closed"\n', "x: 'closed'\n", "- 'item'\n", '"key": value\n'):
+            with self.subTest(line=line):
+                head = self.edit("permissions:\n  checks: read\n", line + "permissions:\n  checks: read\n")
+                self.assertIn(merge.UNREADABLE, merge.changed_keys(FACTORY_TEXT, head))
 
     def test_a_line_with_a_byte_order_mark_or_a_homoglyph_is_refused(self):
         for new in ("\ufeffon:\n  pull_request:\n", "p\u0435rmissions:\n  checks: write\n"):
@@ -158,7 +149,7 @@ class FactoryKeyTests(unittest.TestCase):
         for step in ("      - run: 'echo permissions: read'\n", '      - name: "Show permissions: read"\n'):
             with self.subTest(step=step):
                 head = self.edit("    steps:\n", "    steps:\n" + step)
-                self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), ["permissions:"])
+                self.assertIn("permissions:", merge.changed_keys(FACTORY_TEXT, head))
 
     def test_the_key_name_in_a_comment_beside_a_quote_is_refused(self):
         head = self.edit("    steps:\n", "    steps:\n      - run: echo 'x' # permissions: write\n")
@@ -173,7 +164,7 @@ class FactoryKeyTests(unittest.TestCase):
         ):
             with self.subTest(line=line):
                 head = self.edit("  factory:\n", "  factory:\n" + line)
-                self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), ["permissions:"])
+                self.assertIn("permissions:", merge.changed_keys(FACTORY_TEXT, head))
 
     def test_a_grant_after_a_tag_or_an_anchor_is_refused(self):
         for line in ("    !!str permissions: write-all\n", "    &grant permissions: write-all\n"):

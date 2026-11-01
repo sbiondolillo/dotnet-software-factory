@@ -43,7 +43,7 @@
 # collection, an anchor, an alias, a tag, an explicit key or an escape. That
 # check reads text and fails closed: a step edit that names permissions in a
 # scalar, or that uses flow style, is refused and stays the owner's direct
-# change. A changed line that leaves a quote open, or that holds a character
+# change. A changed line that opens a quoted scalar, or that holds a character
 # outside printable ASCII, is refused too: an open quote can swallow the
 # permissions: block into a scalar, and a byte order mark can hide on:. It merges
 # nothing on a pull request whose base is not the default
