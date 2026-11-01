@@ -8,7 +8,15 @@ comment and sets the label repair on the pull request. The factory keeps its Red
 the last gate output on the issue when the bound is spent. With `copilot=on` it then requests a Copilot code
 review and answers each thread through FeedbackRun, three rounds at most, which copilot.py watches.
 
-The factory builds at main, so an issue whose target is a pull request branch gets a comment and no build.
+A repair issue with the label factory is a fault of the factory itself, so the factory of main may be the broken
+one. Decided in #399 and #403, this job builds it with the factory at its last green ref: the head SHA of the last
+run of factory.yml on main that ended success. The dispatch API takes a branch or a tag and never a commit, so the
+job creates the branch repair-base/<n> at that SHA, dispatches factory.yml at it with `base=main`, so the change
+lands on the head of main, and deletes the branch when the step ends, passed or failed. A branch of that name left
+by an earlier run is moved to the SHA. With no green run, the job comments on the issue and builds nothing.
+
+Every repair lands on the head of main, so an issue whose target is a pull request branch gets a comment and no
+build.
 The Managed Agents builder, #370, builds at the red SHA.
 
 Environment: GH_TOKEN, GITHUB_REPOSITORY, REPAIR_BUILD_TIMEOUT_SECONDS (default 3600).
@@ -19,6 +27,7 @@ the factory run as `run` when this job started one, for the Copilot stage.
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 
@@ -26,7 +35,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from judge import gh  # noqa: E402
 
 LABEL = "repair"
+FACTORY_LABEL = "factory"
 WORKFLOW = "factory.yml"
+BASE_BRANCH = "repair-base"
 
 
 def read_issue(repo, number):
@@ -86,10 +97,60 @@ def factory_runs(repo):
     return {run["databaseId"]: run for run in runs}
 
 
-def dispatch(repo, number, timeout):
-    """Starts the factory on the issue, and gives back its run once the list holds it."""
+def green_sha(repo):
+    """The head SHA of the last run of the factory on main that ended success, or None when no run did."""
+    runs = json.loads(
+        gh(
+            "run",
+            "list",
+            "-R",
+            repo,
+            "--workflow",
+            WORKFLOW,
+            "--status",
+            "success",
+            "--branch",
+            "main",
+            "--limit",
+            "1",
+            "--json",
+            "headSha",
+        )
+    )
+    return runs[0]["headSha"] if runs else None
+
+
+def create_base_branch(repo, branch, sha):
+    """Points the branch at the SHA: moves a branch of that name left by an earlier run, or creates it."""
+    moved = subprocess.run(
+        ["gh", "api", "-X", "PATCH", f"repos/{repo}/git/refs/heads/{branch}", "-f", f"sha={sha}", "-F", "force=true"],
+        capture_output=True,
+        text=True,
+    )
+    if moved.returncode != 0:
+        gh("api", "-X", "POST", f"repos/{repo}/git/refs", "-f", f"ref=refs/heads/{branch}", "-f", f"sha={sha}")
+    print(f"repair: the branch {branch} is at the green SHA {sha}")
+
+
+def delete_base_branch(repo, branch):
+    """Deletes the branch. A failure is a log line, so it hides no error of the build."""
+    deleted = subprocess.run(
+        ["gh", "api", "-X", "DELETE", f"repos/{repo}/git/refs/heads/{branch}"], capture_output=True, text=True
+    )
+    if deleted.returncode == 0:
+        print(f"repair: deleted the branch {branch}")
+    else:
+        print(f"repair: the deletion of the branch {branch} failed: {deleted.stderr.strip()[:500]}")
+
+
+def dispatch(repo, number, timeout, ref=None):
+    """Starts the factory on the issue, and gives back its run once the list holds it.
+
+    With a ref, the factory of that ref builds on the head of main, by `base=main`. With none, it runs at main.
+    """
     before = factory_runs(repo)
-    gh("workflow", "run", WORKFLOW, "-R", repo, "-f", f"issue={number}", "-f", "copilot=on")
+    at = ["--ref", ref, "-f", "base=main"] if ref else []
+    gh("workflow", "run", WORKFLOW, "-R", repo, *at, "-f", f"issue={number}", "-f", "copilot=on")
     deadline = time.time() + timeout
     while time.time() < deadline:
         time.sleep(10)
@@ -157,7 +218,33 @@ def main():
         return
 
     timeout = int(os.environ.get("REPAIR_BUILD_TIMEOUT_SECONDS", "3600"))
-    run = dispatch(repo, number, 180)
+    if FACTORY_LABEL not in labels:
+        build(repo, number, timeout)
+        return
+    sha = green_sha(repo)
+    if sha is None:
+        gh(
+            "issue",
+            "comment",
+            str(number),
+            "-R",
+            repo,
+            "--body",
+            f"No run of `{WORKFLOW}` on `main` ended `success`, so the factory has no green ref to build this "
+            "repair at. No build.",
+        )
+        print(f"repair: no green run of {WORKFLOW} on main; no build of issue #{number}")
+        return
+    branch = f"{BASE_BRANCH}/{number}"
+    try:
+        create_base_branch(repo, branch, sha)
+        build(repo, number, timeout, branch)
+    finally:
+        delete_base_branch(repo, branch)
+
+
+def build(repo, number, timeout, ref=None):
+    run = dispatch(repo, number, 180, ref)
     print(f"repair: started the factory: {run['url']}")
     with open(os.environ.get("GITHUB_OUTPUT", os.devnull), "a") as output:
         output.write(f"run={run['databaseId']}\n")

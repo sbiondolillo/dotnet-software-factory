@@ -10,6 +10,12 @@
 # and copilot=on, as #358 decided. The factory runs at main, opens the pull
 # request under FACTORY_SELF_TOKEN, so ci and the judge run on it, and posts
 # `Opened <url>` on the issue. The step reads that comment and sets the label.
+# A repair issue with the label factory is built by the factory at its last
+# green ref, as #403 decided: the step creates the branch repair-base/<n> at the
+# head SHA of the last run of factory.yml on main that ended success,
+# dispatches at that branch with base=main, and deletes the branch when the
+# step ends. With no green run, the step comments on the issue and builds
+# nothing.
 #
 # The Copilot step requests a review by copilot-pull-request-reviewer when the
 # head holds none, and polls until a review is on the head and no thread is
