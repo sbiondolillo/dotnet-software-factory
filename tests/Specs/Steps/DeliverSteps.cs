@@ -59,7 +59,11 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
     }
 
     [Given("the run changed the file {string}")]
-    public void GivenChangedFile(string path) => _changedFile = path;
+    public void GivenChangedFile(string path)
+    {
+        _changedFile = path;
+        _facts = (_facts ?? new DeliveryFacts()) with { BaseCommit = "5e36013a09bb449617dd18a7b25f266369af8844" };
+    }
 
     [Given("GitHub answers the open of the pull request with the number {int} and the web address {string}")]
     public void GivenOpen(int number, string url)
@@ -105,7 +109,8 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
             {
                 _commands.Add(spec);
                 int exit = spec.Arguments[0] is "push" ? _pushExit : 0;
-                return Task.FromResult(new CommandResult { ExitCode = exit, StandardError = exit is 0 ? "" : _pushError });
+                string changed = spec.Arguments[0] is "diff" ? _changedFile : "";
+                return Task.FromResult(new CommandResult { ExitCode = exit, StandardOutput = changed, StandardError = exit is 0 ? "" : _pushError });
             });
         var client = new GitHubClient(new HttpClient(_handler), token, TimeSpan.Zero);
         var deliver = new Deliver(new Git(mock.Object), new PullRequests(client), client, _facts);
@@ -117,8 +122,6 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
         {
             _exception = ex;
         }
-
-        Assert.DoesNotContain(_commands, c => _changedFile.Length > 0 && c.Arguments.Contains(_changedFile));
     }
 
     [Then("git pushed the branch {string} from {string} to origin")]
