@@ -12,6 +12,7 @@ public sealed class GitIntegrationTests
 {
     private const string Owner = "sbiondolillo";
     private const string Repo = "factory-scratch";
+    private static readonly string[] LayoutDirectories = ["specs/features", "tests/Specs", "tests/Integration"];
 
     private static string Token => Environment.GetEnvironmentVariable("FACTORY_GITHUB_TOKEN")
         ?? throw new InvalidOperationException("FACTORY_GITHUB_TOKEN is not set");
@@ -64,6 +65,21 @@ public sealed class GitIntegrationTests
             string[] changedFiles = await git.ListChangedFilesAsync("main", directory.FullName, TestContext.Current.CancellationToken);
             Assert.Contains("README.md", changedFiles);
             Assert.Contains(newFile, changedFiles);
+        });
+    }
+
+    [Fact]
+    public async Task TheScratchCloneHoldsTheFourPathsOfTheLayout()
+    {
+        await Cleanup.RunAsync(async cleanup =>
+        {
+            DirectoryInfo directory = NewDirectory(cleanup);
+            await new Git(new CommandRunner()).CloneAsync($"https://github.com/{Owner}/{Repo}.git", Token, directory.FullName, TestContext.Current.CancellationToken);
+            Assert.True(File.Exists(Path.Combine(directory.FullName, "Solution.slnx")));
+            foreach (string path in LayoutDirectories)
+            {
+                Assert.True(Directory.Exists(Path.Combine(directory.FullName, path)), path);
+            }
         });
     }
 

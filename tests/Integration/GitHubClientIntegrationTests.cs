@@ -11,6 +11,7 @@ public sealed class GitHubClientIntegrationTests
     private const string Owner = "sbiondolillo";
     private const string Repo = "factory-scratch";
     private static readonly string[] BugAndQuestion = ["bug", "question"];
+    private static readonly string[] CleanupAndReframe = ["cleanup", "reframe"];
 
     private static GitHubClient Client(string? token = null)
     {
@@ -46,6 +47,43 @@ public sealed class GitHubClientIntegrationTests
             await client.PostCommentAsync(Owner, Repo, number, comment, ct);
             JsonElement comments = await client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/issues/{number}/comments", null, ct);
             Assert.Equal(comment, Assert.Single(comments.EnumerateArray()).GetProperty("body").GetString());
+        });
+    }
+
+    [Fact]
+    public async Task AnIssueWithTwoExcludingLabelsAndAMultiLineBodyReadsBackWithBoth()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        GitHubClient client = Client();
+        string written = "## Scope\nREADME.md\n";
+        await Cleanup.RunAsync(async cleanup =>
+        {
+            (int number, _) = await CreateAsync(client, cleanup, JsonSerializer.Serialize(new { title = "client-test " + Guid.NewGuid(), body = written, labels = CleanupAndReframe }), ct);
+            GitHubIssue issue = await client.ReadIssueAsync(Owner, Repo, number, ct);
+            Assert.Equal<string[]>(["cleanup", "reframe"], [.. issue.Labels.Order()]);
+            Assert.Equal(written, issue.Body);
+            Assert.Equal<string[]>(["README.md"], [.. CleanupBody.ReadScope(issue.Body)]);
+            Assert.Null(CleanupBody.ReadCheck(issue.Body));
+        });
+    }
+
+    [Fact]
+    public async Task AnIssueWithNoLabelAndAScenariosHeadingWithNoFenceReadsBackAsItWasWritten()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        GitHubClient client = Client();
+        string written = "## Scenarios\n\nThe scenarios follow.";
+        await Cleanup.RunAsync(async cleanup =>
+        {
+            (int number, _) = await CreateAsync(client, cleanup, JsonSerializer.Serialize(new { title = "client-test " + Guid.NewGuid(), body = written }), ct);
+            GitHubIssue issue = await client.ReadIssueAsync(Owner, Repo, number, ct);
+            Assert.Empty(issue.Labels);
+            Assert.Equal(written, issue.Body);
+            Assert.True(IssueScenarios.Holds(issue.Body));
+            DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-client-integration-");
+            cleanup.Add($"delete the directory {directory.FullName}", () => directory.Delete(recursive: true));
+            IssueScenariosResult result = IssueScenarios.Apply(issue.Body, directory.FullName);
+            Assert.Contains("holds no fenced block", Assert.Single(result.Faults), StringComparison.Ordinal);
         });
     }
 
