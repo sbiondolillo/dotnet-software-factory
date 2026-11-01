@@ -91,6 +91,22 @@ class FactoryKeyTests(unittest.TestCase):
         head = self.edit("  factory:\n", "  factory:\n    # permissions: write\n")
         self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), [])
 
+    def test_a_step_edit_with_an_apostrophe_passes(self):
+        head = (
+            self.edit("Read the builder's ids", "Read the builder's two ids")
+            .replace("  factory:\n", "  factory:\n    # a comment that isn't a key\n")
+            .replace('github.event.issue.number }}"', "github.event.issue.number }} isn't\"")
+        )
+        self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), [])
+
+    def test_a_line_that_leaves_a_quote_open_is_refused(self):
+        for quote in ('"', "'"):
+            with self.subTest(quote=quote):
+                head = self.edit(
+                    "permissions:\n  checks: read\n", f"x: {quote}\npermissions:\n  checks: read\n{quote}\n"
+                )
+                self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), [merge.UNREADABLE])
+
     def test_an_added_pull_request_trigger_is_refused(self):
         head = self.edit("on:\n  issues:\n", "on:\n  pull_request:\n  issues:\n")
         self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), ["on:"])
@@ -245,7 +261,6 @@ class BaseTests(unittest.TestCase):
             "changedFiles": 1,
         }
 
-    permissions = "read"
     paths = ["src/x.cs"]
 
     def run_main(self, *bases):
@@ -256,7 +271,6 @@ class BaseTests(unittest.TestCase):
             mock.patch.object(merge.sys, "argv", ["merge.py", "7", self.SHA]),
             mock.patch.object(merge, "read_pull_request", side_effect=reads),
             mock.patch.object(merge, "default_branch", return_value="main"),
-            mock.patch.object(merge, "default_permissions", return_value=self.permissions),
             mock.patch.object(merge, "file_at", return_value=None),
             mock.patch.object(merge, "read_issue", return_value={"body": "", "labels": []}),
             mock.patch.object(merge, "changed_files", return_value=(1, self.paths)) as files,
@@ -293,23 +307,19 @@ class BaseTests(unittest.TestCase):
         stop.assert_not_called()
         arm.assert_not_called()
 
-    def test_a_factory_diff_on_a_repo_with_default_read_arms_the_merge(self):
+    def test_a_factory_diff_with_no_key_change_arms_the_merge(self):
         self.paths = [merge.FACTORY]
         files, judge, arm, stop = self.run_main("main", "main", "main")
         stop.assert_not_called()
         arm.assert_called_once()
 
-    def test_a_factory_diff_on_a_repo_with_default_write_ends_the_job(self):
-        self.paths = [merge.FACTORY]
-        self.permissions = "write"
-        with self.assertRaises(SystemExit) as ended:
-            self.run_main("main", "main")
-        self.assertIn("default_workflow_permissions is write, not read", str(ended.exception))
-
-    def test_a_diff_outside_factory_reads_no_setting(self):
-        self.permissions = "write"
-        files, judge, arm, stop = self.run_main("main", "main", "main")
-        arm.assert_called_once()
+    def test_a_guarded_path_is_refused_with_one_comment_before_the_judge(self):
+        self.paths = [".github/workflows/judge.yml"]
+        files, judge, arm, stop = self.run_main("main", "main")
+        stop.assert_called_once()
+        self.assertIn("`.github/workflows/judge.yml`", stop.call_args.args[4])
+        judge.assert_not_called()
+        arm.assert_not_called()
 
 
 class WaitForMergeTests(unittest.TestCase):

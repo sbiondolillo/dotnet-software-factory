@@ -29,9 +29,9 @@ refuses a diff of factory.yml for each of three causes, and the comment names ea
 
 A text check sees no change in a block whose lines did not change. A new line that opens a quote above the top-level
 `permissions:` block, closed after it, swallows the block into a scalar, and the file then parses with no top-level
-permissions. A removed block gives the token the repo's default. So the job reads `actions/permissions/workflow` when
-the diff touches factory.yml, and exits when `default_workflow_permissions` is not `read`. The default is a repo
-setting of the owner, so the exit is one line and no comment.
+permissions. So a changed line that leaves a quote open is a form the job cannot read, and the job refuses it. A
+whole-line comment is out of the match, and a `'` inside a double-quoted scalar is text, so a step edit with
+balanced quotes passes.
 
 1. A changed line, which is a line that the diff of the two texts adds or removes, that holds a key form. Before the
    match, the job strips a comment from the line when the line holds no quote character. The forms are: the token
@@ -159,11 +159,6 @@ def default_branch(repo):
     return gh("api", f"repos/{repo}", "--jq", ".default_branch").strip()
 
 
-def default_permissions(repo):
-    """The repo's default_workflow_permissions, `read` or `write`."""
-    return gh("api", f"repos/{repo}/actions/permissions/workflow", "--jq", ".default_workflow_permissions").strip()
-
-
 def closing_issue(body):
     match = re.search(r"^Closes #(\d+)\s*$", body or "", re.M)
     return int(match.group(1)) if match else None
@@ -219,11 +214,37 @@ def changed_lines(base, head):
     return [line for tag, i1, i2, j1, j2 in matcher.get_opcodes() if tag != "equal" for line in old[i1:i2] + new[j1:j2]]
 
 
+def open_quote(text):
+    """True when the text ends inside a quoted scalar. A quote opens a scalar only where a node starts: at the start
+    of the text, or after `:`, `-`, `,`, `[`, `{` or `?` and spaces. A quote inside a plain scalar, such as the `'`
+    of `builder's`, is text, as in YAML. A backslash in a double-quoted scalar escapes the next character."""
+    quote = None
+    skip = False
+    for index, char in enumerate(text):
+        if skip:
+            skip = False
+        elif quote is not None:
+            if quote == '"' and char == "\\":
+                skip = True
+            elif char == quote:
+                quote = None
+        elif char in "\"'":
+            before = text[:index].rstrip()
+            if not before or before[-1] in ":-,[{?":
+                quote = char
+    return quote is not None
+
+
 def line_causes(line):
     """The causes of the module docstring that the changed line holds, as a set of `on:`, `permissions:` and
-    UNREADABLE. The comment goes first when the line holds no quote character."""
+    UNREADABLE. A whole-line comment holds none. A trailing comment goes first when the line holds no quote
+    character. A line that leaves a quote open is UNREADABLE."""
+    if line.lstrip().startswith("#"):
+        return set()
     text = line if "'" in line or '"' in line else COMMENT.sub("", line)
     causes = set()
+    if open_quote(text):
+        causes.add(UNREADABLE)
     if PERMISSIONS.search(text):
         causes.add("permissions:")
     if ON.match(text):
@@ -513,11 +534,6 @@ def main():
             "job read its files; nothing to merge"
         )
         return
-    if FACTORY in paths and (setting := default_permissions(repo)) != "read":
-        sys.exit(
-            f"repair: the repo's default_workflow_permissions is {setting}, not read. The key rule of {FACTORY} "
-            "rests on read: a diff that removes its permissions block passes the rule. No merge."
-        )
     keys = (
         changed_keys(file_at(repo, FACTORY, after["baseRefOid"]), file_at(repo, FACTORY, sha))
         if FACTORY in paths
