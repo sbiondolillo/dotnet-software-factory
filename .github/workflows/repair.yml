@@ -33,8 +33,14 @@
 # the merge and closes the issue with one comment that names the merge commit.
 # A push by this token starts no run, so the step then starts ci on main with
 # workflow_dispatch. The step merges nothing on a pull request whose head
-# branch is the branch of the red run that started the repair. The job has no
-# checks permission: the repo is public, so the read of the check run needs
+# branch is the branch of the red run that started the repair.
+# A repair of the factory, a pull request with the label factory or whose
+# issue has it, gets a gate after the judge approved, as #399 Q5 decided: the
+# step dispatches factory.yml at the head branch on the story of the issue's
+# line `Story: #<n>`, with base=main, and waits for that run. On success the
+# merge arms. Any other conclusion is one comment on the issue that names the
+# run, and no merge. A ci repair gets no gate run. The job has no checks
+# permission: the repo is public, so the read of the check run needs
 # none, and #361 bars checks: write here, since the protection binds the check
 # name and any job with checks: write could post a green judge-verdict. The
 # repo needs allow_auto_merge and delete_branch_on_merge on, and main needs the

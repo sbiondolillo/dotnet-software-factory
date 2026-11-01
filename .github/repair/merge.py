@@ -21,15 +21,31 @@ the job then starts `ci` on the base branch with workflow_dispatch, and the merg
 wait that reaches the timeout disarms the auto-merge, so no later head merges unsettled. The job reads check runs with
 no `checks` permission: the repo is public, and #361 bars `checks: write` on this job.
 
+The gate, decided in #399 Q5 and built in #404: a repair of the factory itself merges only after its story runs green
+through the repaired factory. A pull request is a factory repair when it or its issue has the label `factory`. The
+issue has it from read.py, and the pull request has only `repair` from build.py, so the job reads both. After the
+judge approved, the job reads the story from the line `Story: #<n>` of the issue body, which read.py wrote. It
+dispatches factory.yml at the head branch with `issue=<story>` and `base=main`, so the factory of the repair branch
+builds the story on the head of main, with the sandbox image from `sandbox/` of that branch. The run's name is
+`#<story>`. The job finds the run as build.py does: a new run of the branch with that name, and it must be on the
+settled SHA. The gate is a run and not a check run, since #361 bars `checks: write` on this job. On `success` the
+merge arms. Any other conclusion is one comment on the issue that names the run, and no merge. A factory repair with
+no issue or no story line gets one comment and no merge. A pull request with no `factory` label, a ci repair, gets
+no gate run. The story's own pull request opens as a side effect of a green gate run.
+
 The kill switch REPAIR_ENABLED is read first, on every event. Any value other than `true` ends the step with the
 exit code 0 and one line.
 
-The merge timeout covers the wait for the judge and the wait for the merge. The defaults of the five waits of the job,
-the rerun, the reader, the build, the Copilot stage and this one, add up to 18900 s, under GitHub's job limit of
-21600 s. The required checks ran during the Copilot stage in the usual case, so the merge lands at once.
+The merge timeout covers the wait for the judge and the wait for the merge. The gate timeout covers the wait for the
+gate run, and that wait does not count against the merge timeout. The job has six waits. Their defaults are the
+rerun 3600 s, the reader 900 s, the build 3600 s, the Copilot stage 7200 s, the gate 3600 s and the merge 1800 s.
+They add up to 20700 s. That is 900 s under GitHub's job limit of 21600 s, for the search of at most 180 s for the
+gate run and for the other steps of the job. The gate made the merge timeout 1800 s, down from 3600 s. The judge and
+the required checks start on each push, so in the usual case they ran during the Copilot stage, and the merge lands
+at once. A green run of factory.yml on a story took about 1350 s in October 2026.
 
-Environment: GH_TOKEN, GITHUB_REPOSITORY, REPAIR_ENABLED, REPAIR_MERGE_TIMEOUT_SECONDS (default 3600),
-REPAIR_POLL_SECONDS (default 30).
+Environment: GH_TOKEN, GITHUB_REPOSITORY, REPAIR_ENABLED, REPAIR_MERGE_TIMEOUT_SECONDS (default 1800),
+REPAIR_GATE_TIMEOUT_SECONDS (default 3600), REPAIR_POLL_SECONDS (default 30).
 Arguments: the number of the repair pull request, and the head SHA the Copilot stage settled on.
 """
 
@@ -44,6 +60,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from judge import gh  # noqa: E402
 
 LABEL = "repair"
+FACTORY_LABEL = "factory"
+WORKFLOW = "factory.yml"
 HEADS = ("repair/", "factory/")
 CHECK = "judge-verdict"
 MARKER = "<!-- repair-merge:{sha} -->"
@@ -59,10 +77,13 @@ def closing_issue(body):
     return int(match.group(1)) if match else None
 
 
-def red_run_branch(repo, issue):
-    """The head branch of the red run named under ## Run of the issue, or None when the issue names no run."""
-    body = json.loads(gh("issue", "view", str(issue), "-R", repo, "--json", "body"))["body"] or ""
-    match = re.search(rf"^Run: https://github\.com/{re.escape(repo)}/actions/runs/(\d+)\s*$", body, re.M)
+def read_issue(repo, issue):
+    return json.loads(gh("issue", "view", str(issue), "-R", repo, "--json", "body,labels"))
+
+
+def red_run_branch(repo, body):
+    """The head branch of the red run named under ## Run of the issue body, or None when the body names no run."""
+    match = re.search(rf"^Run: https://github\.com/{re.escape(repo)}/actions/runs/(\d+)\s*$", body or "", re.M)
     if not match:
         return None
     return json.loads(gh("api", f"repos/{repo}/actions/runs/{match.group(1)}"))["head_branch"]
@@ -74,6 +95,69 @@ def verdict(repo, sha):
     answer = json.loads(gh("api", f"repos/{repo}/commits/{sha}/check-runs?check_name={CHECK}&filter=latest"))
     runs = answer.get("check_runs") or []
     return (runs[0]["status"], runs[0].get("conclusion")) if runs else None
+
+
+def story_of(body):
+    """The number of the story under the line `Story: #<n>` of the issue body, or None."""
+    match = re.search(r"^Story: #(\d+)\s*$", body or "", re.M)
+    return int(match.group(1)) if match else None
+
+
+def gate_runs(repo, branch):
+    runs = json.loads(
+        gh(
+            "run",
+            "list",
+            "-R",
+            repo,
+            "--workflow",
+            WORKFLOW,
+            "--branch",
+            branch,
+            "--event",
+            "workflow_dispatch",
+            "--limit",
+            "30",
+            "--json",
+            "databaseId,headSha,displayTitle,url",
+        )
+    )
+    return {run["databaseId"]: run for run in runs}
+
+
+def dispatch_gate(repo, branch, number, timeout=180):
+    """Starts factory.yml at the branch on the story, and gives back its run once the list holds it.
+
+    The run is new since the dispatch, on the branch, and named `#<story>` by the run-name of factory.yml.
+    """
+    before = gate_runs(repo, branch)
+    gh("workflow", "run", WORKFLOW, "-R", repo, "--ref", branch, "-f", f"issue={number}", "-f", "base=main")
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        time.sleep(10)
+        new = [
+            run
+            for run_id, run in gate_runs(repo, branch).items()
+            if run_id not in before and run["displayTitle"] == f"#{number}"
+        ]
+        if new:
+            return new[0]
+    sys.exit(f"repair: the dispatch of {WORKFLOW} at {branch} for the story #{number} shows no run after {timeout} s")
+
+
+def wait_for_gate(repo, run, deadline, wait):
+    """The conclusion of the gate run once it completed. The job exits when the run is not complete by the deadline."""
+    while True:
+        current = json.loads(gh("run", "view", str(run["databaseId"]), "-R", repo, "--json", "status,conclusion"))
+        if current["status"] == "completed":
+            return current["conclusion"]
+        if time.time() >= deadline:
+            sys.exit(
+                f"repair: the gate run {run['url']} is {current['status']} after the timeout; "
+                "it goes on, and no merge arms"
+            )
+        print(f"repair: the gate run {run['url']} is {current['status']}; waiting")
+        time.sleep(wait)
 
 
 def stop(repo, number, issue, sha, text):
@@ -210,7 +294,9 @@ def main():
         )
         return
     issue = closing_issue(pr["body"])
-    if issue is not None and red_run_branch(repo, issue) == pr["headRefName"]:
+    fields = read_issue(repo, issue) if issue is not None else {"body": "", "labels": []}
+    gated = FACTORY_LABEL in labels or FACTORY_LABEL in [item["name"] for item in fields.get("labels") or []]
+    if issue is not None and red_run_branch(repo, fields["body"]) == pr["headRefName"]:
         stop(
             repo,
             number,
@@ -221,9 +307,23 @@ def main():
             "The loop merges no branch of its own red run. The owner reads the pull request.",
         )
         return
+    story_number = story_of(fields["body"])
+    if gated and story_number is None:
+        stop(
+            repo,
+            number,
+            issue,
+            sha,
+            f"Pull request #{number} is a repair of the factory, and its issue names no story in a line `Story: #<n>`. "
+            "No gate run, and no merge. The owner reads the issue."
+            if issue is not None
+            else f"Pull request #{number} is a repair of the factory, and it closes no issue, so it has no story. "
+            "No gate run, and no merge. The owner reads the pull request.",
+        )
+        return
 
     wait = int(os.environ.get("REPAIR_POLL_SECONDS", "30"))
-    deadline = time.time() + int(os.environ.get("REPAIR_MERGE_TIMEOUT_SECONDS", "3600"))
+    deadline = time.time() + int(os.environ.get("REPAIR_MERGE_TIMEOUT_SECONDS", "1800"))
     conclusion = wait_for_judge(repo, sha, deadline, wait)
     if conclusion != "success":
         stop(
@@ -235,8 +335,32 @@ def main():
             "The owner reads the judge's review.",
         )
         return
+    if gated:
+        left = deadline - time.time()
+        run = dispatch_gate(repo, pr["headRefName"], story_number)
+        print(f"repair: started the gate run {run['url']} of the story #{story_number}")
+        if run["headSha"] != sha:
+            print(f"repair: the gate run {run['url']} is on {run['headSha'][:7]}, not the settled {sha[:7]}; no merge")
+            return
+        gate_deadline = time.time() + int(os.environ.get("REPAIR_GATE_TIMEOUT_SECONDS", "3600"))
+        conclusion = wait_for_gate(repo, run, gate_deadline, wait)
+        if conclusion != "success":
+            stop(
+                repo,
+                number,
+                issue,
+                sha,
+                f"The gate run {run['url']} of the story #{story_number} through the factory of `{sha}` "
+                f"is `{conclusion}`. No merge of pull request #{number}. The owner reads the run.",
+            )
+            return
+        print(f"repair: the gate run {run['url']} is success")
+        deadline = time.time() + left
     if read_pull_request(repo, number)["headRefOid"] != sha:
-        print(f"repair: the head of pull request #{number} moved off {sha[:7]} while the judge ran; nothing to merge")
+        print(
+            f"repair: the head of pull request #{number} moved off {sha[:7]} while the judge"
+            f"{' and the gate' if gated else ''} ran; nothing to merge"
+        )
         return
 
     merged = arm_and_wait(repo, number, sha, deadline, wait)
