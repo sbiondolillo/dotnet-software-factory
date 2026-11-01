@@ -8,9 +8,10 @@ from unittest import mock
 
 import merge
 
-FACTORY_TEXT = open(
+with open(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "workflows", "factory.yml"), encoding="utf-8"
-).read()
+) as file:
+    FACTORY_TEXT = file.read()
 
 
 class GuardedTests(unittest.TestCase):
@@ -93,6 +94,37 @@ class FactoryKeyTests(unittest.TestCase):
         head = FACTORY_TEXT + "  forge: {runs-on: ubuntu-latest, permissions: {checks: write}, steps: []}\n"
         self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), ["permissions:"])
 
+    def test_a_grant_in_another_spelling_is_refused(self):
+        for line in (
+            "    permissions\t: write-all\n",
+            "    permissions\t: {checks: write}\n",
+            '    "permissions":write-all\n',
+            "    !!str permissions: write-all\n",
+            "    &grant permissions: write-all\n",
+        ):
+            with self.subTest(line=line):
+                head = self.edit("  factory:\n", "  factory:\n" + line)
+                self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), ["permissions:"])
+
+    def test_a_trigger_in_another_spelling_is_refused(self):
+        for line in ('"on":[pull_request]\n', "on\t: pull_request\n"):
+            with self.subTest(line=line):
+                self.assertEqual(merge.changed_keys(FACTORY_TEXT, FACTORY_TEXT + line), ["on:"])
+
+    def test_a_key_in_a_hidden_form_is_refused(self):
+        for line in (
+            '    "perm\\x69ssions": write-all\n',
+            "    ? permissions\n    : write-all\n",
+            "    *grant : write-all\n",
+            "    env: {? x : y}\n",
+        ):
+            with self.subTest(line=line):
+                head = self.edit("  factory:\n", "  factory:\n" + line)
+                self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), [merge.UNREADABLE])
+
+    def test_the_file_on_the_branch_holds_no_hidden_form(self):
+        self.assertEqual(merge.hidden_lines(FACTORY_TEXT), [])
+
     def test_a_changed_top_level_grant_is_refused(self):
         head = self.edit("  checks: read\n", "  checks: write\n")
         self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), ["permissions:"])
@@ -108,6 +140,10 @@ class FactoryKeyTests(unittest.TestCase):
         self.assertEqual(
             merge.refused([], ["on:", "permissions:"]),
             ["the `on:` and `permissions:` keys of `.github/workflows/factory.yml`"],
+        )
+        self.assertEqual(
+            merge.refused([], [merge.UNREADABLE]),
+            ["a key in a form the job cannot read in `.github/workflows/factory.yml`"],
         )
         self.assertEqual(merge.refused([], []), [])
 

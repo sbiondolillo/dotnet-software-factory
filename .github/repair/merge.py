@@ -30,13 +30,16 @@ library, since the job installs nothing. The block of a key is its line and each
 key. A line at the key's own indent that starts with `- ` stays in the block, for a sequence at that indent. Blank
 lines and lines that hold only a comment are left out, so an edit of a comment passes. `on:` counts at column 0
 alone. `permissions:` counts at the start of a line at any indent, after `- ` too, and inside a flow mapping such as
-`{permissions: {checks: write}}`. Any other change of a block is a refusal, also a change of indent or of a comment
-at the end of a line. The comparison misses a key that YAML spells in another form: with an escape in double quotes,
-as an explicit `? ` key, through an alias, or `on:` in a flow mapping that holds the whole document. An alias in a
-block is compared as its text, so a change of the anchor that it names is missed. The blocks on main hold no alias,
-and a new alias is a change of the block. The base SHA is the tip of the base branch and not the merge base, so a
-change of a key on main after the branch point is a refusal too. A file that is absent at a SHA has no keys, so a
-diff that adds or deletes factory.yml is a refusal.
+`{permissions: {checks: write}}`. A key counts in quotes, after a tag or an anchor, and with spaces or tabs before
+its colon. Any other change of a block is a refusal, also a change of indent or of a comment at the end of a line.
+Three key forms hide the key's name from a text match: an explicit `? ` key, an alias as a key, and a key in double
+quotes that holds an escape. The job reads each line that holds one of them, and a change of those lines is a
+refusal too, as a key in a form the job cannot read. factory.yml on main holds no such line. The comparison still
+misses two forms. An alias in a block is compared as its text, so a change of the anchor that it names is missed.
+The blocks on main hold no alias, and a new alias is a change of the block. And `on:` inside a flow mapping that
+holds the whole document is missed. The base SHA is the tip of the base branch and not the merge base, so a change
+of a key on main after the branch point is a refusal too. A file that is absent at a SHA has no keys, so a diff that
+adds or deletes factory.yml is a refusal.
 
 The job reads the paths from `GET /repos/<repo>/pulls/<n>/files`, with `--paginate`, and not from
 `gh pr diff --name-only`. The API names both paths of a rename, `filename` and `previous_filename`, so a move of a
@@ -111,6 +114,12 @@ GUARDED = (
 FACTORY = ".github/workflows/factory.yml"
 OPEN = (FACTORY,)
 KEYS = (("on", True), ("permissions", False))
+UNREADABLE = "a key in a form the job cannot read"
+# A tag or an anchor before a key, such as `!!str ` or `&a `.
+PREFIX = r"(?:[!&][^ \t]*[ \t]+)*"
+# An explicit `? ` key or an alias as a key, at the start of a line or of a flow entry, or a key in double quotes
+# that holds an escape.
+HIDDEN = re.compile(r"""(?:^[ \t]*(?:-[ \t]+)*|[{,][ \t]*)(?:\?(?:[ \t]|$)|\*)|"[^"\n]*\\[^"\n]*"[ \t]*:""")
 
 
 def read_pull_request(repo, number):
@@ -141,8 +150,8 @@ def guarded(paths):
 def key_blocks(text, key, top_level):
     """The blocks of the key in the YAML text, each as a list of lines, in the order of the file. The module
     docstring states what a block is, and what the comparison catches and misses."""
-    start = re.compile(rf"""^(?P<indent> *(?:- +)*)(?P<quote>["']?){key}(?P=quote) *:(?: |$)""")
-    inline = re.compile(rf"""[\s{{,]["']?{key}["']? *:""")
+    start = re.compile(rf"""^(?P<indent> *(?:-[ \t]+)*){PREFIX}(?P<quote>["']?){key}(?P=quote)[ \t]*:""")
+    inline = re.compile(rf"""[\s{{,]{PREFIX}["']?{key}["']?[ \t]*:""")
     lines = [line.rstrip() for line in (text or "").splitlines()]
     blocks = []
     for index, line in enumerate(lines):
@@ -166,10 +175,18 @@ def key_blocks(text, key, top_level):
     return blocks
 
 
+def hidden_lines(text):
+    """Each line of the YAML text that holds a key form of HIDDEN, in the order of the file. A comment line holds
+    none."""
+    lines = [line.rstrip() for line in (text or "").splitlines()]
+    return [line for line in lines if not line.lstrip().startswith("#") and HIDDEN.search(line)]
+
+
 def changed_keys(base, head):
-    """Each key of KEYS whose blocks differ between the two texts of factory.yml, as `on:` or `permissions:`. A text
-    of None is a file that is absent at that SHA."""
-    return [f"{key}:" for key, top in KEYS if key_blocks(base, key, top) != key_blocks(head, key, top)]
+    """Each key of KEYS whose blocks differ between the two texts of factory.yml, as `on:` or `permissions:`, then
+    UNREADABLE when the lines of HIDDEN differ. A text of None is a file that is absent at that SHA."""
+    keys = [f"{key}:" for key, top in KEYS if key_blocks(base, key, top) != key_blocks(head, key, top)]
+    return keys + ([UNREADABLE] if hidden_lines(base) != hidden_lines(head) else [])
 
 
 def file_at(repo, path, sha):
@@ -186,9 +203,12 @@ def file_at(repo, path, sha):
 def refused(paths, keys):
     """The items of the refusal comment: each guarded path, then FACTORY with each changed key."""
     items = [f"`{path}`" for path in paths]
-    if keys:
-        names = " and ".join(f"`{key}`" for key in keys)
-        items.append(f"the {names} {'key' if len(keys) == 1 else 'keys'} of `{FACTORY}`")
+    named = [key for key in keys if key != UNREADABLE]
+    if named:
+        names = " and ".join(f"`{key}`" for key in named)
+        items.append(f"the {names} {'key' if len(named) == 1 else 'keys'} of `{FACTORY}`")
+    if UNREADABLE in keys:
+        items.append(f"{UNREADABLE} in `{FACTORY}`")
     return items
 
 
