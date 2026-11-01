@@ -4,7 +4,7 @@ Where things are in this repo, for an agent about to read or write code here.
 
 ## Directories
 
-`docs/agents/setup-sheet.toml` names the spec directory and the binding directory. It is the authority for those two. This table says what each directory holds.
+This table says what each directory holds.
 
 | path | holds | rule |
 |---|---|---|
