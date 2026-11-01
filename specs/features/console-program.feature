@@ -207,12 +207,13 @@ Feature: The console program runs the factory on an issue or a pull request
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
     Then GitHub gets a read of the check runs after the last reply
 
-  Scenario: disputed
-    Given GitHub answers each read of the review threads with the thread A
+  Scenario: disputed resolves
+    Given GitHub answers each read of the review threads with the thread A, unresolved until the resolve of the thread A and resolved after it
     And the agent writes the disputed report
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
-    Then standard output holds the line "checks: green, unresolved threads: 1"
-    And the exit code is 1
+    Then the program replies to the thread "PRRT_kwDOUpm1Qc6ofWu5" and then resolves it
+    And standard output holds the line "checks: green, unresolved threads: 0"
+    And the exit code is 0
     And git clones 2 times in the run
 
   Scenario: red and thread

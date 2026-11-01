@@ -121,6 +121,9 @@ public sealed partial class ConsoleProgramSteps : IDisposable
     [Given("GitHub answers each read of the review threads with the thread A until the resolve of the thread A, and with no thread after it")]
     public void GivenThreadUntilResolved() => _h.Threads = "until-resolved";
 
+    [Given("GitHub answers each read of the review threads with the thread A, unresolved until the resolve of the thread A and resolved after it")]
+    public void GivenThreadResolvable() => _h.Threads = "resolvable";
+
     [Given("the agent writes the disputed report")]
     public void GivenDisputed() => _h.Disputed = true;
 
@@ -387,6 +390,19 @@ public sealed partial class ConsoleProgramSteps : IDisposable
         Assert.Contains(_h.Requests, r => r.Path.EndsWith("/graphql", StringComparison.Ordinal)
             && r.Content!.Contains("resolveReviewThread", StringComparison.Ordinal)
             && r.Content.Contains(id, StringComparison.Ordinal));
+
+    [Then("the program replies to the thread {string} and then resolves it")]
+    public void ThenRepliesThenResolves(string id)
+    {
+        int reply = _h.Requests.FindIndex(r => r.Path.EndsWith("/graphql", StringComparison.Ordinal)
+            && r.Content!.Contains("addPullRequestReviewThreadReply", StringComparison.Ordinal)
+            && r.Content.Contains(id, StringComparison.Ordinal));
+        int resolve = _h.Requests.FindIndex(r => r.Path.EndsWith("/graphql", StringComparison.Ordinal)
+            && r.Content!.Contains("resolveReviewThread", StringComparison.Ordinal)
+            && r.Content.Contains(id, StringComparison.Ordinal));
+        Assert.True(reply >= 0);
+        Assert.True(resolve > reply);
+    }
 
     [Then("GitHub gets a read of the check runs after the last reply")]
     public void ThenAfterReply()

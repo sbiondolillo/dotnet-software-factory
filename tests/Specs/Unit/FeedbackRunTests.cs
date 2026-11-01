@@ -116,6 +116,19 @@ public sealed class FeedbackRunTests
     }
 
     [Fact]
+    public async Task AFixedItemAndADisputedItemGetAReplyAndAResolveEach()
+    {
+        string report = FeedbackRunHarness.Items([(A, "fixed", "fixed it"), (B, "disputed", "the name is right")]);
+        using var h = new FeedbackRunHarness { Report = _ => report };
+        Assert.Equal(new FeedbackRunResult(2, 0, 0), await h.RunAsync(Ct));
+        Assert.Equal(
+            ["reply:" + A, "resolve:" + A, "reply:" + B, "resolve:" + B],
+            h.Events.Where(e => e.StartsWith("reply:", StringComparison.Ordinal) || e.StartsWith("resolve:", StringComparison.Ordinal)));
+        Assert.Contains(h.Requests, r => r.Content is string c && c.Contains("addPullRequestReviewThreadReply", StringComparison.Ordinal)
+            && c.Contains(B, StringComparison.Ordinal) && c.Contains("the name is right", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task AStaleReportOfAnEarlierBuildIsNoReport()
     {
         using var h = new FeedbackRunHarness { Report = n => n is 1 ? Both() : null };

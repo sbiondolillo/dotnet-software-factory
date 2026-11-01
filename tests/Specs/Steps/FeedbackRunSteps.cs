@@ -200,15 +200,11 @@ public sealed class FeedbackRunSteps : IDisposable
     public void ThenResult(int resolved, int unresolved, int redos) =>
         Assert.Equal(new FeedbackRunResult(resolved, unresolved, redos), Result with { Sessions = null });
 
+    [Then("FeedbackRun resolves the threads {string} and {string}")]
+    public void ThenResolvesBoth(string first, string second) => Assert.Equal([first, second], Resolves);
+
     [Then("FeedbackRun gives back a result with {int} Redo(s)")]
     public void ThenRedos(int redos) => Assert.Equal(redos, Result.Redos);
-
-    [Then("FeedbackRun resolves no thread and gives back a result with {int} threads resolved, {int} threads unresolved and {int} Redos")]
-    public void ThenNoResolve(int resolved, int unresolved, int redos)
-    {
-        Assert.Empty(Resolves);
-        Assert.Equal(new FeedbackRunResult(resolved, unresolved, redos), Result with { Sessions = null });
-    }
 
     [Then("git clones {string} into the directory that the caller gave and checks out the branch {string} in it")]
     public void ThenClones(string url, string branch)
@@ -303,13 +299,6 @@ public sealed class FeedbackRunSteps : IDisposable
     {
         Assert.Contains((thread, reply), Replies);
         Assert.Contains(resolved, Resolves);
-    }
-
-    [Then("FeedbackRun adds the reply {string} to the thread {string}, and resolves the thread {string} alone")]
-    public void ThenReplyResolveAlone(string reply, string thread, string resolved)
-    {
-        Assert.Contains((thread, reply), Replies);
-        Assert.Equal([resolved], Resolves);
     }
 
     [Then("FeedbackRun runs the second build prompt before any dotnet command")]

@@ -78,23 +78,6 @@ Feature: A feedback run answers every unresolved review thread
     When a caller starts a feedback run
     Then FeedbackRun gives back a result with 2 threads resolved, 0 threads unresolved and 0 Redos
 
-  Scenario: A disputed thread gets its reply and stays unresolved
-    Given on a build prompt the agent writes the report that marks A fixed and B disputed
-    When a caller starts a feedback run
-    Then FeedbackRun adds the reply "The title of the test names the unit." to the thread "PRRT_kwDOUpm1Qc6ofWvu", and resolves the thread "PRRT_kwDOUpm1Qc6ofWu5" alone
-
-  Scenario: A run with one disputed thread leaves one unresolved
-    Given on a build prompt the agent writes the report that marks A fixed and B disputed
-    When a caller starts a feedback run
-    Then FeedbackRun gives back a result with 1 thread resolved, 1 thread unresolved and 0 Redos
-
-  Scenario: A run with every thread disputed and no change still pushes and resolves nothing
-    Given on a build prompt the agent writes the report that marks A and B disputed
-    And git reports no change in the work tree after the build
-    When a caller starts a feedback run
-    Then git pushes the branch "factory/a1b2c3d4"
-    And FeedbackRun resolves no thread and gives back a result with 0 threads resolved, 2 threads unresolved and 0 Redos
-
   Scenario: An error flag from claude passes no gate
     Given claude answers the build prompt with the error flag set
     When a caller starts a feedback run
@@ -263,3 +246,22 @@ Feature: A feedback run answers every unresolved review thread
     When a caller starts a feedback run
     Then FeedbackRun throws SessionBranchException with a message that holds "The session committed files under .factory/, which only the factory writes: .factory/leak.txt. The run stops."
     And the run starts no session
+
+  Scenario: A disputed thread gets its reply and is resolved
+    Given on a build prompt the agent writes the report that marks A fixed and B disputed
+    When a caller starts a feedback run
+    Then FeedbackRun adds the reply "The title of the test names the unit." to the thread "PRRT_kwDOUpm1Qc6ofWvu" and resolves the thread "PRRT_kwDOUpm1Qc6ofWvu"
+
+  Scenario: A run with one disputed thread resolves both threads
+    Given on a build prompt the agent writes the report that marks A fixed and B disputed
+    When a caller starts a feedback run
+    Then FeedbackRun gives back a result with 2 threads resolved, 0 threads unresolved and 0 Redos
+    And FeedbackRun resolves the threads "PRRT_kwDOUpm1Qc6ofWu5" and "PRRT_kwDOUpm1Qc6ofWvu"
+
+  Scenario: A run with every thread disputed and no change still pushes and resolves both threads
+    Given on a build prompt the agent writes the report that marks A and B disputed
+    And git reports no change in the work tree after the build
+    When a caller starts a feedback run
+    Then git pushes the branch "factory/a1b2c3d4"
+    And FeedbackRun gives back a result with 2 threads resolved, 0 threads unresolved and 0 Redos
+    And FeedbackRun resolves the threads "PRRT_kwDOUpm1Qc6ofWu5" and "PRRT_kwDOUpm1Qc6ofWvu"
