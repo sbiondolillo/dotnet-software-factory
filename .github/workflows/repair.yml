@@ -2,9 +2,9 @@
 # issue with the label repair, written by one Managed Agents session, that
 # issue becomes a pull request with the label repair, built by factory.yml,
 # that pull request gets a Copilot review with every thread answered, and it
-# merges once the judge approved. The job holds the API key and the GitHub
-# token. The session holds a read-only repository token, the judge's agent and
-# the judge's environment.
+# merges once the judge approved. The job holds the API key, the GitHub
+# token and the private key of the App dsf-builder. The session holds a
+# read-only repository token, the judge's agent and the judge's environment.
 #
 # The build step starts factory.yml with workflow_dispatch, the issue number
 # and copilot=on, as #358 decided. The factory runs at main, opens the pull
@@ -15,10 +15,12 @@
 # head SHA of the last run of factory.yml on main that ended success,
 # dispatches at that branch with base=main, and deletes the branch when the
 # step ends. The ref calls run under an installation token of the App
-# dsf-builder with contents: write and workflows: write, because github.token
-# holds no workflows permission and GitHub refuses a ref at a commit whose
-# workflow files differ from main (#403). With no green run, the step comments
-# on the issue and builds nothing.
+# dsf-builder with contents: write and workflows: write. github.token holds no
+# workflows permission, and GitHub refuses it a ref at a commit whose workflow
+# files differ from main (#403). A step before the build step mints that token
+# with continue-on-error, so a mint failure fails no ci repair: the ref calls
+# then fall back to github.token. With no green run, the step comments on the
+# issue and builds nothing.
 #
 # The Copilot step requests a review by copilot-pull-request-reviewer when the
 # head holds none, and polls until a review is on the head and no thread is
@@ -92,7 +94,7 @@
 # read step, for development on a planted fault: `gh workflow run repair.yml
 # -f run=<run id>`. The merge step reads the switch on every event, and merges
 # nothing when it is not true. A run by hand with an issue number runs the
-# build step, the Copilot step and the merge step:
+# mint step, the build step, the Copilot step and the merge step:
 # `gh workflow run repair.yml -f issue=<n>`. A run by hand with a pull request
 # number runs the Copilot step and the merge step:
 # `gh workflow run repair.yml -f pr=<n>`. That is the route for a pull request
@@ -160,6 +162,7 @@ jobs:
       - name: Mint the App token for the base branch
         id: app
         if: ${{ !inputs.pr && (inputs.issue || steps.read.outputs.issue) }}
+        continue-on-error: true
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ vars.DSF_REPAIR_APP_ID }}

@@ -55,16 +55,23 @@ class RefTokenTests(unittest.TestCase):
                         self.assertEqual(env["GH_TOKEN"], "job")
 
     def test_the_deletion_sends_the_ref_token_as_gh_token(self):
-        for value, expected in (("app", "app"), ("", "job")):
+        for value, expected in (("app", "app"), ("", "job"), (None, "job")):
             with (
                 self.subTest(ref_token=value),
-                mock.patch.dict(os.environ, {"GH_TOKEN": "job", "REPAIR_REF_TOKEN": value}),
+                mock.patch.dict(os.environ, {"GH_TOKEN": "job"}),
                 mock.patch.object(
                     build.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "", "")
                 ) as run,
             ):
+                if value is None:
+                    os.environ.pop("REPAIR_REF_TOKEN", None)
+                else:
+                    os.environ["REPAIR_REF_TOKEN"] = value
                 build.delete_base_branch(REPO, BRANCH)
-                self.assertEqual(run.call_args.kwargs["env"]["GH_TOKEN"], expected)
+                env = run.call_args.kwargs["env"]
+                self.assertEqual(env["GH_TOKEN"], expected)
+                if value != "app":
+                    self.assertEqual(env, dict(os.environ))
 
 
 if __name__ == "__main__":

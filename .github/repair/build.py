@@ -134,11 +134,11 @@ def ref_env():
 def create_base_branch(repo, branch, sha):
     """Points the branch at the SHA, and exits with GitHub's error text when a call fails.
 
-    The calls use REPAIR_REF_TOKEN, an installation token of the App dsf-builder with workflows write, because
-    GITHUB_TOKEN holds no workflows permission, and GitHub refuses it a ref at a commit whose workflow files differ
-    from main (#403). It reads the ref first. A 404 means no branch of that name, so a POST creates it at the SHA. A
-    branch of that name left by an earlier run gets a forced PATCH that moves it to the SHA. Any other error of the
-    read exits.
+    The calls use REPAIR_REF_TOKEN when it is set: an installation token of the App dsf-builder with workflows
+    write. GITHUB_TOKEN holds no workflows permission, and GitHub refuses it a ref at a commit whose workflow files
+    differ from main (#403). It reads the ref first. A 404 means no branch of that name, so a POST creates it at the
+    SHA. A branch of that name left by an earlier run gets a forced PATCH that moves it to the SHA. Any other error of
+    the read exits.
     """
     env = ref_env()
     found = subprocess.run(
