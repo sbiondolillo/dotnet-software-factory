@@ -7,14 +7,11 @@ namespace Specs.Steps;
 [Binding]
 public sealed class FactoryWorkflowSteps
 {
-    private const string JqMissing = "The step runs jq, which the sandbox image lacks. The build job of ci.yml runs it.";
-
     private WorkflowStepRun? _run;
 
     [When("the step {string} of {string} runs on the lockfile {string} of this repo")]
     public async Task WhenTheStepRunsOnTheLockfileOfThisRepo(string stepName, string workflow, string lockfile)
     {
-        Assert.SkipUnless(WorkflowStep.OnPath("jq"), JqMissing);
         string root = StarterChecks.RepoRoot();
         string text = WorkflowStep.RunText(Path.Combine(root, workflow), stepName);
         _run = await WorkflowStep.RunAsync(text, await File.ReadAllTextAsync(Path.Combine(root, lockfile))).ConfigureAwait(false);
@@ -23,7 +20,6 @@ public sealed class FactoryWorkflowSteps
     [When("the step {string} of {string} runs on a lockfile that holds only the agent {string} with the id {string}")]
     public async Task WhenTheStepRunsOnALockfileThatHoldsOnlyTheAgent(string stepName, string workflow, string key, string id)
     {
-        Assert.SkipUnless(WorkflowStep.OnPath("jq"), JqMissing);
         string text = WorkflowStep.RunText(Path.Combine(StarterChecks.RepoRoot(), workflow), stepName);
         string lockfile = JsonSerializer.Serialize(new { resources = new Dictionary<string, object> { [key] = new { kind = "agent", id } } });
         _run = await WorkflowStep.RunAsync(text, lockfile).ConfigureAwait(false);

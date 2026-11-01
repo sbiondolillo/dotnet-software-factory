@@ -71,11 +71,4 @@ public sealed class WorkflowStepTests : IDisposable
         => Assert.StartsWith("jq ", WorkflowStep.RunText(
             Path.Combine(StarterChecks.RepoRoot(), ".github", "workflows", "factory.yml"),
             "Read the builder's ids from the lockfile"), StringComparison.Ordinal);
-
-    [Fact]
-    public void OnPathFindsAProgramInAPathDirectoryAndNotAMissingOne()
-    {
-        Assert.True(WorkflowStep.OnPath("bash"));
-        Assert.False(WorkflowStep.OnPath("no-such-program-on-the-path"));
-    }
 }

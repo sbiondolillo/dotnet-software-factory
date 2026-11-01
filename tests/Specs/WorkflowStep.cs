@@ -10,12 +10,6 @@ public static class WorkflowStep
 {
     private const string Lockfile = ".github/agents/claude-lock.json";
 
-    /// <summary>Whether a program of that name is in a directory of the <c>PATH</c>.</summary>
-    public static bool OnPath(string program)
-        => (Environment.GetEnvironmentVariable("PATH") ?? "")
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Any(directory => File.Exists(Path.Combine(directory, program)));
-
     /// <summary>The <c>run</c> text of the step named <paramref name="stepName"/> in a job of the workflow.</summary>
     public static string RunText(string workflowFile, string stepName)
     {
@@ -31,7 +25,7 @@ public static class WorkflowStep
         return run ?? throw new InvalidOperationException($"{workflowFile} has no step {stepName} with a run command");
     }
 
-    /// <summary>Runs the text in a new work tree that holds the lockfile text at <c>.github/agents/claude-lock.json</c>, and removes the work tree.</summary>
+    /// <summary>Runs the text in a new work tree, with <see cref="JqShim"/> in front of the <c>PATH</c> when the machine has no <c>jq</c>, that holds the lockfile text at <c>.github/agents/claude-lock.json</c>, and removes the work tree.</summary>
     public static async Task<WorkflowStepRun> RunAsync(string runText, string lockfileText, CancellationToken cancellationToken = default)
     {
         string tree = Directory.CreateTempSubdirectory("workflow-step-").FullName;
@@ -43,13 +37,21 @@ public static class WorkflowStep
             string environmentFile = Path.Combine(tree, "github-env");
             await File.WriteAllTextAsync(environmentFile, "", cancellationToken).ConfigureAwait(false);
 
+            Dictionary<string, string> environment = new() { ["GITHUB_ENV"] = environmentFile };
+            if (!JqShim.OnPath("jq"))
+            {
+                string shim = Path.Combine(tree, "shim");
+                await JqShim.InstallAsync(shim, cancellationToken).ConfigureAwait(false);
+                environment["PATH"] = shim + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH");
+            }
+
             CommandResult result = await new CommandRunner().RunAsync(
                 new CommandSpec
                 {
                     Command = "bash",
                     Arguments = ["-e", "-c", runText],
                     WorkingDirectory = tree,
-                    EnvironmentVariables = new Dictionary<string, string> { ["GITHUB_ENV"] = environmentFile },
+                    EnvironmentVariables = environment,
                 },
                 cancellationToken).ConfigureAwait(false);
 
