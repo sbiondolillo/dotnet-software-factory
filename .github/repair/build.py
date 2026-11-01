@@ -12,8 +12,9 @@ A repair issue with the label factory is a fault of the factory itself, so the f
 one. Decided in #399 and #403, this job builds it with the factory at its last green ref: the head SHA of the last
 run of factory.yml on main that ended success. The dispatch API takes a branch or a tag and never a commit, so the
 job creates the branch repair-base/<n> at that SHA, dispatches factory.yml at it with `base=main`, so the change
-lands on the head of main, and deletes the branch when the step ends, passed or failed. A branch of that name left
-by an earlier run is moved to the SHA. With no green run, the job comments on the issue and builds nothing.
+lands on the head of main, and deletes the branch when the step ends, passed or failed. The job reads the branch
+first. It creates a missing branch at the SHA, and moves a branch of that name left by an earlier run to the SHA.
+With no green run, the job comments on the issue and builds nothing.
 
 Every repair lands on the head of main, so an issue whose target is a pull request branch gets a comment and no
 build.
@@ -121,16 +122,23 @@ def green_sha(repo):
 
 
 def create_base_branch(repo, branch, sha):
-    """Points the branch at the SHA: moves a branch of that name left by an earlier run, or creates it."""
-    moved = subprocess.run(
-        ["gh", "api", "-X", "PATCH", f"repos/{repo}/git/refs/heads/{branch}", "-f", f"sha={sha}", "-F", "force=true"],
-        capture_output=True,
-        text=True,
-    )
-    if moved.returncode != 0:
-        if "Reference does not exist" not in moved.stderr:
-            sys.exit(f"repair: the branch {branch} could not be moved to {sha}: {moved.stderr.strip()[:500]}")
-        gh("api", "-X", "POST", f"repos/{repo}/git/refs", "-f", f"ref=refs/heads/{branch}", "-f", f"sha={sha}")
+    """Points the branch at the SHA, and exits with GitHub's error text when a call fails.
+
+    It reads the ref first. A 404 means no branch of that name, so a POST creates it at the SHA. A branch of that
+    name left by an earlier run gets a forced PATCH that moves it to the SHA. Any other error of the read exits.
+    """
+    found = subprocess.run(["gh", "api", f"repos/{repo}/git/ref/heads/{branch}"], capture_output=True, text=True)
+    if found.returncode == 0:
+        verb = "moved to"
+        call = ["-X", "PATCH", f"repos/{repo}/git/refs/heads/{branch}", "-f", f"sha={sha}", "-F", "force=true"]
+    elif "(HTTP 404)" in found.stderr:
+        verb = "created at"
+        call = ["-X", "POST", f"repos/{repo}/git/refs", "-f", f"ref=refs/heads/{branch}", "-f", f"sha={sha}"]
+    else:
+        sys.exit(f"repair: the branch {branch} could not be read: {found.stderr.strip()[:500]}")
+    sent = subprocess.run(["gh", "api", *call], capture_output=True, text=True)
+    if sent.returncode != 0:
+        sys.exit(f"repair: the branch {branch} could not be {verb} {sha}: {sent.stderr.strip()[:500]}")
     print(f"repair: the branch {branch} is at the green SHA {sha}")
 
 
