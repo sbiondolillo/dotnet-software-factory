@@ -1,9 +1,10 @@
-# The repair loop: a red ci run becomes an issue with the label repair,
-# written by one Managed Agents session, that issue becomes a pull request
-# with the label repair, built by factory.yml, that pull request gets a
-# Copilot review with every thread answered, and it merges once the judge
-# approved. The job holds the API key and the GitHub token. The session holds
-# a read-only repository token, the judge's agent and the judge's environment.
+# The repair loop: a red ci run, or a red factory run on a story, becomes an
+# issue with the label repair, written by one Managed Agents session, that
+# issue becomes a pull request with the label repair, built by factory.yml,
+# that pull request gets a Copilot review with every thread answered, and it
+# merges once the judge approved. The job holds the API key and the GitHub
+# token. The session holds a read-only repository token, the judge's agent and
+# the judge's environment.
 #
 # The build step starts factory.yml with workflow_dispatch, the issue number
 # and copilot=on, as #358 decided. The factory runs at main, opens the pull
@@ -40,7 +41,15 @@
 # A red run on a pull request with the label repair is out, since a loop that
 # repairs its own pull request would file a second repair.
 #
-# The job reruns a run on its first attempt, and the end of that rerun fires
+# A red factory run, decided in #399, names its story in display_title, `#<n>`,
+# by the run-name of factory.yml. The read step reads it on main alone, and ends
+# when the story has the label repair, so a failing builder files no repair of
+# itself. Its branch is main, so the repair/* rule binds ci runs alone. It gets
+# no rerun: the class flake dispatches the story once more. The class factory
+# files an issue with repair, ready and factory and a line `Story: #<n>`, one at
+# a time, and the class code is a comment on the story.
+#
+# The job reruns a ci run on its first attempt, and the end of that rerun fires
 # this workflow again. The concurrency group holds that second job until the
 # first ends, and the second then finds the first one's issue or marker comment.
 #
@@ -60,7 +69,7 @@ name: repair
 
 on:
   workflow_run:
-    workflows: [ci]
+    workflows: [ci, factory]
     types: [completed]
   workflow_dispatch:
     inputs:
@@ -77,8 +86,9 @@ on:
         required: false
         type: string
 
-# actions reruns the run, reads its log and starts factory.yml. contents posts a
-# comment on a commit of main, and with pull-requests merges the pull request.
+# actions reruns the run, reads its log and starts factory.yml, for a build or
+# for the story of a flaky factory run. contents posts a comment on a commit of
+# main, and with pull-requests merges the pull request.
 # No checks, as #361 decided.
 permissions:
   actions: write
@@ -96,7 +106,8 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'failure' &&
-      !startsWith(github.event.workflow_run.head_branch, 'repair/') &&
+      (endsWith(github.event.workflow_run.path, '/factory.yml') ||
+      !startsWith(github.event.workflow_run.head_branch, 'repair/')) &&
       github.event.workflow_run.head_repository.full_name == github.repository)
     steps:
       - uses: actions/checkout@v7
