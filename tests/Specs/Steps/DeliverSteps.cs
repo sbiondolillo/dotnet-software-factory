@@ -20,6 +20,8 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
     private int _issue;
     private string _title = "";
     private int _pushExit;
+    private string _pushError = "fatal: push failed";
+    private string _changedFile = "";
     private PullRequest? _result;
     private Exception? _exception;
     private DeliveryFacts? _facts;
@@ -48,6 +50,16 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
 
     [Given("git answers the push with the exit code {int}")]
     public void GivenPushAnswers(int code) => _pushExit = code;
+
+    [Given("git answers the push with the exit code {int} and the standard error {string}")]
+    public void GivenPushAnswersWithError(int code, string standardError)
+    {
+        _pushExit = code;
+        _pushError = standardError;
+    }
+
+    [Given("the run changed the file {string}")]
+    public void GivenChangedFile(string path) => _changedFile = path;
 
     [Given("GitHub answers the open of the pull request with the number {int} and the web address {string}")]
     public void GivenOpen(int number, string url)
@@ -93,7 +105,7 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
             {
                 _commands.Add(spec);
                 int exit = spec.Arguments[0] is "push" ? _pushExit : 0;
-                return Task.FromResult(new CommandResult { ExitCode = exit, StandardError = exit is 0 ? "" : "fatal: push failed" });
+                return Task.FromResult(new CommandResult { ExitCode = exit, StandardError = exit is 0 ? "" : _pushError });
             });
         var client = new GitHubClient(new HttpClient(_handler), token, TimeSpan.Zero);
         var deliver = new Deliver(new Git(mock.Object), new PullRequests(client), client, _facts);
@@ -105,6 +117,8 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
         {
             _exception = ex;
         }
+
+        Assert.DoesNotContain(_commands, c => _changedFile.Length > 0 && c.Arguments.Contains(_changedFile));
     }
 
     [Then("git pushed the branch {string} from {string} to origin")]
@@ -162,6 +176,10 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
 
     [Then("Deliver throws GitCommandException")]
     public void ThenGitException() => Assert.IsType<GitCommandException>(_exception);
+
+    [Then("Deliver throws GitCommandException whose message holds {string}")]
+    public void ThenGitExceptionHolds(string text) =>
+        Assert.Contains(text, Assert.IsType<GitCommandException>(_exception).Message, StringComparison.Ordinal);
 
     [Then("Deliver sent no request to GitHub")]
     public void ThenNoRequest() => Assert.Empty(_handler.Requests);
