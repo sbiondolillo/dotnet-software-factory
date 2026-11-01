@@ -31,7 +31,9 @@ A text check sees no change in a block whose lines did not change. A new line th
 `permissions:` block, closed after it, swallows the block into a scalar, and the file then parses with no top-level
 permissions. So a changed line that leaves a quote open is a form the job cannot read, and the job refuses it. A
 whole-line comment is out of the match, and a `'` inside a double-quoted scalar is text, so a step edit with
-balanced quotes passes.
+balanced quotes passes. A changed line with a character outside printable ASCII is refused the same way: a byte
+order mark before `on` hides the key from a match at column 0, and a homoglyph hides a key name. The file on
+`main` holds no such character outside its comments.
 
 1. A changed line, which is a line that the diff of the two texts adds or removes, that holds a key form. Before the
    match, the job strips a comment from the line when the line holds no quote character. The forms are: the token
@@ -142,6 +144,8 @@ UNREADABLE = "a line in a form the job cannot read"
 PREFIX = r"(?:[!&][^ \t]*[ \t]+)*"
 # A comment: a `#` at the start of a line or after a space or a tab, to the end of the line.
 COMMENT = re.compile(r"(?:^|[ \t])#.*$")
+# A character outside printable ASCII: a byte order mark or a homoglyph can hide a key from a text match.
+NON_ASCII = re.compile(r"[^\t\x20-\x7e]")
 # A key form of the module docstring, in a changed line of factory.yml.
 PERMISSIONS = re.compile(r"permissions", re.I)
 ON = re.compile(rf"""^{PREFIX}(?P<quote>["']?)on(?P=quote)[ \t]*:""", re.I)
@@ -238,12 +242,12 @@ def open_quote(text):
 def line_causes(line):
     """The causes of the module docstring that the changed line holds, as a set of `on:`, `permissions:` and
     UNREADABLE. A whole-line comment holds none. A trailing comment goes first when the line holds no quote
-    character. A line that leaves a quote open is UNREADABLE."""
+    character. A line that leaves a quote open, or that holds a character outside printable ASCII, is UNREADABLE."""
     if line.lstrip().startswith("#"):
         return set()
     text = line if "'" in line or '"' in line else COMMENT.sub("", line)
     causes = set()
-    if open_quote(text):
+    if open_quote(text) or NON_ASCII.search(text):
         causes.add(UNREADABLE)
     if PERMISSIONS.search(text):
         causes.add("permissions:")

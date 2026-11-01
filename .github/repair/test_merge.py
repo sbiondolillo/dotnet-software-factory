@@ -107,6 +107,16 @@ class FactoryKeyTests(unittest.TestCase):
                 )
                 self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), [merge.UNREADABLE])
 
+    def test_a_line_with_a_byte_order_mark_or_a_homoglyph_is_refused(self):
+        for new in ("\ufeffon:\n  pull_request:\n", "p\u0435rmissions:\n  checks: write\n"):
+            with self.subTest(new=new):
+                head = new + FACTORY_TEXT
+                self.assertIn(merge.UNREADABLE, merge.changed_keys(FACTORY_TEXT, head))
+
+    def test_the_file_on_the_branch_holds_no_character_outside_ascii_in_a_line_the_rule_reads(self):
+        lines = [line for line in FACTORY_TEXT.splitlines() if not line.lstrip().startswith("#")]
+        self.assertEqual([line for line in lines if merge.NON_ASCII.search(line)], [])
+
     def test_an_added_pull_request_trigger_is_refused(self):
         head = self.edit("on:\n  issues:\n", "on:\n  pull_request:\n  issues:\n")
         self.assertEqual(merge.changed_keys(FACTORY_TEXT, head), ["on:"])
