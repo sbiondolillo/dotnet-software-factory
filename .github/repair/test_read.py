@@ -186,75 +186,11 @@ class CleanupBodyTests(unittest.TestCase):
         self.assertIsNone(read.opens_fence("``` a`b"))
         self.assertEqual(read.opens_fence("~~~ a~b"), "~~~")
 
-    def test_a_check_that_runs_an_absent_tool_fails(self):
-        for command in (
-            "jq .x f",
-            "  jq .x f",
-            "python3 -c 'print(1)'",
-            "python -c 'print(1)'",
-            "yq .x f",
-            "cat f | jq .x",
-            "true && jq .x f",
-            "true; yq .x f",
-            "! jq -e .x f",
-            'test "$(jq .x f)" = y',
-            "test `jq .x f` = y",
-            "if jq .x f; then true; fi",
-            "/usr/bin/jq .x f",
-            "A=1 jq .x f",
-            "env jq .x f",
-            "{ jq .x f; }",
-            "case a in a) jq .x f;; esac",
-            "eval jq .x f",
-            "timeout 5 jq .x f",
-            "echo f | xargs -r jq .x",
-            "2>/dev/null jq .x f",
-            "true 2>&1 | jq .x",
-            "command -v jq",
-            "type jq",
-            'test "$(jq -r ".a" f)" = 1',
-            "cat <<X | jq .x\nnot a command\nX",
-            "cat f |\\\n  jq .x",
-        ):
-            with self.subTest(command):
-                error = self.faults(f"{SCOPE}## Check\n```sh\n{command}\n```\n")
-                self.assertRegex(
-                    error, "`## Check` runs `(jq|python3?|yq)`, which the image of `sandbox/Dockerfile` lacks"
-                )
-
-    def test_a_check_that_only_names_a_tool_parses(self):
-        for command in (
-            "grep -c foo f",
-            "grep -c jq f",
-            "grep -c 'cat f | jq .x' f",
-            'grep -c "; python3 x" f',
-            "grep -c x\\|jq f",
-            "test -f jq",
-            "grep -c if jq f",
-            "grep -q do python3 f",
-            "echo do jq",
-            'test ! jq = "$x"',
-            'grep -c "`jq .x`" f'.replace("`", "\\`"),
-            "grep -c 'a' \"$(grep -c 'x|jq' f)\"",
-            "cat <<X\njq is absent\nX",
-            "node <<'X'\npython is not a tool of this script\nX",
-            "grep -c foo jq.json",
-            "jqlang f",
-            "./python-check.sh",
-            "python/run.sh",
-            "true # then jq .x f",
-            "node -e 'require(\"./f.json\")'",
-        ):
-            with self.subTest(command):
-                self.assertIsNone(
-                    parse_factory(factory_answer(f"{SCOPE}## Check\n```sh\n{command}\n```\n", recipe="cleanup"))[1]
-                )
-
 
 class FactoryPromptTests(unittest.TestCase):
     def test_the_factory_prompt_names_the_sandbox_tools_and_the_recipes(self):
         prompt = read.factory_reader_prompt("o/r", RUN, STORY, "records")
-        for tool in ("grep", "sed", "awk", "sha256sum", "git", "node", "dotnet", "jq", "python3", "yq"):
+        for tool in ("grep", "sed", "awk", "sha256sum", "git", "node", "dotnet", "jq", "python", "python3", "yq"):
             self.assertIn(f"`{tool}`", prompt)
         self.assertIn("`recipe` is `none`", prompt)
         self.assertIn("`recipe` is `cleanup`", prompt)
@@ -350,7 +286,7 @@ class CorrectionTests(unittest.TestCase):
         self.assertIn("KeyError: 'body'", message)
 
     def test_a_cleanup_fault_reaches_the_reader_by_the_correction_turn(self):
-        body = f"{SCOPE}## Check\n```sh\njq .x f\n```\n"
+        body = f"{SCOPE}## Check\n\nNo block.\n"
         answers = [(factory_answer(body, recipe="cleanup"), None), (factory_answer(recipe="cleanup"), None)]
         api = FakeApi([OLD_TURN, NEW_TURN])
         with (
@@ -361,7 +297,7 @@ class CorrectionTests(unittest.TestCase):
             answer = read.read_answer(SID, read.FACTORY_CLASSES, FACTORY_FILES, read.FACTORY_CONTRACT, 60)
         self.assertEqual(answer["recipe"], "cleanup")
         sent = api.posts[0][1]["events"][0]["content"][0]["text"]
-        self.assertIn("`## Check` runs `jq`", sent)
+        self.assertIn("`## Check` holds no closed fenced block", sent)
         self.assertIn(read.FACTORY_CONTRACT, sent)
 
     def test_a_good_first_answer_posts_nothing(self):

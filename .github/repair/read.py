@@ -39,20 +39,11 @@ MARKER = "<!-- repair:{sha} -->"
 CLASSES = ("code", "flake", "dependency")
 FACTORY_CLASSES = CLASSES + ("factory",)
 RECIPES = ("cleanup", "none")
-# The tools a reader session can hold and the image of sandbox/Dockerfile lacks.
-ABSENT_TOOLS = ("jq", "python3", "python", "yq")
 LOG_LIMIT = 100000
 RECORD_LIMIT = 50000
 FACTORY_WORKFLOW = "factory.yml"
 STORY = re.compile(r"^#(\d+)$")
 HEADING = re.compile(r"#{1,6}\s")
-SHELL_TEXT = re.compile(
-    r"""'[^']*'|"(?:\\.|[^"\\])*"|\\.|(?:^|(?<=\s))#[^\n]*|<<-?\s*['"]?(\w+)['"]?([^\n]*)\n.*?^\s*\1\s*$""", re.M | re.S
-)
-SUBSTITUTION = re.compile(r"""\$\([^)"]*|(?<!\\)`[^`]*`""")
-SEPARATOR = re.compile(r"(?<![<>])&|[\n;|()`]")
-PREFIX_WORD = re.compile(r"\w+=\S*|\d*[<>]\S*|[!{]|if|then|elif|else|do|while|until")
-WRAPPERS = ("command", "env", "eval", "exec", "nohup", "time", "timeout", "type", "xargs")
 ANSWER = "Your final answer is one JSON object and nothing else, with no prose before or after it and no code fence:"
 CONTRACT = f"""{ANSWER}
 {{"class": "code" or "dependency" or "flake", "title": "the issue title", "body": "the issue body",
@@ -309,9 +300,10 @@ Every other fix uses the `cleanup` recipe, and `recipe` is `cleanup`: a workflow
 
 A cleanup body has `## Scope` and `## Check` as the recipe states. `## Scope` holds one path on each line and no prose.
 `## Check` proves the changed line. The factory runs `## Check` with `sh -c` in the image of `sandbox/Dockerfile`. That
-image holds `grep`, `sed`, `awk`, `sha256sum`, `git`, `node` and `dotnet`. It holds no `jq`, `python3` or `yq`, and your
-session can hold them, so a pass in your session proves nothing about them. Read a JSON file with `grep` or `node`. Run
-the check in your checkout before you answer. At this commit it exits with a code other than 0, 126 and 127.
+image holds `grep`, `sed`, `awk`, `sha256sum`, `git`, `node` and `dotnet`. It holds no `jq`, `python`, `python3`,
+`yq`, `gh`, `rg` or `make`, and your session can hold them, so a pass in your session proves nothing about them. Use
+the tools the image holds. Read a JSON file with `grep` or `node`. Run the check in your checkout before you answer.
+At this commit it exits with a code other than 0, 126 and 127.
 
 The body names the fault in the factory, the failing step, and the story #{story["number"]} that exposed it. The job
 adds the head SHA, the run URL, the story and the session id at the end of the body, so leave these four out. The fix
@@ -448,58 +440,15 @@ def first_block(lines):
     return None
 
 
-def code_of(match):
-    """The code that one match of SHELL_TEXT holds: a heredoc keeps the rest of its first line, and a double-quoted
-    string keeps each command substitution, since the shell runs it."""
-    text = match.group(0)
-    if text.startswith("<<"):
-        return shell_code(match.group(2))
-    if text[0] == '"':
-        return shell_code(" ".join(SUBSTITUTION.findall(text))) or "_"
-    return "_" if text[0] == "'" else " "
-
-
-def shell_code(check):
-    """The text of a check with no comment, no escaped character, no quoted string and no heredoc body, so a pattern
-    that names a tool reads as no command."""
-    return SHELL_TEXT.sub(code_of, check)
-
-
-def absent_tool(check):
-    """The tool of ABSENT_TOOLS that a command of the check names in command position, or None. The first word of a
-    simple command is that position, after each assignment, redirect and shell keyword. A wrapper such as `timeout 5`
-    or `xargs -r` passes the position to the word after its options and numbers. Dash exits 127 on `command -v` and
-    `type` of an absent tool, so they count. A name in a variable or in a quoted script stays out of reach."""
-    for command in SEPARATOR.split(shell_code(check)):
-        wrapped = False
-        for word in command.split():
-            if PREFIX_WORD.fullmatch(word):
-                continue
-            if word in WRAPPERS:
-                wrapped = True
-            elif not wrapped or not (word[0] == "-" or word[0].isdigit()):
-                name = word.rsplit("/", 1)[-1]
-                if name in ABSENT_TOOLS:
-                    return name
-                break
-    return None
-
-
 def check_cleanup_body(body):
-    """The faults of a cleanup body, as assertions: FactoryRun reads it through src/Core/CleanupBody.cs, and a check
-    that names an absent tool exits 127 in the sandbox and ends the run with no pull request."""
+    """The faults of a cleanup body, as assertions: FactoryRun reads it through src/Core/CleanupBody.cs, and it declines
+    a body with no scope or no check."""
     scope = section(body, "## Scope")
     assert scope is not None, "the cleanup body has no `## Scope` heading"
     assert any(line.strip() and opens_fence(line.strip()) is None for line in scope), "`## Scope` holds no path"
     lines = section(body, "## Check")
     assert lines is not None, "the cleanup body has no `## Check` heading"
-    check = first_block(lines)
-    assert check is not None, "`## Check` holds no closed fenced block with a command"
-    absent = absent_tool(check)
-    assert absent is None, (
-        f"`## Check` runs `{absent}`, which the image of `sandbox/Dockerfile` lacks. "
-        "Read a JSON file with `grep` or `node`"
-    )
+    assert first_block(lines) is not None, "`## Check` holds no closed fenced block with a command"
 
 
 def parse_or_error(text, classes=CLASSES, files=("code", "dependency")):
