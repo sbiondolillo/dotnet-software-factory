@@ -3,6 +3,7 @@ of ci.yml runs them with `python3 -B -m unittest discover -s .github/repair -p '
 each one replaces read.anthropic and read.wait_idle, and time.sleep where the wait polls."""
 
 import json
+import os
 import unittest
 from unittest import mock
 
@@ -14,6 +15,12 @@ GOOD = '{"class": "code", "title": "t", "body": "b", "evidence": ["e"]}'
 # The slip of run 41338664688: a stray `]` closed the body string.
 STRAY = '{"class": "code", "title": "t", "body": "b"], "evidence": []}'
 DELIMITER = "Expecting ',' delimiter"
+FACTORY_FILES = ("factory", "dependency")
+SCOPE = "## Scope\n\n- `.github/workflows/factory.yml`\n\n"
+CHECK = "## Check\n\n```sh\ngrep -c 'lock: claude' .github/workflows/factory.yml\n```\n"
+SOUND = f"Cleanup. Read the right key.\n\n{SCOPE}{CHECK}"
+RUN = {"id": 1, "head_sha": "abc", "html_url": "https://run"}
+STORY = {"number": 451, "title": "t"}
 
 
 OLD_TURN = [
@@ -57,6 +64,14 @@ def message(text):
     return {"type": "agent.message", "content": [{"type": "text", "text": text}]}
 
 
+def factory_answer(body=SOUND, kind="factory", **fields):
+    return json.dumps({"class": kind, "title": "t", "body": body, "evidence": ["e"], **fields})
+
+
+def parse_factory(text):
+    return read.parse_or_error(text, read.FACTORY_CLASSES, FACTORY_FILES)
+
+
 class ParseTests(unittest.TestCase):
     def test_a_valid_object_parses(self):
         answer, error = read.parse_or_error(GOOD, read.CLASSES, FILES)
@@ -68,6 +83,213 @@ class ParseTests(unittest.TestCase):
         self.assertIsNone(answer)
         self.assertTrue(error.startswith("JSONDecodeError: "), error)
         self.assertIn(DELIMITER, error)
+
+
+class RecipeTests(unittest.TestCase):
+    def test_a_cleanup_answer_with_a_sound_body_parses(self):
+        answer, error = parse_factory(factory_answer(recipe="cleanup"))
+        self.assertIsNone(error)
+        self.assertEqual(answer["recipe"], "cleanup")
+
+    def test_none_parses_with_no_scope_and_no_check(self):
+        answer, error = parse_factory(factory_answer("A fix in `src/`.", recipe="none"))
+        self.assertIsNone(error)
+        self.assertEqual(answer["recipe"], "none")
+
+    def test_a_class_that_files_needs_a_known_recipe(self):
+        for kind in FACTORY_FILES:
+            for fields, shown in (
+                ({}, "None"),
+                ({"recipe": "behavior"}, "'behavior'"),
+                ({"recipe": ["none"]}, "['none']"),
+            ):
+                with self.subTest(kind=kind, fields=fields):
+                    answer, error = parse_factory(factory_answer(kind=kind, **fields))
+                    self.assertIsNone(answer)
+                    self.assertEqual(error, f"AssertionError: the recipe {shown} is not one of cleanup, none")
+
+    def test_code_and_flake_on_a_factory_read_need_no_recipe(self):
+        for kind, body in (("code", "the reason"), ("flake", "")):
+            with self.subTest(kind=kind):
+                answer, error = parse_factory(factory_answer(body, kind))
+                self.assertIsNone(error)
+                self.assertEqual(answer["class"], kind)
+
+    def test_a_ci_answer_needs_no_recipe(self):
+        answer, error = read.parse_or_error(GOOD, read.CLASSES, FILES)
+        self.assertIsNone(error)
+        self.assertNotIn("recipe", answer)
+
+    def test_the_contracts(self):
+        self.assertIn('"recipe": "cleanup" or "none"', read.FACTORY_CONTRACT)
+        self.assertNotIn("recipe", read.CONTRACT)
+
+
+class CleanupBodyTests(unittest.TestCase):
+    """The cases agree with tests/Specs/Unit/CleanupBodyTests.cs for the C# that reads the body at run time."""
+
+    def faults(self, body):
+        answer, error = parse_factory(factory_answer(body, recipe="cleanup"))
+        self.assertIsNone(answer)
+        return error
+
+    def test_a_fault_of_the_body_is_an_assertion_message(self):
+        unclosed = "## Check\n\n```sh\ntrue\n"
+        for name, body, fault in (
+            ("no scope", CHECK, "the cleanup body has no `## Scope` heading"),
+            ("empty scope", f"## Scope\n\n  \n\n{CHECK}", "`## Scope` holds no path"),
+            ("a fence alone", f"## Scope\n\n```\n```\n\n{CHECK}", "`## Scope` holds no path"),
+            ("no check", SCOPE, "the cleanup body has no `## Check` heading"),
+            ("no block", f"{SCOPE}## Check\n\ntrue\n", "`## Check` holds no closed fenced block with a command"),
+            ("a block after the section", f"{SCOPE}## Check\n\n## Notes\n```sh\ntrue\n```\n", "`## Check` holds no"),
+            ("blank block", f"{SCOPE}## Check\n\n```sh\n\n```\n", "`## Check` holds no closed fenced block"),
+            ("unclosed fence", SCOPE + unclosed, "`## Check` holds no closed fenced block with a command"),
+        ):
+            with self.subTest(name):
+                error = self.faults(body)
+                self.assertTrue(error.startswith("AssertionError: "), error)
+                self.assertIn(fault, error)
+
+    def test_the_forms_the_csharp_reads_parse(self):
+        for name, body in (
+            ("a list item", f"## Scope\n- a.yml\n{CHECK}"),
+            ("a star item", f"## Scope\n* a.yml\n{CHECK}"),
+            ("a backticked path", f"## Scope\n`a.yml`\n{CHECK}"),
+            ("a bare path", f"## Scope\na.yml\n{CHECK}"),
+            ("a bare fence", f"{SCOPE}## Check\n```\ntrue\n```\n"),
+            ("a tilde fence", f"{SCOPE}## Check\n~~~\ntrue\n~~~\n"),
+            ("a tilde fence with an info string", f"{SCOPE}## Check\n~~~sh\ntrue\n~~~\n"),
+            ("a longer closing fence", f"{SCOPE}## Check\n```sh\ntrue\n`````\n"),
+            ("a carriage return", "## Scope\r\na.yml\r\n## Check\r\n```sh\r\ntrue\r\n```\r\n"),
+            ("the check first", f"{CHECK}\n{SCOPE}"),
+        ):
+            with self.subTest(name):
+                self.assertIsNone(parse_factory(factory_answer(body, recipe="cleanup"))[1])
+
+    def test_a_heading_inside_a_fence_does_not_end_a_section(self):
+        body = f"{SCOPE}## Check\n```sh\n## not a heading\ntrue\n```\n"
+        self.assertIsNone(parse_factory(factory_answer(body, recipe="cleanup"))[1])
+        self.assertEqual(read.first_block(read.section(body, "## Check")), "## not a heading\ntrue")
+
+    def test_a_heading_inside_a_fence_is_no_section(self):
+        body = f"## Notes\n```\n## Scope\na.yml\n```\n{CHECK}"
+        self.assertIn("no `## Scope` heading", self.faults(body))
+
+    def test_a_section_ends_at_the_next_heading(self):
+        self.assertIn("`## Scope` holds no path", self.faults(f"## Scope\n## Notes\na.yml\n{CHECK}"))
+
+    def test_the_first_block_wins(self):
+        lines = read.section("## Check\n```sh\none\n```\n```sh\ntwo\n```\n", "## Check")
+        self.assertEqual(read.first_block(lines), "one")
+
+    def test_a_fence_with_a_backtick_after_it_opens_nothing(self):
+        self.assertIsNone(read.opens_fence("``` a`b"))
+        self.assertEqual(read.opens_fence("~~~ a~b"), "~~~")
+
+    def test_a_check_that_runs_an_absent_tool_fails(self):
+        for command in (
+            "jq .x f",
+            "  jq .x f",
+            "python3 -c 'print(1)'",
+            "python -c 'print(1)'",
+            "yq .x f",
+            "cat f | jq .x",
+            "true && jq .x f",
+            "true; yq .x f",
+            "! jq -e .x f",
+            'test "$(jq .x f)" = y',
+            "test `jq .x f` = y",
+            "if jq .x f; then true; fi",
+            "/usr/bin/jq .x f",
+            "A=1 jq .x f",
+            "env jq .x f",
+            "cat f |\\\n  jq .x",
+        ):
+            with self.subTest(command):
+                error = self.faults(f"{SCOPE}## Check\n```sh\n{command}\n```\n")
+                self.assertRegex(
+                    error, "`## Check` runs `(jq|python3?|yq)`, which the image of `sandbox/Dockerfile` lacks"
+                )
+
+    def test_a_check_that_only_names_a_tool_parses(self):
+        for command in (
+            "grep -c foo f",
+            "grep -c jq f",
+            "grep -c 'cat f | jq .x' f",
+            'grep -c "; python3 x" f',
+            "grep -c x\\|jq f",
+            "test -f jq",
+            "command -v jq",
+            "grep -c foo jq.json",
+            "jqlang f",
+            "./python-check.sh",
+            "python/run.sh",
+            "true # then jq .x f",
+            "node -e 'require(\"./f.json\")'",
+        ):
+            with self.subTest(command):
+                self.assertIsNone(
+                    parse_factory(factory_answer(f"{SCOPE}## Check\n```sh\n{command}\n```\n", recipe="cleanup"))[1]
+                )
+
+
+class FactoryPromptTests(unittest.TestCase):
+    def test_the_factory_prompt_names_the_sandbox_tools_and_the_recipes(self):
+        prompt = read.factory_reader_prompt("o/r", RUN, STORY, "records")
+        for tool in ("grep", "sed", "awk", "sha256sum", "git", "node", "dotnet", "jq", "python3", "yq"):
+            self.assertIn(f"`{tool}`", prompt)
+        self.assertIn("`recipe` is `none`", prompt)
+        self.assertIn("`recipe` is `cleanup`", prompt)
+        self.assertIn("exits with a code other than 0, 126 and 127", prompt)
+        self.assertNotIn("Use the recipe with no label", prompt)
+        self.assertIn(read.FACTORY_CONTRACT, prompt)
+
+    def test_the_ci_prompt_stays(self):
+        prompt = read.reader_prompt("o/r", RUN, "`repair/1`", "log")
+        self.assertIn("Use the recipe with no label, since a fix to a red run is a bug fix.", prompt)
+        self.assertNotIn("recipe`", prompt)
+
+
+class FinishFactoryTests(unittest.TestCase):
+    def filed(self, answer):
+        """The arguments and the body of the one `issue create` of a read, with `gh` replaced."""
+        calls = []
+
+        def gh(*args, input_text=None):
+            calls.append((args, input_text))
+            return "[]" if args[:2] == ("issue", "list") else "https://github.com/o/r/issues/7\n"
+
+        with mock.patch.object(read, "gh", gh), mock.patch.dict(os.environ, {"GITHUB_OUTPUT": os.devnull}):
+            read.finish_factory("o/r", RUN, STORY, None, answer, SID)
+        return next((args, body) for args, body in calls if args[:2] == ("issue", "create"))
+
+    def labels(self, args):
+        return [args[i + 1] for i, arg in enumerate(args) if arg == "--label"]
+
+    def test_a_cleanup_answer_takes_the_label_cleanup(self):
+        args, _ = self.filed({"class": "factory", "recipe": "cleanup", "title": "t", "body": SOUND, "evidence": []})
+        self.assertEqual(self.labels(args), ["repair", "ready", "factory", "cleanup"])
+
+    def test_a_none_answer_keeps_three_labels(self):
+        args, _ = self.filed({"class": "dependency", "recipe": "none", "title": "t", "body": "b", "evidence": []})
+        self.assertEqual(self.labels(args), ["repair", "ready", "factory"])
+
+    def test_the_run_section_ends_a_last_section_of_the_filed_body(self):
+        for name, body, scope in (
+            ("the check last", SOUND, ["- `.github/workflows/factory.yml`"]),
+            ("the scope last", f"{CHECK}\n## Scope\n\na.yml", ["a.yml"]),
+        ):
+            with self.subTest(name):
+                _, filed = self.filed({"class": "factory", "recipe": "cleanup", "title": "t", "body": body})
+                read.check_cleanup_body(filed)
+                self.assertIn("## Run", filed)
+                self.assertEqual([line for line in read.section(filed, "## Scope") if line.strip()], scope)
+
+    def test_the_run_section_closes_no_fence(self):
+        _, filed = self.filed(
+            {"class": "factory", "recipe": "cleanup", "title": "t", "body": f"{SCOPE}## Check\n```sh\ntrue"}
+        )
+        self.assertIsNone(read.first_block(read.section(filed, "## Check")))
 
 
 class CorrectionTests(unittest.TestCase):
@@ -108,6 +330,21 @@ class CorrectionTests(unittest.TestCase):
         self.assertEqual(len(api.posts), 1)
         self.assertIn(DELIMITER, message)
         self.assertIn("KeyError: 'body'", message)
+
+    def test_a_cleanup_fault_reaches_the_reader_by_the_correction_turn(self):
+        body = f"{SCOPE}## Check\n```sh\njq .x f\n```\n"
+        answers = [(factory_answer(body, recipe="cleanup"), None), (factory_answer(recipe="cleanup"), None)]
+        api = FakeApi([OLD_TURN, NEW_TURN])
+        with (
+            mock.patch.object(read, "anthropic", api),
+            mock.patch.object(read, "wait_idle"),
+            mock.patch.object(read, "final_answer", side_effect=answers),
+        ):
+            answer = read.read_answer(SID, read.FACTORY_CLASSES, FACTORY_FILES, read.FACTORY_CONTRACT, 60)
+        self.assertEqual(answer["recipe"], "cleanup")
+        sent = api.posts[0][1]["events"][0]["content"][0]["text"]
+        self.assertIn("`## Check` runs `jq`", sent)
+        self.assertIn(read.FACTORY_CONTRACT, sent)
 
     def test_a_good_first_answer_posts_nothing(self):
         answer, api, _ = self.read_answer([GOOD])

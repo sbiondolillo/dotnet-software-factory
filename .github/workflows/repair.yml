@@ -85,7 +85,8 @@
 # itself. Its branch is main, so the repair/* rule binds ci runs alone. It gets
 # no rerun: the class flake dispatches the story once more. The class factory
 # files an issue with repair, ready and factory and a line `Story: #<n>`, one at
-# a time, and the class code is a comment on the story.
+# a time, and the class code is a comment on the story. The issue also takes the
+# label cleanup when the field recipe of the answer is cleanup.
 #
 # The job reruns a ci run on its first attempt, and the end of that rerun fires
 # this workflow again. The concurrency group holds that second job until the

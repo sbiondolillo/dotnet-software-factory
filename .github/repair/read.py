@@ -11,9 +11,10 @@ the read, so a failing builder files no repair of itself. The run gets no rerun.
 the comments the run posted on the story, and its class set gains factory. The job summary is no record: GitHub
 serves it on no API, and the log holds its facts.
 `factory`, and `dependency` on a factory run, file one issue with repair, ready and factory and a line `Story: #<n>`,
-unless an open issue with repair and factory exists, and then the red commit gets a comment that names it. `code` is a
-comment on the story, and `flake` dispatches the story once more. Both comments carry the marker of the SHA, so a
-second red run of the story on that SHA ends the read.
+unless an open issue with repair and factory exists, and then the red commit gets a comment that names it. The issue
+also takes the label cleanup when the field `recipe` of the answer is `cleanup`, so the build skips the plan phase.
+`code` is a comment on the story, and `flake` dispatches the story once more. Both comments carry the marker of the
+SHA, so a second red run of the story on that SHA ends the read.
 The answer can fail the parse. Then the job sends one correction turn to the same session, with the parser error,
 and a second failure ends the read.
 
@@ -37,17 +38,29 @@ from judge import anthropic, env, gh, start_session, wait_idle  # noqa: E402
 MARKER = "<!-- repair:{sha} -->"
 CLASSES = ("code", "flake", "dependency")
 FACTORY_CLASSES = CLASSES + ("factory",)
+RECIPES = ("cleanup", "none")
+# The tools a reader session can hold and the image of sandbox/Dockerfile lacks.
+ABSENT_TOOLS = ("jq", "python3", "python", "yq")
 LOG_LIMIT = 100000
 RECORD_LIMIT = 50000
 FACTORY_WORKFLOW = "factory.yml"
 STORY = re.compile(r"^#(\d+)$")
+HEADING = re.compile(r"#{1,6}\s")
+SHELL_TEXT = re.compile(r"""'[^']*'|"(?:\\.|[^"\\])*"|\\.|(?:^|(?<=\s))#[^\n]*""", re.M | re.S)
+SUBSTITUTION = re.compile(r"\$\([^)]*\)|`[^`]*`")
+ABSENT_COMMAND = re.compile(
+    r"(?:^|[|;&(`!]|\b(?:if|then|elif|else|do|while|until|env|exec|command|xargs)\s)\s*"
+    r"(?:\w+=\S*\s+)*(?:[\w./-]*/)?"
+    rf"({'|'.join(ABSENT_TOOLS)})(?=[\s;|&)`<>]|$)",
+    re.M,
+)
 ANSWER = "Your final answer is one JSON object and nothing else, with no prose before or after it and no code fence:"
 CONTRACT = f"""{ANSWER}
 {{"class": "code" or "dependency" or "flake", "title": "the issue title", "body": "the issue body",
  "evidence": ["each log line that decides the class"]}}"""
 FACTORY_CONTRACT = f"""{ANSWER}
-{{"class": "factory" or "code" or "dependency" or "flake", "title": "the issue title", "body": "the issue body",
- "evidence": ["each log line that decides the class"]}}"""
+{{"class": "factory" or "code" or "dependency" or "flake", "recipe": "cleanup" or "none", "title": "the issue title",
+ "body": "the issue body", "evidence": ["each log line that decides the class"]}}"""
 
 
 def read_run(repo, run_id):
@@ -287,10 +300,23 @@ Find the cause in the checkout, and pick one class:
 For the classes factory and dependency, write a repair issue of the factory. Read
 {mount}/templates/starter/docs/write-an-issue.md. Each rule of it binds the issue body you write. Its repo is this
 one: `main` is this repo's `main`, and the feature files and the step classes are under `specs/features/` and
-`tests/Specs/Steps/`. Use the recipe with no label, since a fix to a red run is a bug fix. `## Scenarios` holds a
-block only when the fix adds or edits a scenario. The body names the fault in the factory, the failing step, and the
-story #{story["number"]} that exposed it. The job adds the head SHA, the run URL, the story and the session id at the
-end of the body, so leave these four out. The fix is built on the head of `main`.
+`tests/Specs/Steps/`.
+
+Pick the recipe by the path of the fix, and name it in the field `recipe`. A fix with a path under `src/` uses the
+recipe with no label, and `recipe` is `none`. `## Scenarios` holds a block only when the fix adds or edits a scenario.
+Every other fix uses the `cleanup` recipe, and `recipe` is `cleanup`: a workflow file, a prompt under
+`.github/agents/`, `.github/agents/claude-lock.json`, `sandbox/Dockerfile`, a config file. The program of this repo is
+`src/`, so such a fix leaves the program as it is.
+
+A cleanup body has `## Scope` and `## Check` as the recipe states. `## Scope` holds one path on each line and no prose.
+`## Check` proves the changed line. The factory runs `## Check` with `sh -c` in the image of `sandbox/Dockerfile`. That
+image holds `grep`, `sed`, `awk`, `sha256sum`, `git`, `node` and `dotnet`. It holds no `jq`, `python3` or `yq`, and your
+session can hold them, so a pass in your session proves nothing about them. Read a JSON file with `grep` or `node`. Run
+the check in your checkout before you answer. At this commit it exits with a code other than 0, 126 and 127.
+
+The body names the fault in the factory, the failing step, and the story #{story["number"]} that exposed it. The job
+adds the head SHA, the run URL, the story and the session id at the end of the body, so leave these four out. The fix
+is built on the head of `main`.
 
 For the class code, the title is an empty string and the body is the reason the story's build failed, in a few
 sentences, for the owner of the story. The job posts it on the story. For the class flake, title and body are empty
@@ -370,9 +396,93 @@ def wait_turn(sid, before, timeout):
         time.sleep(15)
 
 
+def opens_fence(trimmed):
+    """The fence that a trimmed line opens, or None, as OpensFence of src/Core/CleanupBody.cs."""
+    for mark in "`~":
+        count = len(trimmed) - len(trimmed.lstrip(mark))
+        if count >= 3 and (mark == "~" or "`" not in trimmed[count:]):
+            return mark * count
+    return None
+
+
+def closes_fence(trimmed, fence):
+    return trimmed.startswith(fence) and not trimmed.strip(fence[0])
+
+
+def section(body, heading):
+    """The lines under a heading, or None with no such heading, as Section of src/Core/CleanupBody.cs. The section ends
+    at the next heading, and a heading inside a fence is text."""
+    fence = None
+    inside = found = False
+    lines = []
+    for line in body.replace("\r\n", "\n").split("\n"):
+        trimmed = line.strip()
+        if fence is None and HEADING.match(trimmed):
+            if inside:
+                break
+            inside = trimmed == heading
+            found = found or inside
+            continue
+        if fence is None:
+            fence = opens_fence(trimmed)
+        elif closes_fence(trimmed, fence):
+            fence = None
+        if inside:
+            lines.append(line)
+    return lines if found else None
+
+
+def first_block(lines):
+    """The text of the first fenced block of a section, or None when it is blank or unclosed, as ReadCheck of
+    src/Core/CleanupBody.cs."""
+    fence = None
+    command = []
+    for line in lines:
+        trimmed = line.strip()
+        if fence is None:
+            fence = opens_fence(trimmed)
+        elif closes_fence(trimmed, fence):
+            text = "\n".join(command)
+            return text if text.strip() else None
+        else:
+            command.append(line)
+    return None
+
+
+def shell_code(check):
+    """The text of a check with no comment, no escaped character and no quoted string, so a pattern that names a tool
+    reads as no command. A command substitution in double quotes stays, since the shell runs it."""
+
+    def code(match):
+        text = match.group(0)
+        if text[0] == '"':
+            return " ".join(SUBSTITUTION.findall(text)) or "_"
+        return "_" if text[0] == "'" else " "
+
+    return SHELL_TEXT.sub(code, check)
+
+
+def check_cleanup_body(body):
+    """The faults of a cleanup body, as assertions: FactoryRun reads it through src/Core/CleanupBody.cs, and a check
+    that names an absent tool exits 127 in the sandbox and ends the run with no pull request."""
+    scope = section(body, "## Scope")
+    assert scope is not None, "the cleanup body has no `## Scope` heading"
+    assert any(line.strip() and opens_fence(line.strip()) is None for line in scope), "`## Scope` holds no path"
+    lines = section(body, "## Check")
+    assert lines is not None, "the cleanup body has no `## Check` heading"
+    check = first_block(lines)
+    assert check is not None, "`## Check` holds no closed fenced block with a command"
+    absent = ABSENT_COMMAND.search(shell_code(check))
+    assert absent is None, (
+        f"`## Check` runs `{absent.group(1)}`, which the image of `sandbox/Dockerfile` lacks. "
+        "Read a JSON file with `grep` or `node`"
+    )
+
+
 def parse_or_error(text, classes=CLASSES, files=("code", "dependency")):
     """The reader's JSON object and None, or None and the parser error. Each class in `files` needs a title and a
-    body, and `code` on a factory run, which is a comment, a body alone."""
+    body, and `code` on a factory run, which is a comment, a body alone. On a factory read, each class in `files` also
+    needs a recipe, and a body that the cleanup recipe can run when the recipe is `cleanup`."""
     match = re.search(r"\{.*\}", text, re.S)
     try:
         answer = json.loads(match.group(0) if match else text)
@@ -380,6 +490,11 @@ def parse_or_error(text, classes=CLASSES, files=("code", "dependency")):
         assert isinstance(answer["title"], str) and isinstance(answer["body"], str), "title and body are not strings"
         assert answer["class"] == "flake" or answer["body"].strip(), "the body is empty"
         assert answer["class"] not in files or answer["title"].strip(), "the title is empty"
+        if "factory" in files and answer["class"] in files:
+            recipe = answer.get("recipe")
+            assert recipe in RECIPES, f"the recipe {recipe!r} is not one of {', '.join(RECIPES)}"
+            if recipe == "cleanup":
+                check_cleanup_body(answer["body"])
         evidence = answer.get("evidence") or []
         answer["evidence"] = [evidence] if isinstance(evidence, str) else [str(line) for line in evidence]
         return answer, None
@@ -532,7 +647,10 @@ def finish_factory(repo, run, story, pr, answer, sid):
         f"{answer['body'].rstrip()}\n\n## Run\n\nTarget branch: a new branch from the head of `main`\n\n"
         f"Head SHA: `{sha}`\n\nRun: {run['html_url']}\n\nStory: #{story['number']}\n\nSession: `{sid}`\n"
     )
-    file_issue(repo, answer["title"], body, ("repair", "ready", "factory"))
+    labels = ("repair", "ready", "factory")
+    if answer["recipe"] == "cleanup":
+        labels += ("cleanup",)
+    file_issue(repo, answer["title"], body, labels)
 
 
 def main():
