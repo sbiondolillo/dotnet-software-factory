@@ -14,12 +14,12 @@ serves it on no API, and the log holds its facts.
 unless an open issue with repair and factory exists, and then the red commit gets a comment that names it. `code` is a
 comment on the story, and `flake` dispatches the story once more. Both comments carry the marker of the SHA, so a
 second red run of the story on that SHA ends the read.
+The answer can fail the parse. Then the job sends one correction turn to the same session, with the parser error,
+and a second failure ends the read.
 
 Environment: JUDGE_ANTHROPIC_API_KEY, JUDGE_GITHUB_RO_TOKEN, GH_TOKEN, GITHUB_REPOSITORY, GITHUB_EVENT_NAME,
 JUDGE_AGENT_ID, JUDGE_ENVIRONMENT_ID, REPAIR_ENABLED, REPAIR_BUDGET_CENTS (default 200),
 REPAIR_TIMEOUT_SECONDS (default 900), REPAIR_RERUN_TIMEOUT_SECONDS (default 3600).
-The answer can fail the parse. Then the job sends one correction turn to the same session, with the parser error,
-and a second failure ends the read.
 Argument: the id of the red run. The number of the filed issue goes to GITHUB_OUTPUT as `issue`, for the build stage.
 """
 
