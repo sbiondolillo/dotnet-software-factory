@@ -21,7 +21,8 @@ build.
 The Managed Agents builder, #370, builds at the red SHA.
 
 Environment: GH_TOKEN, GITHUB_REPOSITORY, REPAIR_BUILD_TIMEOUT_SECONDS (default 3600), and REPAIR_REF_TOKEN, the
-token of the ref calls on repair-base/<n>. With no REPAIR_REF_TOKEN, those calls use GH_TOKEN.
+token of the read, the create and the move of repair-base/<n>. With no REPAIR_REF_TOKEN, those calls use GH_TOKEN.
+The deletion always uses GH_TOKEN.
 Argument: the number of the repair issue. The pull request number goes to GITHUB_OUTPUT as `pr`, and the id of
 the factory run as `run` when this job started one, for the Copilot stage.
 """
@@ -123,7 +124,7 @@ def green_sha(repo):
 
 
 def ref_env():
-    """The environment of the ref calls: GH_TOKEN is REPAIR_REF_TOKEN when that variable is set and not empty.
+    """The environment of the create and the move: GH_TOKEN is REPAIR_REF_TOKEN when it is set and not empty.
 
     Else it is the environment of the process, unchanged.
     """
@@ -159,12 +160,14 @@ def create_base_branch(repo, branch, sha):
 
 
 def delete_base_branch(repo, branch):
-    """Deletes the branch with the token of the ref calls. A failure is a log line, so it hides no build error."""
+    """Deletes the branch with GH_TOKEN. A failure is a log line, so it hides no build error.
+
+    The deletion runs after the wait for the factory run, up to REPAIR_BUILD_TIMEOUT_SECONDS later. An installation
+    token lives one hour, so by then REPAIR_REF_TOKEN can be expired. GH_TOKEN lives for the job. A deletion adds no
+    workflow file, so it needs no workflows permission.
+    """
     deleted = subprocess.run(
-        ["gh", "api", "-X", "DELETE", f"repos/{repo}/git/refs/heads/{branch}"],
-        capture_output=True,
-        text=True,
-        env=ref_env(),
+        ["gh", "api", "-X", "DELETE", f"repos/{repo}/git/refs/heads/{branch}"], capture_output=True, text=True
     )
     if deleted.returncode == 0:
         print(f"repair: deleted the branch {branch}")

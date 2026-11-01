@@ -14,13 +14,15 @@
 # green ref, as #403 decided: the step creates the branch repair-base/<n> at the
 # head SHA of the last run of factory.yml on main that ended success,
 # dispatches at that branch with base=main, and deletes the branch when the
-# step ends. The ref calls run under an installation token of the App
-# dsf-builder with contents: write and workflows: write. github.token holds no
-# workflows permission, and GitHub refuses it a ref at a commit whose workflow
-# files differ from main (#403). A step before the build step mints that token
-# with continue-on-error, so a mint failure fails no ci repair: the ref calls
-# then fall back to github.token. With no green run, the step comments on the
-# issue and builds nothing.
+# step ends. The create and the move of the branch run under an installation
+# token of the App dsf-builder with contents: write and workflows: write.
+# github.token holds no workflows permission, and GitHub refuses it a ref at a
+# commit whose workflow files differ from main (#403). A step before the build
+# step mints that token with continue-on-error, so a mint failure fails no ci
+# repair: the create and the move then fall back to github.token. The deletion
+# runs under github.token, since it runs after a wait of up to an hour and the
+# App token lives one hour. With no green run, the step comments on the issue
+# and builds nothing.
 #
 # The Copilot step requests a review by copilot-pull-request-reviewer when the
 # head holds none, and polls until a review is on the head and no thread is

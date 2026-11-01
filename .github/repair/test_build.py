@@ -1,6 +1,6 @@
-"""Unit tests of the token of the ref calls in build.py, decided in #403. The build job of ci.yml runs them with
-`python3 -B -m unittest discover -s .github/repair -p 'test_*.py'`. No test calls GitHub: each one replaces
-subprocess.run and reads the env that each call gets."""
+"""Unit tests of the token of the create, the move and the deletion of repair-base/<n> in build.py, decided in
+#403. The build job of ci.yml runs them with `python3 -B -m unittest discover -s .github/repair -p 'test_*.py'`.
+No test calls GitHub: each one replaces subprocess.run and reads the env that each call gets."""
 
 import os
 import subprocess
@@ -54,8 +54,8 @@ class RefTokenTests(unittest.TestCase):
                         self.assertEqual(env, dict(os.environ))
                         self.assertEqual(env["GH_TOKEN"], "job")
 
-    def test_the_deletion_sends_the_ref_token_as_gh_token(self):
-        for value, expected in (("app", "app"), ("", "job"), (None, "job")):
+    def test_the_deletion_uses_the_job_token_with_or_without_a_ref_token(self):
+        for value in ("app", "", None):
             with (
                 self.subTest(ref_token=value),
                 mock.patch.dict(os.environ, {"GH_TOKEN": "job"}),
@@ -68,10 +68,8 @@ class RefTokenTests(unittest.TestCase):
                 else:
                     os.environ["REPAIR_REF_TOKEN"] = value
                 build.delete_base_branch(REPO, BRANCH)
-                env = run.call_args.kwargs["env"]
-                self.assertEqual(env["GH_TOKEN"], expected)
-                if value != "app":
-                    self.assertEqual(env, dict(os.environ))
+                self.assertNotIn("env", run.call_args.kwargs)
+                self.assertEqual(os.environ["GH_TOKEN"], "job")
 
 
 if __name__ == "__main__":
