@@ -245,6 +245,9 @@ class BaseTests(unittest.TestCase):
             "changedFiles": 1,
         }
 
+    permissions = "read"
+    paths = ["src/x.cs"]
+
     def run_main(self, *bases):
         reads = [self.pull_request(base) for base in bases]
         env = {"REPAIR_ENABLED": "true", "GITHUB_REPOSITORY": "o/r", "REPAIR_POLL_SECONDS": "0"}
@@ -253,8 +256,10 @@ class BaseTests(unittest.TestCase):
             mock.patch.object(merge.sys, "argv", ["merge.py", "7", self.SHA]),
             mock.patch.object(merge, "read_pull_request", side_effect=reads),
             mock.patch.object(merge, "default_branch", return_value="main"),
+            mock.patch.object(merge, "default_permissions", return_value=self.permissions),
+            mock.patch.object(merge, "file_at", return_value=None),
             mock.patch.object(merge, "read_issue", return_value={"body": "", "labels": []}),
-            mock.patch.object(merge, "changed_files", return_value=(1, ["src/x.cs"])) as files,
+            mock.patch.object(merge, "changed_files", return_value=(1, self.paths)) as files,
             mock.patch.object(merge, "red_run_branch", return_value=None),
             mock.patch.object(merge, "wait_for_judge", return_value="success") as judge,
             mock.patch.object(merge, "arm_and_wait", return_value=None) as arm,
@@ -287,6 +292,24 @@ class BaseTests(unittest.TestCase):
         judge.assert_called_once()
         stop.assert_not_called()
         arm.assert_not_called()
+
+    def test_a_factory_diff_on_a_repo_with_default_read_arms_the_merge(self):
+        self.paths = [merge.FACTORY]
+        files, judge, arm, stop = self.run_main("main", "main", "main")
+        stop.assert_not_called()
+        arm.assert_called_once()
+
+    def test_a_factory_diff_on_a_repo_with_default_write_ends_the_job(self):
+        self.paths = [merge.FACTORY]
+        self.permissions = "write"
+        with self.assertRaises(SystemExit) as ended:
+            self.run_main("main", "main")
+        self.assertIn("default_workflow_permissions is write, not read", str(ended.exception))
+
+    def test_a_diff_outside_factory_reads_no_setting(self):
+        self.permissions = "write"
+        files, judge, arm, stop = self.run_main("main", "main", "main")
+        arm.assert_called_once()
 
 
 class WaitForMergeTests(unittest.TestCase):

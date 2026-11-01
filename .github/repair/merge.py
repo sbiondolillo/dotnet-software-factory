@@ -27,6 +27,12 @@ job reads factory.yml at the base SHA and at the head SHA from the contents API.
 job installs nothing. So the check reads text, and it fails closed: a form that it cannot read is a refusal. It
 refuses a diff of factory.yml for each of three causes, and the comment names each cause.
 
+A text check sees no change in a block whose lines did not change. A new line that opens a quote above the top-level
+`permissions:` block, closed after it, swallows the block into a scalar, and the file then parses with no top-level
+permissions. A removed block gives the token the repo's default. So the job reads `actions/permissions/workflow` when
+the diff touches factory.yml, and exits when `default_workflow_permissions` is not `read`. The default is a repo
+setting of the owner, so the exit is one line and no comment.
+
 1. A changed line, which is a line that the diff of the two texts adds or removes, that holds a key form. Before the
    match, the job strips a comment from the line when the line holds no quote character. The forms are: the token
    `permissions` anywhere, in any case and in any quoting; `on` as a key at column 0, in quotes, after a tag or an
@@ -151,6 +157,11 @@ def read_pull_request(repo, number):
 
 def default_branch(repo):
     return gh("api", f"repos/{repo}", "--jq", ".default_branch").strip()
+
+
+def default_permissions(repo):
+    """The repo's default_workflow_permissions, `read` or `write`."""
+    return gh("api", f"repos/{repo}/actions/permissions/workflow", "--jq", ".default_workflow_permissions").strip()
 
 
 def closing_issue(body):
@@ -502,6 +513,11 @@ def main():
             "job read its files; nothing to merge"
         )
         return
+    if FACTORY in paths and (setting := default_permissions(repo)) != "read":
+        sys.exit(
+            f"repair: the repo's default_workflow_permissions is {setting}, not read. The key rule of {FACTORY} "
+            "rests on read: a diff that removes its permissions block passes the rule. No merge."
+        )
     keys = (
         changed_keys(file_at(repo, FACTORY, after["baseRefOid"]), file_at(repo, FACTORY, sha))
         if FACTORY in paths
