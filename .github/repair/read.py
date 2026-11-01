@@ -29,6 +29,7 @@ import re
 import subprocess
 import sys
 import time
+import urllib.parse
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "judge"))
 from judge import anthropic, env, gh, start_session, wait_idle  # noqa: E402
@@ -313,11 +314,27 @@ def factory_records(log, comments):
 
 def turn_events(sid):
     """The id of the newest user.message and the events of its turn, newest first: the events after that message.
-    The events come oldest first by default, and a long session holds more than one page."""
-    events = anthropic("GET", f"/v1/sessions/{sid}/events?limit=200&order=desc")["data"]
-    newest = next((i for i, e in enumerate(events) if e.get("type") == "user.message"), len(events))
-    message = events[newest].get("id") if newest < len(events) else None
-    return message, events[:newest]
+    A long turn fills more than one page, so the read follows `next_page` back as ReadBackAsync of
+    src/Core/ManagedAgentsAgent.cs does, until it reaches a user.message. The id is None when the pages end first."""
+    events = []
+    page = None
+    while True:
+        cursor = "" if page is None else f"&page={urllib.parse.quote(page, safe='')}"
+        answer = anthropic("GET", f"/v1/sessions/{sid}/events?order=desc&limit=100{cursor}")
+        for e in answer.get("data") or []:
+            if e.get("type") == "user.message":
+                return e.get("id"), events
+            events.append(e)
+        page = answer.get("next_page")
+        if not page:
+            return None, events
+
+
+def check_ended(sid, when):
+    """Exit when the session ended as terminated or error: it takes no more turn and goes idle no more."""
+    status = anthropic("GET", f"/v1/sessions/{sid}")["status"]
+    if status in ("terminated", "error"):
+        sys.exit(f"repair: session {sid} ended with the status {status} {when}")
 
 
 def final_answer(events):
@@ -347,9 +364,7 @@ def wait_turn(sid, before, timeout):
         message, events = turn_events(sid)
         if message != before and any(e.get("type") == "session.status_idle" for e in events):
             return events
-        status = anthropic("GET", f"/v1/sessions/{sid}")["status"]
-        if status in ("terminated", "error"):
-            sys.exit(f"repair: session {sid} ended with the status {status} before its correction turn went idle")
+        check_ended(sid, "before its correction turn went idle")
         if time.time() >= deadline:
             sys.exit(f"repair: the correction turn of session {sid} is not idle after {timeout} s")
         time.sleep(15)
@@ -400,13 +415,15 @@ def correction(error, contract):
 def read_answer(sid, classes, files, contract, timeout):
     """The reader's answer after its first turn. A message that fails the parse gets one correction turn in the
     same session: one user.message with the parser error and the contract, as the factory sends a follow-up turn in
-    src/Core/ManagedAgentsAgent.cs. A second failure exits with both errors."""
+    src/Core/ManagedAgentsAgent.cs. A session that ended as terminated or error takes no turn, so it exits first.
+    A second failure exits with both errors."""
     before, events = turn_events(sid)
     text, stop = final_answer(events)
     check_refusal(sid, stop)
     answer, error = parse_or_error(text, classes, files)
     if answer is not None:
         return answer
+    check_ended(sid, f"after its first turn, so it takes no correction turn ({error})")
     print(f"repair: the reader's final message is not the JSON object the contract names ({error}); one correction")
     message = {"type": "user.message", "content": [{"type": "text", "text": correction(error, contract)}]}
     anthropic("POST", f"/v1/sessions/{sid}/events", {"events": [message]})
