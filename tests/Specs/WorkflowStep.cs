@@ -10,6 +10,12 @@ public static class WorkflowStep
 {
     private const string Lockfile = ".github/agents/claude-lock.json";
 
+    /// <summary>Whether a program of that name is in a directory of the <c>PATH</c>.</summary>
+    public static bool OnPath(string program)
+        => (Environment.GetEnvironmentVariable("PATH") ?? "")
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Any(directory => File.Exists(Path.Combine(directory, program)));
+
     /// <summary>The <c>run</c> text of the step named <paramref name="stepName"/> in a job of the workflow.</summary>
     public static string RunText(string workflowFile, string stepName)
     {
