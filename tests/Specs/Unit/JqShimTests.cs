@@ -51,6 +51,16 @@ public sealed class JqShimTests : IDisposable
     }
 
     [Fact]
+    public async Task AnErrorOnTheLeftOfTheAlternativeOperatorIsNotCaught()
+    {
+        CommandResult result = await JqAsync("-r 'error(\"broken\") // \"fallback\"'");
+
+        Assert.Equal(5, result.ExitCode);
+        Assert.Equal("", result.StandardOutput);
+        Assert.Contains("broken", result.StandardError, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SyntaxOutsideTheSubsetExitsWithTheCode3()
     {
         CommandResult result = await JqAsync("'.resources | keys'");

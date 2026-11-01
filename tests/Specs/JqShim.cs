@@ -101,9 +101,7 @@ public static class JqShim
               break;
             case 'alt': {
               let any = false;
-              try {
-                for (const l of run(node.l, input)) if (l !== null && l !== false) { any = true; yield l; }
-              } catch (e) { if (!(e instanceof JqError)) throw e; }
+              for (const l of run(node.l, input)) if (l !== null && l !== false) { any = true; yield l; }
               if (!any) yield* run(node.r, input);
               break;
             }
