@@ -34,12 +34,16 @@
 # A push by this token starts no run, so the step then starts ci on main with
 # workflow_dispatch. The step merges nothing on a pull request whose head
 # branch is the branch of the red run that started the repair.
-# The step merges nothing on a pull request whose diff touches judge.yml,
-# ci.yml, this file, .github/judge/ or .github/repair/, as #406 decided. It
-# posts one comment on the issue that names each such file, before the wait
-# for the judge. judge.yml and ci.yml run from the pull request's own copy, so
-# such a repair judges itself, and this file and .github/repair/ hold the rule.
-# A change to them stays the owner's direct change.
+# The step merges nothing on a pull request whose diff touches a file under
+# .github/workflows/ other than factory.yml, or .github/judge/,
+# .github/repair/ or .claude/skills/change/JUDGES.md, as #406 decided. It
+# also merges nothing on a diff that changes the top-level on: key of
+# factory.yml, or a permissions: key at any depth of it. It posts one comment
+# on the issue that names each such file and key, before the wait for the
+# judge. A workflow on pull_request runs from the pull request's own copy and
+# can post judge-verdict, and judge.py reads .github/judge/ and JUDGES.md, so
+# such a repair judges itself. This file and .github/repair/ hold the rule. A
+# change to them stays the owner's direct change.
 # A repair of the factory, a pull request with the label factory or whose
 # issue has it, gets a gate after the judge approved, as #399 Q5 decided: the
 # step dispatches factory.yml at the head branch on the story of the issue's

@@ -11,13 +11,33 @@ The guards, decided in #355 and #366, run first: the pull request is open with t
 head. The job waits for the judge when its check run is not complete yet.
 A verdict other than success is one comment on the issue and no merge.
 
-The path rule, decided in #406: the job merges no repair pull request whose diff touches a path of GUARDED. The
-refusal is one comment on the issue that names each such path. judge.yml and ci.yml run on pull_request from the
-pull request's own copy, and judge.yml holds `checks: write`, so a repair that edits them, or .github/judge/, judges
-itself. repair.yml and .github/repair/ run from main, so an edit there acts only after a merge, and this rule is in
-.github/repair/. So a repair that edits the rule is refused by the rule. A change to a path of GUARDED stays the
-owner's direct change. factory.yml, .github/agents/, src/, sandbox/ and the other paths are open to a repair. The
-rule runs before the wait for the judge, so a refused pull request spends no wait and starts no gate run.
+The path rule, decided in #406 and in its addendum of 2026-11-01: the job merges no repair pull request whose diff
+touches a path of GUARDED. GUARDED holds every path under .github/workflows/ except factory.yml, and .github/judge/,
+.github/repair/ and .claude/skills/change/JUDGES.md. The refusal is one comment on the issue that names each such
+path. A workflow on pull_request runs from the pull request's own copy. A workflow with `checks: write` can post a
+green judge-verdict, and verdict() reads that check by its name alone. judge.py reads .github/judge/ and JUDGES.md as
+the rules of the judge. So a repair that adds or edits a workflow, or edits those files, judges itself. repair.yml
+and .github/repair/ run from main, so an edit there acts only after a merge, and this rule is in .github/repair/. So
+a repair that edits the rule is refused by the rule. A change to a path of GUARDED stays the owner's direct change.
+.github/agents/, src/, sandbox/ and the other paths are open to a repair. The rule runs before the wait for the
+judge, so a refused pull request spends no wait and starts no gate run.
+
+factory.yml is open, so a fault in it stays repairable, except for two keys. The job refuses a diff of factory.yml
+that changes its top-level `on:` key or a `permissions:` key at any depth, and the comment names each changed key. A
+job-level `permissions:` is in, since a job-level grant of `checks: write` is the same fault. The job reads
+factory.yml at the base SHA and at the head SHA from the contents API, and compares the keys as text. It uses no YAML
+library, since the job installs nothing. The block of a key is its line and each later line indented deeper than the
+key. A line at the key's own indent that starts with `- ` stays in the block, for a sequence at that indent. Blank
+lines and lines that hold only a comment are left out, so an edit of a comment passes. `on:` counts at column 0
+alone. `permissions:` counts at the start of a line at any indent, after `- ` too, and inside a flow mapping such as
+`{permissions: {checks: write}}`. Any other change of a block is a refusal, also a change of indent or of a comment
+at the end of a line. The comparison misses a key that YAML spells in another form: with an escape in double quotes,
+as an explicit `? ` key, through an alias, or `on:` in a flow mapping that holds the whole document. An alias in a
+block is compared as its text, so a change of the anchor that it names is missed. The blocks on main hold no alias,
+and a new alias is a change of the block. The base SHA is the tip of the base branch and not the merge base, so a
+change of a key on main after the branch point is a refusal too. A file that is absent at a SHA has no keys, so a
+diff that adds or deletes factory.yml is a refusal.
+
 The job reads the paths from `GET /repos/<repo>/pulls/<n>/files`, with `--paginate`, and not from
 `gh pr diff --name-only`. The API names both paths of a rename, `filename` and `previous_filename`, so a move of a
 guarded file is seen. `gh pr diff` reads the diff media type, which GitHub refuses for a large diff. The API lists at
@@ -78,15 +98,19 @@ WORKFLOW = "factory.yml"
 HEADS = ("repair/", "factory/")
 CHECK = "judge-verdict"
 MARKER = "<!-- repair-merge:{sha} -->"
-FIELDS = "number,state,headRefName,headRefOid,baseRefName,body,labels,url,mergeCommit,mergedBy,changedFiles"
-# The paths a repair never changes, as #406 decided. An entry that ends with a slash holds each path under it.
+FIELDS = "number,state,headRefName,headRefOid,baseRefName,baseRefOid,body,labels,url,mergeCommit,mergedBy,changedFiles"
+# The paths a repair never changes, as #406 and its addendum decided. An entry that ends with a slash holds each path
+# under it. OPEN is the exception to GUARDED. A diff of FACTORY changes no key of KEYS, which holds each key with
+# whether it counts at column 0 alone.
 GUARDED = (
-    ".github/workflows/judge.yml",
-    ".github/workflows/ci.yml",
-    ".github/workflows/repair.yml",
+    ".github/workflows/",
     ".github/judge/",
     ".github/repair/",
+    ".claude/skills/change/JUDGES.md",
 )
+FACTORY = ".github/workflows/factory.yml"
+OPEN = (FACTORY,)
+KEYS = (("on", True), ("permissions", False))
 
 
 def read_pull_request(repo, number):
@@ -103,14 +127,69 @@ def read_issue(repo, issue):
 
 
 def guarded(paths):
-    """Each path of the list that GUARDED holds, sorted, and each one once."""
+    """Each path of the list that GUARDED holds and OPEN does not, sorted, and each one once."""
     return sorted(
         {
             path
             for path in paths
-            if any(path == entry or (entry.endswith("/") and path.startswith(entry)) for entry in GUARDED)
+            if path not in OPEN
+            and any(path == entry or (entry.endswith("/") and path.startswith(entry)) for entry in GUARDED)
         }
     )
+
+
+def key_blocks(text, key, top_level):
+    """The blocks of the key in the YAML text, each as a list of lines, in the order of the file. The module
+    docstring states what a block is, and what the comparison catches and misses."""
+    start = re.compile(rf"""^(?P<indent> *(?:- +)*)(?P<quote>["']?){key}(?P=quote) *:(?: |$)""")
+    inline = re.compile(rf"""[\s{{,]["']?{key}["']? *:""")
+    lines = [line.rstrip() for line in (text or "").splitlines()]
+    blocks = []
+    for index, line in enumerate(lines):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        match = start.match(line)
+        if match and not (top_level and match["indent"]):
+            depth = len(match["indent"])
+            block = [line]
+            for later in lines[index + 1 :]:
+                stripped = later.lstrip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                indent = len(later) - len(stripped)
+                if indent < depth or (indent == depth and not (stripped.startswith("- ") or stripped == "-")):
+                    break
+                block.append(later)
+            blocks.append(block)
+        elif not top_level and inline.search(line):
+            blocks.append([line])
+    return blocks
+
+
+def changed_keys(base, head):
+    """Each key of KEYS whose blocks differ between the two texts of factory.yml, as `on:` or `permissions:`. A text
+    of None is a file that is absent at that SHA."""
+    return [f"{key}:" for key, top in KEYS if key_blocks(base, key, top) != key_blocks(head, key, top)]
+
+
+def file_at(repo, path, sha):
+    """The text of the file at the commit, or None when the commit holds no such file. Any other failure ends the job,
+    so a failed read merges nothing."""
+    try:
+        return gh("api", "-H", "Accept: application/vnd.github.raw+json", f"repos/{repo}/contents/{path}?ref={sha}")
+    except SystemExit as error:
+        if "HTTP 404" in str(error):
+            return None
+        raise
+
+
+def refused(paths, keys):
+    """The items of the refusal comment: each guarded path, then FACTORY with each changed key."""
+    items = [f"`{path}`" for path in paths]
+    if keys:
+        names = " and ".join(f"`{key}`" for key in keys)
+        items.append(f"the {names} {'key' if len(keys) == 1 else 'keys'} of `{FACTORY}`")
+    return items
 
 
 def changed_files(repo, number):
@@ -350,20 +429,26 @@ def main():
             "nothing to merge"
         )
         return
-    touched = guarded(paths)
+    keys = (
+        changed_keys(file_at(repo, FACTORY, after["baseRefOid"]), file_at(repo, FACTORY, sha))
+        if FACTORY in paths
+        else []
+    )
+    touched = refused(guarded(paths), keys)
     if touched or count < after["changedFiles"]:
         stop(
             repo,
             number,
             issue,
             sha,
-            f"Pull request #{number} changes {', '.join(f'`{path}`' for path in touched)}. "
-            "A repair changes no file of the judge, of ci or of the repair loop. The judge and ci run from the "
-            "pull request's own copy, so such a repair judges itself, and the files of the loop hold this rule. "
-            "No merge. A change to these files is the owner's direct change."
+            f"Pull request #{number} changes {', '.join(touched)}. "
+            f"A repair changes no workflow file other than `{FACTORY}`, no `on:` or `permissions:` key of it, "
+            "no file of the judge and no file of the repair loop. A workflow on pull_request runs from the pull "
+            "request's own copy and can post the judge's check, so such a repair judges itself, and the files of "
+            "the loop hold this rule. No merge. A change to these files is the owner's direct change."
             if touched
             else f"The list of the files of pull request #{number} holds {count} of its {after['changedFiles']} "
-            "files, so the job cannot read whether it changes a file of the judge, of ci or of the repair loop. "
+            "files, so the job cannot read whether it changes a file that the rule of #406 guards. "
             "No merge. The owner reads the pull request.",
         )
         return
