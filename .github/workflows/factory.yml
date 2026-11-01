@@ -65,7 +65,7 @@ jobs:
         with:
           global-json-file: global.json
       - name: Read the builder's ids from the lockfile
-        run: jq -r '"FACTORY_AGENT_ID=" + (.resources["./builder.md"].id // error("claude-lock.json has no id for builder.md")), "FACTORY_ENVIRONMENT_ID=" + (.resources["./builder.environment.yml"].id // error("claude-lock.json has no id for builder.environment.yaml"))' .github/agents/claude-lock.json >> "$GITHUB_ENV"
+        run: jq -r '"FACTORY_AGENT_ID=" + (.resources["./builder.md"].id // error("claude-lock.json has no id for builder.md")), "FACTORY_ENVIRONMENT_ID=" + (.resources["./builder.environment.yaml"].id // error("claude-lock.json has no id for builder.environment.yaml"))' .github/agents/claude-lock.json >> "$GITHUB_ENV"
       - name: Resolve the base commit
         if: inputs.base
         env:
