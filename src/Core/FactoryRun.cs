@@ -54,9 +54,13 @@ public sealed class FactoryRun(
     private static readonly string[] LayoutFiles = ["Solution.slnx"];
     private static readonly string[] LayoutDirectories = ["specs/features/", "tests/Specs/", "tests/Integration/"];
 
+    /// <summary>True when the last <see cref="RunAsync"/> ended on an input error of the issue's author, with a comment and no run.</summary>
+    public bool Declined { get; private set; }
+
     /// <summary>Runs the issue through the plan, the build, the gates and the review, and delivers an approved build.</summary>
     public async Task<FactoryRunResult> RunAsync(FactoryRunRequest request, CancellationToken cancellationToken = default)
     {
+        Declined = false;
         _summary = new JobSummary();
         _spend = 0m;
         _sessions = [];
@@ -100,6 +104,7 @@ public sealed class FactoryRun(
             if (refusal is not null)
             {
                 await CommentAsync(request, refusal, [], cancellationToken).ConfigureAwait(false);
+                Declined = true;
                 return new FactoryRunResult(null, 0);
             }
         }
@@ -109,6 +114,7 @@ public sealed class FactoryRun(
         {
             string other = issue.Labels.Contains("behavior") ? "behavior" : CleanupLabel;
             await CommentAsync(request, $"The labels refactor and {other} exclude each other: a refactor run leaves every test as it is, and a {other} run does not. Keep one of the two labels.", [], cancellationToken).ConfigureAwait(false);
+            Declined = true;
             return new FactoryRunResult(null, 0);
         }
 
@@ -136,6 +142,7 @@ public sealed class FactoryRun(
             if (refusal is not null)
             {
                 await CommentAsync(request, refusal, [], cancellationToken).ConfigureAwait(false);
+                Declined = true;
                 return new FactoryRunResult(null, 0);
             }
         }
@@ -168,6 +175,7 @@ public sealed class FactoryRun(
             {
                 await CommentAsync(request, "The scenarios of the issue are not sound, so there is no run:", scenarios.Faults, cancellationToken).ConfigureAwait(false);
                 await Say("scenarios: failed").ConfigureAwait(false);
+                Declined = true;
                 return new FactoryRunResult(null, 0);
             }
         }

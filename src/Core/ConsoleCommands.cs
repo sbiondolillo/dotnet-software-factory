@@ -229,13 +229,15 @@ public static partial class ConsoleCommands
             string runId = Convert.ToHexString(RandomNumberGenerator.GetBytes(4)).ToLowerInvariant();
             DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-run-");
             FactoryRunResult result;
+            bool declined;
             try
             {
                 var request = new FactoryRunRequest(
                     owner, repo, options.Number, token, runId, directory.FullName, baseBranch, ImageTag, host.RootDirectory,
                     Model, 50, Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration, options.Settings, options.BaseCommit);
-                result = await new FactoryRun(host.Runner, client, host.Out, host.Error, host.Time, host.Environment("GITHUB_STEP_SUMMARY"), EntryVersion(), host.Handler, host.Delay)
-                    .RunAsync(request, cancellationToken).ConfigureAwait(false);
+                var factoryRun = new FactoryRun(host.Runner, client, host.Out, host.Error, host.Time, host.Environment("GITHUB_STEP_SUMMARY"), EntryVersion(), host.Handler, host.Delay);
+                result = await factoryRun.RunAsync(request, cancellationToken).ConfigureAwait(false);
+                declined = factoryRun.Declined;
                 localHead = result.PullRequest is null ? null : await git.ReadHeadShaAsync(directory.FullName, cancellationToken).ConfigureAwait(false);
             }
             finally
@@ -245,7 +247,7 @@ public static partial class ConsoleCommands
 
             if (result.PullRequest is not PullRequest pullRequest)
             {
-                return 1;
+                return declined ? 0 : 1;
             }
 
             number = pullRequest.Number;

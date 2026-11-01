@@ -192,7 +192,10 @@ public sealed class FactoryRunHarness : IDisposable
     public IEnumerable<string> CommentBodies =>
         Comments.Select(c => JsonDocument.Parse(c.Content!).RootElement.GetProperty("body").GetString() ?? "");
 
-    public Task<FactoryRunResult> RunAsync(CancellationToken cancellationToken = default)
+    /// <summary>What <see cref="FactoryRun.Declined"/> read after the last run.</summary>
+    public bool Declined { get; private set; }
+
+    public async Task<FactoryRunResult> RunAsync(CancellationToken cancellationToken = default)
     {
         var mock = new Mock<CommandRunner>(MockBehavior.Strict);
         mock.Setup(r => r.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
@@ -202,7 +205,10 @@ public sealed class FactoryRunHarness : IDisposable
             Owner, Repo, Issue, Token, RunId, _clone.FullName, BaseBranch, "factory-sandbox:test", _root.FullName,
             PlanModel, PlanTurns, BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames, SkipIntegration,
             Managed is null ? null : ManagedRunFake.Settings(), BaseCommit);
-        return new FactoryRun(mock.Object, client, Progress, handler: new Handler(this), delay: (_, _) => Task.CompletedTask).RunAsync(request, cancellationToken);
+        var run = new FactoryRun(mock.Object, client, Progress, handler: new Handler(this), delay: (_, _) => Task.CompletedTask);
+        FactoryRunResult result = await run.RunAsync(request, cancellationToken);
+        Declined = run.Declined;
+        return result;
     }
 
     public void Dispose()
