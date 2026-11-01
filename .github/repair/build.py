@@ -128,6 +128,8 @@ def create_base_branch(repo, branch, sha):
         text=True,
     )
     if moved.returncode != 0:
+        if "Reference does not exist" not in moved.stderr:
+            sys.exit(f"repair: the branch {branch} could not be moved to {sha}: {moved.stderr.strip()[:500]}")
         gh("api", "-X", "POST", f"repos/{repo}/git/refs", "-f", f"ref=refs/heads/{branch}", "-f", f"sha={sha}")
     print(f"repair: the branch {branch} is at the green SHA {sha}")
 
