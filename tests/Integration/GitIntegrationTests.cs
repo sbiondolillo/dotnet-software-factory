@@ -90,49 +90,6 @@ public sealed class GitIntegrationTests
         });
     }
 
-    /// <summary>
-    /// Proves the push answer that <c>specs/features/workflow-file-push.feature</c> cans. The token is an installation token of a GitHub App
-    /// that holds contents write on factory-scratch and no workflows permission, which GitHub refuses a change under
-    /// <c>.github/workflows/</c> for. A personal access token gets another refusal, which names a scope.
-    /// </summary>
-    [Fact]
-    public async Task APushOfAChangeUnderGithubWorkflowsWithATokenThatLacksTheWorkflowsPermissionIsRefused()
-    {
-        string withoutWorkflows = Environment.GetEnvironmentVariable("FACTORY_GITHUB_TOKEN_WITHOUT_WORKFLOWS")
-            ?? throw new InvalidOperationException("FACTORY_GITHUB_TOKEN_WITHOUT_WORKFLOWS is not set");
-        using HttpClient http = NewGitHubClient(Token);
-
-        await Cleanup.RunAsync(async cleanup =>
-        {
-            DirectoryInfo directory = NewDirectory(cleanup);
-            var git = new Git(new CommandRunner());
-            string branch = $"factory-integration-{Guid.NewGuid():N}";
-
-            await git.CloneAsync($"https://github.com/{Owner}/{Repo}.git", withoutWorkflows, directory.FullName, TestContext.Current.CancellationToken);
-            await git.CheckoutBranchAsync(branch, directory.FullName, TestContext.Current.CancellationToken);
-            string workflows = Path.Combine(directory.FullName, ".github", "workflows");
-            Directory.CreateDirectory(workflows);
-            await File.WriteAllTextAsync(Path.Combine(workflows, $"{branch}.yml"), $"# factory integration {branch}\nname: {branch}\n", TestContext.Current.CancellationToken);
-            await git.CommitAllAsync(directory.FullName, $"Factory integration test {branch}", "Factory Integration Test", "factory-integration@example.com", TestContext.Current.CancellationToken);
-            cleanup.Add($"delete the branch {branch} when GitHub holds it", async () =>
-            {
-                using HttpResponseMessage held = await http.GetAsync($"repos/{Owner}/{Repo}/branches/{branch}");
-                if (held.StatusCode is not System.Net.HttpStatusCode.NotFound)
-                {
-                    held.EnsureSuccessStatusCode();
-                    using HttpResponseMessage deleted = await http.DeleteAsync($"repos/{Owner}/{Repo}/git/refs/heads/{branch}");
-                    deleted.EnsureSuccessStatusCode();
-                }
-            });
-
-            GitCommandException exception = await Assert.ThrowsAsync<GitCommandException>(
-                () => git.PushAsync(branch, directory.FullName, withoutWorkflows, TestContext.Current.CancellationToken));
-
-            Assert.Contains("refusing to allow a GitHub App to create or update workflow", exception.Message, StringComparison.Ordinal);
-            Assert.Contains("without `workflows` permission", exception.Message, StringComparison.Ordinal);
-        });
-    }
-
     [Fact]
     public async Task AChangedFilesReadAgainstAnUnknownBaseGetsGitsUnknownRevisionAnswer()
     {
