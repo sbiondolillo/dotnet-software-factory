@@ -256,6 +256,7 @@ Feature: A feedback run answers every unresolved review thread
     Given on a build prompt the agent writes the report that marks A fixed and B disputed
     When a caller starts a feedback run
     Then FeedbackRun gives back a result with 2 threads resolved, 0 threads unresolved and 0 Redos
+    And FeedbackRun resolves the threads "PRRT_kwDOUpm1Qc6ofWu5" and "PRRT_kwDOUpm1Qc6ofWvu"
 
   Scenario: A run with every thread disputed and no change still pushes and resolves both threads
     Given on a build prompt the agent writes the report that marks A and B disputed
@@ -263,3 +264,4 @@ Feature: A feedback run answers every unresolved review thread
     When a caller starts a feedback run
     Then git pushes the branch "factory/a1b2c3d4"
     And FeedbackRun gives back a result with 2 threads resolved, 0 threads unresolved and 0 Redos
+    And FeedbackRun resolves the threads "PRRT_kwDOUpm1Qc6ofWu5" and "PRRT_kwDOUpm1Qc6ofWvu"

@@ -200,6 +200,9 @@ public sealed class FeedbackRunSteps : IDisposable
     public void ThenResult(int resolved, int unresolved, int redos) =>
         Assert.Equal(new FeedbackRunResult(resolved, unresolved, redos), Result with { Sessions = null });
 
+    [Then("FeedbackRun resolves the threads {string} and {string}")]
+    public void ThenResolvesBoth(string first, string second) => Assert.Equal([first, second], Resolves);
+
     [Then("FeedbackRun gives back a result with {int} Redo(s)")]
     public void ThenRedos(int redos) => Assert.Equal(redos, Result.Redos);
 
