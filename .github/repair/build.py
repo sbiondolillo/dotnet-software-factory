@@ -189,6 +189,16 @@ def wait_for_pull_request(repo, number, run, timeout):
     sys.exit(f"repair: the factory run {run['url']} opened no pull request on issue #{number} within {timeout} s")
 
 
+def build(repo, number, timeout, ref=None):
+    """Dispatches the factory, waits for the pull request it opens, and labels it."""
+    run = dispatch(repo, number, 180, ref)
+    print(f"repair: started the factory: {run['url']}")
+    with open(os.environ.get("GITHUB_OUTPUT", os.devnull), "a") as output:
+        output.write(f"run={run['databaseId']}\n")
+    pr = wait_for_pull_request(repo, number, run, timeout)
+    label(repo, pr)
+
+
 def main():
     repo = os.environ.get("GITHUB_REPOSITORY") or sys.exit("repair: GITHUB_REPOSITORY is not set")
     number = (
@@ -213,8 +223,8 @@ def main():
             "-R",
             repo,
             "--body",
-            f"The factory builds at `main`, and the fault is on the branch of pull request #{target}. No build. "
-            "A builder at the red SHA is the Managed Agents builder, #370.",
+            f"Every repair lands on the head of `main`, and the fault is on the branch of pull request #{target}. "
+            "No build. A builder at the red SHA is the Managed Agents builder, #370.",
         )
         print(f"repair: issue #{number} targets pull request #{target}; no build at main")
         return
@@ -243,15 +253,6 @@ def main():
         build(repo, number, timeout, branch)
     finally:
         delete_base_branch(repo, branch)
-
-
-def build(repo, number, timeout, ref=None):
-    run = dispatch(repo, number, 180, ref)
-    print(f"repair: started the factory: {run['url']}")
-    with open(os.environ.get("GITHUB_OUTPUT", os.devnull), "a") as output:
-        output.write(f"run={run['databaseId']}\n")
-    pr = wait_for_pull_request(repo, number, run, timeout)
-    label(repo, pr)
 
 
 if __name__ == "__main__":
