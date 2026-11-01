@@ -91,6 +91,9 @@ public sealed class PlanPhaseSteps(IssueState issue) : IDisposable
     [Given("the work tree holds the file {string} with the text {string} before the first prompt")]
     public void GivenTreeHoldsFile(string path, string text) => _h.Write(path, text);
 
+    [Given("the work tree holds the file {string} with the text before the first prompt")]
+    public void GivenTreeHoldsDocFile(string path, string text) => _h.Write(path, text);
+
     [Given("the agent on every run changes one byte of {string}")]
     public void GivenEveryChanges(string path) => _h.Act(null, root =>
     {

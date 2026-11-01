@@ -152,7 +152,8 @@ public sealed class PlanPhase(Agent agent, bool refactor = false, IssueScenarios
                     failures.Add($"The feature file {path} holds no scenario.");
                 }
 
-                foreach (int line in FeatureFiles.ReadOverIndentedDocStringLines(path, File.ReadAllText(Path.Combine(workTree, path))))
+                bool unchanged = baseline.TryGetValue(path, out string? before) && before == now[path];
+                foreach (int line in unchanged ? [] : FeatureFiles.ReadOverIndentedDocStringLines(path, File.ReadAllText(Path.Combine(workTree, path))))
                 {
                     failures.Add($"The feature file {path}: the doc string at line {line} has text indented past its opening delimiter; start the text at the column of its opening delimiter.");
                 }

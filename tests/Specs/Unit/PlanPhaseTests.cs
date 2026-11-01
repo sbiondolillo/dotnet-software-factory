@@ -367,4 +367,31 @@ public sealed class PlanPhaseTests : IDisposable
         Assert.Null(result.Pin);
         Assert.Equal(2, _h.Prompts.Count);
     }
+
+    [Fact]
+    public async Task AnOverIndentedDocStringInAFileThatTheAgentLeavesAsItIsPasses()
+    {
+        _h.Write("specs/features/old.feature", Doc("\"\"\"", "  ", "x"));
+        _h.AgentWritesSoundFiles(null);
+        PlanPhaseResult result = await _h.RunAsync();
+        Assert.True(result.Passed, string.Join("; ", result.Failures));
+        Assert.Single(_h.Prompts);
+    }
+
+    [Fact]
+    public async Task AnOverIndentedDocStringInAFileThatTheAgentChangesFails()
+    {
+        _h.Write("specs/features/old.feature", Doc("\"\"\"", "  ", "x"));
+        _h.AgentWrites(null, "specs/features/old.feature", Doc("\"\"\"", "  ", "y"));
+        _h.AgentWrites(null, ".factory/plan.md", "p");
+        AssertDeep(await _h.RunAsync(), "specs/features/old.feature", 5);
+    }
+
+    [Fact]
+    public async Task AnOverIndentedDocStringInAnUnchangedFileDoesNotHideOneInANewFile()
+    {
+        _h.Write("specs/features/old.feature", Doc("\"\"\"", "  ", "x"));
+        PlanPhaseResult result = await RunWithAsync(("specs/features/new.feature", Doc("\"\"\"", "  ", "x")));
+        AssertDeep(result, "specs/features/new.feature", 5);
+    }
 }
