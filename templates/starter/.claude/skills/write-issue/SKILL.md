@@ -23,7 +23,7 @@ Done when each claim names its line on `main`. Each scenario a hit is in is unde
 
 ## 3. Write the draft
 
-Read the section of `docs/write-an-issue.md` for the recipe, then write the title and the body to a file. A behaviour draft writes its scenarios as blocks under `## Scenarios`: open each feature file it names on `main` first, and reuse each step text that `tests/Specs/Steps/` binds when the step means the same. Done when every row of `## Before you file` passes on the file, the row `proof` aside: step 4 runs it.
+Read the section of `docs/write-an-issue.md` for the recipe, then write the title and the body to a file. A behavior draft writes its scenarios as blocks under `## Scenarios`: open each feature file it names on `main` first, and reuse each step text that `tests/Specs/Steps/` binds when the step means the same. Done when every row of `## Before you file` passes on the file, the row `proof` aside: step 4 runs it.
 
 ## 4. Prove the check
 

@@ -3,7 +3,7 @@ using Xunit;
 
 namespace Integration;
 
-/// <summary>Proves the real model removes the feature file of behaviour an issue replaces, in a copy of the starter.</summary>
+/// <summary>Proves the real model removes the feature file of behavior an issue replaces, in a copy of the starter.</summary>
 public sealed class PlanPhaseIntegrationTests
 {
     private const string Tag = "factory-sandbox:integration";

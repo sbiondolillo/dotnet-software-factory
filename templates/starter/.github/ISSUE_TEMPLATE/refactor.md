@@ -1,6 +1,6 @@
 ---
 name: Refactor
-about: A change to the structure of the code that adds no behaviour. Every test stays as it is. The rules are docs/write-an-issue.md.
+about: A change to the structure of the code that adds no behavior. Every test stays as it is. The rules are docs/write-an-issue.md.
 title: ''
 labels: refactor
 ---

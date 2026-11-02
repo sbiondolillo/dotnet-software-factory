@@ -1,4 +1,4 @@
-Feature: The plan phase removes each feature file whose behaviour the issue removes or replaces
+Feature: The plan phase removes each feature file whose behavior the issue removes or replaces
 
   Background:
     Given an empty work tree
