@@ -75,11 +75,13 @@ public sealed class FeedbackRun(
         var pullRequests = new PullRequests(client);
         IReadOnlyList<string> scope = [];
         string? check = null;
+        string? issueBody = null;
         bool cleanup = false;
         bool refactor = false;
         if (PullRequests.ParseClosingIssue(await pullRequests.ReadBodyAsync(request.Owner, request.Repo, request.PullNumber, cancellationToken).ConfigureAwait(false)) is int issueNumber)
         {
             GitHubIssue issue = await client.ReadIssueAsync(request.Owner, request.Repo, issueNumber, cancellationToken).ConfigureAwait(false);
+            issueBody = issue.Body;
             if (issue.Labels.Contains("cleanup"))
             {
                 cleanup = true;
@@ -101,7 +103,7 @@ public sealed class FeedbackRun(
         Pin pin = refactor ? Pin.TakeRefactor(request.Directory) : Pin.Take(request.Directory);
 
         string title = $"Answer the review threads of pull request #{request.PullNumber.ToString(CultureInfo.InvariantCulture)}";
-        string body = Describe(threads);
+        string body = Describe(threads, issueBody, cleanup);
         string reportFile = Path.Combine(request.Directory, ".factory", "threads.json");
 
         var setup = new RunAgentsSetup(
@@ -220,9 +222,31 @@ public sealed class FeedbackRun(
 
     private static IReadOnlyList<SessionCost>? Sessions(RunAgents agents) => agents.Sessions is { Count: > 0 } sessions ? sessions : null;
 
-    private static string Describe(IReadOnlyList<ReviewThread> threads)
+    /// <summary>
+    /// Gives the body of the builder and the reviewer. With no closing issue, it is the threads and the report instructions.
+    /// With a closing issue, the issue body comes first, then a <c>## Review threads</c> section, then the report instructions.
+    /// For a <c>cleanup</c> issue, the report instructions make a thread outside the <c>## Scope</c> disputed.
+    /// </summary>
+    private static string Describe(IReadOnlyList<ReviewThread> threads, string? issueBody, bool cleanup)
     {
-        var text = new StringBuilder("Answer each review thread below.\n");
+        var text = new StringBuilder();
+        if (issueBody is null)
+        {
+            text.Append("Answer each review thread below.\n");
+        }
+        else
+        {
+            text.Append(issueBody);
+            if (!issueBody.EndsWith('\n'))
+            {
+                text.Append('\n');
+            }
+
+            text.Append("\n## Review threads\n\n")
+                .Append("The work tree holds the build of the issue above. The threads below are the work. ")
+                .Append("Change the work tree only where a thread asks for it.\n");
+        }
+
         foreach (ReviewThread thread in threads)
         {
             text.Append("\nThread ").Append(thread.Id).Append('\n').Append("Path: ").Append(thread.Path).Append('\n');
@@ -243,6 +267,11 @@ public sealed class FeedbackRun(
             .Append("The status fixed means that you changed the work tree to answer the thread. ")
             .Append("The status disputed means that you leave the work tree as it is on that point. ")
             .Append("The reply is the text for the reviewer.");
+        if (cleanup)
+        {
+            text.Append(" A thread that asks for a change to a path outside the `## Scope` takes the status `disputed`, and its reply names the scope.");
+        }
+
         return text.ToString();
     }
 
