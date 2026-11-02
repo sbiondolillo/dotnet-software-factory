@@ -6,10 +6,10 @@ The factory reads the labels, the title and the body of the issue, and nothing e
 
 | The change | Label | The body holds |
 |---|---|---|
-| A feature, a bug fix, or a new test for behaviour the program already has | none | the story, `**Today.**`, `**What changes.**`, `## Scenarios` when the change adds or edits a scenario or when no scenario applies, `## Removed scenarios` when it removes one, and `## Context` when a scenario needs a fact of the world |
-| A change to the structure of the code that adds no behaviour. Every test stays as it is | `refactor` | prose, then `## Check` when a command can tell the new structure from the old |
+| A feature, a bug fix, or a new test for behavior the program already has | none | the story, `**Today.**`, `**What changes.**`, `## Scenarios` when the change adds or edits a scenario or when no scenario applies, `## Removed scenarios` when it removes one, and `## Context` when a scenario needs a fact of the world |
+| A change to the structure of the code that adds no behavior. Every test stays as it is | `refactor` | prose, then `## Check` when a command can tell the new structure from the old |
 | A fix to a test, a config file or a document. The program stays as it is | `cleanup` | prose, then `## Scope` and `## Check` |
-| A change to the code, the tests or the config that keeps the behaviour, such as a format sweep or a framework upgrade. Every passing test keeps passing, and the public API of `src/` stays as it is | `reframe` | prose, then `## Scope` and `## Check` |
+| A change to the code, the tests or the config that keeps the behavior, such as a format sweep or a framework upgrade. Every passing test keeps passing, and the public API of `src/` stays as it is | `reframe` | prose, then `## Scope` and `## Check` |
 
 A bug fix changes the program, so it takes no label. A change that fits two rows is two issues. The label `behavior` beside `refactor` or `cleanup` gets a comment and no run. The label `reframe` beside `behavior`, `refactor` or `cleanup` gets a comment and no run.
 
@@ -30,13 +30,13 @@ The body states results, and the build chooses every means. A means is a package
 
 In a scenario, the sentence is a `Then` step and the block is its doc string. In prose, the block is a fenced block.
 
-A file whose behaviour a test checks by running it is tested by that run, and its text is in no `Then`. Examples are a feature file outside `specs/features/`, which a test compiles and runs, and a script that a test starts. The body names that test and the result of the run: a behaviour body in `**What changes.**`, and another body in its prose. A text that no run checks keeps the forms above, such as a workflow, or the base image of a Dockerfile that a test builds.
+A file whose behavior a test checks by running it is tested by that run, and its text is in no `Then`. Examples are a feature file outside `specs/features/`, which a test compiles and runs, and a script that a test starts. The body names that test and the result of the run: a behavior body in `**What changes.**`, and another body in its prose. A text that no run checks keeps the forms above, such as a workflow, or the base image of a Dockerfile that a test builds.
 
 Name what holds after the change. State an invariant as the state it keeps: "Every other existing test passes unchanged." `**Today.**` is the one place that states what `main` does now.
 
 A count of findings names the command that prints it: "`dotnet build --no-incremental -p:TreatWarningsAsErrors=false 2>&1 | grep 'warning CA1849' | sed 's/ \[.*\]$//' | sort -u | wc -l` on `main` prints `4`." A reader who runs that command gets the same count. A build prints each warning twice, inline and in its summary, and a build that compiles nothing prints none.
 
-## A behaviour body
+## A behavior body
 
 The title states what the person can do after the change, or the end state, in the present tense: "A repo owner can run an issue against any factory ref". The pull request takes the title of the issue.
 
@@ -90,7 +90,7 @@ Feature: New example
 
 **`## Removed scenarios` holds one list item for each scenario that the change removes.** The item is `- `, the path in backticks, a colon, and the name of the scenario: `` - `specs/features/example.feature`: An empty input gets the default answer ``. Each line under the heading is such an item. A feature file whose last scenario is removed leaves the repo, and at least one feature file stays. A whole-file block leaves out each scenario that it removes, so `## Removed scenarios` names no scenario of that file. A name under `## Removed scenarios` is in no block.
 
-**Each scenario states one behaviour that a person observes.**
+**Each scenario states one behavior that a person observes.**
 
 - Each `Then` states one observable result.
 - A step names the real program and the real service: "Given the exchange rate service answers the status 503". The stub is how the test builds that world.
@@ -123,7 +123,7 @@ The body starts "Cleanup." and a plain imperative. It states the defect in the t
 
 ## A reframe body
 
-The body starts "Reframe." and a plain imperative. It states the rule or the version that changes, and the paths on `main` that the change touches. It states the invariant: the program keeps its behaviour, and the public API of `src/` stays as it is. The public API is each public type and each public or protected member. A reframe adds none, removes none and changes none.
+The body starts "Reframe." and a plain imperative. It states the rule or the version that changes, and the paths on `main` that the change touches. It states the invariant: the program keeps its behavior, and the public API of `src/` stays as it is. The public API is each public type and each public or protected member. A reframe adds none, removes none and changes none.
 
 `## Scope` and `## Check` take the form of a cleanup body. The scope can name `src/` and a test under `tests/`. Each feature file under `specs/features/` stays as it is.
 
@@ -166,12 +166,12 @@ Read the draft once for each row. File it when every row passes. A person with C
 | scenario names | list the names of the scenarios of each feature file after the change | no two give one test name, and no block holds one name twice |
 | removed | each line under `## Removed scenarios` | it is a list item: a path in backticks, a colon, and a name that the file on `main` holds |
 | conditions | search the scenarios for "When" | each `When` names an event that occurs |
-| known text | list each config value, workflow, pinned version and file whose text the issue already knows | each file whose behaviour a test checks by running it is in no `Then`, and each other one is in a `Then` as one value or as a doc string |
+| known text | list each config value, workflow, pinned version and file whose text the issue already knows | each file whose behavior a test checks by running it is in no `Then`, and each other one is in a `Then` as one value or as a doc string |
 | context | list each sentence and each row of `## Context` | each one states a fact of the world and its source, and none states what the program must do |
 | stated once | list each requirement of the program in the draft | each one is in one scenario, and nowhere else |
 | positive form | search the prose for "not", "never", "don't", "later" | each sentence found states what holds |
 | counts | list each count of findings | each one names the command that prints it, and that command on `main` prints the count |
 | result inputs | each `Then` whose result is a count, an exit code or a summary line | its scenario states each input that result reads |
-| on `main` | read each scenario that the change adds or edits against the code on `main` | `main` fails each one, unless the change is a new test for behaviour the program already has. A scenario that a whole-file block keeps from the file on `main` passes on `main` |
+| on `main` | read each scenario that the change adds or edits against the code on `main` | `main` fails each one, unless the change is a new test for behavior the program already has. A scenario that a whole-file block keeps from the file on `main` passes on `main` |
 | scope and check | a `cleanup` or a `reframe` body | `## Scope` holds a path, and `## Check` holds one fenced `sh` block |
 | proof | a body with `## Check`: run the check in a copy of `main`, then in that copy with the change faked | it exits with a code other than 0 on `main`, and with the code 0 on the faked change |

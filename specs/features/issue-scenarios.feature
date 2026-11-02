@@ -1,5 +1,5 @@
 Feature: The factory pins the scenarios of an issue as the owner wrote them
-  A repo owner writes the scenarios of a behaviour issue under ## Scenarios, and the build proves what the owner approved.
+  A repo owner writes the scenarios of a behavior issue under ## Scenarios, and the build proves what the owner approved.
 
   Scenario: A whole-file block for a new feature file becomes that file in the pin
     Given an issue whose ## Scenarios holds a block with a Feature: line for "specs/features/greeting-name.feature"

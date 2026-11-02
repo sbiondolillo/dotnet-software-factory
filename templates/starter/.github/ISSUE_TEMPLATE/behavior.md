@@ -1,6 +1,6 @@
 ---
-name: Behaviour
-about: A feature, a bug fix, or a new test for behaviour the program already has. The rules are docs/write-an-issue.md.
+name: Behavior
+about: A feature, a bug fix, or a new test for behavior the program already has. The rules are docs/write-an-issue.md.
 title: ''
 labels: ''
 ---

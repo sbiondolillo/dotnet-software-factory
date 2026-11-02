@@ -20,7 +20,7 @@ dotnet_diagnostic.IDE0073.severity = warning
 
 After the change, the first line of each `*.cs` file under `src/` and `tests/` is `// SPDX-License-Identifier: MIT`. `dotnet build` exits 0.
 
-The program keeps its behaviour. Each public type and each public or protected member under `src/` stays as it is. Each test keeps passing. Every other line of `.editorconfig` stays as it is on `main`. Each project file, `Solution.slnx`, `Directory.Build.props` and `Directory.Packages.props` stay as they are on `main`. Each feature file under `specs/features/` stays as it is.
+The program keeps its behavior. Each public type and each public or protected member under `src/` stays as it is. Each test keeps passing. Every other line of `.editorconfig` stays as it is on `main`. Each project file, `Solution.slnx`, `Directory.Build.props` and `Directory.Packages.props` stay as they are on `main`. Each feature file under `specs/features/` stays as it is.
 
 ## Scope
 
