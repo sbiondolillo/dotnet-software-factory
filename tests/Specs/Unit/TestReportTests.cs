@@ -58,6 +58,24 @@ public sealed class TestReportTests : IDisposable
     }
 
     [Fact]
+    public void ADynamicSkipIsSkippedWithItsReason()
+    {
+        // The shape that xunit.v3 3.2.2 writes for Assert.SkipUnless, measured on 2026-11-02 (#451).
+        string path = Write(Steps.TrxBuilder.Wrap(
+            "<UnitTest name=\"FactSkipsUnlessFalse\" id=\"4cd4a360-dddb-e657-4036-f8868034c02a\">"
+            + "<TestMethod className=\"Specs.Unit.ZzMeasureSkipTests\" name=\"FactSkipsUnlessFalse\" /></UnitTest>",
+            "<UnitTestResult testId=\"4cd4a360-dddb-e657-4036-f8868034c02a\" testName=\"Specs.Unit.ZzMeasureSkipTests.FactSkipsUnlessFalse\" outcome=\"NotExecuted\">"
+            + "<Output><ErrorInfo><Message>measure: the tool is absent</Message></ErrorInfo></Output></UnitTestResult>"));
+
+        ReportedTest test = Assert.Single(TestReport.Read(path));
+
+        Assert.Equal(TestOutcome.Skipped, test.Outcome);
+        Assert.Equal("Specs.Unit.ZzMeasureSkipTests", test.ClassName);
+        Assert.Equal("FactSkipsUnlessFalse", test.Method);
+        Assert.Equal("measure: the tool is absent", test.Message);
+    }
+
+    [Fact]
     public void AMissingFileThrowsFileNotFound()
         => Assert.Throws<FileNotFoundException>(() => TestReport.Read(Path.Combine(_root, "none.trx")));
 
