@@ -7,7 +7,8 @@ namespace Core;
 public sealed record PlanPhaseResult(bool Passed, Pin? Pin, IReadOnlyList<string> Failures);
 
 /// <summary>Asks the agent for feature files and a plan, checks the work tree, and pins the scenarios.
-/// With <c>scenarios</c>, the feature files the issue wrote, the agent writes the plan alone.</summary>
+/// With <c>scenarios</c>, the feature files the issue wrote, the agent writes the plan alone. Scenarios with no file
+/// written and none removed are an issue that states no scenario applies.</summary>
 public sealed class PlanPhase(Agent agent, bool refactor = false, IssueScenariosResult? scenarios = null)
 {
     private bool PlanOnly => refactor || scenarios is not null;
@@ -18,6 +19,9 @@ public sealed class PlanPhase(Agent agent, bool refactor = false, IssueScenarios
     /// <summary>The sentence that says what a canned answer is, in the words of the starter's <c>AGENTS.md</c>.</summary>
     internal const string CannedAnswerText =
         "The build suite answers each call to a service with a canned answer from a stub HttpMessageHandler. ";
+
+    // The sentence of the plan prompt for an issue whose ## Scenarios is None.
+    private const string NoScenarioText = "The issue states that no scenario applies, so the build adds no feature file. Say so in one line of the plan. ";
 
     private const string IntegrationText =
         CannedAnswerText
@@ -65,6 +69,7 @@ public sealed class PlanPhase(Agent agent, bool refactor = false, IssueScenarios
             + $"Issue title:\n{title}\n\nIssue body:\n{body}\n\n"
             + Named("The issue wrote these feature files, and the build makes their scenarios pass: ", scenarios.Written)
             + Named("The issue removed these feature files: ", scenarios.Removed)
+            + (scenarios.Written.Count is 0 && scenarios.Removed.Count is 0 ? NoScenarioText : "")
             + $"Write the plan to {PlanPath}, stating each result the build owes. "
             + IntegrationText
             + $"Write no other file: {PlanPath} is the only file the plan phase writes. "

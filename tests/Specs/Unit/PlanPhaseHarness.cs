@@ -23,6 +23,8 @@ public sealed class PlanPhaseHarness : IDisposable
 
     public bool Refactor { get; set; }
 
+    public IssueScenariosResult? Scenarios { get; set; }
+
     public string? RawOutput { get; set; }
 
     public string WorkTree => _work.FullName;
@@ -93,7 +95,7 @@ public sealed class PlanPhaseHarness : IDisposable
             });
         File.WriteAllText(Path.Combine(_root.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
         Sandbox sandbox = await Sandbox.StartAsync(mock.Object, "factory-sandbox:test", _root.FullName, _work.FullName);
-        return await new PlanPhase(new ClaudeCodeAgent(sandbox), Refactor).RunAsync(title, body, model, turns, _work.FullName);
+        return await new PlanPhase(new ClaudeCodeAgent(sandbox), Refactor, Scenarios).RunAsync(title, body, model, turns, _work.FullName);
     }
 
     private CommandResult Exec(CommandSpec spec)

@@ -394,4 +394,45 @@ public sealed class PlanPhaseTests : IDisposable
         PlanPhaseResult result = await RunWithAsync(("specs/features/new.feature", Doc("\"\"\"", "  ", "x")));
         AssertDeep(result, "specs/features/new.feature", 5);
     }
+
+    private const string NoScenarioText = "The issue states that no scenario applies, so the build adds no feature file. Say so in one line of the plan.";
+
+    [Fact]
+    public async Task ScenariosThatWriteNoFileAskForAOneLinePlanAndPassWithThePlanAlone()
+    {
+        _h.Write("specs/features/a.feature", PlanPhaseHarness.SoundFeature);
+        _h.Scenarios = new IssueScenariosResult([], [], []);
+        _h.AgentWrites(null, ".factory/plan.md", "No scenario applies.");
+
+        PlanPhaseResult result = await _h.RunAsync();
+
+        Assert.True(result.Passed, string.Join("; ", result.Failures));
+        string prompt = Assert.Single(_h.Prompts);
+        Assert.Contains(NoScenarioText, prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Write Gherkin scenarios", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ScenariosThatWriteAFileGetNoNoScenarioSentence()
+    {
+        _h.Write("specs/features/a.feature", PlanPhaseHarness.SoundFeature);
+        _h.Scenarios = new IssueScenariosResult([], ["specs/features/a.feature"], []);
+        _h.AgentWrites(null, ".factory/plan.md", "p");
+
+        await _h.RunAsync();
+
+        Assert.DoesNotContain(NoScenarioText, Assert.Single(_h.Prompts), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ScenariosThatWriteNoFileFailAPlanThatAddsAFeatureFile()
+    {
+        _h.Scenarios = new IssueScenariosResult([], [], []);
+        _h.AgentWritesSoundFiles(null);
+
+        PlanPhaseResult result = await _h.RunAsync();
+
+        Assert.False(result.Passed);
+        Assert.Contains(result.Failures, failure => failure.Contains("specs/features/", StringComparison.Ordinal));
+    }
 }

@@ -64,6 +64,15 @@ Feature: The factory pins the scenarios of an issue as the owner wrote them
     When the factory runs the issue
     Then the first plan prompt holds "Write no other file: .factory/plan.md is the only file the plan phase writes."
 
+  Scenario: An issue whose ## Scenarios is None. writes no feature file and asks for the plan alone
+    Given the clone holds "specs/features/greeting.feature"
+    And an issue whose ## Scenarios holds the line "None." and one sentence that says why
+    When the factory runs the issue
+    Then the first plan prompt holds "Write no other file: .factory/plan.md is the only file the plan phase writes."
+    And the first plan prompt holds "The issue states that no scenario applies, so the build adds no feature file. Say so in one line of the plan."
+    And the work tree holds "specs/features/greeting.feature" as it is on main, and no other feature file
+    And the run gives back a pull request
+
   Scenario: A body with CRLF line ends gives a feature file with LF line ends
     Given an issue body with CRLF line ends and a block for "specs/features/greeting-name.feature"
     When the factory runs the issue
@@ -123,6 +132,7 @@ Feature: The factory pins the scenarios of an issue as the owner wrote them
       | removals that leave no feature file | The issue leaves no feature file under specs/features/. |
       | blocks and removals that leave every file as it is on main | The blocks and the removed scenarios leave every feature file as it is on main. |
       | both ## Scenarios and ## Acceptance criteria | The body holds both ## Scenarios and ## Acceptance criteria. Keep one of the two. |
+      | a ## Scenarios that holds the line "None." and a fenced block | The heading ## Scenarios holds the line None. and a fenced block. Keep one of the two. |
       | a block that starts "# specs/features/greeting.feature" outside ## Scenarios | A fenced block that starts with # specs/features/ sits outside the heading ## Scenarios. |
 
   Scenario: A comment lists every fault of the body

@@ -7,7 +7,8 @@ public sealed record IssueScenariosResult(IReadOnlyList<string> Faults, IReadOnl
 
 /// <summary>Reads <c>## Scenarios</c> and <c>## Removed scenarios</c> from the body of an issue, and applies them to the
 /// feature files of a clone. A block that holds a <c>Feature:</c> line is a whole file. Any other block upserts its
-/// scenarios by name. The clone changes only when the body and every resulting file are sound.</summary>
+/// scenarios by name. A <c>## Scenarios</c> whose first line is <c>None.</c>, with no fenced block, states that no scenario
+/// applies: it writes no file. The clone changes only when the body and every resulting file are sound.</summary>
 public static partial class IssueScenarios
 {
     private const string ScenariosHeading = "## Scenarios";
@@ -15,6 +16,7 @@ public static partial class IssueScenarios
     private const string CriteriaHeading = "## Acceptance criteria";
     private const string FeatureDirectory = "specs/features/";
     private const string PathLine = "# " + FeatureDirectory;
+    private const string NoneLine = "None.";
 
     /// <summary>Tells whether the body holds the heading <c>## Scenarios</c> or <c>## Removed scenarios</c>.</summary>
     public static bool Holds(string body)
@@ -38,7 +40,12 @@ public static partial class IssueScenarios
         }
 
         List<Block> scenarioBlocks = [.. read.Blocks.Where(block => block.Heading is ScenariosHeading)];
-        if (hasScenarios && scenarioBlocks.Count is 0)
+        bool none = hasScenarios && read.ScenarioLines.Select(line => line.Trim()).FirstOrDefault(line => line.Length > 0) is NoneLine;
+        if (none && scenarioBlocks.Count > 0)
+        {
+            faults.Add($"The heading {ScenariosHeading} holds the line {NoneLine} and a fenced block. Keep one of the two.");
+        }
+        else if (hasScenarios && scenarioBlocks.Count is 0 && !none)
         {
             faults.Add($"The heading {ScenariosHeading} holds no fenced block. Put the scenarios of each feature file in a fenced block under it.");
         }
@@ -137,7 +144,7 @@ public static partial class IssueScenarios
             }
         }
 
-        if (faults.Count is 0)
+        if (faults.Count is 0 && !(none && removals.Count is 0))
         {
             string features = Path.Combine(workTree, FeatureDirectory);
             int left = (Directory.Exists(features) ? Directory.EnumerateFiles(features, "*.feature", SearchOption.AllDirectories) : [])
@@ -412,15 +419,17 @@ public static partial class IssueScenarios
 
     private sealed record Block(string? Heading, List<string> Lines, bool Closed);
 
-    private sealed record Body(IReadOnlyList<string> Headings, IReadOnlyList<Block> Blocks, IReadOnlyList<string> RemovedLines);
+    private sealed record Body(IReadOnlyList<string> Headings, IReadOnlyList<Block> Blocks, IReadOnlyList<string> RemovedLines, IReadOnlyList<string> ScenarioLines);
 
-    /// <summary>Reads the headings, the fenced blocks and the lines under <c>## Removed scenarios</c>. A fenced block
+    /// <summary>Reads the headings, the fenced blocks, the lines under <c>## Removed scenarios</c> and the lines outside a
+    /// fenced block under <c>## Scenarios</c>. A fenced block
     /// closes as GitHub closes it: at a fence line of its own mark, at least as long, indented 3 spaces or fewer.</summary>
     private static Body Read(string body)
     {
         var headings = new List<string>();
         var blocks = new List<Block>();
         var removed = new List<string>();
+        var scenarioLines = new List<string>();
         string? heading = null;
         (char Mark, int Length, int Indent)? fence = null;
         List<string> content = [];
@@ -458,6 +467,10 @@ public static partial class IssueScenarios
             {
                 removed.Add(line);
             }
+            else if (heading is ScenariosHeading && fence is null)
+            {
+                scenarioLines.Add(line);
+            }
         }
 
         if (fence is not null)
@@ -465,7 +478,7 @@ public static partial class IssueScenarios
             blocks.Add(new Block(heading, content, false));
         }
 
-        return new Body(headings, blocks, removed);
+        return new Body(headings, blocks, removed, scenarioLines);
     }
 
     private static (char Mark, int Length, int Indent)? Opens(string line)
