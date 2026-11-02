@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Xunit;
 
 namespace Specs.Unit;
@@ -48,6 +49,25 @@ public sealed class FactoryWorkflowTests
         Assert.EndsWith(">> \"$GITHUB_ENV\"", run, StringComparison.Ordinal);
         Assert.Contains("\"FACTORY_AGENT_ID=\"", run, StringComparison.Ordinal);
         Assert.Contains("\"FACTORY_ENVIRONMENT_ID=\"", run, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("./builder.environment.yaml")]
+    [InlineData("./builder.md")]
+    public void TheLockStepReadsAKeyThatTheLockfileHoldsWithAnId(string key)
+    {
+        string run = Step(LockStep).GetValueOrDefault("run") as string ?? "";
+        string lockfile = Path.Combine(StarterChecks.RepoRoot(), ".github", "agents", "claude-lock.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(lockfile));
+        string? id = document.RootElement.TryGetProperty("resources", out JsonElement resources)
+            && resources.TryGetProperty(key, out JsonElement resource)
+            && resource.TryGetProperty("id", out JsonElement idElement)
+            && idElement.ValueKind is JsonValueKind.String
+            ? idElement.GetString()
+            : null;
+
+        Assert.Contains($".resources[\"{key}\"].id", run, StringComparison.Ordinal);
+        Assert.False(string.IsNullOrEmpty(id), $"the lockfile holds no non-empty id under resources for {key}");
     }
 
     private static List<Dictionary<string, object?>> Steps()
