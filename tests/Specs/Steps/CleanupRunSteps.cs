@@ -143,6 +143,11 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
         if (number is 11 or 15)
         {
             H.Labels.Add(label);
+            if (label is "cleanup" or "reframe")
+            {
+                H.Body = Body(DefaultScope, DefaultCheck);
+            }
+
             return;
         }
 

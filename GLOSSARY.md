@@ -1,0 +1,63 @@
+# Dotnet Software Factory
+
+The factory takes an issue of a .NET repo to a pull request. An agent writes the code, and the factory holds the gates, the review and the delivery.
+
+## Recipes
+
+**Recipe**:
+A named, fixed sequence of phases, picked by a label of the issue. The four recipes are behavior, refactor, cleanup and reframe.
+_Avoid_: run kind, kind of run, mode
+
+**Behavior**:
+The recipe for a feature, a bug fix, or a new test for behavior the program already has. An issue with no recipe label is a behavior.
+_Avoid_: feature run, default run
+
+**Refactor**:
+The recipe for a change to the structure of the code that adds no behavior. Every test stays as it is.
+_Avoid_: restructure
+
+**Cleanup**:
+The recipe for a fix to a test, a config file or a document. The program stays as it is.
+_Avoid_: chore, tidy
+
+**Reframe**:
+The recipe for a change to the code, the tests or the config that keeps the behavior, such as a format sweep or a framework upgrade. Every passing test keeps passing, and the public API of `src/` stays as it is.
+_Avoid_: migration, upgrade
+
+## Runs
+
+**Run**:
+One execution of a recipe. A factory run starts from an issue. A feedback run starts from the review threads of the pull request that a factory run opened.
+_Avoid_: session, job
+
+**Phase**:
+One step of a recipe: the plan, the build or the review. A phase takes its inputs from the recipe and never reads the recipe.
+_Avoid_: step, stage
+
+**Redo**:
+One more build after a gate or the review rejects the last build. The faults of the rejection go to the next build as Redo texts. A run has a budget of three Redos.
+_Avoid_: retry, attempt
+
+**Decline**:
+The end of a run before its first phase, on a fault of the issue's author, such as two recipe labels that exclude each other or a cleanup with no scope. The run posts the reason as a comment and builds nothing.
+_Avoid_: refusal, rejection (a rejection is the review's verdict on a build)
+
+## Issue sections
+
+**Scope**:
+The paths that a cleanup or a reframe can change, one for each line under the heading `## Scope` of the issue.
+_Avoid_: allow list, paths
+
+**Check**:
+The command in the first fenced block under the heading `## Check` of the issue. It fails before the build and passes after it. A cleanup and a reframe always have one, and a refactor can have one.
+_Avoid_: acceptance test, verify step
+
+## Gates
+
+**Gate**:
+A test of a build that the factory runs, outside the agent, before the review. A gate that fails gives a Redo.
+_Avoid_: check (see Check), validation
+
+**Pin**:
+The fingerprint of the files that a build must leave as they are, taken before the build. A refactor pins every test file. Every other recipe pins the feature files and the build settings files.
+_Avoid_: snapshot, baseline

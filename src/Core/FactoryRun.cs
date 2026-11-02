@@ -47,9 +47,6 @@ public sealed class FactoryRun(
     private decimal _spend;
     private long _started;
     private IReadOnlyList<SessionCost> _sessions = [];
-    private const string CleanupLabel = "cleanup";
-    private const string RefactorLabel = "refactor";
-    private const string ReframeLabel = "reframe";
 
     private static readonly string[] LayoutFiles = ["Solution.slnx"];
     private static readonly string[] LayoutDirectories = ["specs/features/", "tests/Specs/", "tests/Integration/"];
@@ -78,73 +75,12 @@ public sealed class FactoryRun(
     private async Task<FactoryRunResult> RunCoreAsync(FactoryRunRequest request, CancellationToken cancellationToken)
     {
         GitHubIssue issue = await client.ReadIssueAsync(request.Owner, request.Repo, request.IssueNumber, cancellationToken).ConfigureAwait(false);
-        IReadOnlyList<string> scope = [];
-        string check = "";
-        bool reframe = issue.Labels.Contains(ReframeLabel);
-        if (reframe)
+        RecipeChoice choice = RecipeRules.Parse(issue.Labels, issue.Body);
+        if (choice.Declined is string refusal)
         {
-            string? refusal = null;
-            if (new[] { "behavior", CleanupLabel, RefactorLabel }.FirstOrDefault(issue.Labels.Contains) is string other)
-            {
-                refusal = $"The labels reframe and {other} exclude each other: each one names a kind of run. Keep one of the two labels.";
-            }
-            else if ((scope = CleanupBody.ReadScope(issue.Body)).Count is 0)
-            {
-                refusal = "The body of a reframe issue names its scope under the heading ## Scope, one path for each line. The body holds no such heading with a path under it.";
-            }
-            else if (CleanupBody.ReadCheck(issue.Body) is not string command)
-            {
-                refusal = "The body of a reframe issue holds its check command in the first fenced block under the heading ## Check. The body holds no such heading with a fenced block under it.";
-            }
-            else
-            {
-                check = command;
-            }
-
-            if (refusal is not null)
-            {
-                await CommentAsync(request, refusal, [], cancellationToken).ConfigureAwait(false);
-                Declined = true;
-                return new FactoryRunResult(null, 0);
-            }
-        }
-
-        bool refactor = issue.Labels.Contains(RefactorLabel);
-        if (refactor && (issue.Labels.Contains("behavior") || issue.Labels.Contains(CleanupLabel)))
-        {
-            string other = issue.Labels.Contains("behavior") ? "behavior" : CleanupLabel;
-            await CommentAsync(request, $"The labels refactor and {other} exclude each other: a refactor run leaves every test as it is, and a {other} run does not. Keep one of the two labels.", [], cancellationToken).ConfigureAwait(false);
+            await CommentAsync(request, refusal, [], cancellationToken).ConfigureAwait(false);
             Declined = true;
             return new FactoryRunResult(null, 0);
-        }
-
-        bool cleanup = issue.Labels.Contains(CleanupLabel);
-        if (cleanup)
-        {
-            string? refusal = null;
-            if (issue.Labels.Contains("behavior"))
-            {
-                refusal = "The labels cleanup and behavior exclude each other: a cleanup run has no plan, and a behavior run has one. Keep one of the two labels.";
-            }
-            else if ((scope = CleanupBody.ReadScope(issue.Body)).Count is 0)
-            {
-                refusal = "The body of a cleanup issue names its scope under the heading ## Scope, one path for each line. The body holds no such heading with a path under it.";
-            }
-            else if (CleanupBody.ReadCheck(issue.Body) is not string command)
-            {
-                refusal = "The body of a cleanup issue holds its check command in the first fenced block under the heading ## Check. The body holds no such heading with a fenced block under it.";
-            }
-            else
-            {
-                check = command;
-            }
-
-            if (refusal is not null)
-            {
-                await CommentAsync(request, refusal, [], cancellationToken).ConfigureAwait(false);
-                Declined = true;
-                return new FactoryRunResult(null, 0);
-            }
         }
 
         var git = new Git(runner);
@@ -168,7 +104,7 @@ public sealed class FactoryRun(
         }
 
         IssueScenariosResult? scenarios = null;
-        if (!reframe && !refactor && !cleanup && IssueScenarios.Holds(issue.Body))
+        if (choice.Recipe is Recipe.Behavior && IssueScenarios.Holds(issue.Body))
         {
             scenarios = IssueScenarios.Apply(issue.Body, request.Directory);
             if (scenarios.Faults.Count > 0)
@@ -194,7 +130,7 @@ public sealed class FactoryRun(
         {
             try
             {
-                return await RunAgentsAsync(request, issue, scope, check, scenarios, reframe, refactor, cleanup, agents, git, baseCommit, cancellationToken).ConfigureAwait(false);
+                return await RunAgentsAsync(request, issue, choice, scenarios, agents, git, baseCommit, cancellationToken).ConfigureAwait(false);
             }
             catch (SessionBranchException exception)
             {
@@ -210,35 +146,31 @@ public sealed class FactoryRun(
     private async Task<FactoryRunResult> RunAgentsAsync(
         FactoryRunRequest request,
         GitHubIssue issue,
-        IReadOnlyList<string> scope,
-        string check,
+        RecipeChoice choice,
         IssueScenariosResult? scenarios,
-        bool reframe,
-        bool refactor,
-        bool cleanup,
         RunAgents agents,
         Git git,
         string baseCommit,
         CancellationToken cancellationToken)
     {
-        if (reframe)
+        if (choice is { Recipe: Recipe.Reframe, Check: string reframeCheck })
         {
-            return await RunReframeAsync(request, issue, scope, check, agents, git, baseCommit, cancellationToken).ConfigureAwait(false);
+            return await RunReframeAsync(request, issue, choice, reframeCheck, agents, git, baseCommit, cancellationToken).ConfigureAwait(false);
         }
 
-        if (refactor)
+        if (choice.Recipe is Recipe.Refactor)
         {
-            return await RunRefactorAsync(request, issue, agents, git, baseCommit, cancellationToken).ConfigureAwait(false);
+            return await RunRefactorAsync(request, issue, choice, agents, git, baseCommit, cancellationToken).ConfigureAwait(false);
         }
 
-        if (cleanup)
+        if (choice is { Recipe: Recipe.Cleanup, Check: string cleanupCheck })
         {
-            return await RunCleanupAsync(request, issue, scope, check, agents, git, baseCommit, cancellationToken).ConfigureAwait(false);
+            return await RunCleanupAsync(request, issue, choice, cleanupCheck, agents, git, baseCommit, cancellationToken).ConfigureAwait(false);
         }
 
         Agent agent = agents.Builder;
         await Say("plan: start").ConfigureAwait(false);
-        PlanPhaseResult plan = await new PlanPhase(agent, scenarios: scenarios)
+        PlanPhaseResult plan = await new PlanPhase(agent, RecipeRules.PlanText(Recipe.Behavior, scenarios))
             .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, request.Directory, cancellationToken).ConfigureAwait(false);
         if (!plan.Passed || plan.Pin is null)
         {
@@ -250,10 +182,10 @@ public sealed class FactoryRun(
 
         _summary.AddRow("plan", null, "passed");
         await Say("plan: passed").ConfigureAwait(false);
-        var buildPhase = new BuildPhase(agent, noScenario: scenarios is { Written.Count: 0, Removed.Count: 0 });
+        var buildPhase = new BuildPhase(agent, RecipeRules.BuildText(Recipe.Behavior, RunKind.Factory, scenarios));
         LintGate lintGate = agents.Lint(log);
         var testGate = new TestGate(agents.Sandbox, log, request.SkipIntegration);
-        var reviewPhase = new ReviewPhase(agents.Reviewer, git);
+        var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(Recipe.Behavior, RunKind.Factory));
 
         int redos = 0;
         string producer;
@@ -294,7 +226,7 @@ public sealed class FactoryRun(
                 if (review.Approved)
                 {
                     await Say("deliver: start").ConfigureAwait(false);
-                    var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, gate, false, redos));
+                    var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, gate, choice, redos));
                     PullRequest pullRequest = await deliver
                         .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
                     return new FactoryRunResult(pullRequest, redos);
@@ -324,6 +256,7 @@ public sealed class FactoryRun(
     private async Task<FactoryRunResult> RunRefactorAsync(
         FactoryRunRequest request,
         GitHubIssue issue,
+        RecipeChoice choice,
         RunAgents agents,
         Git git,
         string baseCommit,
@@ -331,7 +264,7 @@ public sealed class FactoryRun(
     {
         Sandbox sandbox = agents.Sandbox;
         Agent agent = agents.Builder;
-        string? check = CleanupBody.ReadCheck(issue.Body);
+        string? check = choice.Check;
         if (check is not null)
         {
             CommandResult first = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
@@ -350,7 +283,7 @@ public sealed class FactoryRun(
         }
 
         await Say("plan: start").ConfigureAwait(false);
-        PlanPhaseResult plan = await new PlanPhase(agent, refactor: true)
+        PlanPhaseResult plan = await new PlanPhase(agent, RecipeRules.PlanText(Recipe.Refactor))
             .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, request.Directory, cancellationToken).ConfigureAwait(false);
         if (!plan.Passed)
         {
@@ -362,11 +295,11 @@ public sealed class FactoryRun(
 
         _summary.AddRow("plan", null, "passed");
         await Say("plan: passed").ConfigureAwait(false);
-        var pin = Pin.TakeRefactor(request.Directory);
-        var buildPhase = new BuildPhase(agent, refactor: true);
+        Pin pin = RecipeRules.TakePin(choice.Recipe, request.Directory);
+        var buildPhase = new BuildPhase(agent, RecipeRules.BuildText(choice.Recipe, RunKind.Factory));
         LintGate lintGate = agents.Lint(log);
         var testGate = new TestGate(agents.Sandbox, log, request.SkipIntegration);
-        var reviewPhase = new ReviewPhase(agents.Reviewer, git, refactor: true);
+        var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Factory));
 
         int redos = 0;
         string producer;
@@ -426,7 +359,7 @@ public sealed class FactoryRun(
                     if (review.Approved)
                     {
                         await Say("deliver: start").ConfigureAwait(false);
-                        var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, gate, check is not null, redos));
+                        var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, gate, choice, redos));
                         PullRequest pullRequest = await deliver
                             .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
                         return new FactoryRunResult(pullRequest, redos);
@@ -453,7 +386,7 @@ public sealed class FactoryRun(
     private async Task<FactoryRunResult> RunCleanupAsync(
         FactoryRunRequest request,
         GitHubIssue issue,
-        IReadOnlyList<string> scope,
+        RecipeChoice choice,
         string check,
         RunAgents agents,
         Git git,
@@ -476,11 +409,12 @@ public sealed class FactoryRun(
             return new FactoryRunResult(null, 0);
         }
 
-        var buildPhase = new BuildPhase(agent, cleanup: true);
+        IReadOnlyList<string> scope = choice.Scope;
+        var buildPhase = new BuildPhase(agent, RecipeRules.BuildText(choice.Recipe, RunKind.Factory));
         LintGate lintGate = agents.Lint(log);
         var testGate = new TestGate(agents.Sandbox, log, request.SkipIntegration);
-        var reviewPhase = new ReviewPhase(agents.Reviewer, git, cleanup: true);
-        var pin = Pin.Take(request.Directory);
+        var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Factory));
+        Pin pin = RecipeRules.TakePin(choice.Recipe, request.Directory);
         IReadOnlySet<string> basePassed = await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false);
 
         int redos = 0;
@@ -535,7 +469,7 @@ public sealed class FactoryRun(
                         if (review.Approved)
                         {
                             await Say("deliver: start").ConfigureAwait(false);
-                            var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, gate, true, redos));
+                            var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, gate, choice, redos));
                             PullRequest pullRequest = await deliver
                                 .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
                             return new FactoryRunResult(pullRequest, redos);
@@ -567,7 +501,7 @@ public sealed class FactoryRun(
     private async Task<FactoryRunResult> RunReframeAsync(
         FactoryRunRequest request,
         GitHubIssue issue,
-        IReadOnlyList<string> scope,
+        RecipeChoice choice,
         string check,
         RunAgents agents,
         Git git,
@@ -590,11 +524,12 @@ public sealed class FactoryRun(
             return new FactoryRunResult(null, 0);
         }
 
-        var buildPhase = new BuildPhase(agent, reframe: true);
+        IReadOnlyList<string> scope = choice.Scope;
+        var buildPhase = new BuildPhase(agent, RecipeRules.BuildText(choice.Recipe, RunKind.Factory));
         LintGate lintGate = agents.Lint(log);
         var testGate = new TestGate(agents.Sandbox, log, request.SkipIntegration);
-        var reviewPhase = new ReviewPhase(agents.Reviewer, git, reframe: true);
-        var pin = Pin.Take(request.Directory);
+        var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Factory));
+        Pin pin = RecipeRules.TakePin(choice.Recipe, request.Directory);
         IReadOnlySet<string> basePassed = await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false);
         ApiListing baseApi = await ListApiAsync(sandbox, cancellationToken).ConfigureAwait(false);
         if (baseApi.Lines is null)
@@ -671,7 +606,7 @@ public sealed class FactoryRun(
                     if (review.Approved)
                     {
                         await Say("deliver: start").ConfigureAwait(false);
-                        var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, gate, true, redos));
+                        var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, gate, choice, redos));
                         PullRequest pullRequest = await deliver
                             .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
                         return new FactoryRunResult(pullRequest, redos);
@@ -702,10 +637,10 @@ public sealed class FactoryRun(
     private Task<ApiListing> ListApiAsync(Sandbox sandbox, CancellationToken cancellationToken) =>
         ApiGate.ListAsync(sandbox, progress, log, cancellationToken);
 
-    private DeliveryFacts Facts(RunAgents agents, string baseCommit, TestGateResult gate, bool checkGreen, int redos) => new(
+    private DeliveryFacts Facts(RunAgents agents, string baseCommit, TestGateResult gate, RecipeChoice choice, int redos) => new(
         baseCommit,
         gate.Tests?.Count(test => test.Outcome is TestOutcome.Passed) ?? 0,
-        checkGreen,
+        choice.Check is not null,
         redos,
         _spend,
         (int)(_clock.GetElapsedTime(_started).Ticks / TimeSpan.TicksPerSecond),

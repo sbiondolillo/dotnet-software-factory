@@ -292,6 +292,18 @@ public sealed class ConsoleProgramTests : IDisposable
     }
 
     [Fact]
+    public async Task AFeedbackOnADeclinedIssuePostsOneCommentClonesNothingAndExits0()
+    {
+        _h.Threads = "always";
+        _h.PullBody = "Closes #1";
+        _h.Labels.AddRange(["cleanup", "refactor"]);
+        Assert.Equal(0, await StartAsync($"feedback {Repo} --pr 10"));
+        Assert.Contains("The labels refactor and cleanup exclude each other", Assert.Single(_h.Posts("/issues/10/comments")).Content, StringComparison.Ordinal);
+        Assert.Empty(_h.CloneDirectories);
+        Assert.DoesNotContain(ConsoleHarness.Lines(_h.Out), l => l.StartsWith("checks:", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task AFeedbackWithNoThreadClonesNothingAndExits0()
     {
         Assert.Equal(0, await StartAsync($"feedback {Repo} --pr 10"));

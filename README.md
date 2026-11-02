@@ -255,7 +255,7 @@ A feedback run answers the review of a pull request that the factory opened. The
 3. The run removes the label first, reads every unresolved thread, builds the change on the pull request's branch, and pushes a commit. It replies to each thread with what it changed, or why it disputes the remark. It resolves each thread that it replied to, fixed or disputed, and then reviews its own change and waits for the checks.
 4. Read the replies and the new commit. When a reply does not satisfy you, open its thread again with **Unresolve conversation**, or leave a new remark on a line of the diff. Then add the label again for the next round. The next run reads only the unresolved threads.
 
-A pull request with no unresolved thread gets no build. A `cleanup` or `refactor` pull request keeps its rules through a feedback run, as the sections above say.
+A pull request with no unresolved thread gets no build. A `cleanup`, `refactor` or `reframe` pull request keeps its rules through a feedback run, as the sections above say.
 
 ## A trial run at another ref
 

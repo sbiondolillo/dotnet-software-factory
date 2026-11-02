@@ -74,6 +74,9 @@ public sealed class ConsoleHarness : IDisposable
     /// <summary>The body of the issue, or null for the default.</summary>
     public string? IssueBody { get; set; }
 
+    /// <summary>The body of the pull request, or null for an answer with no body.</summary>
+    public string? PullBody { get; set; }
+
     /// <summary>What the check command answers after the build of that number (0 is before the first build); a number with no entry answers red before the first build and green after one.</summary>
     public Dictionary<int, (int Code, string Out, string Err)> CheckResults { get; } = [];
 
@@ -455,7 +458,9 @@ public sealed class ConsoleHarness : IDisposable
 
         if (path.Contains("/pulls/", StringComparison.Ordinal))
         {
-            return (200, JsonSerializer.Serialize(new { node_id = "PR_kwDOUpm1Qc6abc", head = new { sha = HeadSha(++_headReads), @ref = HeadRef } }));
+            return (200, PullBody is null
+                ? JsonSerializer.Serialize(new { node_id = "PR_kwDOUpm1Qc6abc", head = new { sha = HeadSha(++_headReads), @ref = HeadRef } })
+                : JsonSerializer.Serialize(new { node_id = "PR_kwDOUpm1Qc6abc", body = PullBody, head = new { sha = HeadSha(++_headReads), @ref = HeadRef } }));
         }
 
         if (path.Contains("/issues/", StringComparison.Ordinal))

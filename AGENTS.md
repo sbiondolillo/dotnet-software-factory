@@ -2,6 +2,8 @@
 
 Where things are in this repo, for an agent about to read or write code here.
 
+`GLOSSARY.md` at the root defines the terms of the factory: recipe, run, phase, gate and the rest.
+
 ## Directories
 
 This table says what each directory holds.

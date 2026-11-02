@@ -123,25 +123,23 @@ public sealed class BuildPhaseTests
     }
 
     [Fact]
-    public async Task ANoScenarioBuildAsksForTheCodeAloneAndLeavesTheTests()
+    public async Task ThePromptWrapsTheIssueAndEachRedoTextAroundTheLeadAndTheInstructions()
     {
-        using var h = new BuildPhaseHarness { NoScenario = true };
-        await h.RunAsync();
-        string prompt = Assert.Single(h.Prompts);
-        Assert.Contains(BuildPhase.NoScenarioText, prompt, StringComparison.Ordinal);
-        Assert.DoesNotContain("Bind every scenario", prompt, StringComparison.Ordinal);
-        Assert.DoesNotContain("Write unit tests", prompt, StringComparison.Ordinal);
-        Assert.Contains("Run dotnet build and dotnet test, and work until both pass.", prompt, StringComparison.Ordinal);
+        using var h = new BuildPhaseHarness { Text = new BuildText("LEAD", "INSTRUCTIONS") };
+        await h.RunAsync(title: "TITLE", body: "BODY", redo: ["FIRST", "SECOND"]);
+        Assert.Equal(
+            "LEAD\n\nIssue title:\nTITLE\n\nIssue body:\nBODY\n\nINSTRUCTIONS"
+                + "\n\nThe work tree holds the earlier build. Each text below is a fault to correct in that build.\n"
+                + "\nRedo text:\nFIRST\n"
+                + "\nRedo text:\nSECOND\n",
+            Assert.Single(h.Prompts));
     }
 
     [Fact]
-    public async Task ABehaviourBuildAsksForBindingsAndUnitTests()
+    public async Task APromptWithNoRedoTextEndsWithTheInstructions()
     {
-        using var h = new BuildPhaseHarness();
-        await h.RunAsync();
-        string prompt = Assert.Single(h.Prompts);
-        Assert.DoesNotContain(BuildPhase.NoScenarioText, prompt, StringComparison.Ordinal);
-        Assert.Contains("Bind every scenario of every feature file", prompt, StringComparison.Ordinal);
-        Assert.Contains("Write unit tests for the new code under tests/Specs/Unit/.", prompt, StringComparison.Ordinal);
+        using var h = new BuildPhaseHarness { Text = new BuildText("LEAD", "INSTRUCTIONS") };
+        await h.RunAsync(title: "TITLE", body: "BODY");
+        Assert.Equal("LEAD\n\nIssue title:\nTITLE\n\nIssue body:\nBODY\n\nINSTRUCTIONS", Assert.Single(h.Prompts));
     }
 }
