@@ -20,6 +20,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 API = "https://api.anthropic.com"
@@ -146,17 +147,32 @@ def wait_idle(session_ids, timeout):
 
 
 def final_message(sid):
-    events = anthropic("GET", f"/v1/sessions/{sid}/events?limit=200")["data"]
-    texts = [
-        c["text"]
-        for e in events
-        if e.get("type") == "agent.message"
-        for c in e.get("content", [])
-        if c.get("type") == "text"
-    ]
-    stop = [e.get("stop_details") for e in events if e.get("type") == "session.status_idle"]
-    usage = [e.get("usage") for e in events if e.get("type") == "session.usage"]
-    return (texts[-1] if texts else ""), (stop[-1] if stop else None), (usage[-1] if usage else {})
+    """The text of the last agent message, the last stop details and the last usage of a session. A long session fills
+    more than one page, so the read takes the newest events first and follows `next_page` back, as turn_events of
+    .github/repair/read.py does, until it has all three or the pages end."""
+    text, stop, usage = None, None, {}
+    found = set()
+    page = None
+    while True:
+        cursor = "" if page is None else f"&page={urllib.parse.quote(page, safe='')}"
+        answer = anthropic("GET", f"/v1/sessions/{sid}/events?order=desc&limit=100{cursor}")
+        for e in answer.get("data") or []:
+            kind = e.get("type")
+            if kind in found:
+                continue
+            if kind == "agent.message":
+                text = next((c["text"] for c in reversed(e.get("content", [])) if c.get("type") == "text"), None)
+                if text is not None:
+                    found.add(kind)
+            elif kind == "session.status_idle":
+                stop = e.get("stop_details")
+                found.add(kind)
+            elif kind == "session.usage":
+                usage = e.get("usage")
+                found.add(kind)
+        page = answer.get("next_page")
+        if not page or len(found) == 3:
+            return text or "", stop, usage
 
 
 def parse_report(angle, text):
