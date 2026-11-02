@@ -23,6 +23,12 @@ public sealed class RecipeRulesTests
     }
 
     [Theory]
+    [InlineData(Recipe.Reframe, "The labels reframe and behavior exclude each other: each one names a kind of run. Keep one of the two labels.", "reframe", "refactor", "cleanup", "behavior")]
+    [InlineData(Recipe.Refactor, "The labels refactor and behavior exclude each other: a refactor run leaves every test as it is, and a behavior run does not. Keep one of the two labels.", "cleanup", "refactor", "behavior")]
+    public void ThreeLabelsNameTheFirstExcludedLabelInAFixedOrder(Recipe recipe, string text, params string[] labels) =>
+        Assert.Equal(new RecipeChoice(recipe, [], null, text), RecipeRules.Parse(labels, Body));
+
+    [Theory]
     [InlineData("cleanup", Recipe.Cleanup, "Fix the install test.", "The body of a cleanup issue names its scope under the heading ## Scope, one path for each line. The body holds no such heading with a path under it.")]
     [InlineData("reframe", Recipe.Reframe, "Fix the install test.", "The body of a reframe issue names its scope under the heading ## Scope, one path for each line. The body holds no such heading with a path under it.")]
     [InlineData("cleanup", Recipe.Cleanup, "## Scope\nREADME.md\n", "The body of a cleanup issue holds its check command in the first fenced block under the heading ## Check. The body holds no such heading with a fenced block under it.")]
