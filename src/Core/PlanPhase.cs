@@ -6,26 +6,25 @@ namespace Core;
 /// <summary>The outcome of <see cref="PlanPhase"/>: passed with a pin, or failed with failure sentences.</summary>
 public sealed record PlanPhaseResult(bool Passed, Pin? Pin, IReadOnlyList<string> Failures);
 
-/// <summary>Asks the agent for feature files and a plan, checks the work tree, and pins the scenarios.
-/// With <c>scenarios</c>, the feature files the issue wrote, the agent writes the plan alone. Scenarios with no file
-/// written and none removed are an issue that states no scenario applies.</summary>
-public sealed class PlanPhase(Agent agent, bool refactor = false, IssueScenariosResult? scenarios = null)
+/// <summary>The gate of <see cref="PlanPhase"/>: feature files and a plan, or the plan alone.</summary>
+public enum PlanMode
 {
-    private bool PlanOnly => refactor || scenarios is not null;
+    FeaturesAndPlan,
+    PlanOnly,
+}
+
+/// <summary>The words of the plan prompt: the lead before the issue and the instructions after it. <paramref name="Mode"/> is the
+/// gate that checks the work tree after the prompt.</summary>
+public sealed record PlanText(string Lead, string Instructions, PlanMode Mode);
+
+/// <summary>Asks the agent for the work that <paramref name="text"/> states, checks the work tree, and pins the scenarios.
+/// With <see cref="PlanMode.PlanOnly"/>, the agent writes the plan alone.</summary>
+public sealed class PlanPhase(Agent agent, PlanText text)
+{
+    private bool PlanOnly => text.Mode is PlanMode.PlanOnly;
 
     private const string FeatureDirectory = "specs/features/";
     private const string PlanPath = ".factory/plan.md";
-
-    /// <summary>The sentence that says what a canned answer is, in the words of the starter's <c>AGENTS.md</c>.</summary>
-    internal const string CannedAnswerText =
-        "The build suite answers each call to a service with a canned answer from a stub HttpMessageHandler. ";
-
-    // The sentence of the plan prompt for an issue whose ## Scenarios is None.
-    private const string NoScenarioText = "The issue states that no scenario applies, so the build adds no feature file. Say so in one line of the plan. ";
-
-    private const string IntegrationText =
-        CannedAnswerText
-        + "For each canned answer that a scenario depends on, name in the plan one test under tests/Integration/ that gets the same answer from the real service. ";
 
     /// <summary>Runs the first prompt and, when its gate fails, one correction prompt.</summary>
     public async Task<PlanPhaseResult> RunAsync(
@@ -64,29 +63,9 @@ public sealed class PlanPhase(Agent agent, bool refactor = false, IssueScenarios
     }
 
     private string BuildPrompt(string title, string body) =>
-        scenarios is not null
-        ? "Plan the work of the issue below.\n\n"
-            + $"Issue title:\n{title}\n\nIssue body:\n{body}\n\n"
-            + Named("The issue wrote these feature files, and the build makes their scenarios pass: ", scenarios.Written)
-            + Named("The issue removed these feature files: ", scenarios.Removed)
-            + (scenarios.Written.Count is 0 && scenarios.Removed.Count is 0 ? NoScenarioText : "")
-            + $"Write the plan to {PlanPath}, stating each result the build owes. "
-            + IntegrationText
-            + $"Write no other file: {PlanPath} is the only file the plan phase writes. "
-            + "Leave every other file as it is."
-        : refactor
-        ? "Plan the work of the refactor issue below.\n\n"
-            + $"Issue title:\n{title}\n\nIssue body:\n{body}\n\n"
-            + $"Write the plan to {PlanPath}, stating the structure the build gives the code and the steps to get there. "
-            + $"Write no other file: {PlanPath} is the only file the plan phase writes. "
-            + "Leave every other file as it is."
-        : "Plan the work of the issue below.\n\n"
+        text.Lead + "\n\n"
         + $"Issue title:\n{title}\n\nIssue body:\n{body}\n\n"
-        + $"Write Gherkin scenarios for the behaviour in feature files under {FeatureDirectory} "
-        + $"and write the plan to {PlanPath}, stating each result the build owes. "
-        + IntegrationText
-        + "Remove each feature file whose behaviour the issue removes or replaces. "
-        + "Leave every other file as it is.";
+        + text.Instructions;
 
     private async Task<(List<string> Failures, bool IsError)> RunOnceAsync(
         string prompt,
@@ -104,9 +83,6 @@ public sealed class PlanPhase(Agent agent, bool refactor = false, IssueScenarios
 
         return (PlanOnly ? RefactorGate(workTree, baseline) : Gate(workTree, baseline), false);
     }
-
-    private static string Named(string lead, IReadOnlyList<string> paths) =>
-        paths.Count is 0 ? "" : lead + string.Join(", ", paths) + ". ";
 
     private static List<string> RefactorGate(string workTree, Dictionary<string, string> baseline)
     {

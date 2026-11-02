@@ -5,18 +5,11 @@ namespace Core;
 /// <summary>The outcome of <see cref="BuildPhase"/>: passed, or failed with the text claude gave.</summary>
 public sealed record BuildPhaseResult(bool Passed, string Failure);
 
-/// <summary>Asks the agent to implement the plan and bind every pinned scenario. With <c>noScenario</c>, for an issue
-/// whose <c>## Scenarios</c> is <c>None.</c>, the agent writes the code alone and leaves the tests as they are.</summary>
-public sealed class BuildPhase(Agent agent, bool cleanup = false, bool refactor = false, bool readsPlan = true, bool reframe = false, bool noScenario = false)
+/// <summary>Asks the agent for the work that <paramref name="text"/> states, around the issue and the Redo texts.</summary>
+public sealed class BuildPhase(Agent agent, BuildText text)
 {
-    /// <summary>The sentences of the build prompt for an issue whose <c>## Scenarios</c> is <c>None.</c>.</summary>
-    public const string NoScenarioText = "Read the plan, .factory/plan.md, and write the code that it asks for. The issue states that no scenario applies, so add and change no file under specs/features/ or tests/. ";
-
     private const int PromptLimit = 131071;
     private const string CutMarker = "[cut]";
-
-    /// <summary>The order of work that the build prompt of a reframe run states.</summary>
-    public const string ReframeText = "Make the change the issue asks for to its config files first, then run dotnet format --no-restore once from the repo root, before any edit to a source file. Edit by hand only what the build still reports.";
 
     /// <summary>Runs one build prompt built from the issue and the Redo texts.</summary>
     public async Task<BuildPhaseResult> RunAsync(
@@ -93,61 +86,10 @@ public sealed class BuildPhase(Agent agent, bool cleanup = false, bool refactor 
     private string Compose(string title, string body, IReadOnlyList<string> redoTexts)
     {
         var prompt = new StringBuilder();
-        if (reframe)
-        {
-            prompt.Append("Do the reframe of the issue below.\n\n")
-                .Append("Issue title:\n").Append(title).Append("\n\n")
-                .Append("Issue body:\n").Append(body).Append("\n\n")
-                .Append(ReframeText).Append(' ')
-                .Append("Change only the paths that the issue names under the heading ## Scope. ")
-                .Append("Make the command in the first fenced block under the heading ## Check exit with the code 0. ")
-                .Append("Keep every test that passes now passing, and keep every public type and every public or protected member of the code under src/ as it is. ")
-                .Append("Leave each feature file under specs/features/ as it is. Run dotnet build and dotnet test, and work until both pass.");
-            AppendRedos(prompt, redoTexts);
-            return prompt.ToString();
-        }
-
-        if (cleanup)
-        {
-            prompt.Append("Do the cleanup of the issue below.\n\n")
-                .Append("Issue title:\n").Append(title).Append("\n\n")
-                .Append("Issue body:\n").Append(body).Append("\n\n")
-                .Append("Change only the paths that the issue names under the heading ## Scope. ")
-                .Append("Make the command in the first fenced block under the heading ## Check exit with the code 0, and keep every test that passes now passing. ")
-                .Append("Leave each feature file under specs/features/ as it is. Run dotnet build and dotnet test, and work until both pass.");
-            AppendRedos(prompt, redoTexts);
-            return prompt.ToString();
-        }
-
-        if (refactor)
-        {
-            prompt.Append("Do the refactor of the issue below.\n\n")
-                .Append("Issue title:\n").Append(title).Append("\n\n")
-                .Append("Issue body:\n").Append(body).Append("\n\n")
-                .Append(readsPlan
-                    ? "Read the plan, .factory/plan.md, and change the structure of the code as it says. "
-                    : "Change the structure of the code as the issue says. ")
-                .Append("Change no file under specs/features/, tests/Specs/ or tests/Integration/: every test stays as it is. ")
-                .Append("Leave each build settings file as it is; the build settings files are named ")
-                .Append(string.Join(", ", Pin.SettingsFileNames.Order(StringComparer.Ordinal)))
-                .Append(". Run dotnet build and dotnet test, and work until both pass.");
-            AppendRedos(prompt, redoTexts);
-            return prompt.ToString();
-        }
-
-        prompt.Append("Build the work of the issue below.\n\n")
+        prompt.Append(text.Lead).Append("\n\n")
             .Append("Issue title:\n").Append(title).Append("\n\n")
             .Append("Issue body:\n").Append(body).Append("\n\n")
-            .Append(noScenario
-                ? NoScenarioText
-                : "Read the plan, .factory/plan.md, and each feature file under specs/features/. "
-                    + "Write the code that the plan and the scenarios ask for. "
-                    + "Bind every scenario of every feature file, in step classes under tests/Specs/Steps/. "
-                    + "Write unit tests for the new code under tests/Specs/Unit/. ")
-            .Append("Leave each feature file and each build settings file as it is; the build settings files are named ")
-            .Append(string.Join(", ", Pin.SettingsFileNames.Order(StringComparer.Ordinal)))
-            .Append(". Run dotnet build and dotnet test, and work until both pass.");
-
+            .Append(text.Instructions);
         AppendRedos(prompt, redoTexts);
         return prompt.ToString();
     }

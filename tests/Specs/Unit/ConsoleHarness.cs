@@ -74,6 +74,12 @@ public sealed class ConsoleHarness : IDisposable
     /// <summary>The body of the issue, or null for the default.</summary>
     public string? IssueBody { get; set; }
 
+    /// <summary>The body of the pull request, or null for an answer with no body.</summary>
+    public string? PullBody { get; set; }
+
+    /// <summary>The labels of the issue 2, which a <see cref="PullBody"/> of "Closes #2" names, or null for <see cref="Labels"/>.</summary>
+    public List<string>? ClosingLabels { get; set; }
+
     /// <summary>What the check command answers after the build of that number (0 is before the first build); a number with no entry answers red before the first build and green after one.</summary>
     public Dictionary<int, (int Code, string Out, string Err)> CheckResults { get; } = [];
 
@@ -455,12 +461,15 @@ public sealed class ConsoleHarness : IDisposable
 
         if (path.Contains("/pulls/", StringComparison.Ordinal))
         {
-            return (200, JsonSerializer.Serialize(new { node_id = "PR_kwDOUpm1Qc6abc", head = new { sha = HeadSha(++_headReads), @ref = HeadRef } }));
+            return (200, PullBody is null
+                ? JsonSerializer.Serialize(new { node_id = "PR_kwDOUpm1Qc6abc", head = new { sha = HeadSha(++_headReads), @ref = HeadRef } })
+                : JsonSerializer.Serialize(new { node_id = "PR_kwDOUpm1Qc6abc", body = PullBody, head = new { sha = HeadSha(++_headReads), @ref = HeadRef } }));
         }
 
         if (path.Contains("/issues/", StringComparison.Ordinal))
         {
-            return (200, JsonSerializer.Serialize(new { title = "Add a checkout total", body = IssueBody ?? "The checkout shows the total of the cart.", user = new { login = "ada" }, labels = Labels.Select(name => new { name }).ToArray() }));
+            List<string> labels = ClosingLabels is not null && path.EndsWith("/issues/2", StringComparison.Ordinal) ? ClosingLabels : Labels;
+            return (200, JsonSerializer.Serialize(new { title = "Add a checkout total", body = IssueBody ?? "The checkout shows the total of the cart.", user = new { login = "ada" }, labels = labels.Select(name => new { name }).ToArray() }));
         }
 
         return RepoStatus is 200

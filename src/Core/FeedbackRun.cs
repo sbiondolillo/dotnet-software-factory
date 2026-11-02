@@ -41,6 +41,10 @@ public sealed class FeedbackRun(
     private const int RedoBudget = 3;
     private const string ReportPath = ".factory/threads.json";
 
+    /// <summary>True when the last <see cref="RunAsync"/> ended on a closing issue that the recipe rules decline, with a
+    /// comment on the pull request and no build.</summary>
+    public bool Declined { get; private set; }
+
     /// <summary>
     /// Builds an answer to each unresolved thread, gates and reviews it, pushes it, and replies to each thread. Then it
     /// resolves each thread that it replied to, fixed or disputed. The reply of a disputed thread states the dispute. A
@@ -48,6 +52,7 @@ public sealed class FeedbackRun(
     /// </summary>
     public async Task<FeedbackRunResult> RunAsync(FeedbackRunRequest request, CancellationToken cancellationToken = default)
     {
+        Declined = false;
         try
         {
             return await RunCoreAsync(request, cancellationToken).ConfigureAwait(false);
@@ -73,37 +78,35 @@ public sealed class FeedbackRun(
 
         string branch = await new PullRequests(client).ReadHeadBranchAsync(request.Owner, request.Repo, request.PullNumber, cancellationToken).ConfigureAwait(false);
         var pullRequests = new PullRequests(client);
-        IReadOnlyList<string> scope = [];
-        string? check = null;
+        var choice = new RecipeChoice(Recipe.Behavior, [], null);
         string? issueBody = null;
-        bool cleanup = false;
-        bool refactor = false;
         if (PullRequests.ParseClosingIssue(await pullRequests.ReadBodyAsync(request.Owner, request.Repo, request.PullNumber, cancellationToken).ConfigureAwait(false)) is int issueNumber)
         {
             GitHubIssue issue = await client.ReadIssueAsync(request.Owner, request.Repo, issueNumber, cancellationToken).ConfigureAwait(false);
             issueBody = issue.Body;
-            if (issue.Labels.Contains("cleanup"))
+            choice = RecipeRules.Parse(issue.Labels, issue.Body);
+            if (choice.Declined is string refusal)
             {
-                cleanup = true;
-                scope = CleanupBody.ReadScope(issue.Body);
-                check = CleanupBody.ReadCheck(issue.Body);
-            }
-            else if (issue.Labels.Contains("refactor"))
-            {
-                refactor = true;
-                check = CleanupBody.ReadCheck(issue.Body);
+                string comment = CommentText.Fit(refusal, []);
+                await Say(comment).ConfigureAwait(false);
+                await client.PostCommentAsync(request.Owner, request.Repo, request.PullNumber, comment, cancellationToken).ConfigureAwait(false);
+                Declined = true;
+                return new FeedbackRunResult(0, threads.Count, 0);
             }
         }
+
+        IReadOnlyList<string> scope = choice.Scope;
+        bool scoped = choice.Recipe is Recipe.Cleanup or Recipe.Reframe;
 
         var git = new Git(runner);
         await Say("clone: start").ConfigureAwait(false);
         await git.CloneAsync($"https://github.com/{request.Owner}/{request.Repo}.git", request.Token, request.Directory, cancellationToken).ConfigureAwait(false);
         await git.CheckoutExistingBranchAsync(branch, request.Directory, cancellationToken).ConfigureAwait(false);
         string baseCommit = await git.ReadHeadShaAsync(request.Directory, cancellationToken).ConfigureAwait(false);
-        Pin pin = refactor ? Pin.TakeRefactor(request.Directory) : Pin.Take(request.Directory);
+        Pin pin = RecipeRules.TakePin(choice.Recipe, request.Directory);
 
         string title = $"Answer the review threads of pull request #{request.PullNumber.ToString(CultureInfo.InvariantCulture)}";
-        string body = Describe(threads, issueBody, cleanup);
+        string body = Describe(threads, issueBody, RecipeRules.ThreadRules(choice.Recipe));
         string reportFile = Path.Combine(request.Directory, ".factory", "threads.json");
 
         var setup = new RunAgentsSetup(
@@ -114,12 +117,12 @@ public sealed class FeedbackRun(
         await using (agents.ConfigureAwait(false))
         {
             Sandbox sandbox = agents.Sandbox;
-            var buildPhase = new BuildPhase(agents.Builder, cleanup, refactor, readsPlan: false);
+            var buildPhase = new BuildPhase(agents.Builder, RecipeRules.BuildText(choice.Recipe, RunKind.Feedback));
             LintGate lintGate = agents.Lint(null);
             var testGate = new TestGate(sandbox, skipIntegration: request.SkipIntegration);
-            var reviewPhase = new ReviewPhase(agents.Reviewer, git, cleanup, refactor, readsPlan: false);
+            var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Feedback));
 
-            IReadOnlySet<string> basePassed = cleanup
+            IReadOnlySet<string> basePassed = scoped
                 ? await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false)
                 : new HashSet<string>();
             int redos = 0;
@@ -144,7 +147,7 @@ public sealed class FeedbackRun(
                     await Say("lint: start").ConfigureAwait(false);
                     bool linted = await lintGate.RunAsync(request.Directory, title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
                     await agents.AfterLintAsync(linted, cancellationToken).ConfigureAwait(false);
-                    IReadOnlyList<string> scopeFaults = cleanup
+                    IReadOnlyList<string> scopeFaults = scoped
                         ? await CleanupGate.ScopeFaultsAsync(git, baseCommit, request.Directory, scope, cancellationToken).ConfigureAwait(false)
                         : [];
                     if (scopeFaults.Count > 0)
@@ -154,20 +157,16 @@ public sealed class FeedbackRun(
                     else
                     {
                         await Say("test: start").ConfigureAwait(false);
-                        TestGateResult gate = cleanup
+                        TestGateResult gate = scoped
                             ? await testGate.RunAsync(request.Directory, pin, request.SecretNames, path => CleanupGate.PinExempt(scope, path), cancellationToken).ConfigureAwait(false)
                             : await testGate.RunAsync(request.Directory, pin, request.SecretNames, cancellationToken).ConfigureAwait(false);
                         await Say(gate.Passed ? "test: passed" : "test: failed").ConfigureAwait(false);
-                        IReadOnlyList<string> gateFaults = gate.Passed ? [] : gate.Evidence;
-                        if (gate.Passed && (cleanup || refactor))
+                        IReadOnlyList<string> gateFaults = !gate.Passed ? gate.Evidence : scoped ? CleanupGate.LostTests(basePassed, gate) : [];
+                        if (gate.Passed && gateFaults.Count is 0 && choice.Check is string check)
                         {
-                            gateFaults = cleanup ? CleanupGate.LostTests(basePassed, gate) : [];
-                            if (gateFaults.Count is 0 && check is not null)
-                            {
-                                CommandResult after = await CleanupGate.RunCheckAsync(sandbox, check, progress, cancellationToken).ConfigureAwait(false);
-                                await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
-                                gateFaults = after.ExitCode is 0 ? [] : [CleanupGate.CheckRedo(after)];
-                            }
+                            CommandResult after = await CleanupGate.RunCheckAsync(sandbox, check, progress, cancellationToken).ConfigureAwait(false);
+                            await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
+                            gateFaults = after.ExitCode is 0 ? [] : [CleanupGate.CheckRedo(after)];
                         }
 
                         if (gateFaults.Count > 0)
@@ -225,9 +224,9 @@ public sealed class FeedbackRun(
     /// <summary>
     /// Gives the body of the builder and the reviewer. With no closing issue, it is the threads and the report instructions.
     /// With a closing issue, the issue body comes first, then a <c>## Review threads</c> section, then the report instructions.
-    /// For a <c>cleanup</c> issue, the report instructions make a thread outside the <c>## Scope</c> disputed.
+    /// The <paramref name="threadRules"/> of the recipe end the report instructions, when they are not empty.
     /// </summary>
-    private static string Describe(IReadOnlyList<ReviewThread> threads, string? issueBody, bool cleanup)
+    private static string Describe(IReadOnlyList<ReviewThread> threads, string? issueBody, string threadRules)
     {
         var text = new StringBuilder();
         if (issueBody is null)
@@ -267,9 +266,9 @@ public sealed class FeedbackRun(
             .Append("The status fixed means that you changed the work tree to answer the thread. ")
             .Append("The status disputed means that you leave the work tree as it is on that point. ")
             .Append("The reply is the text for the reviewer.");
-        if (cleanup)
+        if (threadRules.Length > 0)
         {
-            text.Append(" A thread that asks for a change to a path outside the `## Scope` takes the status `disputed`, and its reply names the scope.");
+            text.Append(' ').Append(threadRules);
         }
 
         return text.ToString();

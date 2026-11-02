@@ -192,4 +192,24 @@ public sealed class ReviewPhaseTests
 
         Assert.DoesNotContain(h.WorkTree, h.Prompts[0], StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task ThePromptPutsTheJobStepsAfterYourJobAndBeforeTheVerdictStep()
+    {
+        using var h = new ReviewPhaseHarness { JobSteps = "JOB STEPS\n", DiffText = "DIFF" };
+
+        await h.RunAsync(title: "TITLE", body: "BODY");
+
+        Assert.Equal(
+            "Review the build of the issue below.\n\nIssue title:\nTITLE\n\nIssue body:\nBODY\n\n"
+                + $"Base commit: {ReviewPhaseHarness.DefaultBase}\n"
+                + "Read every change since the base commit in the work tree.\n\n"
+                + "Your job:\nJOB STEPS\n"
+                + "3. Write the verdict to .factory/review.json, as one JSON object with approved and blocking. "
+                + "approved is true or false; blocking is a list of texts. Approve only a build with no blocking item. "
+                + "Write each blocking item as one fault, in words that a builder can act on with the item alone.\n"
+                + "4. Leave every other file as it is.\n\n"
+                + "The diff of the work tree against the base commit:\nDIFF",
+            Assert.Single(h.Prompts));
+    }
 }

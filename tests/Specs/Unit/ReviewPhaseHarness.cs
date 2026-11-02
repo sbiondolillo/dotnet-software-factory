@@ -24,6 +24,8 @@ public sealed class ReviewPhaseHarness : IDisposable
 
     public string ResultText { get; set; } = "";
 
+    public string JobSteps { get; set; } = RecipeRules.ReviewSteps(Recipe.Behavior, RunKind.Factory);
+
     public List<CommandSpec> Recorded { get; } = [];
 
     public List<List<string>> ExecArguments { get; } = [];
@@ -66,7 +68,7 @@ public sealed class ReviewPhaseHarness : IDisposable
             });
         File.WriteAllText(Path.Combine(_root.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
         Sandbox sandbox = await Sandbox.StartAsync(mock.Object, "factory-sandbox:test", _root.FullName, _work.FullName);
-        var phase = new ReviewPhase(new ClaudeCodeAgent(sandbox), new Git(mock.Object));
+        var phase = new ReviewPhase(new ClaudeCodeAgent(sandbox), new Git(mock.Object), JobSteps);
         return await phase.RunAsync(title, body, model, turns, _work.FullName, baseCommit);
     }
 

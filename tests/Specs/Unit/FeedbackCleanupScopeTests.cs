@@ -79,7 +79,7 @@ public sealed class FeedbackCleanupScopeTests
     [Fact]
     public async Task AChangeToASettingsFileTheScopeNamesPassesTheTestGate()
     {
-        using FeedbackRunHarness h = Cleanup("## Scope\n.editorconfig\n");
+        using FeedbackRunHarness h = Cleanup("## Scope\n.editorconfig\n\n## Check\n\n```sh\ntrue\n```\n");
         h.FirstBuildChanges.Add(".editorconfig");
         h.FirstBuildWrites.Add(".editorconfig");
         FeedbackRunResult result = await h.RunAsync(Ct);
@@ -137,11 +137,14 @@ public sealed class FeedbackCleanupScopeTests
     }
 
     [Fact]
-    public async Task ABodyWithNoCheckBlockRunsNoCheckAndStartsTheReview()
+    public async Task ABodyWithNoCheckBlockDeclinesTheRoundWithTheDeclineText()
     {
         using FeedbackRunHarness h = Cleanup("## Scope\nREADME.md\n");
-        await h.RunAsync(Ct);
-        Assert.DoesNotContain(h.Commands, RunsCheck);
-        Assert.Contains(h.Prompts, p => p.Kind is "review");
+        FeedbackRunResult result = await h.RunAsync(Ct);
+        Assert.Equal(RecipeRules.Parse(["cleanup"], "## Scope\nREADME.md\n").Declined, Assert.Single(h.CommentBodies));
+        Assert.Equal(new FeedbackRunResult(0, 2, 0), result);
+        Assert.True(h.Declined);
+        Assert.Empty(h.Prompts);
+        Assert.DoesNotContain(h.Commands, c => c.Command is "git" && c.Arguments[0] is "clone");
     }
 }

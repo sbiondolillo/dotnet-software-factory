@@ -261,7 +261,11 @@ public static partial class ConsoleCommands
 
         if (options.Verb is "feedback")
         {
-            localHead = await FeedbackAsync(options, host, client, token, number, cancellationToken).ConfigureAwait(false);
+            (localHead, bool declined) = await FeedbackAsync(options, host, client, token, number, cancellationToken).ConfigureAwait(false);
+            if (declined)
+            {
+                return 0;
+            }
         }
 
         (PullRequestWatchResult last, string head) = await WatchAsync(host, pullRequests, reviewThreads, watch, owner, repo, number, localHead, options.Timeout, options.CopilotReview, cancellationToken).ConfigureAwait(false);
@@ -271,7 +275,12 @@ public static partial class ConsoleCommands
             bool changed = true;
             while (last.Refusal is null && last.Threads.Count > 0 && rounds < options.ReviewRounds && changed)
             {
-                localHead = await FeedbackAsync(options, host, client, token, number, cancellationToken).ConfigureAwait(false);
+                (localHead, bool declined) = await FeedbackAsync(options, host, client, token, number, cancellationToken).ConfigureAwait(false);
+                if (declined)
+                {
+                    return 0;
+                }
+
                 rounds++;
                 string before = head;
                 (last, head) = await WatchAsync(host, pullRequests, reviewThreads, watch, owner, repo, number, localHead, options.Timeout, options.CopilotReview, cancellationToken).ConfigureAwait(false);
@@ -288,8 +297,9 @@ public static partial class ConsoleCommands
         return last.IsGreen && last.Threads.Count is 0 ? 0 : 1;
     }
 
-    /// <summary>Runs one feedback run in a new work tree, and gives back the head commit of that work tree, or null when it cloned nothing.</summary>
-    private static async Task<string?> FeedbackAsync(Options options, ConsoleHost host, GitHubClient client, string token, int number, CancellationToken cancellationToken)
+    /// <summary>Runs one feedback run in a new work tree, and gives back the head commit of that work tree, or null when it cloned
+    /// nothing, and whether the run declined its closing issue.</summary>
+    private static async Task<(string? Head, bool Declined)> FeedbackAsync(Options options, ConsoleHost host, GitHubClient client, string token, int number, CancellationToken cancellationToken)
     {
         await host.Out.WriteLineAsync("feedback: start").ConfigureAwait(false);
         DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-feedback-");
@@ -298,16 +308,21 @@ public static partial class ConsoleCommands
             var request = new FeedbackRunRequest(
                 options.Repo.Owner, options.Repo.Name, number, token, directory.FullName, ImageTag, host.RootDirectory,
                 Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration, options.Settings);
-            FeedbackRunResult result = await new FeedbackRun(host.Runner, client, host.Out, host.Time, host.Handler, host.Delay)
-                .RunAsync(request, cancellationToken).ConfigureAwait(false);
+            var feedbackRun = new FeedbackRun(host.Runner, client, host.Out, host.Time, host.Handler, host.Delay);
+            FeedbackRunResult result = await feedbackRun.RunAsync(request, cancellationToken).ConfigureAwait(false);
             if (result.Sessions is { Count: > 0 } sessions)
             {
                 await WriteSessionsAsync(host, sessions).ConfigureAwait(false);
             }
 
-            return result.Resolved + result.Unresolved is 0
+            if (feedbackRun.Declined)
+            {
+                return (null, true);
+            }
+
+            return (result.Resolved + result.Unresolved is 0
                 ? null
-                : await new Git(host.Runner).ReadHeadShaAsync(directory.FullName, cancellationToken).ConfigureAwait(false);
+                : await new Git(host.Runner).ReadHeadShaAsync(directory.FullName, cancellationToken).ConfigureAwait(false), false);
         }
         finally
         {

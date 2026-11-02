@@ -123,6 +123,9 @@ public sealed class FeedbackRunHarness : IDisposable
 
     public List<CommandSpec> Commands { get; } = [];
 
+    /// <summary>True when the last run declined its closing issue.</summary>
+    public bool Declined { get; private set; }
+
     public List<SeenPrompt> Prompts { get; } = [];
 
     public List<SeenRequest> Requests { get; } = [];
@@ -142,7 +145,7 @@ public sealed class FeedbackRunHarness : IDisposable
     public static string Items(IEnumerable<(string Id, string Status, string Reply)> items) =>
         JsonSerializer.Serialize(new { threads = items.Select(i => new { id = i.Id, status = i.Status, reply = i.Reply }) });
 
-    public Task<FeedbackRunResult> RunAsync(CancellationToken cancellationToken = default)
+    public async Task<FeedbackRunResult> RunAsync(CancellationToken cancellationToken = default)
     {
         var mock = new Mock<CommandRunner>(MockBehavior.Strict);
         mock.Setup(r => r.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
@@ -151,7 +154,15 @@ public sealed class FeedbackRunHarness : IDisposable
         var request = new FeedbackRunRequest(
             Owner, Repo, Pull, Token, _clone.FullName, "factory-sandbox:test", _root.FullName,
             BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames, Managed: Managed is null ? null : ManagedRunFake.Settings());
-        return new FeedbackRun(mock.Object, client, Out, handler: new Handler(this), delay: (_, _) => Task.CompletedTask).RunAsync(request, cancellationToken);
+        var run = new FeedbackRun(mock.Object, client, Out, handler: new Handler(this), delay: (_, _) => Task.CompletedTask);
+        try
+        {
+            return await run.RunAsync(request, cancellationToken);
+        }
+        finally
+        {
+            Declined = run.Declined;
+        }
     }
 
     public void Dispose()

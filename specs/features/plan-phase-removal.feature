@@ -8,7 +8,7 @@ Feature: The plan phase removes each feature file whose behaviour the issue remo
   Scenario: The first prompt tells the agent to remove such a feature file
     Given the agent on the first run writes the sound feature file and the plan
     When I run the plan phase
-    Then the first prompt holds "Remove each feature file whose behaviour the issue removes or replaces."
+    Then the first prompt holds "Remove each feature file whose behavior the issue removes or replaces."
 
   Scenario: A plan that writes the sound feature file and removes the greeting file passes
     Given the work tree holds the greeting file before the first prompt

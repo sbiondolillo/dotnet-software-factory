@@ -14,31 +14,21 @@ public sealed class DeclinedRunTests
         return h;
     }
 
-    [Theory]
-    [InlineData("cleanup", "reframe")]
-    [InlineData("behavior", "reframe")]
-    [InlineData("refactor", "reframe")]
-    [InlineData("behavior", "refactor")]
-    [InlineData("cleanup", "refactor")]
-    [InlineData("behavior", "cleanup")]
-    public async Task TwoLabelsThatExcludeEachOtherDeclineTheIssue(string first, string second)
+    [Fact]
+    public async Task ADeclineOfTheRecipeRulesPostsItsTextOnceAndRunsNothing()
     {
-        using FactoryRunHarness h = Make(Body, first, second);
+        using FactoryRunHarness h = Make(Body, "cleanup", "refactor");
         FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
         Assert.True(h.Declined);
-        Assert.Single(h.CommentBodies);
+        Assert.Equal(RecipeRules.Parse(["cleanup", "refactor"], Body).Declined, Assert.Single(h.CommentBodies));
+        Assert.Empty(h.Prompts);
         Assert.Equal(new FactoryRunResult(null, 0), result);
     }
 
-    [Theory]
-    [InlineData("cleanup", "Fix the install test.")]
-    [InlineData("reframe", "Fix the install test.")]
-    [InlineData("cleanup", "## Scope\nREADME.md\n")]
-    [InlineData("reframe", "## Scope\nREADME.md\n")]
-    [InlineData("", "## Scenarios\n\nThe scenarios follow.\n")]
-    public async Task ABodyWithAFaultDeclinesTheIssue(string label, string body)
+    [Fact]
+    public async Task AScenarioFaultDeclinesTheIssue()
     {
-        using FactoryRunHarness h = Make(body, label.Length is 0 ? [] : [label]);
+        using FactoryRunHarness h = Make("## Scenarios\n\nThe scenarios follow.\n");
         FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
         Assert.True(h.Declined);
         Assert.Single(h.CommentBodies);

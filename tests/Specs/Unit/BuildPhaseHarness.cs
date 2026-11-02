@@ -18,7 +18,7 @@ public sealed class BuildPhaseHarness : IDisposable
 
     public string? RawOutput { get; set; }
 
-    public bool NoScenario { get; set; }
+    public BuildText Text { get; set; } = RecipeRules.BuildText(Recipe.Behavior, RunKind.Factory);
 
     public List<List<string>> ExecArguments { get; } = [];
 
@@ -47,7 +47,7 @@ public sealed class BuildPhaseHarness : IDisposable
             }));
         File.WriteAllText(Path.Combine(_root.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
         Sandbox sandbox = await Sandbox.StartAsync(mock.Object, "factory-sandbox:test", _root.FullName, _work.FullName);
-        return await new BuildPhase(new ClaudeCodeAgent(sandbox), noScenario: NoScenario).RunAsync(title, body, model, turns, redo ?? []);
+        return await new BuildPhase(new ClaudeCodeAgent(sandbox), Text).RunAsync(title, body, model, turns, redo ?? []);
     }
 
     private CommandResult Exec(CommandSpec spec)

@@ -252,7 +252,7 @@ Feature: A reframe run keeps every test and every public type and member
     Then FactoryRun runs one prompt with the model "review-model" and the turn limit 30 that holds the title of the issue, the body of the issue and the base commit
     And the review prompt holds this text
       """
-      Judge the build against every sentence of the issue: it changes only the paths under ## Scope, keeps the behaviour of the program and makes the command under ## Check pass, and it keeps every test and every public type and member of the code under src/.
+      Judge the build against every sentence of the issue: it changes only the paths under ## Scope, keeps the behavior of the program and makes the command under ## Check pass, and it keeps every test and every public type and member of the code under src/.
       """
 
   Scenario: The reframe review prompt names no plan

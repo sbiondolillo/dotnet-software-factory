@@ -27,7 +27,15 @@ public sealed class FeedbackCleanupScopeSteps(FactoryRunSteps factory, FeedbackR
     {
         Assert.Equal(11, number);
         factory.Harness.Labels.Add(label);
-        factory.Harness.Body = $"## Scope\n{scope}\n";
+        factory.Harness.Body = $"## Scope\n{scope}\n\n## Check\n\n```sh\ntrue\n```\n";
+    }
+
+    [Given("the issue {int} has the labels {string} and {string}")]
+    public void GivenLabels(int number, string first, string second)
+    {
+        Assert.Equal(11, number);
+        factory.Harness.Labels.AddRange([first, second]);
+        factory.Harness.Body = "## Scope\nREADME.md\n\n## Check\n\n```sh\ntrue\n```\n";
     }
 
     [Given("the issue {int} has the label {string} and the first fenced block under {string} holding the line {string}")]
@@ -109,6 +117,7 @@ public sealed class FeedbackCleanupScopeSteps(FactoryRunSteps factory, FeedbackR
         Assert.True(number is 11 or 15);
         Assert.Equal("## Check", heading);
         factory.Harness.Labels.Add(label);
-        factory.Harness.Body = $"## Check\n\n```sh\n{line}\n```\n";
+        string scope = label is "cleanup" or "reframe" ? "## Scope\nREADME.md\n\n" : "";
+        factory.Harness.Body = $"{scope}## Check\n\n```sh\n{line}\n```\n";
     }
 }

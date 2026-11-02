@@ -109,7 +109,7 @@ public sealed class PlanPhaseTests : IDisposable
     [Fact]
     public async Task AnErrorOnARefactorPlanSendsOnePromptAndFails()
     {
-        _h.Refactor = true;
+        _h.Text = RecipeRules.PlanText(Recipe.Refactor);
         _h.Answer(null, true, "Invalid API key");
         PlanPhaseResult result = await _h.RunAsync();
         Assert.False(result.Passed);
@@ -269,7 +269,7 @@ public sealed class PlanPhaseTests : IDisposable
     [Fact]
     public async Task TheCorrectionPromptStillHoldsTheRemovalSentenceOnce()
     {
-        const string Sentence = "Remove each feature file whose behaviour the issue removes or replaces.";
+        const string Sentence = "Remove each feature file whose behavior the issue removes or replaces.";
         _h.Write(Greeting, PlanPhaseHarness.SoundFeature);
         _h.Write("specs/features/checkout.feature", PlanPhaseHarness.SoundFeature);
         _h.AgentRemoves(1, Greeting);
@@ -395,56 +395,75 @@ public sealed class PlanPhaseTests : IDisposable
         AssertDeep(result, "specs/features/new.feature", 5);
     }
 
-    private const string NoScenarioText = "The issue states that no scenario applies, so the build adds no feature file. Say so in one line of the plan.";
-
     [Fact]
-    public async Task ScenariosThatWriteNoFileAskForAOneLinePlanAndPassWithThePlanAlone()
+    public async Task ScenariosThatWriteNoFilePassWithThePlanAlone()
     {
         _h.Write("specs/features/a.feature", PlanPhaseHarness.SoundFeature);
-        _h.Scenarios = new IssueScenariosResult([], [], []);
+        _h.Text = RecipeRules.PlanText(Recipe.Behavior, new IssueScenariosResult([], [], []));
         _h.AgentWrites(null, ".factory/plan.md", "No scenario applies.");
 
         PlanPhaseResult result = await _h.RunAsync();
 
         Assert.True(result.Passed, string.Join("; ", result.Failures));
-        string prompt = Assert.Single(_h.Prompts);
-        Assert.Contains(NoScenarioText, prompt, StringComparison.Ordinal);
-        Assert.DoesNotContain("Write Gherkin scenarios", prompt, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ScenariosThatWriteAFileGetNoNoScenarioSentence()
-    {
-        _h.Write("specs/features/a.feature", PlanPhaseHarness.SoundFeature);
-        _h.Scenarios = new IssueScenariosResult([], ["specs/features/a.feature"], []);
-        _h.AgentWrites(null, ".factory/plan.md", "p");
-
-        await _h.RunAsync();
-
-        Assert.DoesNotContain(NoScenarioText, Assert.Single(_h.Prompts), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ScenariosThatOnlyRemoveAFileGetNoNoScenarioSentence()
-    {
-        _h.Write("specs/features/a.feature", PlanPhaseHarness.SoundFeature);
-        _h.Scenarios = new IssueScenariosResult([], [], ["specs/features/gone.feature"]);
-        _h.AgentWrites(null, ".factory/plan.md", "p");
-
-        await _h.RunAsync();
-
-        Assert.DoesNotContain(NoScenarioText, Assert.Single(_h.Prompts), StringComparison.Ordinal);
+        Assert.Single(_h.Prompts);
     }
 
     [Fact]
     public async Task ScenariosThatWriteNoFileFailAPlanThatAddsAFeatureFile()
     {
-        _h.Scenarios = new IssueScenariosResult([], [], []);
+        _h.Text = RecipeRules.PlanText(Recipe.Behavior, new IssueScenariosResult([], [], []));
         _h.AgentWritesSoundFiles(null);
 
         PlanPhaseResult result = await _h.RunAsync();
 
         Assert.False(result.Passed);
         Assert.Contains(result.Failures, failure => failure.Contains("specs/features/", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ThePromptWrapsTheIssueAroundTheLeadAndTheInstructions()
+    {
+        _h.Text = new PlanText("LEAD", "INSTRUCTIONS", PlanMode.PlanOnly);
+        _h.AgentWrites(null, ".factory/plan.md", "p");
+
+        await _h.RunAsync(title: "TITLE", body: "BODY");
+
+        Assert.Equal("LEAD\n\nIssue title:\nTITLE\n\nIssue body:\nBODY\n\nINSTRUCTIONS", Assert.Single(_h.Prompts));
+    }
+
+    [Fact]
+    public async Task TheCorrectionPromptWrapsTheFirstPromptAroundEachFailure()
+    {
+        _h.Text = new PlanText("LEAD", "INSTRUCTIONS", PlanMode.PlanOnly);
+
+        await _h.RunAsync(title: "TITLE", body: "BODY");
+
+        Assert.Equal(2, _h.Prompts.Count);
+        Assert.Equal(
+            _h.Prompts[0] + "\n\nYour previous run failed these checks. Fix each one:\n- The plan .factory/plan.md is missing.\n",
+            _h.Prompts[1]);
+    }
+
+    [Fact]
+    public async Task APlanOnlyTextFailsAFeatureFileThatTheAgentWrites()
+    {
+        _h.Text = new PlanText("LEAD", "INSTRUCTIONS", PlanMode.PlanOnly);
+        _h.AgentWritesSoundFiles(null);
+
+        PlanPhaseResult result = await _h.RunAsync();
+
+        Assert.False(result.Passed);
+        Assert.Contains("The file specs/features/checkout.feature is new; write no file outside .factory/ in the plan phase.", result.Failures);
+    }
+
+    [Fact]
+    public async Task AFeaturesAndPlanTextPassesAFeatureFileThatTheAgentWrites()
+    {
+        _h.Text = new PlanText("LEAD", "INSTRUCTIONS", PlanMode.FeaturesAndPlan);
+        _h.AgentWritesSoundFiles(null);
+
+        PlanPhaseResult result = await _h.RunAsync();
+
+        Assert.True(result.Passed, string.Join("; ", result.Failures));
     }
 }
