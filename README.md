@@ -338,6 +338,8 @@ A tag on a commit before the change of `<Version>` gives the version of the last
 
 ## Commands
 
+The `build` job of `.github/workflows/ci.yml` runs every check. A run of those checks needs the .NET SDK that `global.json` names, `python3` and `pipx`. The block lists the `dotnet` commands.
+
 ```
 dotnet restore --locked-mode             # the packages, from the locks
 dotnet build --no-restore                # build; every warning is an error
