@@ -13,8 +13,9 @@ public enum PlanMode
     PlanOnly,
 }
 
-/// <summary>The instructions of the plan prompt, after the issue, and the gate that checks the work tree after it.</summary>
-public sealed record PlanText(string Instructions, PlanMode Mode);
+/// <summary>The words of the plan prompt: the lead before the issue and the instructions after it. <paramref name="Mode"/> is the
+/// gate that checks the work tree after the prompt.</summary>
+public sealed record PlanText(string Lead, string Instructions, PlanMode Mode);
 
 /// <summary>Asks the agent for the work that <paramref name="text"/> states, checks the work tree, and pins the scenarios.
 /// With <see cref="PlanMode.PlanOnly"/>, the agent writes the plan alone.</summary>
@@ -62,7 +63,7 @@ public sealed class PlanPhase(Agent agent, PlanText text)
     }
 
     private string BuildPrompt(string title, string body) =>
-        "Plan the work of the issue below.\n\n"
+        text.Lead + "\n\n"
         + $"Issue title:\n{title}\n\nIssue body:\n{body}\n\n"
         + text.Instructions;
 

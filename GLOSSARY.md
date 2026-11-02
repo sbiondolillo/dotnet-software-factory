@@ -6,7 +6,7 @@ The factory takes an issue of a .NET repo to a pull request. An agent writes the
 
 **Recipe**:
 A named, fixed sequence of phases, picked by a label of the issue. The four recipes are behavior, refactor, cleanup and reframe.
-_Avoid_: run kind, kind of run, mode
+_Avoid_: run kind, mode
 
 **Behavior**:
 The recipe for a feature, a bug fix, or a new test for behavior the program already has. An issue with no recipe label is a behavior.
@@ -35,7 +35,7 @@ One step of a recipe: the plan, the build or the review. A phase takes its input
 _Avoid_: step, stage
 
 **Redo**:
-One more build after a gate or the review rejects the last build. The faults of the rejection go to the next build as Redo texts. A run has a budget of three Redos.
+One more build after a gate or the review rejects the last build, with the faults of the rejection as Redo texts. A run has a budget of three Redos.
 _Avoid_: retry, attempt
 
 **Decline**:
@@ -49,7 +49,7 @@ The paths that a cleanup or a reframe can change, one for each line under the he
 _Avoid_: allow list, paths
 
 **Check**:
-The command in the first fenced block under the heading `## Check` of the issue. It fails before the build and passes after it. A cleanup and a reframe always have one, and a refactor can have one.
+The command in the first fenced block under the heading `## Check` of the issue, which fails before the build and passes after it. A cleanup and a reframe always have one, and a refactor can have one.
 _Avoid_: acceptance test, verify step
 
 ## Gates
@@ -59,5 +59,5 @@ A test of a build that the factory runs, outside the agent, before the review. A
 _Avoid_: check (see Check), validation
 
 **Pin**:
-The fingerprint of the files that a build must leave as they are, taken before the build. A refactor pins every test file. Every other recipe pins the feature files and the build settings files.
+The fingerprint, taken before the build, of the files that the build must leave as they are. A refactor pins every test file and the build settings files, and every other recipe pins the feature files and the build settings files.
 _Avoid_: snapshot, baseline

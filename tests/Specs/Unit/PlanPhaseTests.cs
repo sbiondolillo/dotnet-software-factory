@@ -269,7 +269,7 @@ public sealed class PlanPhaseTests : IDisposable
     [Fact]
     public async Task TheCorrectionPromptStillHoldsTheRemovalSentenceOnce()
     {
-        const string Sentence = "Remove each feature file whose behaviour the issue removes or replaces.";
+        const string Sentence = "Remove each feature file whose behavior the issue removes or replaces.";
         _h.Write(Greeting, PlanPhaseHarness.SoundFeature);
         _h.Write("specs/features/checkout.feature", PlanPhaseHarness.SoundFeature);
         _h.AgentRemoves(1, Greeting);
@@ -421,20 +421,20 @@ public sealed class PlanPhaseTests : IDisposable
     }
 
     [Fact]
-    public async Task ThePromptWrapsTheIssueAroundTheInstructions()
+    public async Task ThePromptWrapsTheIssueAroundTheLeadAndTheInstructions()
     {
-        _h.Text = new PlanText("INSTRUCTIONS", PlanMode.PlanOnly);
+        _h.Text = new PlanText("LEAD", "INSTRUCTIONS", PlanMode.PlanOnly);
         _h.AgentWrites(null, ".factory/plan.md", "p");
 
         await _h.RunAsync(title: "TITLE", body: "BODY");
 
-        Assert.Equal("Plan the work of the issue below.\n\nIssue title:\nTITLE\n\nIssue body:\nBODY\n\nINSTRUCTIONS", Assert.Single(_h.Prompts));
+        Assert.Equal("LEAD\n\nIssue title:\nTITLE\n\nIssue body:\nBODY\n\nINSTRUCTIONS", Assert.Single(_h.Prompts));
     }
 
     [Fact]
     public async Task TheCorrectionPromptWrapsTheFirstPromptAroundEachFailure()
     {
-        _h.Text = new PlanText("INSTRUCTIONS", PlanMode.PlanOnly);
+        _h.Text = new PlanText("LEAD", "INSTRUCTIONS", PlanMode.PlanOnly);
 
         await _h.RunAsync(title: "TITLE", body: "BODY");
 
@@ -447,7 +447,7 @@ public sealed class PlanPhaseTests : IDisposable
     [Fact]
     public async Task APlanOnlyTextFailsAFeatureFileThatTheAgentWrites()
     {
-        _h.Text = new PlanText("INSTRUCTIONS", PlanMode.PlanOnly);
+        _h.Text = new PlanText("LEAD", "INSTRUCTIONS", PlanMode.PlanOnly);
         _h.AgentWritesSoundFiles(null);
 
         PlanPhaseResult result = await _h.RunAsync();
@@ -459,7 +459,7 @@ public sealed class PlanPhaseTests : IDisposable
     [Fact]
     public async Task AFeaturesAndPlanTextPassesAFeatureFileThatTheAgentWrites()
     {
-        _h.Text = new PlanText("INSTRUCTIONS", PlanMode.FeaturesAndPlan);
+        _h.Text = new PlanText("LEAD", "INSTRUCTIONS", PlanMode.FeaturesAndPlan);
         _h.AgentWritesSoundFiles(null);
 
         PlanPhaseResult result = await _h.RunAsync();

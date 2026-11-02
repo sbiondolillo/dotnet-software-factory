@@ -87,9 +87,10 @@ public sealed class RecipeRulesTests
     public void ABehaviorWithNoScenariosWritesFeatureFilesAndAPlan()
     {
         PlanText text = RecipeRules.PlanText(Recipe.Behavior);
+        Assert.Equal("Plan the work of the issue below.", text.Lead);
         Assert.Equal(PlanMode.FeaturesAndPlan, text.Mode);
         Assert.StartsWith("Write Gherkin scenarios for the behavior in feature files under specs/features/ and write the plan to .factory/plan.md", text.Instructions, StringComparison.Ordinal);
-        Assert.Contains("Remove each feature file whose behaviour the issue removes or replaces.", text.Instructions, StringComparison.Ordinal);
+        Assert.Contains("Remove each feature file whose behavior the issue removes or replaces.", text.Instructions, StringComparison.Ordinal);
         Assert.Contains("name in the plan one test under tests/Integration/", text.Instructions, StringComparison.Ordinal);
     }
 
@@ -97,6 +98,7 @@ public sealed class RecipeRulesTests
     public void ABehaviorWithScenariosWritesThePlanAloneAndNamesTheFiles()
     {
         PlanText text = RecipeRules.PlanText(Recipe.Behavior, new IssueScenariosResult([], ["specs/features/a.feature"], ["specs/features/gone.feature"]));
+        Assert.Equal("Plan the work of the issue below.", text.Lead);
         Assert.Equal(PlanMode.PlanOnly, text.Mode);
         Assert.StartsWith(
             "The issue wrote these feature files, and the build makes their scenarios pass: specs/features/a.feature. The issue removed these feature files: specs/features/gone.feature. Write the plan to .factory/plan.md",
@@ -128,6 +130,7 @@ public sealed class RecipeRulesTests
     public void ARefactorWritesThePlanAlone()
     {
         PlanText text = RecipeRules.PlanText(Recipe.Refactor);
+        Assert.Equal("Plan the work of the refactor issue below.", text.Lead);
         Assert.Equal(PlanMode.PlanOnly, text.Mode);
         Assert.Equal(
             "Write the plan to .factory/plan.md, stating the structure the build gives the code and the steps to get there. Write no other file: .factory/plan.md is the only file the plan phase writes. Leave every other file as it is.",

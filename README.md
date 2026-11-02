@@ -246,6 +246,8 @@ A feedback run on the pull request of a `refactor` issue leaves every file under
 
 The repo's owner starts a reframe run, a run with no plan, with the label `reframe` on an issue. A reframe issue keeps the behavior of the program and changes the code, the tests or the config. A format sweep and a framework upgrade are reframe issues. The body names the paths the build can change under the heading `## Scope`, as a `cleanup` issue does. The scope can name `src/`. The body holds under the heading `## Check` one fenced `sh` block that fails before the change and exits with the code 0 after it. The run records the tests that pass on the base commit. It also records the public API of the code under `src/`: one line per public type and per public or protected member. The build runs again when it loses a test or changes a line of that API. The label `reframe` with the label `behavior`, `cleanup` or `refactor` on one issue gets a comment and no run.
 
+A feedback run on the pull request of a `reframe` issue keeps to the issue's `## Scope`, runs the build again when it loses a test, and runs the issue's `## Check` after the tests pass. It does not compare the public API.
+
 ### `review-feedback`
 
 A feedback run answers the review of a pull request that the factory opened. The loop starts with you:

@@ -48,6 +48,12 @@ public static class RecipeRules
 
     private const string ReframeReviewText = "Judge the build against every sentence of the issue: it changes only the paths under ## Scope, keeps the behavior of the program and makes the command under ## Check pass, and it keeps every test and every public type and member of the code under src/.";
 
+    private const string BindText =
+        "Bind every scenario of every feature file, in step classes under tests/Specs/Steps/. "
+        + "Write unit tests for the new code under tests/Specs/Unit/. ";
+
+    private const string PlanLead = "Plan the work of the issue below.";
+
     private const string ThreadScopeText = "A thread that asks for a change to a path outside the `## Scope` takes the status `disputed`, and its reply names the scope.";
 
     /// <summary>Reads the recipe from the labels, and the scope and the check from the body. Two labels that exclude each
@@ -93,12 +99,13 @@ public static class RecipeRules
     public static Pin TakePin(Recipe recipe, string workTree) =>
         recipe is Recipe.Refactor ? Pin.TakeRefactor(workTree) : Pin.Take(workTree);
 
-    /// <summary>The instructions of the plan prompt and the gate of the plan phase. A behavior with no <paramref name="scenarios"/>
+    /// <summary>The words of the plan prompt and the gate of the plan phase. A behavior with no <paramref name="scenarios"/>
     /// writes feature files and a plan. A behavior with scenarios, and a refactor, write the plan alone. A cleanup and a reframe
     /// have no plan phase, so they throw.</summary>
     public static PlanText PlanText(Recipe recipe, IssueScenariosResult? scenarios = null) => recipe switch
     {
         Recipe.Behavior when scenarios is { } given => new(
+            PlanLead,
             Named("The issue wrote these feature files, and the build makes their scenarios pass: ", given.Written)
             + Named("The issue removed these feature files: ", given.Removed)
             + (NoScenario(given) ? NoScenarioPlanText : "")
@@ -108,13 +115,15 @@ public static class RecipeRules
             + "Leave every other file as it is.",
             PlanMode.PlanOnly),
         Recipe.Behavior => new(
+            PlanLead,
             $"Write Gherkin scenarios for the behavior in feature files under {FeatureDirectory} "
             + $"and write the plan to {PlanPath}, stating each result the build owes. "
             + IntegrationText
-            + "Remove each feature file whose behaviour the issue removes or replaces. "
+            + "Remove each feature file whose behavior the issue removes or replaces. "
             + "Leave every other file as it is.",
             PlanMode.FeaturesAndPlan),
         Recipe.Refactor => new(
+            "Plan the work of the refactor issue below.",
             $"Write the plan to {PlanPath}, stating the structure the build gives the code and the steps to get there. "
             + $"Write no other file: {PlanPath} is the only file the plan phase writes. "
             + "Leave every other file as it is.",
@@ -220,10 +229,6 @@ public static class RecipeRules
             + "Write the code that the issue and the scenarios ask for. "
             + BindText,
     };
-
-    private const string BindText =
-        "Bind every scenario of every feature file, in step classes under tests/Specs/Steps/. "
-        + "Write unit tests for the new code under tests/Specs/Unit/. ";
 
     private static bool NoScenario(IssueScenariosResult scenarios) => scenarios is { Written.Count: 0, Removed.Count: 0 };
 
