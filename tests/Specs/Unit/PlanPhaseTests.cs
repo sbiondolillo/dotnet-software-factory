@@ -425,6 +425,18 @@ public sealed class PlanPhaseTests : IDisposable
     }
 
     [Fact]
+    public async Task ScenariosThatOnlyRemoveAFileGetNoNoScenarioSentence()
+    {
+        _h.Write("specs/features/a.feature", PlanPhaseHarness.SoundFeature);
+        _h.Scenarios = new IssueScenariosResult([], [], ["specs/features/gone.feature"]);
+        _h.AgentWrites(null, ".factory/plan.md", "p");
+
+        await _h.RunAsync();
+
+        Assert.DoesNotContain(NoScenarioText, Assert.Single(_h.Prompts), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ScenariosThatWriteNoFileFailAPlanThatAddsAFeatureFile()
     {
         _h.Scenarios = new IssueScenariosResult([], [], []);

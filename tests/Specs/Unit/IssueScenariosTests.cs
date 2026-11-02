@@ -263,4 +263,26 @@ public sealed class IssueScenariosTests : IDisposable
         Assert.Equal(["The heading ## Scenarios holds the line None. and a fenced block. Keep one of the two."], result.Faults);
         Assert.Equal("Feature: G\n\n" + One, Read());
     }
+
+    [Fact]
+    public void NoneWithRemovalsThatLeaveNoFeatureFileIsAFault()
+    {
+        Main("Feature: G\n\n" + One);
+
+        IssueScenariosResult result = Apply(NoneBody + "\n## Removed scenarios\n\n- `" + Path0 + "`: One\n");
+
+        Assert.Equal(["The issue leaves no feature file under specs/features/."], result.Faults);
+        Assert.Equal("Feature: G\n\n" + One, Read());
+    }
+
+    [Fact]
+    public void ABlockThenNoneIsAFault()
+    {
+        Main("Feature: G\n\n" + One);
+
+        IssueScenariosResult result = Apply(Block(Two) + "\nNone.\n");
+
+        Assert.Equal(["The heading ## Scenarios holds the line None. and a fenced block. Keep one of the two."], result.Faults);
+        Assert.Equal("Feature: G\n\n" + One, Read());
+    }
 }

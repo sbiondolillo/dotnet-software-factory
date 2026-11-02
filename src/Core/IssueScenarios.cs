@@ -422,8 +422,8 @@ public static partial class IssueScenarios
     private sealed record Body(IReadOnlyList<string> Headings, IReadOnlyList<Block> Blocks, IReadOnlyList<string> RemovedLines, IReadOnlyList<string> ScenarioLines);
 
     /// <summary>Reads the headings, the fenced blocks, the lines under <c>## Removed scenarios</c> and the lines outside a
-    /// fenced block under <c>## Scenarios</c>. A fenced block
-    /// closes as GitHub closes it: at a fence line of its own mark, at least as long, indented 3 spaces or fewer.</summary>
+    /// fenced block under <c>## Scenarios</c>. A fenced block closes as GitHub closes it: at a fence line of its own mark,
+    /// at least as long, indented 3 spaces or fewer.</summary>
     private static Body Read(string body)
     {
         var headings = new List<string>();
