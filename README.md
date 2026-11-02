@@ -342,5 +342,5 @@ dotnet build --no-restore                # build; every warning is an error
 dotnet format --verify-no-changes        # lint
 dotnet test --no-restore                 # the test suite, no network needed
 dotnet run --project tests/Integration   # the integration suite, network needed
-dotnet run --project src/App -- Ada      # the console program
+dotnet run --project src/App -- --help   # the console program: its usage and commands
 ```
