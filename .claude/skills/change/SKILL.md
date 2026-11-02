@@ -71,7 +71,7 @@ python3 -B -m unittest discover -s .github/repair -p 'test_*.py'
 
 `ruff format .` rewraps the Python under `.github/` to `ruff.toml`, and `ruff check .` names each line that it cannot wrap, such as a long docstring or a long string. Wrap each one by hand. The `build` job runs `ruff==0.16.2`, so a check with another version can differ.
 
-A change to code that calls GitHub, `docker` or Claude Code also runs `dotnet run --no-restore --project tests/Integration`, and the result goes in the pull request.
+Step 2 runs the checks of the `build` job. The `integration` job of `ci.yml` runs the integration suite on the pull request, and its check is the result of the suite.
 
 Commit the branch, new files included, so that a reviewer reads every change by one SHA. The commit runs only when `git status --porcelain` prints a line, since `git commit` with no change exits with the code 1. A failed run's pull request that needs only replies keeps its head commit, and step 3 reviews that head. The message, in the file `<scratch>/message`, is the title of the issue, or a Conventional Commits line for a change with no issue:
 
@@ -81,7 +81,7 @@ git add -- <each changed path> && git commit -F <scratch>/message
 
 A body with `## Check` then runs its block as the factory does, on the tracked files alone. `git worktree add --detach <scratch>/check HEAD`. Then write the block to `<scratch>/check.sh`, run `sh <scratch>/check.sh` in `<scratch>/check`, and run `git worktree remove --force <scratch>/check`. The block exits with the code 0.
 
-Done when every check above passes, and the result of the integration suite is kept when that suite ran. Then `git status --porcelain` lists no path the spec names.
+Done when every check above passes. Then `git status --porcelain` lists no path the spec names.
 
 ### 3. Review the branch
 
@@ -109,7 +109,7 @@ tr -d '\r' < <scratch>/spec | sed -nE 's/^ *Scenario( Outline)?: //p' | while re
 tr -d '\r' < <scratch>/spec | sed -n '/^## Removed scenarios/,/^## /p' | sed -nE 's/^- `[^`]*`: //p' | while read -r name; do grep -rhE '^ *Scenario( Outline)?: ' specs/features | sed -E 's/^ *Scenario( Outline)?: //' | grep -qxF -- "$name" && echo "still present: $name"; done
 ```
 
-Write the report to a file: what changed, the result of each suite, each reviewer's verdict, and each finding with its fix or its refutation. Then push the branch, `git push -u origin HEAD`. A push with no new commit prints `Everything up-to-date` and starts no check run, so the handover names each red check, and the owner reruns it with `gh run rerun <id> --failed`. For a failed run with an open pull request, each open review thread then gets a reply, as `## Review threads` says: the SHA of its pushed fix, or the evidence that refutes it. A fixed thread is resolved, and a refuted thread stays open for the reviewer. Deliver the report by the case:
+Write the report to a file: what changed, the result of each suite, each reviewer's verdict, and each finding with its fix or its refutation. The report names the `integration` check of the pull request as the result of the integration suite. A change to code that calls GitHub, `docker` or Claude Code says so in the report, so that the owner reads that check. Then push the branch, `git push -u origin HEAD`. A push with no new commit prints `Everything up-to-date` and starts no check run, so the handover names each check that is red or `cancelled`, and the owner reruns it with `gh run rerun <id> --failed`. A check shows `cancelled` when its concurrency group, such as `ci-integration`, cancels a waiting job as a newer one queues. For a failed run with an open pull request, each open review thread then gets a reply, as `## Review threads` says: the SHA of its pushed fix, or the evidence that refutes it. A fixed thread is resolved, and a refuted thread stays open for the reviewer. Deliver the report by the case:
 
 | Case | Delivery |
 |---|---|
