@@ -250,7 +250,7 @@ public sealed class FactoryRun(
 
         _summary.AddRow("plan", null, "passed");
         await Say("plan: passed").ConfigureAwait(false);
-        var buildPhase = new BuildPhase(agent);
+        var buildPhase = new BuildPhase(agent, noScenario: scenarios is { Written.Count: 0, Removed.Count: 0 });
         LintGate lintGate = agents.Lint(log);
         var testGate = new TestGate(agents.Sandbox, log, request.SkipIntegration);
         var reviewPhase = new ReviewPhase(agents.Reviewer, git);

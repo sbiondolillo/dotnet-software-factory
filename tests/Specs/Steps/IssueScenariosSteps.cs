@@ -489,6 +489,12 @@ public sealed class IssueScenariosSteps(FactoryRunSteps factory, PlanPhaseSteps 
             Directory.EnumerateFiles(features, "*.feature", SearchOption.AllDirectories).Select(file => Path.GetRelativePath(H.CloneDirectory, file).Replace('\\', '/')));
     }
 
+    [Then("the first build prompt holds {string}")]
+    public void ThenFirstBuildHolds(string text) => Assert.Contains(text, H.Prompts.First(p => p.Kind is "build").Text, StringComparison.Ordinal);
+
+    [Then("the first build prompt lacks {string}")]
+    public void ThenFirstBuildLacks(string text) => Assert.DoesNotContain(text, H.Prompts.First(p => p.Kind is "build").Text, StringComparison.Ordinal);
+
     [Then("the run gives back a pull request")]
     public void ThenPull() => Assert.NotNull(Result.PullRequest);
 

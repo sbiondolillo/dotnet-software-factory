@@ -121,4 +121,27 @@ public sealed class BuildPhaseTests
         using var h = new BuildPhaseHarness { RawOutput = "not json" };
         await Assert.ThrowsAsync<ClaudeCodeException>(() => h.RunAsync());
     }
+
+    [Fact]
+    public async Task ANoScenarioBuildAsksForTheCodeAloneAndLeavesTheTests()
+    {
+        using var h = new BuildPhaseHarness { NoScenario = true };
+        await h.RunAsync();
+        string prompt = Assert.Single(h.Prompts);
+        Assert.Contains(BuildPhase.NoScenarioText, prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Bind every scenario", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Write unit tests", prompt, StringComparison.Ordinal);
+        Assert.Contains("Run dotnet build and dotnet test, and work until both pass.", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ABehaviourBuildAsksForBindingsAndUnitTests()
+    {
+        using var h = new BuildPhaseHarness();
+        await h.RunAsync();
+        string prompt = Assert.Single(h.Prompts);
+        Assert.DoesNotContain(BuildPhase.NoScenarioText, prompt, StringComparison.Ordinal);
+        Assert.Contains("Bind every scenario of every feature file", prompt, StringComparison.Ordinal);
+        Assert.Contains("Write unit tests for the new code under tests/Specs/Unit/.", prompt, StringComparison.Ordinal);
+    }
 }

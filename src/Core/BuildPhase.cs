@@ -5,9 +5,13 @@ namespace Core;
 /// <summary>The outcome of <see cref="BuildPhase"/>: passed, or failed with the text claude gave.</summary>
 public sealed record BuildPhaseResult(bool Passed, string Failure);
 
-/// <summary>Asks the agent to implement the plan and bind every pinned scenario.</summary>
-public sealed class BuildPhase(Agent agent, bool cleanup = false, bool refactor = false, bool readsPlan = true, bool reframe = false)
+/// <summary>Asks the agent to implement the plan and bind every pinned scenario. With <c>noScenario</c>, for an issue
+/// whose <c>## Scenarios</c> is <c>None.</c>, the agent writes the code alone and leaves the tests as they are.</summary>
+public sealed class BuildPhase(Agent agent, bool cleanup = false, bool refactor = false, bool readsPlan = true, bool reframe = false, bool noScenario = false)
 {
+    /// <summary>The sentences of the build prompt for an issue whose <c>## Scenarios</c> is <c>None.</c>.</summary>
+    public const string NoScenarioText = "Read the plan, .factory/plan.md, and write the code that it asks for. The issue states that no scenario applies, so add and change no file under specs/features/ or tests/. ";
+
     private const int PromptLimit = 131071;
     private const string CutMarker = "[cut]";
 
@@ -134,10 +138,12 @@ public sealed class BuildPhase(Agent agent, bool cleanup = false, bool refactor 
         prompt.Append("Build the work of the issue below.\n\n")
             .Append("Issue title:\n").Append(title).Append("\n\n")
             .Append("Issue body:\n").Append(body).Append("\n\n")
-            .Append("Read the plan, .factory/plan.md, and each feature file under specs/features/. ")
-            .Append("Write the code that the plan and the scenarios ask for. ")
-            .Append("Bind every scenario of every feature file, in step classes under tests/Specs/Steps/. ")
-            .Append("Write unit tests for the new code under tests/Specs/Unit/. ")
+            .Append(noScenario
+                ? NoScenarioText
+                : "Read the plan, .factory/plan.md, and each feature file under specs/features/. "
+                    + "Write the code that the plan and the scenarios ask for. "
+                    + "Bind every scenario of every feature file, in step classes under tests/Specs/Steps/. "
+                    + "Write unit tests for the new code under tests/Specs/Unit/. ")
             .Append("Leave each feature file and each build settings file as it is; the build settings files are named ")
             .Append(string.Join(", ", Pin.SettingsFileNames.Order(StringComparer.Ordinal)))
             .Append(". Run dotnet build and dotnet test, and work until both pass.");

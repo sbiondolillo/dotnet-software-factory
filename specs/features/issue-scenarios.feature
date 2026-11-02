@@ -70,6 +70,8 @@ Feature: The factory pins the scenarios of an issue as the owner wrote them
     When the factory runs the issue
     Then the first plan prompt holds "Write no other file: .factory/plan.md is the only file the plan phase writes."
     And the first plan prompt holds "The issue states that no scenario applies, so the build adds no feature file. Say so in one line of the plan."
+    And the first build prompt holds "The issue states that no scenario applies, so add and change no file under specs/features/ or tests/."
+    And the first build prompt lacks "Write unit tests"
     And the work tree holds "specs/features/greeting.feature" as it is on main, and no other feature file
     And the run gives back a pull request
 
@@ -82,6 +84,12 @@ Feature: The factory pins the scenarios of an issue as the owner wrote them
     Given a block whose step holds a doc string fenced with ``` and indented 6 spaces
     When the factory runs the issue
     Then the feature file holds the doc string and every step after it
+
+  Scenario: The build prompt of an issue with scenarios asks for bindings and unit tests
+    Given an issue with ## Scenarios
+    When the factory runs the issue
+    Then the first build prompt holds "Write unit tests for the new code under tests/Specs/Unit/."
+    And the first build prompt lacks "The issue states that no scenario applies"
 
   Scenario: The first prompt of an issue with scenarios asks for the plan alone
     Given an issue with ## Scenarios
