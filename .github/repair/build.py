@@ -94,7 +94,7 @@ def factory_runs(repo):
             "--limit",
             "30",
             "--json",
-            "databaseId,status,conclusion,url",
+            "databaseId,displayTitle,status,conclusion,url",
         )
     )
     return {run["databaseId"]: run for run in runs}
@@ -178,7 +178,9 @@ def delete_base_branch(repo, branch):
 def dispatch(repo, number, timeout, ref=None):
     """Starts the factory on the issue, and gives back its run once the list holds it.
 
-    With a ref, the factory of that ref builds on the head of main, by `base=main`. With none, it runs at main.
+    The run is new since the dispatch, and named `#<issue>` by the run-name of factory.yml, so a run of another issue
+    dispatched in the same window is not taken. With a ref, the factory of that ref builds on the head of main, by
+    `base=main`. With none, it runs at main.
     """
     before = factory_runs(repo)
     at = ["--ref", ref, "-f", "base=main"] if ref else []
@@ -186,7 +188,11 @@ def dispatch(repo, number, timeout, ref=None):
     deadline = time.time() + timeout
     while time.time() < deadline:
         time.sleep(10)
-        new = [run for run_id, run in factory_runs(repo).items() if run_id not in before]
+        new = [
+            run
+            for run_id, run in factory_runs(repo).items()
+            if run_id not in before and run["displayTitle"] == f"#{number}"
+        ]
         if new:
             return new[0]
     sys.exit(f"repair: the dispatch of {WORKFLOW} for issue #{number} shows no run after {timeout} s")

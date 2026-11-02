@@ -1,7 +1,9 @@
-"""Unit tests of the token of the create, the move and the deletion of repair-base/<n> in build.py, decided in
-#403. The build job of ci.yml runs them with `python3 -B -m unittest discover -s .github/repair -p 'test_*.py'`.
-No test calls GitHub: each one replaces subprocess.run and reads the env that each call gets."""
+"""Unit tests of build.py: the token of the create, the move and the deletion of repair-base/<n>, decided in #403,
+and the run that the dispatch gives back, from #469. The build job of ci.yml runs them with
+`python3 -B -m unittest discover -s .github/repair -p 'test_*.py'`. No test calls GitHub: each one replaces
+subprocess.run or gh."""
 
+import json
 import os
 import subprocess
 import unittest
@@ -70,6 +72,25 @@ class RefTokenTests(unittest.TestCase):
                 build.delete_base_branch(REPO, BRANCH)
                 self.assertNotIn("env", run.call_args.kwargs)
                 self.assertEqual(os.environ["GH_TOKEN"], "job")
+
+
+class DispatchTests(unittest.TestCase):
+    def test_the_dispatch_gives_back_the_run_of_its_issue_when_another_issue_comes_first(self):
+        other = {"databaseId": 2, "displayTitle": "#999", "url": "https://example/2"}
+        own = {"databaseId": 3, "displayTitle": "#7", "url": "https://example/3"}
+        old = {"databaseId": 1, "displayTitle": "#7", "url": "https://example/1"}
+        lists = iter([[old], [other, own, old]])
+
+        def gh(*args, **kwargs):
+            """A run list answers with the fields of --json alone, as gh does, and any other call with no output."""
+            if args[:2] != ("run", "list"):
+                return ""
+            fields = args[args.index("--json") + 1].split(",")
+            return json.dumps([{key: run[key] for key in fields if key in run} for run in next(lists)])
+
+        with mock.patch.object(build, "gh", side_effect=gh), mock.patch.object(build.time, "sleep"):
+            run = build.dispatch(REPO, 7, 180)
+        self.assertEqual(run, own)
 
 
 if __name__ == "__main__":
