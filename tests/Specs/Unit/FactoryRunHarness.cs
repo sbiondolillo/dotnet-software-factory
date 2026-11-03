@@ -16,6 +16,7 @@ public sealed record SeenRequest(string Method, string Uri, string? Content);
 public sealed class FactoryRunHarness : IDisposable
 {
     public const string ContainerId = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    public const string Blocking = "The total ignores the second item of the cart.";
     public const string RedText = "Assert.Equal() Failure: Values differ";
 
     private readonly DirectoryInfo _clone = Directory.CreateTempSubdirectory("factory-run-clone-");
@@ -92,6 +93,8 @@ public sealed class FactoryRunHarness : IDisposable
     public StringWriter Progress { get; } = new();
 
     public HashSet<int> RedBuilds { get; } = [];
+
+    public HashSet<int> RejectedBuilds { get; } = [];
 
     public string? TestStdout { get; set; }
 
@@ -485,7 +488,10 @@ public sealed class FactoryRunHarness : IDisposable
 
         if (kind is "review" && !ErrorReviews.Contains(_reviews))
         {
-            Write(".factory/review.json", """{"approved":true,"blocking":[]}""");
+            bool rejected = RejectedBuilds.Contains(_builds);
+            Write(".factory/review.json", rejected
+                ? JsonSerializer.Serialize(new { approved = false, blocking = new[] { Blocking } })
+                : """{"approved":true,"blocking":[]}""");
         }
 
         if ((kind is "build" && ErrorBuilds.Contains(_builds)) || (kind is "review" && ErrorReviews.Contains(_reviews)))

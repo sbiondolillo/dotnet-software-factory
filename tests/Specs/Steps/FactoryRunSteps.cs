@@ -100,11 +100,8 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     [Given("each dotnet command exits with the code 0 and the TRX file holds one passed test")]
     public void GivenDotnet() => _h.RedBuilds.Clear();
 
-    /// <summary>The harness approves every review, so the step sets nothing.</summary>
     [Given("the agent approves on the review prompt")]
-    public static void GivenApproves()
-    {
-    }
+    public void GivenApproves() => _h.RejectedBuilds.Clear();
 
     [Given("the clone lacks {string}")]
     public void GivenLacks(string path) => _h.Lacks.Add(path);
