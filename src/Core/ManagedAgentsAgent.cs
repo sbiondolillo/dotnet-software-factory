@@ -240,8 +240,9 @@ public sealed class ManagedAgentsAgent(
             foreach (string path in Directory.EnumerateFiles(factory).Order(StringComparer.Ordinal))
             {
                 string name = Path.GetFileName(path);
-                if (!IsSafeName(name))
+                if (!IsSafeName(name) || new FileInfo(path).LinkTarget is not null)
                 {
+                    // An upload reads through a link, so a linked file would send a file of the runner to the session.
                     continue;
                 }
 

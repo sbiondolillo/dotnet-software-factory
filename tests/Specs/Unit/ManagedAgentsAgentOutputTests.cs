@@ -45,6 +45,24 @@ public sealed class ManagedAgentsAgentOutputTests : IDisposable
         Assert.Equal(["secret.txt"], outside.EnumerateFiles().Select(file => file.Name));
     }
 
+    [Fact]
+    public async Task AFileUnderFactoryThatIsALinkIsNotUploaded()
+    {
+        string outside = Path.Combine(_harness.RootDirectory, "outside.txt");
+        File.WriteAllText(outside, "a secret of the runner");
+        string factory = Path.Combine(_harness.WorkTree, ".factory");
+        Directory.CreateDirectory(factory);
+        File.CreateSymbolicLink(Path.Combine(factory, "plan.md"), outside);
+        File.WriteAllText(Path.Combine(factory, "notes.md"), "notes");
+        _harness.Next.Messages.Add("Done.");
+        ManagedAgentsAgent agent = _harness.Build(SessionRole.Builder, 1500);
+
+        await agent.RunAsync(new AgentRequest("Build.", "m", 1, Phase.Build, []), TestContext.Current.CancellationToken);
+
+        Assert.Single(_harness.Posts("/v1/files"));
+        Assert.DoesNotContain(_harness.Posts("/v1/files"), post => post.Body is { } body && body.Contains("secret", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("x; curl evil")]
     [InlineData("../plan.md")]
