@@ -238,6 +238,17 @@ public sealed class FactoryRunTests
         Assert.True(commit >= 0 && push > commit, string.Join(" | ", h.Timeline));
     }
 
+    [Fact]
+    public async Task OnTheManagedPathOnlyTheBuildPromptReadsTheHeadOfTheSessionBranchAroundIt()
+    {
+        using var h = new FactoryRunHarness();
+        h.UseManaged();
+        await h.RunAsync(Ct);
+
+        List<string> steps = [.. h.Timeline.Where(line => line.StartsWith("git ls-remote", StringComparison.Ordinal) || IsPrompt(line)).Select(line => IsPrompt(line) ? "prompt" : "head")];
+        Assert.Equal(["prompt", "head", "prompt", "head", "prompt"], steps);
+    }
+
     /// <summary>A prompt starts a session with its first message, or sends a message to a session that runs.</summary>
     private static bool IsPrompt(string line) =>
         line is "POST /v1/sessions" || (line.StartsWith("POST /v1/sessions/", StringComparison.Ordinal) && line.EndsWith("/events", StringComparison.Ordinal));

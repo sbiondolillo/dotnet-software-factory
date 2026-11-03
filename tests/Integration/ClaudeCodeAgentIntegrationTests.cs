@@ -56,8 +56,8 @@ public sealed class ClaudeCodeAgentIntegrationTests : IDisposable
     {
         await using Sandbox sandbox = await StartAsync();
 
-        ClaudeCodeResult result = await new ClaudeCodeAgent(sandbox).RunAsync(
-            "Reply with the single word ok and nothing else.", Model, 1, TestContext.Current.CancellationToken);
+        AgentAnswer result = await new ClaudeCodeAgent(sandbox, _tree.FullName).RunAsync(
+            new AgentRequest("Reply with the single word ok and nothing else.", Model, 1, Phase.Build, []), TestContext.Current.CancellationToken);
 
         Assert.False(result.IsError);
         Assert.Equal("ok", result.Result);
@@ -79,7 +79,20 @@ public sealed class ClaudeCodeAgentIntegrationTests : IDisposable
         Assert.True(File.Exists(AnswerPath));
         Assert.Contains("approved", File.ReadAllText(AnswerPath), StringComparison.Ordinal);
         File.AppendAllText(AnswerPath, " ");
-        using JsonDocument document = ClaudeCodeAgent.ReadJsonFile(AnswerPath);
+        using var document = JsonDocument.Parse(File.ReadAllText(AnswerPath));
+        Assert.Equal("approved", document.RootElement.GetProperty("verdict").GetString());
+    }
+
+    [Fact]
+    public async Task TheAgentGivesTheTextOfTheOutputThatThePromptWrites()
+    {
+        await using Sandbox sandbox = await StartAsync();
+
+        AgentAnswer answer = await new ClaudeCodeAgent(sandbox, _tree.FullName).RunAsync(
+            new AgentRequest(WritePrompt, Model, 6, Phase.Build, ["answer.json"]), TestContext.Current.CancellationToken);
+
+        Assert.False(answer.IsError, answer.Result);
+        using var document = JsonDocument.Parse(answer.Outputs["answer.json"]);
         Assert.Equal("approved", document.RootElement.GetProperty("verdict").GetString());
     }
 

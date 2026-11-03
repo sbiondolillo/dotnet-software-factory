@@ -69,3 +69,13 @@ _Avoid_: snapshot, baseline
 **Baseline**:
 What a gate reads from the base commit before the first build, and holds from its construction: the tests that passed, for the lost-test check of the test gate, and the listing of the public API, for the API gate.
 _Avoid_: snapshot, prepare
+
+## Agents
+
+**Agent**:
+What a phase sends one request through and takes one answer from. A phase sees the agent alone, and never the adapter behind it.
+_Avoid_: session, claude
+
+**Output**:
+A file that a phase asks the agent for by name, and that the answer carries as text. The agent keeps it fresh: an output in the answer is one that this prompt wrote.
+_Avoid_: artifact, result (the result is the text of the answer)

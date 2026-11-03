@@ -24,7 +24,12 @@ public sealed class PlanPhase(Agent agent, PlanText text)
     private bool PlanOnly => text.Mode is PlanMode.PlanOnly;
 
     private const string FeatureDirectory = "specs/features/";
-    private const string PlanPath = ".factory/plan.md";
+    private const string PlanName = "plan.md";
+    private const string PlanPath = ".factory/" + PlanName;
+
+    /// <summary>The sentence that ends the correction prompt. The agent removes each output before a prompt, so the plan of the
+    /// first run is gone.</summary>
+    public const string CorrectionPlanSentence = "\nWrite the whole plan to " + PlanPath + " again in this run. The host removes the plan of the run before.\n";
 
     /// <summary>Runs the first prompt and, when its gate fails, one correction prompt.</summary>
     public async Task<PlanPhaseResult> RunAsync(
@@ -56,6 +61,8 @@ public sealed class PlanPhase(Agent agent, PlanText text)
             correction.Append("- ").Append(failure).Append('\n');
         }
 
+        correction.Append(CorrectionPlanSentence);
+
         (failures, _) = await RunOnceAsync(correction.ToString(), model, maxTurns, workTree, baseline, cancellationToken).ConfigureAwait(false);
         return failures.Count is 0
             ? new PlanPhaseResult(true, Pin.Take(workTree), [])
@@ -75,20 +82,21 @@ public sealed class PlanPhase(Agent agent, PlanText text)
         Dictionary<string, string> baseline,
         CancellationToken cancellationToken)
     {
-        ClaudeCodeResult answer = await agent.RunAsync(prompt, model, maxTurns, "plan", cancellationToken).ConfigureAwait(false);
+        AgentAnswer answer = await agent.RunAsync(new AgentRequest(prompt, model, maxTurns, Phase.Plan, [PlanName]), cancellationToken).ConfigureAwait(false);
         if (answer.IsError)
         {
-            return ([string.IsNullOrWhiteSpace(answer.Result) ? "claude answered with an error and no text." : answer.Result], true);
+            return ([answer.Result], true);
         }
 
-        return (PlanOnly ? RefactorGate(workTree, baseline) : Gate(workTree, baseline), false);
+        bool planned = answer.Outputs.ContainsKey(PlanName);
+        return (PlanOnly ? RefactorGate(workTree, baseline, planned) : Gate(workTree, baseline, planned), false);
     }
 
-    private static List<string> RefactorGate(string workTree, Dictionary<string, string> baseline)
+    private static List<string> RefactorGate(string workTree, Dictionary<string, string> baseline, bool planned)
     {
         var failures = new List<string>();
         Dictionary<string, string> now = Snapshot(workTree, all: true);
-        if (!File.Exists(Path.Combine(workTree, PlanPath)))
+        if (!planned)
         {
             failures.Add($"The plan {PlanPath} is missing.");
         }
@@ -107,7 +115,7 @@ public sealed class PlanPhase(Agent agent, PlanText text)
         return failures;
     }
 
-    private static List<string> Gate(string workTree, Dictionary<string, string> baseline)
+    private static List<string> Gate(string workTree, Dictionary<string, string> baseline, bool planned)
     {
         var failures = new List<string>();
         Dictionary<string, string> now = Snapshot(workTree, all: false);
@@ -145,7 +153,7 @@ public sealed class PlanPhase(Agent agent, PlanText text)
             }
         }
 
-        if (!File.Exists(Path.Combine(workTree, PlanPath)))
+        if (!planned)
         {
             failures.Add($"The plan {PlanPath} is missing.");
         }

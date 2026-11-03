@@ -118,12 +118,45 @@ public sealed class PlanPhaseTests : IDisposable
     }
 
     [Fact]
-    public async Task AnErrorWithNoTextSendsOnePromptAndGivesTheFailureSentence()
+    public async Task ThePromptIsAPlanRequestThatAsksForThePlan()
     {
-        _h.Answer(null, true, "");
+        _h.AgentWritesSoundFiles(null);
+        await _h.RunAsync(model: "m", turns: 7);
+        AgentRequest request = Assert.Single(_h.Requests);
+        Assert.Equal((Phase.Plan, "m", 7), (request.Phase, request.Model, request.MaxTurns));
+        Assert.Equal(["plan.md"], request.Outputs);
+    }
+
+    [Fact]
+    public async Task APlanInTheOutputsOfTheAnswerWithNoFileOnDiskPasses()
+    {
+        _h.Agent.ReadsDisk = false;
+        _h.AgentWrites(null, "specs/features/checkout.feature", PlanPhaseHarness.SoundFeature);
+        _h.Agent.Answer(FakeAgent.Done() with { Outputs = new Dictionary<string, string> { ["plan.md"] = PlanPhaseHarness.PlanText } });
         PlanPhaseResult result = await _h.RunAsync();
-        Assert.Single(_h.Prompts);
-        Assert.Equal(["claude answered with an error and no text."], result.Failures);
+        Assert.True(result.Passed, string.Join(" | ", result.Failures));
+        Assert.False(File.Exists(Path.Combine(_h.WorkTree, ".factory", "plan.md")));
+    }
+
+    [Fact]
+    public async Task APlanOnDiskThatTheOutputsOfTheAnswerLackIsMissing()
+    {
+        _h.Agent.ReadsDisk = false;
+        _h.AgentWritesSoundFiles(null);
+        PlanPhaseResult result = await _h.RunAsync();
+        Assert.False(result.Passed);
+        Assert.Equal(["The plan .factory/plan.md is missing."], result.Failures);
+    }
+
+    [Fact]
+    public async Task APlanFileThatThePromptDidNotWriteIsMissing()
+    {
+        _h.Write(".factory/plan.md", "the plan of a run before");
+        _h.AgentWrites(null, "specs/features/checkout.feature", PlanPhaseHarness.SoundFeature);
+        PlanPhaseResult result = await _h.RunAsync();
+        Assert.False(result.Passed);
+        Assert.Equal(["The plan .factory/plan.md is missing."], result.Failures);
+        Assert.Equal(2, _h.Prompts.Count);
     }
 
     [Fact]
@@ -143,11 +176,31 @@ public sealed class PlanPhaseTests : IDisposable
         _h.AgentWritesSoundFiles(1);
         _h.AgentWrites(1, "src/One.cs", "x");
         _h.AgentWrites(1, "src/Two.cs", "x");
+        _h.AgentWrites(2, ".factory/plan.md", PlanPhaseHarness.PlanText);
         PlanPhaseResult result = await _h.RunAsync();
         Assert.Equal(2, _h.Prompts.Count);
         Assert.Contains("src/One.cs", _h.Prompts[1], StringComparison.Ordinal);
         Assert.Contains("src/Two.cs", _h.Prompts[1], StringComparison.Ordinal);
         Assert.Equal(2, result.Failures.Count);
+    }
+
+    [Fact]
+    public async Task TheCorrectionPromptEndsWithTheSentenceThatAsksForThePlanAgain()
+    {
+        _h.AgentWritesSoundFiles(1);
+        _h.AgentWrites(1, "src/One.cs", "x");
+        await _h.RunAsync();
+        Assert.DoesNotContain(PlanPhase.CorrectionPlanSentence, _h.Prompts[0], StringComparison.Ordinal);
+        Assert.EndsWith(PlanPhase.CorrectionPlanSentence, _h.Prompts[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ACorrectionThatDoesNotWriteThePlanAgainFailsWithTheMissingPlan()
+    {
+        _h.AgentWritesSoundFiles(1);
+        _h.AgentWrites(1, "src/One.cs", "x");
+        _h.AgentRemoves(2, "src/One.cs");
+        AssertOneFailureNaming(await _h.RunAsync(), ".factory/plan.md");
     }
 
     [Fact]
@@ -157,6 +210,7 @@ public sealed class PlanPhaseTests : IDisposable
         _h.AgentWrites(1, "src/One.cs", "x");
         _h.AgentRemoves(2, "src/One.cs");
         _h.AgentWrites(2, "src/Other.cs", "x");
+        _h.AgentWrites(2, ".factory/plan.md", PlanPhaseHarness.PlanText);
         AssertOneFailureNaming(await _h.RunAsync(), "src/Other.cs");
     }
 
@@ -188,7 +242,7 @@ public sealed class PlanPhaseTests : IDisposable
     [Fact]
     public async Task ARejectedPromptPropagates()
     {
-        _h.RawOutput = "no json";
+        _h.Agent.Throw(new ClaudeCodeException("no JSON object"));
         await Assert.ThrowsAsync<ClaudeCodeException>(() => _h.RunAsync());
     }
 
@@ -276,6 +330,7 @@ public sealed class PlanPhaseTests : IDisposable
         _h.AgentWrites(1, ".factory/plan.md", "p");
         _h.AgentWrites(1, "src/New.cs", "x");
         _h.AgentRemoves(2, "src/New.cs");
+        _h.AgentWrites(2, ".factory/plan.md", "p");
         PlanPhaseResult result = await _h.RunAsync();
         Assert.True(result.Passed);
         Assert.Equal(2, _h.Prompts.Count);
@@ -415,7 +470,7 @@ public sealed class PlanPhaseTests : IDisposable
 
         Assert.Equal(2, _h.Prompts.Count);
         Assert.Equal(
-            _h.Prompts[0] + "\n\nYour previous run failed these checks. Fix each one:\n- The plan .factory/plan.md is missing.\n",
+            _h.Prompts[0] + "\n\nYour previous run failed these checks. Fix each one:\n- The plan .factory/plan.md is missing.\n" + PlanPhase.CorrectionPlanSentence,
             _h.Prompts[1]);
     }
 

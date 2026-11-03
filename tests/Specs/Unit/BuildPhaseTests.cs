@@ -18,12 +18,17 @@ public sealed class BuildPhaseTests
     }
 
     [Fact]
-    public async Task AFailedAnswerWithNoTextFailsWithEmptyText()
+    public async Task ThePromptIsABuildRequestThatNamesTheOutputsAndTheResultCarriesTheOutputsAndTheFaults()
     {
-        using var h = new BuildPhaseHarness { IsError = true, OmitResult = true };
-        BuildPhaseResult result = await h.RunAsync();
-        Assert.False(result.Passed);
-        Assert.Equal("", result.Failure);
+        using var h = new BuildPhaseHarness { Answer = FakeAgent.Done() with { Faults = ["no commit"] } };
+        h.Agent.Stage("threads.json", "{}");
+        BuildPhaseResult result = await h.RunAsync(turns: 9, outputs: ["threads.json"]);
+        AgentRequest request = Assert.Single(h.Requests);
+        Assert.Equal((Phase.Build, 9), (request.Phase, request.MaxTurns));
+        Assert.Equal(["threads.json"], request.Outputs);
+        Assert.True(result.Passed);
+        Assert.Equal(new Dictionary<string, string> { ["threads.json"] = "{}" }, result.Outputs);
+        Assert.Equal(["no commit"], result.Faults);
     }
 
     [Fact]
@@ -118,7 +123,8 @@ public sealed class BuildPhaseTests
     [Fact]
     public async Task AClaudeCodeExceptionReachesTheCaller()
     {
-        using var h = new BuildPhaseHarness { RawOutput = "not json" };
+        using var h = new BuildPhaseHarness();
+        h.Agent.Throw(new ClaudeCodeException("no JSON object"), 1);
         await Assert.ThrowsAsync<ClaudeCodeException>(() => h.RunAsync());
     }
 

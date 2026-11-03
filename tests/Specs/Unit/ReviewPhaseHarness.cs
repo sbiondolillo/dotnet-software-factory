@@ -1,16 +1,18 @@
-using System.Text.Json;
 using Core;
 using Moq;
 
 namespace Specs.Unit;
 
-/// <summary>A real work tree and a mocked command runner behind a real sandbox and a real Git, for the review phase.</summary>
+/// <summary>A real work tree, a <see cref="FakeAgent"/> and a real Git over a mocked command runner, for the review phase.</summary>
 public sealed class ReviewPhaseHarness : IDisposable
 {
     public const string DefaultBase = "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c";
 
     private readonly DirectoryInfo _work = Directory.CreateTempSubdirectory("factory-review-work-");
-    private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("factory-review-root-");
+
+    public ReviewPhaseHarness() => Agent = new FakeAgent(_work.FullName);
+
+    public FakeAgent Agent { get; }
 
     public string WorkTree => _work.FullName;
 
@@ -28,17 +30,11 @@ public sealed class ReviewPhaseHarness : IDisposable
 
     public List<CommandSpec> Recorded { get; } = [];
 
-    public List<List<string>> ExecArguments { get; } = [];
+    public IReadOnlyList<AgentRequest> Requests => Agent.Requests;
 
-    public List<string> Prompts { get; } = [];
+    public IReadOnlyList<string> Prompts => Agent.Prompts;
 
-    public string? VerdictBeforeAgent { get; private set; }
-
-    public void Dispose()
-    {
-        _work.Delete(recursive: true);
-        _root.Delete(recursive: true);
-    }
+    public void Dispose() => _work.Delete(recursive: true);
 
     public void Write(string relative, string text)
     {
@@ -59,16 +55,15 @@ public sealed class ReviewPhaseHarness : IDisposable
             .Returns((CommandSpec spec, CancellationToken _) =>
             {
                 Recorded.Add(spec);
-                return Task.FromResult(spec.Command is "git" ? Git(spec) : spec.Arguments[0] switch
-                {
-                    "run" => new CommandResult { StandardOutput = "0123456789abcdef\n" },
-                    "exec" => Exec(spec),
-                    _ => new CommandResult(),
-                });
+                return Task.FromResult(Git(spec));
             });
-        File.WriteAllText(Path.Combine(_root.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
-        Sandbox sandbox = await Sandbox.StartAsync(mock.Object, "factory-sandbox:test", _root.FullName, _work.FullName);
-        var phase = new ReviewPhase(new ClaudeCodeAgent(sandbox), new Git(mock.Object), JobSteps);
+        if (VerdictToWrite is not null)
+        {
+            Agent.Stage("review.json", VerdictToWrite);
+        }
+
+        Agent.Answer(IsError ? FakeAgent.Error(ResultText) : FakeAgent.Done(ResultText));
+        var phase = new ReviewPhase(Agent, new Git(mock.Object), JobSteps);
         return await phase.RunAsync(title, body, model, turns, _work.FullName, baseCommit);
     }
 
@@ -80,30 +75,6 @@ public sealed class ReviewPhaseHarness : IDisposable
             ExitCode = DiffExitCode,
             StandardOutput = DiffText,
             StandardError = DiffExitCode is 0 ? "" : "fatal: bad object",
-        };
-    }
-
-    private CommandResult Exec(CommandSpec spec)
-    {
-        List<string> arguments = [.. spec.Arguments];
-        ExecArguments.Add(arguments);
-        Prompts.Add(arguments[arguments.IndexOf("-p") + 1]);
-        string verdict = Path.Combine(_work.FullName, ".factory", "review.json");
-        VerdictBeforeAgent = File.Exists(verdict) ? File.ReadAllText(verdict) : null;
-        if (VerdictToWrite is not null)
-        {
-            Write(".factory/review.json", VerdictToWrite);
-        }
-
-        return new CommandResult
-        {
-            StandardOutput = JsonSerializer.Serialize(new Dictionary<string, object>
-            {
-                ["is_error"] = IsError,
-                ["result"] = ResultText,
-                ["num_turns"] = 1,
-                ["total_cost_usd"] = 0.0,
-            }),
         };
     }
 }

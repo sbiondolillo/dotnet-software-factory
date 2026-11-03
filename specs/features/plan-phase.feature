@@ -89,6 +89,7 @@ Feature: The plan phase writes the scenarios and the plan, and the scenarios are
   Scenario: The correction removes the extra file and passes with a pin
     Given the agent on the first run writes the sound feature file, the plan and the file "src/Core/Extra.cs"
     And the agent on the second run removes "src/Core/Extra.cs"
+    And the agent on the second run writes the file ".factory/plan.md" with the text "The checkout adds the prices of the cart."
     When I run the plan phase
     Then the result is passed
     And the pin holds "specs/features/checkout.feature"
@@ -97,6 +98,7 @@ Feature: The plan phase writes the scenarios and the plan, and the scenarios are
     Given the agent on the first run writes the sound feature file, the plan and the file "src/Core/Extra.cs"
     And the agent on the second run removes "src/Core/Extra.cs"
     And the agent on the second run writes the file "src/Core/Other.cs" with the text "class Other {}"
+    And the agent on the second run writes the file ".factory/plan.md" with the text "The checkout adds the prices of the cart."
     When I run the plan phase
     Then the plan phase ran two prompts
     And the result is failed
@@ -114,12 +116,6 @@ Feature: The plan phase writes the scenarios and the plan, and the scenarios are
     And claude answers the first run with the error flag set and no result text
     When I run the plan phase
     Then the plan phase ran one prompt
-
-  Scenario: Every command run through the command runner is a docker command
-    Given the agent on the first run writes the sound feature file and the plan
-    When I run the plan phase
-    Then the result is passed
-    And each command the plan phase ran is a docker command
 
   Scenario: The first prompt asks the plan to name an integration test for each canned answer
     Given the agent on the first run writes the sound feature file and the plan

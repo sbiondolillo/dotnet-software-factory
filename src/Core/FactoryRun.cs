@@ -145,13 +145,13 @@ public sealed class FactoryRun(
                         .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, request.Directory, cancellationToken).ConfigureAwait(false);
                     if (!plan.Passed || (choice.Recipe is Recipe.Behavior && plan.Pin is null))
                     {
-                        _summary.AddRow("plan", null, "failed");
+                        _summary.AddRow(Phase.Plan.Text(), null, "failed");
                         await Say("plan: failed").ConfigureAwait(false);
                         await CommentAsync(request, "The plan phase failed:", plan.Failures, cancellationToken).ConfigureAwait(false);
                         return new FactoryRunResult(null, 0);
                     }
 
-                    _summary.AddRow("plan", null, "passed");
+                    _summary.AddRow(Phase.Plan.Text(), null, "passed");
                     await Say("plan: passed").ConfigureAwait(false);
                     pin = plan.Pin is Pin planned && choice.Recipe is Recipe.Behavior ? planned : RecipeRules.TakePin(choice.Recipe, request.Directory);
                 }
@@ -171,7 +171,7 @@ public sealed class FactoryRun(
                 var build = new FactoryBuild(
                     new BuildPhase(agents.Builder, RecipeRules.BuildText(choice.Recipe, RunKind.Factory)), issue.Title, issue.Body, request.BuildModel, request.BuildTurns);
                 var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Factory));
-                var loop = new BuildLoop(_summary, _clock, progress, agents.NoteBuild, gates.Lint, request.Directory, issue.Title, request.AuthorName, request.AuthorEmail);
+                var loop = new BuildLoop(_summary, _clock, progress, gates.Lint, request.Directory, issue.Title, request.AuthorName, request.AuthorEmail);
                 BuildLoopResult result = await loop.RunAsync(
                     build,
                     gates.Gates,

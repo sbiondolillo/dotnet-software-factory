@@ -44,17 +44,6 @@ Feature: One build loop runs every recipe
     Then the loop stopped with 0 Redos and the comment "The API answered 500."
     And the job summary holds the row "| review 1 | 7 | 3 | $0.5 | failed |"
 
-  Scenario Outline: An error with no text stops the loop with a fixed sentence
-    Given a build loop with the gates test
-    And the <phase> answers with the error ""
-    When the build loop runs
-    Then the loop stopped with 0 Redos and the comment "claude answered with an error and no text."
-
-    Examples:
-      | phase  |
-      | build  |
-      | review |
-
   Scenario: The lint runs after every build that passes
     Given a build loop with the gates test
     And the gate test fails once with the Redo text "test failed: GreeterTests.Hello"

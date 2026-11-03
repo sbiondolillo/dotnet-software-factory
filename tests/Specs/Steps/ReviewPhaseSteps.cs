@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using Core;
 using Moq;
@@ -51,7 +50,7 @@ public sealed class ReviewPhaseSteps(IssueState issue, ExceptionState exceptionS
     public void GivenFlagSetNoText()
     {
         _h.IsError = true;
-        _h.ResultText = "";
+        _h.ResultText = Agent.NoTextError;
     }
 
     [Given("git answers the diff with the text {string}")]
@@ -116,9 +115,9 @@ public sealed class ReviewPhaseSteps(IssueState issue, ExceptionState exceptionS
     [Then("the review prompt ran with the model {string} and the turn limit {int}")]
     public void ThenModel(string model, int turns)
     {
-        List<string> args = _h.ExecArguments[0];
-        Assert.Equal(model, args[args.IndexOf("--model") + 1]);
-        Assert.Equal(turns.ToString(CultureInfo.InvariantCulture), args[args.IndexOf("--max-turns") + 1]);
+        AgentRequest request = _h.Requests[0];
+        Assert.Equal((model, turns, Phase.Review), (request.Model, request.MaxTurns, request.Phase));
+        Assert.Equal(["review.json"], request.Outputs);
     }
 
     [Then("the review prompt holds {string} and {string}")]

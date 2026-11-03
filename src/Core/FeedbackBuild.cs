@@ -7,9 +7,9 @@ public sealed record ThreadAnswer(string Id, string Reply);
 
 /// <summary>
 /// The build of a feedback round: one prompt of <paramref name="phase"/> over the round's <paramref name="title"/> and
-/// <paramref name="body"/>, then a read of the report <see cref="ReportPath"/> in <paramref name="workTree"/>. It deletes the
-/// report of the build before. An answer with <c>is_error</c> is the stop, and the report is not read. Each fault of the report
-/// is a Redo text, and a report with no fault gives one <see cref="ThreadAnswer"/> for each of <paramref name="threads"/>.
+/// <paramref name="body"/>, which asks for the output <see cref="ReportName"/>, then a parse of its text. An answer with
+/// <c>is_error</c> is the stop, and the report is not read. Each fault of the report is a Redo text, and a report with no fault
+/// gives one <see cref="ThreadAnswer"/> for each of <paramref name="threads"/>. The faults of the answer pass through.
 /// </summary>
 public sealed class FeedbackBuild(
     BuildPhase phase,
@@ -17,11 +17,13 @@ public sealed class FeedbackBuild(
     string body,
     string model,
     int maxTurns,
-    string workTree,
     IReadOnlyList<ReviewThread> threads) : IBuild
 {
+    /// <summary>The base name of the report.</summary>
+    public const string ReportName = "threads.json";
+
     /// <summary>The path of the report under the work tree.</summary>
-    public const string ReportPath = ".factory/threads.json";
+    public const string ReportPath = ".factory/" + ReportName;
 
     /// <summary>The answers of the last build whose report has no fault, or none.</summary>
     public IReadOnlyList<ThreadAnswer> Answers { get; private set; } = [];
@@ -30,30 +32,25 @@ public sealed class FeedbackBuild(
     public async Task<BuildOutcome> RunAsync(IReadOnlyList<string> redoTexts, CancellationToken cancellationToken = default)
     {
         Answers = [];
-        string file = Path.Combine(workTree, ".factory", "threads.json");
-        if (File.Exists(file))
-        {
-            File.Delete(file);
-        }
-
-        BuildPhaseResult built = await phase.RunAsync(title, body, model, maxTurns, redoTexts, cancellationToken).ConfigureAwait(false);
+        BuildPhaseResult built = await phase.RunAsync(title, body, model, maxTurns, redoTexts, [ReportName], cancellationToken).ConfigureAwait(false);
         if (!built.Passed)
         {
-            return new BuildOutcome(built.Failure, []);
+            return new BuildOutcome(built.Failure, [], built.Faults);
         }
 
-        (IReadOnlyList<ThreadAnswer> answers, IReadOnlyList<string> faults) = ReadReport(file, threads);
+        (IReadOnlyList<ThreadAnswer> answers, IReadOnlyList<string> faults) = ParseReport(built.Outputs.GetValueOrDefault(ReportName), threads);
         if (faults.Count is 0)
         {
             Answers = answers;
         }
 
-        return new BuildOutcome(null, faults);
+        return new BuildOutcome(null, faults, built.Faults);
     }
 
-    private static (IReadOnlyList<ThreadAnswer> Answers, IReadOnlyList<string> Faults) ReadReport(string file, IReadOnlyList<ReviewThread> threads)
+    /// <summary>The answers and the faults of the report <paramref name="text"/>. Null text is a report the agent did not write.</summary>
+    private static (IReadOnlyList<ThreadAnswer> Answers, IReadOnlyList<string> Faults) ParseReport(string? text, IReadOnlyList<ReviewThread> threads)
     {
-        if (!File.Exists(file))
+        if (text is null)
         {
             return ([], [$"The report {ReportPath} is absent. Write it."]);
         }
@@ -61,7 +58,7 @@ public sealed class FeedbackBuild(
         JsonElement root;
         try
         {
-            using var document = JsonDocument.Parse(File.ReadAllText(file));
+            using var document = JsonDocument.Parse(text);
             root = document.RootElement.Clone();
         }
         catch (JsonException)

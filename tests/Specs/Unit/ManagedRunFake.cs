@@ -201,7 +201,6 @@ public sealed class ManagedRunFake
         posted["content"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = text });
         session.Events.Add(posted);
         _current = session;
-        int outputsBefore = _files.Count;
         ManagedTurn turn = OnMessage(text, session.Model);
         _current = null;
         if (turn.Pushes && !turn.IsError)
@@ -210,14 +209,12 @@ public sealed class ManagedRunFake
         }
 
         session.Cents += turn.Cents;
-        string[] outputs = [.. _files.Skip(outputsBefore).Select(f => f.Name)];
-        string answer = outputs.Length is 0 ? turn.Result : $"{turn.Result}\n\noutputs: {string.Join(", ", outputs)}";
         session.Events.Add(Event("span.model_request_start"));
         JsonObject end = Event("span.model_request_end");
         end["model_usage"] = new JsonObject { ["input_tokens"] = 10, ["output_tokens"] = 5 };
         session.Events.Add(end);
         JsonObject message = Event("agent.message");
-        message["content"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = answer });
+        message["content"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = turn.Result });
         session.Events.Add(message);
         JsonObject usage = Event("session.usage");
         usage["usage"] = Usage(session);

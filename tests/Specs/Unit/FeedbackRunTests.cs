@@ -276,9 +276,11 @@ public sealed class FeedbackRunTests
 
         List<SeenPrompt> builds = [.. h.BuildPrompts];
         Assert.Equal(2, builds.Count);
-        Assert.DoesNotContain(RunAgents.NoCommitText, builds[0].Text, StringComparison.Ordinal);
-        Assert.Contains(RunAgents.NoCommitText, builds[1].Text, StringComparison.Ordinal);
+        Assert.DoesNotContain(NoCommitText, builds[0].Text, StringComparison.Ordinal);
+        Assert.Contains(NoCommitText, builds[1].Text, StringComparison.Ordinal);
     }
+
+    private const string NoCommitText = "The build pushed no commit to the session branch. Commit the work and push it to that branch.";
 
     private static bool IsSessionPush(string line) => line.StartsWith("git push origin ", StringComparison.Ordinal) && line.EndsWith("-session", StringComparison.Ordinal) && !line.Contains("--delete", StringComparison.Ordinal);
 

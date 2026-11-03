@@ -133,9 +133,9 @@ public sealed class FeedbackRun(
 
                 var build = new FeedbackBuild(
                     new BuildPhase(agents.Builder, RecipeRules.BuildText(choice.Recipe, RunKind.Feedback)),
-                    title, body, request.BuildModel, request.BuildTurns, request.Directory, threads);
+                    title, body, request.BuildModel, request.BuildTurns, threads);
                 var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Feedback));
-                var loop = new BuildLoop(_summary, _clock, progress, agents.NoteBuild, gates.Lint, request.Directory, title, request.AuthorName, request.AuthorEmail);
+                var loop = new BuildLoop(_summary, _clock, progress, gates.Lint, request.Directory, title, request.AuthorName, request.AuthorEmail);
                 BuildLoopResult result = await loop.RunAsync(
                     build,
                     gates.Gates,
