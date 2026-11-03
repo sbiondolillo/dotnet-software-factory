@@ -22,7 +22,7 @@ public static class PhaseNames
 }
 
 /// <summary>One prompt for an agent, the phase it serves, and the base names of the outputs the phase reads after it.</summary>
-public sealed record AgentRequest(string Prompt, string Model, int MaxTurns, Phase Phase, IReadOnlyList<string> Outputs);
+public sealed record AgentRequest(AgentPrompt Prompt, string Model, int MaxTurns, Phase Phase, IReadOnlyList<string> Outputs);
 
 /// <summary>The answer of one prompt. Outputs holds the text of each expected output the agent wrote, by base name. Faults are
 /// the texts the adapter knows about the prompt's work, which join the Redo texts of a rejection. Result holds a character other

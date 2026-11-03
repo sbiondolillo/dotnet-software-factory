@@ -1,6 +1,7 @@
 using Core;
 using Moq;
 using Reqnroll;
+using Specs.Unit;
 using Xunit;
 
 namespace Specs.Steps;
@@ -72,7 +73,7 @@ public sealed class ClaudeCodeAgentSteps(ExceptionState exceptionState) : IDispo
         ClaudeCodeAgent agent = await AgentAsync();
         try
         {
-            _result = await agent.RunAsync(new AgentRequest(prompt, model, turns, Phase.Build, outputs), TestContext.Current.CancellationToken);
+            _result = await agent.RunAsync(new AgentRequest(FakeAgent.Whole(prompt), model, turns, Phase.Build, outputs), TestContext.Current.CancellationToken);
         }
         catch (ClaudeCodeException exception)
         {

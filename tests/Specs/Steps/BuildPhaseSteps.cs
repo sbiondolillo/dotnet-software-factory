@@ -9,6 +9,7 @@ namespace Specs.Steps;
 [Binding]
 public sealed class BuildPhaseSteps(IssueState issue) : IDisposable
 {
+    private const int ArgumentLimit = 131071;
     private readonly BuildPhaseHarness _h = new();
     private string _model = "";
     private int _turns;
@@ -79,16 +80,19 @@ public sealed class BuildPhaseSteps(IssueState issue) : IDisposable
     [Then("the build prompt holds {string}, {string}, {string}, {string}, {string}, {string} and {string}")]
     public void ThenHolds7(string a, string b, string c, string d, string e, string f, string g) => AssertHolds(a, b, c, d, e, f, g);
 
+    /// <summary>The first prompt as <see cref="ClaudeCodeAgent"/> sends it: fitted to the limit of one argument to <c>claude</c>.</summary>
+    private string Sent => _h.Requests[0].Prompt.Fit(ArgumentLimit) ?? throw new InvalidOperationException("the prompt does not fit");
+
     [Then("the build prompt is {int} bytes or fewer")]
-    public void ThenBytes(int limit) => Assert.True(Encoding.UTF8.GetByteCount(_h.Prompts[0]) <= limit);
+    public void ThenBytes(int limit) => Assert.True(Encoding.UTF8.GetByteCount(Sent) <= limit);
 
     [Then("the build prompt holds the letter {string} {int} times in sequence")]
-    public void ThenSequence(string letter, int count) => Assert.Contains(Repeat(letter, count), _h.Prompts[0], StringComparison.Ordinal);
+    public void ThenSequence(string letter, int count) => Assert.Contains(Repeat(letter, count), Sent, StringComparison.Ordinal);
 
     [Then("the build prompt holds the letter {string} {int} times in sequence and {string}")]
     public void ThenSequenceAnd(string letter, int count, string text)
     {
-        Assert.Contains(Repeat(letter, count), _h.Prompts[0], StringComparison.Ordinal);
+        Assert.Contains(Repeat(letter, count), Sent, StringComparison.Ordinal);
         AssertHolds(text);
     }
 
@@ -110,7 +114,7 @@ public sealed class BuildPhaseSteps(IssueState issue) : IDisposable
     {
         foreach (string text in texts)
         {
-            Assert.Contains(text, FirstPrompt is null ? _h.Prompts[0] : FirstPrompt(), StringComparison.Ordinal);
+            Assert.Contains(text, FirstPrompt is null ? Sent : FirstPrompt(), StringComparison.Ordinal);
         }
     }
 }

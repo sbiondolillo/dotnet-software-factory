@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 
 namespace Core;
@@ -11,8 +10,6 @@ public sealed class ReviewPhase(Agent agent, Git git, string jobSteps)
 {
     private const string VerdictName = "review.json";
     private const string VerdictPath = ".factory/" + VerdictName;
-    private const string CutMarker = "[cut]";
-    private const int PromptLimit = 131071;
 
     /// <summary>Runs one review prompt and gives back the verdict the agent wrote.</summary>
     public async Task<ReviewPhaseResult> RunAsync(
@@ -25,7 +22,7 @@ public sealed class ReviewPhase(Agent agent, Git git, string jobSteps)
         CancellationToken cancellationToken = default)
     {
         string diff = await git.ReadDiffAsync(baseCommit, workTree, cancellationToken).ConfigureAwait(false);
-        string prompt = BuildPrompt(title, body, baseCommit, diff);
+        AgentPrompt prompt = BuildPrompt(title, body, baseCommit, diff);
 
         AgentAnswer answer = await agent.RunAsync(new AgentRequest(prompt, model, maxTurns, Phase.Review, [VerdictName]), cancellationToken).ConfigureAwait(false);
         if (answer.IsError)
@@ -103,9 +100,9 @@ public sealed class ReviewPhase(Agent agent, Git git, string jobSteps)
         }
     }
 
-    private string BuildPrompt(string title, string body, string baseCommit, string diff)
-    {
-        string Make(string shownDiff) =>
+    private AgentPrompt BuildPrompt(string title, string body, string baseCommit, string diff) => new(
+        [diff],
+        pieces =>
             "Review the build of the issue below.\n\n"
             + $"Issue title:\n{title}\n\nIssue body:\n{body}\n\n"
             + $"Base commit: {baseCommit}\n"
@@ -116,32 +113,5 @@ public sealed class ReviewPhase(Agent agent, Git git, string jobSteps)
             + "approved is true or false; blocking is a list of texts. Approve only a build with no blocking item. "
             + "Write each blocking item as one fault, in words that a builder can act on with the item alone.\n"
             + "4. Leave every other file as it is.\n\n"
-            + $"The diff of the work tree against the base commit:\n{shownDiff}";
-
-        string whole = Make(diff);
-        if (Encoding.UTF8.GetByteCount(whole) <= PromptLimit)
-        {
-            return whole;
-        }
-
-        int low = 0;
-        int high = diff.Length;
-        while (low < high)
-        {
-            int middle = (low + high + 1) / 2;
-            if (Encoding.UTF8.GetByteCount(Make(Prefix(diff, middle) + CutMarker)) <= PromptLimit)
-            {
-                low = middle;
-            }
-            else
-            {
-                high = middle - 1;
-            }
-        }
-
-        return Make(Prefix(diff, low) + CutMarker);
-    }
-
-    private static string Prefix(string text, int length) =>
-        length > 0 && length < text.Length && char.IsHighSurrogate(text[length - 1]) ? text[..(length - 1)] : text[..length];
+            + $"The diff of the work tree against the base commit:\n{pieces[0]}");
 }

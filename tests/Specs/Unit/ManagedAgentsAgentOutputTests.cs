@@ -21,7 +21,7 @@ public sealed class ManagedAgentsAgentOutputTests : IDisposable
         _harness.Next.Files.Add(new ScriptedFile("plan.md", "the plan"));
         ManagedAgentsAgent agent = _harness.Build(SessionRole.Builder, 1500);
 
-        AgentAnswer answer = await agent.RunAsync(new AgentRequest("Plan.", "m", 1, Phase.Plan, ["plan.md"]), TestContext.Current.CancellationToken);
+        AgentAnswer answer = await agent.RunAsync(new AgentRequest(FakeAgent.Whole("Plan."), "m", 1, Phase.Plan, ["plan.md"]), TestContext.Current.CancellationToken);
 
         Assert.Equal("the plan", answer.Outputs["plan.md"]);
         Assert.Equal("a file of the runner", File.ReadAllText(outside));
@@ -39,7 +39,7 @@ public sealed class ManagedAgentsAgentOutputTests : IDisposable
         _harness.Next.Files.Add(new ScriptedFile("plan.md", "the plan"));
         ManagedAgentsAgent agent = _harness.Build(SessionRole.Builder, 1500);
 
-        await Assert.ThrowsAsync<ClaudeCodeException>(() => agent.RunAsync(new AgentRequest("Plan.", "m", 1, Phase.Plan, ["plan.md"]), TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<ClaudeCodeException>(() => agent.RunAsync(new AgentRequest(FakeAgent.Whole("Plan."), "m", 1, Phase.Plan, ["plan.md"]), TestContext.Current.CancellationToken));
 
         Assert.Empty(_harness.Posts("/v1/sessions"));
         Assert.Equal(["secret.txt"], outside.EnumerateFiles().Select(file => file.Name));
@@ -57,7 +57,7 @@ public sealed class ManagedAgentsAgentOutputTests : IDisposable
         _harness.Next.Messages.Add("Done.");
         ManagedAgentsAgent agent = _harness.Build(SessionRole.Builder, 1500);
 
-        await agent.RunAsync(new AgentRequest("Build.", "m", 1, Phase.Build, []), TestContext.Current.CancellationToken);
+        await agent.RunAsync(new AgentRequest(FakeAgent.Whole("Build."), "m", 1, Phase.Build, []), TestContext.Current.CancellationToken);
 
         Assert.Single(_harness.Posts("/v1/files"));
         Assert.DoesNotContain(_harness.Posts("/v1/files"), post => post.Body is { } body && body.Contains("secret", StringComparison.Ordinal));
@@ -72,8 +72,23 @@ public sealed class ManagedAgentsAgentOutputTests : IDisposable
     {
         ManagedAgentsAgent agent = _harness.Build(SessionRole.Builder, 1500);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => agent.RunAsync(new AgentRequest("Plan.", "m", 1, Phase.Plan, [name]), TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<ArgumentException>(() => agent.RunAsync(new AgentRequest(FakeAgent.Whole("Plan."), "m", 1, Phase.Plan, [name]), TestContext.Current.CancellationToken));
 
         Assert.Empty(_harness.Posts("/v1/sessions"));
+    }
+
+    [Fact]
+    public async Task APromptOverTheLimitOfOneArgumentReachesTheMessageWhole()
+    {
+        string piece = new('a', 200000);
+        var prompt = new AgentPrompt([piece], pieces => "Build.\n" + pieces[0]);
+        _harness.Next.Messages.Add("Done.");
+        ManagedAgentsAgent agent = _harness.Build(SessionRole.Builder, 1500);
+
+        await agent.RunAsync(new AgentRequest(prompt, "m", 1, Phase.Build, []), TestContext.Current.CancellationToken);
+
+        string message = _harness.FirstMessage();
+        Assert.Contains("Build.\n" + piece, message, StringComparison.Ordinal);
+        Assert.DoesNotContain("[cut]", message, StringComparison.Ordinal);
     }
 }

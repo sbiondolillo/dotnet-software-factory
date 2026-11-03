@@ -38,7 +38,7 @@ public sealed class RunLogTests : IDisposable
     {
         Sandbox sandbox = await SandboxAsync(_ => answer);
         return await new ClaudeCodeAgent(sandbox, _directory.FullName, _log, new FakeTime())
-            .RunAsync(new AgentRequest(prompt, "m", 1, Phase.Plan, []), TestContext.Current.CancellationToken);
+            .RunAsync(new AgentRequest(FakeAgent.Whole(prompt), "m", 1, Phase.Plan, []), TestContext.Current.CancellationToken);
     }
 
     [Fact]

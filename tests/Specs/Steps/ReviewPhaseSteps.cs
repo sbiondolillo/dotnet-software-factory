@@ -10,6 +10,7 @@ namespace Specs.Steps;
 [Binding]
 public sealed class ReviewPhaseSteps(IssueState issue, ExceptionState exceptionState, ReviewPromptState promptState) : IDisposable
 {
+    private const int ArgumentLimit = 131071;
     private readonly ReviewPhaseHarness _h = new();
     private string _model = "";
     private int _turns;
@@ -24,7 +25,10 @@ public sealed class ReviewPhaseSteps(IssueState issue, ExceptionState exceptionS
 
     private ReviewPhaseResult Result => _result ?? throw new InvalidOperationException("the review phase did not run");
 
-    private string Prompt => promptState.Text ?? promptState.Lookup?.Invoke() ?? _h.Prompts[0];
+    private string Prompt => promptState.Text ?? promptState.Lookup?.Invoke() ?? Sent;
+
+    /// <summary>The first prompt as <see cref="ClaudeCodeAgent"/> sends it: fitted to the limit of one argument to <c>claude</c>.</summary>
+    private string Sent => _h.Requests[0].Prompt.Fit(ArgumentLimit) ?? throw new InvalidOperationException("the prompt does not fit");
 
     [Given("the review model is {string} and the turn limit is {int}")]
     public void GivenModel(string model, int turns)

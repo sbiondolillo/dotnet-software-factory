@@ -29,7 +29,7 @@ public sealed class ManagedAgentsAgentSteps(ExceptionState exceptionState) : IDi
         _prompt = prompt;
         try
         {
-            _result = await _agent!.RunAsync(new AgentRequest(prompt, model, 200, phase, outputs), _cancel.Token);
+            _result = await _agent!.RunAsync(new AgentRequest(FakeAgent.Whole(prompt), model, 200, phase, outputs), _cancel.Token);
         }
         catch (ClaudeCodeException exception)
         {

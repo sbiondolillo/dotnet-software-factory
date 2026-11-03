@@ -1,4 +1,3 @@
-using System.Text;
 using Core;
 using Xunit;
 
@@ -6,8 +5,6 @@ namespace Specs.Unit;
 
 public sealed class BuildPhaseTests
 {
-    private const int Limit = 131071;
-
     [Fact]
     public async Task AFailedAnswerHoldsItsText()
     {
@@ -32,64 +29,19 @@ public sealed class BuildPhaseTests
     }
 
     [Fact]
-    public async Task ALongRedoTextIsCutAndTheShortOneStaysWhole()
+    public async Task TheRedoTextsAreThePiecesOfThePromptAndTheIssueIsFixed()
     {
         using var h = new BuildPhaseHarness();
         string longText = new('a', 200000);
-        await h.RunAsync(redo: [longText, "short fault"]);
-        string prompt = h.Prompts[0];
-        Assert.True(Encoding.UTF8.GetByteCount(prompt) <= Limit);
-        Assert.Contains("short fault", prompt, StringComparison.Ordinal);
-        Assert.Contains("[cut]", prompt, StringComparison.Ordinal);
-        Assert.Contains(new string('a', 100000) + "[cut]", prompt, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task AMultibyteRedoTextIsCutOnWholeCharacters()
-    {
-        using var h = new BuildPhaseHarness();
-        await h.RunAsync(redo: [new string('é', 100000)]);
-        string prompt = h.Prompts[0];
-        Assert.True(Encoding.UTF8.GetByteCount(prompt) <= Limit);
-        Assert.DoesNotContain('\uFFFD', prompt);
-        Assert.Contains("é[cut]", prompt, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task TwoLongRedoTextsAreBothCutEvenly()
-    {
-        using var h = new BuildPhaseHarness();
-        await h.RunAsync(redo: [new string('a', 200000), new string('b', 150000)]);
-        string prompt = h.Prompts[0];
-        Assert.True(Encoding.UTF8.GetByteCount(prompt) <= Limit);
-        Assert.Contains("The checkout shows the total of the cart.", prompt, StringComparison.Ordinal);
-        int a = System.Text.RegularExpressions.Regex.Match(prompt, "a{1000,}").Length;
-        int b = System.Text.RegularExpressions.Regex.Match(prompt, "b{1000,}").Length;
-        Assert.True(Math.Abs(a - b) <= 1);
-        Assert.Equal(2, prompt.Split("[cut]").Length - 1);
-    }
-
-    [Fact]
-    public async Task ASurrogatePairIsNeverSplit()
-    {
-        using var h = new BuildPhaseHarness();
-        await h.RunAsync(redo: [string.Concat(Enumerable.Repeat("\U0001F600", 100000))]);
-        string prompt = h.Prompts[0];
-        Assert.True(Encoding.UTF8.GetByteCount(prompt) <= Limit);
-        Assert.DoesNotContain('\uFFFD', prompt);
-        Assert.Contains("\U0001F600[cut]", prompt, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task APromptAtTheLimitIsNotCut()
-    {
-        using var h = new BuildPhaseHarness();
-        await h.RunAsync(redo: ["x"]);
-        int baseBytes = Encoding.UTF8.GetByteCount(h.Prompts[0]);
-        using var exact = new BuildPhaseHarness();
-        await exact.RunAsync(redo: [new string('x', Limit - baseBytes + 1)]);
-        Assert.Equal(Limit, Encoding.UTF8.GetByteCount(exact.Prompts[0]));
-        Assert.DoesNotContain("[cut]", exact.Prompts[0], StringComparison.Ordinal);
+        await h.RunAsync(body: "the body", redo: [longText, "short fault"]);
+        AgentPrompt prompt = Assert.Single(h.Requests).Prompt;
+        Assert.Equal([longText, "short fault"], prompt.Pieces);
+        string text = prompt.Text;
+        Assert.Contains(longText, text, StringComparison.Ordinal);
+        Assert.Contains("the body", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("[cut]", text, StringComparison.Ordinal);
+        Assert.Contains("the body", prompt.Compose(["x", "y"]), StringComparison.Ordinal);
+        Assert.Contains("\nRedo text:\nx\n", prompt.Compose(["x", "y"]), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -99,14 +51,6 @@ public sealed class BuildPhaseTests
         await h.RunAsync();
         Assert.DoesNotContain("[cut]", h.Prompts[0], StringComparison.Ordinal);
         Assert.DoesNotContain("Redo", h.Prompts[0], StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task AnIssueTooLongToFitThrowsAndSendsNoPrompt()
-    {
-        using var h = new BuildPhaseHarness();
-        await Assert.ThrowsAsync<ClaudeCodeException>(() => h.RunAsync(body: new string('b', 200000), redo: ["short"]));
-        Assert.Empty(h.Prompts);
     }
 
     [Fact]
