@@ -346,42 +346,16 @@ public sealed class BuildLoopTests
         Assert.Equal(["| build 1 | 5 | 0 | $0 | passed |", "| test 1 | 42 | 0 | $0 | passed |", "| check 1 | 2 | 0 | $0 | passed |", "| review 1 | 7 | 3 | $0.5 | approved |"], h.Rows);
     }
 
-    [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    public async Task OnTheManagedPathTheLintCommitIsPushedBeforeTheGates(bool commits, bool managed)
-    {
-        await using var h = new BuildLoopHarness { Managed = managed, Status = commits ? " M src/Greeter.cs\n" : "" };
-        h.Gates.Add(GateName.Test);
-        await h.RunAsync();
-
-        Assert.Equal(commits && managed ? ["build", "lint", "push", "test", "review"] : ["build", "lint", "test", "review"], h.Calls);
-    }
-
     [Fact]
-    public async Task ACancelDuringThePushOfTheLintCommitThrowsAndNoGateRuns()
+    public async Task TheNoteOfARejectedBuildGivesTheRedoTextsOfTheNextBuild()
     {
-        await using var h = new BuildLoopHarness { Managed = true, Status = " M src/Greeter.cs\n" };
-        h.Gates.Add(GateName.Test);
-        h.Pushes[0] = h.Cancels(() => new CommandResult());
+        await using var h = new BuildLoopHarness { NoteBuild = texts => [.. texts, "noted"] };
+        h.Reviews[0] = BuildLoopHarness.ReviewBlocks("again");
+        h.Reviews.Add(BuildLoopHarness.Approve);
         await h.RunAsync();
 
-        Assert.IsAssignableFrom<OperationCanceledException>(h.Thrown);
-        Assert.Equal(["build", "lint", "push"], h.Calls);
-        Assert.Empty(h.Rows);
-    }
-
-    [Fact]
-    public async Task ACancelDuringTheLintThrowsBeforeThePush()
-    {
-        await using var h = new BuildLoopHarness { Managed = true, Status = " M src/Greeter.cs\n" };
-        h.Gates.Add(GateName.Test);
-        h.Formats[0] = h.Cancels(() => new CommandResult());
-        await h.RunAsync();
-
-        Assert.IsAssignableFrom<OperationCanceledException>(h.Thrown);
-        Assert.Equal(["build", "lint"], h.Calls);
+        Assert.Equal(new BuildLoopResult(BuildLoopEnd.Passed, 1), h.Result);
+        Assert.Equal(["again", "noted"], h.BuildTexts[1]);
     }
 
     [Fact]

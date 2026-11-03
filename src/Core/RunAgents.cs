@@ -31,7 +31,7 @@ public sealed record RunAgentsSetup(
 /// <summary>
 /// The agents and the sandbox of one run. With no settings, both agents are Claude Code in one <see cref="Core.Sandbox"/>, and the
 /// gates run in it. With settings, the builder and the reviewer are two Managed Agents sessions over a scratch branch, and the gates
-/// run in a sandbox that holds no key. The host pushes the scratch branch before the first prompt, pulls it after each prompt of the
+/// run in a sandbox that holds no key. The host pushes the scratch branch before each prompt, pulls it after each prompt of the
 /// builder, and deletes it on origin at the end.
 /// </summary>
 public sealed class RunAgents : IAsyncDisposable
@@ -102,24 +102,12 @@ public sealed class RunAgents : IAsyncDisposable
         return new RunAgents(setup, sandbox);
     }
 
-    /// <summary>The lint gate over <see cref="Sandbox"/>.</summary>
-    public LintGate Lint(TextWriter? log) => new(Sandbox, _setup.Git, log, restoreFirst: _builder is not null);
-
-    /// <summary>Pushes the commit of the lint gate to the scratch branch, so the next session message builds on it.</summary>
-    public async Task AfterLintAsync(bool committed, CancellationToken cancellationToken = default)
-    {
-        if (_builder is not null && committed)
-        {
-            await _setup.Git.PushAsync(_setup.ScratchBranch, _setup.Directory, _setup.Token, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
     /// <summary>Adds <see cref="NoCommitText"/> to the Redo texts when the last build pushed no commit.</summary>
     public IReadOnlyList<string> NoteBuild(IReadOnlyList<string> redoTexts) =>
         _pushedNothing && !redoTexts.Contains(NoCommitText) ? [.. redoTexts, NoCommitText] : redoTexts;
 
-    /// <summary>Checks out <paramref name="branch"/> and fast-forwards it to the scratch branch, so a push of it sends the session's work.</summary>
-    public async Task MoveToAsync(string branch, CancellationToken cancellationToken = default)
+    /// <summary>Puts the session's commits on <paramref name="branch"/>, for the push that delivers them. With no session, the work is on the branch, and the call does nothing.</summary>
+    public async Task CollectAsync(string branch, CancellationToken cancellationToken = default)
     {
         if (_builder is null)
         {
@@ -181,21 +169,20 @@ public sealed class RunAgents : IAsyncDisposable
         _setup.OnAnswer);
 
     /// <summary>
-    /// Checks out the scratch branch, commits a change of the work tree, such as the scenarios that FactoryRun applied, and pushes the
-    /// branch once. The base commit stays as it was, so the diff against the base still holds that change.
+    /// Pushes the scratch branch, so the session builds on every commit of the host, such as the commit of the lint gate. The first
+    /// call checks out the scratch branch and commits a change of the work tree, such as the scenarios that FactoryRun applied. The
+    /// base commit stays as it was, so the diff against the base still holds that change. A push with no new commit changes nothing.
     /// </summary>
     private async Task PushScratchAsync(CancellationToken cancellationToken)
     {
-        if (_pushed)
+        if (!_pushed)
         {
-            return;
-        }
-
-        await _setup.Git.CheckoutBranchAsync(_setup.ScratchBranch, _setup.Directory, cancellationToken).ConfigureAwait(false);
-        if (await _setup.Git.HasChangesAsync(_setup.Directory, cancellationToken).ConfigureAwait(false))
-        {
-            await _setup.Git.CommitAllAsync(
-                _setup.Directory, $"{_setup.Title}: the scenarios of the issue", _setup.AuthorName, _setup.AuthorEmail, cancellationToken).ConfigureAwait(false);
+            await _setup.Git.CheckoutBranchAsync(_setup.ScratchBranch, _setup.Directory, cancellationToken).ConfigureAwait(false);
+            if (await _setup.Git.HasChangesAsync(_setup.Directory, cancellationToken).ConfigureAwait(false))
+            {
+                await _setup.Git.CommitAllAsync(
+                    _setup.Directory, $"{_setup.Title}: the scenarios of the issue", _setup.AuthorName, _setup.AuthorEmail, cancellationToken).ConfigureAwait(false);
+            }
         }
 
         await _setup.Git.PushAsync(_setup.ScratchBranch, _setup.Directory, _setup.Token, cancellationToken).ConfigureAwait(false);
@@ -203,7 +190,7 @@ public sealed class RunAgents : IAsyncDisposable
     }
 
     /// <summary>
-    /// A session agent with the branch work of the host around each prompt: the push of the scratch branch before the first prompt, and
+    /// A session agent with the branch work of the host around each prompt: the push of the scratch branch before each prompt, and
     /// for the builder the pull after each prompt, the check that no commit tracks a file under <c>.factory/</c>, and the read of the
     /// remote head around each build prompt. A tracked file under <c>.factory/</c>, before a prompt or after a pull, throws
     /// <see cref="SessionBranchException"/>, which stops the run whatever the phase. The session uploads what <c>.factory/</c> holds and

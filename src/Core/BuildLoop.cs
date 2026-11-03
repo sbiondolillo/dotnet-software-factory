@@ -32,6 +32,7 @@ public sealed record BuildLoopResult(BuildLoopEnd End, int Redos, string? Commen
 /// The build loop of a run: the build, the lint, the gates in the order of the recipe, then the review, repeated within the
 /// budget of <see cref="RedoBudget"/> Redos. It writes every row of <paramref name="summary"/> and every progress line of the
 /// loop. The lint commits a change of <paramref name="workTree"/> with <paramref name="message"/> and the author.
+/// <paramref name="noteBuild"/> takes the Redo texts of a rejected build and gives the texts of the next one.
 /// A token that is cancelled when an await returns throws <see cref="OperationCanceledException"/> before the next call.
 /// The loop catches nothing: an exception of a phase, the lint or a gate reaches the caller unchanged, and the rows so far stay.
 /// </summary>
@@ -39,7 +40,7 @@ public sealed class BuildLoop(
     JobSummary summary,
     TimeProvider clock,
     TextWriter? progress,
-    RunAgents agents,
+    Func<IReadOnlyList<string>, IReadOnlyList<string>> noteBuild,
     LintGate lint,
     string workTree,
     string message,
@@ -81,9 +82,7 @@ public sealed class BuildLoop(
             }
 
             await SayAsync("lint: start", cancellationToken).ConfigureAwait(false);
-            bool linted = await lint.RunAsync(workTree, message, authorName, authorEmail, cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            await agents.AfterLintAsync(linted, cancellationToken).ConfigureAwait(false);
+            await lint.RunAsync(workTree, message, authorName, authorEmail, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             string producer = summary.AddRow("build", clock.GetElapsedTime(buildStart), "passed");
             redoTexts = built.RedoTexts;
@@ -118,7 +117,7 @@ public sealed class BuildLoop(
                 producer = reviewRow;
             }
 
-            redoTexts = agents.NoteBuild(redoTexts);
+            redoTexts = noteBuild(redoTexts);
             if (redos >= RedoBudget)
             {
                 return new BuildLoopResult(

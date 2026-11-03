@@ -6,7 +6,7 @@ namespace Specs.Unit;
 
 /// <summary>
 /// A <see cref="BuildLoop"/> over a fake build, fake gates and a fake review, with the lint over a <see cref="Sandbox"/> of a
-/// mock <see cref="CommandRunner"/>. Each fake takes the next answer of its script, and the last answer repeats. Every call
+/// mock <see cref="CommandRunner"/>, and no <see cref="RunAgents"/>. Each fake takes the next answer of its script, and the last answer repeats. Every call
 /// goes to <see cref="Calls"/>: <c>build</c>, <c>lint</c>, the text of a gate, or <c>review</c>. A build moves the clock 5
 /// seconds, a gate 2 seconds, and the review notes one prompt of 7 seconds, 3 turns and $0.5.
 /// </summary>
@@ -17,11 +17,10 @@ public sealed class BuildLoopHarness : IAsyncDisposable
     private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("build-loop-root-");
     private readonly DirectoryInfo _work = Directory.CreateTempSubdirectory("build-loop-work-");
     private readonly Dictionary<GateName, int> _gateCalls = [];
-    private RunAgents? _agents;
+    private Sandbox? _sandbox;
     private int _builds;
     private int _reviews;
     private int _lints;
-    private int _pushes;
 
     public BuildLoopHarness()
     {
@@ -47,13 +46,10 @@ public sealed class BuildLoopHarness : IAsyncDisposable
     /// <summary>The answer of <c>git status --porcelain</c> after the format: a line here makes the lint commit.</summary>
     public string Status { get; set; } = "";
 
-    /// <summary>The answers of <c>git push</c>, one for each call.</summary>
-    public List<Func<CommandResult>> Pushes { get; } = [() => new CommandResult()];
+    /// <summary>The note of each rejected build: it takes the Redo texts and gives the texts of the next build. The default gives them unchanged.</summary>
+    public Func<IReadOnlyList<string>, IReadOnlyList<string>> NoteBuild { get; set; } = texts => texts;
 
-    /// <summary>True for the Managed Agents path, where the host pushes the commit of the lint to the scratch branch.</summary>
-    public bool Managed { get; set; }
-
-    /// <summary>Every call of the loop, in order, with <c>push</c> for a push of the scratch branch.</summary>
+    /// <summary>Every call of the loop, in order.</summary>
     public List<string> Calls { get; } = [];
 
     /// <summary>The Redo texts that each build got, in order.</summary>
@@ -114,13 +110,9 @@ public sealed class BuildLoopHarness : IAsyncDisposable
         var mock = new Mock<CommandRunner>(MockBehavior.Strict);
         mock.Setup(runner => runner.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec spec, CancellationToken _) => Task.FromResult(Reply(spec)));
-        var git = new Git(mock.Object);
-        var setup = new RunAgentsSetup(
-            mock.Object, git, "octo", "shop", "token", _work.FullName, _root.FullName, "factory-sandbox:test",
-            "base", "factory/1-session", "Add a total", "Ada", "ada@example.com",
-            Managed ? new ManagedAgentsSettings("key", "agent", "env", "1", "2", "pem") : null);
-        _agents = await RunAgents.StartAsync(setup, TestContext.Current.CancellationToken);
-        var loop = new BuildLoop(Summary, Clock, Progress, _agents, _agents.Lint(null), _work.FullName, "Add a total", "Ada", "ada@example.com");
+        _sandbox = await Sandbox.StartAsync(mock.Object, "factory-sandbox:test", _root.FullName, _work.FullName, TestContext.Current.CancellationToken);
+        var lint = new LintGate(_sandbox, new Git(mock.Object));
+        var loop = new BuildLoop(Summary, Clock, Progress, NoteBuild, lint, _work.FullName, "Add a total", "Ada", "ada@example.com");
         try
         {
             Result = await loop.RunAsync(new FakeBuild(this), [.. Gates.Select(name => new FakeGate(this, name))], ReviewAsync, Source.Token);
@@ -133,9 +125,9 @@ public sealed class BuildLoopHarness : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_agents is not null)
+        if (_sandbox is not null)
         {
-            await _agents.DisposeAsync();
+            await _sandbox.DisposeAsync();
         }
 
         Source.Dispose();
@@ -161,9 +153,6 @@ public sealed class BuildLoopHarness : IAsyncDisposable
             {
                 case "status":
                     return new CommandResult { StandardOutput = Status };
-                case "push":
-                    Calls.Add("push");
-                    return Next(Pushes, _pushes++);
                 default:
                     return new CommandResult();
             }
