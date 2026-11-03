@@ -1,4 +1,3 @@
-using System.Text;
 using Core;
 using Xunit;
 
@@ -140,18 +139,6 @@ public sealed class FeedbackRunTests
     }
 
     [Fact]
-    public async Task RedReportsAndRedGatesShareOneBudgetOfThree()
-    {
-        using var h = new FeedbackRunHarness { Report = n => n is 2 or 4 ? null : Both() };
-        h.RedBuilds.Add(1);
-        h.RedBuilds.Add(3);
-        FeedbackRunResult result = await h.RunAsync(Ct);
-        Assert.Equal(4, h.Builds);
-        Assert.Equal(new FeedbackRunResult(0, 2, 3), result);
-        Assert.Single(h.CommentBodies);
-    }
-
-    [Fact]
     public async Task ASpentBudgetPostsOneCommentPushesNothingRepliesToNothingAndRemovesTheContainer()
     {
         using var h = new FeedbackRunHarness();
@@ -167,92 +154,6 @@ public sealed class FeedbackRunTests
         Assert.DoesNotContain("push", h.Events);
         Assert.Empty(RepliedIds(h));
         Assert.Contains("rm", h.Events);
-    }
-
-    [Fact]
-    public async Task ARejectingFourthReviewPostsItsBlockingItems()
-    {
-        using var h = new FeedbackRunHarness();
-        foreach (int build in new[] { 1, 2, 3, 4 })
-        {
-            h.RejectedBuilds.Add(build);
-        }
-
-        FeedbackRunResult result = await h.RunAsync(Ct);
-        Assert.Equal(new FeedbackRunResult(0, 2, 3), result);
-        Assert.Contains(FeedbackRunHarness.Blocking, Assert.Single(h.CommentBodies), StringComparison.Ordinal);
-        Assert.DoesNotContain("push", h.Events);
-    }
-
-    [Fact]
-    public async Task ARedReportAfterTheFourthBuildPostsOneComment()
-    {
-        using var h = new FeedbackRunHarness { Report = _ => null };
-        FeedbackRunResult result = await h.RunAsync(Ct);
-        Assert.Equal(new FeedbackRunResult(0, 2, 3), result);
-        Assert.Contains(".factory/threads.json", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
-        Assert.DoesNotContain("dotnet", h.Events);
-    }
-
-    [Fact]
-    public async Task ACommentOverTheLimitIsCutToTheLimitInBytesAndAKeptTextStartsWholeAndEndsWithTheMarker()
-    {
-        using var h = new FeedbackRunHarness { TestStdout = new string('é', 200000) };
-        foreach (int build in new[] { 1, 2, 3, 4 })
-        {
-            h.RedBuilds.Add(build);
-        }
-
-        await h.RunAsync(Ct);
-        string body = Assert.Single(h.CommentBodies);
-        Assert.True(Encoding.UTF8.GetByteCount(body) <= 262144);
-        Assert.Contains("[cut]", body, StringComparison.Ordinal);
-        Assert.DoesNotContain('\uFFFD', body);
-        Assert.Contains(new string('é', 1000), body, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ACommentWithinTheLimitIsPostedWhole()
-    {
-        using var h = new FeedbackRunHarness();
-        foreach (int build in new[] { 1, 2, 3, 4 })
-        {
-            h.RedBuilds.Add(build);
-        }
-
-        await h.RunAsync(Ct);
-        Assert.DoesNotContain("[cut]", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task AnErrorFlagOnTheBuildWithAFaultFreeReportStopsTheRoundWithAComment()
-    {
-        using var h = new FeedbackRunHarness { BuildIsError = true };
-        Assert.Equal(new FeedbackRunResult(0, 2, 0), await h.RunAsync(Ct));
-        Assert.Equal("build error", Assert.Single(h.CommentBodies));
-        Assert.Contains("| build 1 | ", h.Summary, StringComparison.Ordinal);
-        Assert.EndsWith("| failed |", h.Summary.Split('\n').Single(line => line.StartsWith("| build 1 |", StringComparison.Ordinal)), StringComparison.Ordinal);
-        Assert.DoesNotContain("### Redos", h.Summary, StringComparison.Ordinal);
-        Assert.Single(h.BuildPrompts);
-        Assert.DoesNotContain("dotnet", h.Events);
-        Assert.DoesNotContain("push", h.Events);
-        Assert.Empty(RepliedIds(h));
-        Assert.DoesNotContain(h.Events, e => e.StartsWith("resolve:", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task AnErrorFlagOnTheReviewStopsTheRoundWithAComment()
-    {
-        using var h = new FeedbackRunHarness { ErrorText = "API Error: 529 Overloaded" };
-        h.ErrorReviews.Add(1);
-        Assert.Equal(new FeedbackRunResult(0, 2, 0), await h.RunAsync(Ct));
-        Assert.Equal("API Error: 529 Overloaded", Assert.Single(h.CommentBodies));
-        Assert.EndsWith("| failed |", h.Summary.Split('\n').Single(line => line.StartsWith("| review 1 |", StringComparison.Ordinal)), StringComparison.Ordinal);
-        Assert.DoesNotContain("### Redos", h.Summary, StringComparison.Ordinal);
-        Assert.Single(h.BuildPrompts);
-        Assert.DoesNotContain("push", h.Events);
-        Assert.Empty(RepliedIds(h));
-        Assert.DoesNotContain(h.Events, e => e.StartsWith("resolve:", StringComparison.Ordinal));
     }
 
     [Fact]

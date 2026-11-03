@@ -385,6 +385,20 @@ public sealed class BuildLoopTests
     }
 
     [Fact]
+    public async Task AReviewErrorAfterARedoKeepsTheRedoSpent()
+    {
+        await using var h = new BuildLoopHarness();
+        h.Gates.Add(GateName.Test);
+        h.Reviews.Clear();
+        h.Reviews.AddRange([BuildLoopHarness.ReviewBlocks("again"), BuildLoopHarness.ReviewError("down")]);
+        await h.RunAsync();
+
+        Assert.Equal(new BuildLoopResult(BuildLoopEnd.Stopped, 1, "down"), h.Result);
+        Assert.Equal(2, h.Calls.Count(call => call is "build"));
+        Assert.Equal(2, h.Calls.Count(call => call is "review"));
+    }
+
+    [Fact]
     public async Task AReviewErrorStopsWithItsFirstText()
     {
         await using var h = new BuildLoopHarness();

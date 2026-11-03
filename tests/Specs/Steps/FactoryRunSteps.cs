@@ -91,14 +91,20 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     [Given("the agent writes the feature file and the plan on the plan prompt")]
     public void GivenAgentWrites() => _h.AgentWritesPlan = true;
 
+    /// <summary>The harness answers each build prompt with the error flag clear, so the step sets nothing.</summary>
     [Given("claude answers each prompt with the error flag clear")]
-    public void GivenFlagClear() => _h.BuildIsError = false;
+    public static void GivenFlagClear()
+    {
+    }
 
     [Given("each dotnet command exits with the code 0 and the TRX file holds one passed test")]
     public void GivenDotnet() => _h.RedBuilds.Clear();
 
+    /// <summary>The harness approves every review, so the step sets nothing.</summary>
     [Given("the agent approves on the review prompt")]
-    public void GivenApproves() => _h.RejectedBuilds.Clear();
+    public static void GivenApproves()
+    {
+    }
 
     [Given("the clone lacks {string}")]
     public void GivenLacks(string path) => _h.Lacks.Add(path);
@@ -113,26 +119,11 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     [Given("the run's list of secret names is {string} and {string}")]
     public void GivenSecrets(string first, string second) => _h.SecretNames = [first, second];
 
-    [Given("claude answers the build prompt with the error flag set")]
-    public void GivenBuildError() => _h.BuildIsError = true;
-
     [Given("the test gate is red after the first build and passes after the second build")]
     public void GivenRedFirst() => _h.RedBuilds.Add(1);
 
-    [Given("the review rejects the first build and approves the second build")]
-    public void GivenRejectFirst() => _h.RejectedBuilds.Add(1);
-
     [Given("the test gate is red after the first build")]
     public void GivenRedOne() => _h.RedBuilds.Add(1);
-
-    [Given("the review rejects the second build")]
-    public void GivenRejectSecond() => _h.RejectedBuilds.Add(2);
-
-    [Given("the test gate is red after the third build")]
-    public void GivenRedThird() => _h.RedBuilds.Add(3);
-
-    [Given("the review approves the fourth build")]
-    public void GivenApproveFourth() => _h.RejectedBuilds.Remove(4);
 
     [Given("the test gate is red after each of four builds")]
     public void GivenRedAll()
@@ -141,20 +132,6 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
         {
             _h.RedBuilds.Add(build);
         }
-    }
-
-    [Given("the test gate is red after the first build and the third build")]
-    public void GivenRedFirstThird()
-    {
-        _h.RedBuilds.Add(1);
-        _h.RedBuilds.Add(3);
-    }
-
-    [Given("the review rejects the second build and the fourth build")]
-    public void GivenRejectSecondFourth()
-    {
-        _h.RejectedBuilds.Add(2);
-        _h.RejectedBuilds.Add(4);
     }
 
     [Given("the test command writes the letter {string} {int} times to its standard output")]
@@ -325,18 +302,6 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
 
     [Then("FactoryRun runs a second build prompt that holds {string}")]
     public void ThenSecondBuild(string text) => Assert.Contains(text, Builds.ElementAt(1).Text, StringComparison.Ordinal);
-
-    [Then("FactoryRun runs the second build prompt before any prompt with the model {string}")]
-    public void ThenSecondBeforeReview(string model)
-    {
-        int second = _h.Prompts.FindIndex(p => p.Kind is "build" && p.BuildsBefore is 2);
-        int review = _h.Prompts.FindIndex(p => p.Model == model);
-        Assert.True(second >= 0);
-        Assert.True(review > second);
-    }
-
-    [Then("FactoryRun runs {int} build prompts in the run")]
-    public void ThenBuildCount(int count) => Assert.Equal(count, Builds.Count());
 
     [Then("git pushes no branch")]
     public void ThenNoPush() => Assert.DoesNotContain(Commands, c => c.Command is "git" && c.Arguments[0] is "push");

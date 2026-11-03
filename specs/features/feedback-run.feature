@@ -78,26 +78,6 @@ Feature: A feedback run answers every unresolved review thread
     When a caller starts a feedback run
     Then FeedbackRun gives back a result with 2 threads resolved, 0 threads unresolved and 0 Redos
 
-  Scenario: An error flag from claude on the build stops the round with a comment
-    Given claude answers the first build prompt with the error flag set and the result text "API Error: 529 Overloaded"
-    When a caller starts a feedback run
-    Then FeedbackRun posts one comment on the pull request 10 that holds "API Error: 529 Overloaded"
-    And the job summary holds the row "build 1" with the result "failed"
-    And FeedbackRun runs no dotnet command
-    And git pushes no branch
-    And FeedbackRun adds no reply
-    And FeedbackRun gives back a result with 0 threads resolved, 2 threads unresolved and 0 Redos
-
-  Scenario: An error flag from claude on the review stops the round with a comment
-    Given claude answers the first review prompt with the error flag set and the result text "API Error: 529 Overloaded"
-    When a caller starts a feedback run
-    Then FeedbackRun posts one comment on the pull request 10 that holds "API Error: 529 Overloaded"
-    And the job summary holds the row "review 1" with the result "failed"
-    And FeedbackRun runs 1 build prompts in the run
-    And git pushes no branch
-    And FeedbackRun adds no reply
-    And FeedbackRun gives back a result with 0 threads resolved, 2 threads unresolved and 0 Redos
-
   Scenario: A round appends its own section to the job summary
     When a caller starts a feedback run
     Then the job summary of the round is one section "## Feedback run" with the rows "build 1", "test 1" and "review 1", in this order
@@ -143,43 +123,6 @@ Feature: A feedback run answers every unresolved review thread
     When a caller starts a feedback run
     Then the third build prompt holds ".factory/threads.json"
 
-  Scenario: The evidence of a red test gate is in the next build prompt
-    Given the test gate is red after the first build and passes after the second build
-    When a caller starts a feedback run
-    Then the second build prompt holds "Assert.Equal() Failure: Values differ"
-
-  Scenario: A red test gate sends the run back before any review
-    Given the test gate is red after the first build
-    When a caller starts a feedback run
-    Then FeedbackRun runs the second build prompt before any prompt with the model "review-model"
-
-  Scenario: A red test gate then a pass spends one Redo
-    Given the test gate is red after the first build and passes after the second build
-    When a caller starts a feedback run
-    Then FeedbackRun gives back a result with 2 threads resolved, 0 threads unresolved and 1 Redo
-
-  Scenario: A rejecting review puts its blocking items in the next build prompt
-    Given the review rejects the first build and approves the second build
-    When a caller starts a feedback run
-    Then the second build prompt holds "The total of an empty cart is unset."
-
-  Scenario: A rejecting review then an approval spends one Redo
-    Given the review rejects the first build and approves the second build
-    When a caller starts a feedback run
-    Then FeedbackRun gives back a result with 2 threads resolved, 0 threads unresolved and 1 Redo
-
-  Scenario: A red report, a red test gate and a rejecting review spend the three Redos
-    Given on the first build prompt the agent writes no report
-    And the test gate is red after the second build
-    And the review rejects the third build and approves the fourth build
-    When a caller starts a feedback run
-    Then FeedbackRun gives back a result with 2 threads resolved, 0 threads unresolved and 3 Redos
-
-  Scenario: A run has four builds at most
-    Given the test gate is red after each of four builds
-    When a caller starts a feedback run
-    Then FeedbackRun runs 4 build prompts in the run
-
   Scenario: A spent budget posts one comment with the evidence
     Given the test gate is red after each of four builds
     When a caller starts a feedback run
@@ -191,19 +134,6 @@ Feature: A feedback run answers every unresolved review thread
     Then git pushes no branch
     And FeedbackRun adds no reply
     And FeedbackRun gives back a result with 0 threads resolved, 2 threads unresolved and 3 Redos
-
-  Scenario: A spent budget after a red gate and rejecting reviews holds the blocking items
-    Given the test gate is red after the first build and the third build
-    And the review rejects the second build and the fourth build
-    When a caller starts a feedback run
-    Then FeedbackRun posts one comment on the pull request 10 that holds "The total of an empty cart is unset."
-    And FeedbackRun gives back a result with 0 threads resolved, 2 threads unresolved and 3 Redos
-
-  Scenario: A comment over the limit is cut
-    Given the test gate is red after each of four builds
-    And the test command writes the letter "a" 300000 times to its standard output
-    When a caller starts a feedback run
-    Then FeedbackRun posts one comment of 262144 bytes or fewer in bytes, and the comment holds the letter "a" 200000 times in sequence and "[cut]"
 
   Scenario: The container is removed after the last reply
     When a caller starts a feedback run

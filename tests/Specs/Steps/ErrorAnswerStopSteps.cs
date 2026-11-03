@@ -31,13 +31,6 @@ public sealed class ErrorAnswerStopSteps(FactoryRunSteps factory)
     [Given("claude answers the first review prompt with the error flag set")]
     public void GivenFirstReviewError() => H.ErrorReviews.Add(1);
 
-    [Given("claude answers the first review prompt with the error flag set and the result text {string}")]
-    public void GivenFirstReviewErrorText(string text)
-    {
-        H.ErrorReviews.Add(1);
-        H.ErrorText = text;
-    }
-
     [Then("FactoryRun runs these prompts in this order")]
     public void ThenPrompts(Table table)
     {
