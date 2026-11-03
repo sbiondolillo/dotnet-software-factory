@@ -10,6 +10,12 @@ Environment: JUDGE_ANTHROPIC_API_KEY, JUDGE_GITHUB_RO_TOKEN, GITHUB_TOKEN, GITHU
 JUDGE_AGENT_ID, JUDGE_ENVIRONMENT_ID, JUDGE_ANGLES (comma-separated, default "Conformance,Regressions and style"),
 JUDGE_BUDGET_CENTS (default 500), JUDGE_TIMEOUT_SECONDS (default 1800).
 Argument: the pull request number.
+
+A pull request that Dependabot opened takes the automatic path on the event `pull_request`, for #448: bump.py tests
+the four conditions of a pure bump, and a pure bump gets judge-verdict as success with no session. That path reads
+no JUDGE_* variable, since a run with Dependabot as its actor holds no JUDGE_* secret. It posts no comment and no
+marker, so a later dispatch by hand is not deduped away. A bump that fails a condition gets no check run: the job
+prints each failed condition and exits with the code 0. `workflow_dispatch` always runs the full judge.
 """
 
 import hashlib
@@ -22,6 +28,8 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+import bump
 
 API = "https://api.anthropic.com"
 BETA = "managed-agents-2026-04-01"
@@ -230,9 +238,63 @@ def render(reports, synthesis, pr, costs, spec):
     return verdict, "\n".join(lines)
 
 
+def takes_bump_path(event, author):
+    """True for the automatic path: the event `pull_request` on a pull request that Dependabot opened."""
+    return event == "pull_request" and author == bump.DEPENDABOT
+
+
+def api_list(path):
+    """Every item of a paged REST list, one JSON object for each line of the output."""
+    lines = gh("api", f"{path}?per_page=100", "--paginate", "--jq", ".[] | @json").splitlines()
+    return [json.loads(line) for line in lines if line]
+
+
+def judge_bump(repo, number, pr):
+    """The automatic path for a Dependabot pull request: judge-verdict as success on a pure bump, nothing otherwise."""
+    head = pr["head"]["sha"]
+    commits = api_list(f"repos/{repo}/pulls/{number}/commits")
+    commit_files = {
+        c["sha"]: json.loads(gh("api", f"repos/{repo}/commits/{c['sha']}")).get("files") or [] for c in commits[1:]
+    }
+    files = api_list(f"repos/{repo}/pulls/{number}/files")
+    after = json.loads(gh("api", f"repos/{repo}/pulls/{number}"))
+    if after["head"]["sha"] != head:
+        print(f"judge: the head of pull request #{number} moved off {head[:7]} while the job read it; nothing posted")
+        return
+    failed, packages = bump.failures(after, commits, commit_files, files)
+    if failed:
+        print(f"judge: pull request #{number} {head[:7]} is not a pure bump; no check run. Dispatch the judge by hand.")
+        for line in failed:
+            print(f"judge: failed {line}")
+        return
+    gh(
+        "api",
+        f"repos/{repo}/check-runs",
+        "-f",
+        "name=judge-verdict",
+        "-f",
+        f"head_sha={head}",
+        "-f",
+        "status=completed",
+        "-f",
+        "conclusion=success",
+        "-f",
+        f"output[title]={bump.TITLE}",
+        "-f",
+        f"output[summary]={bump.summary(packages)}",
+    )
+    print(f"judge: {bump.TITLE}, {len(packages)} packages on {head[:7]}")
+
+
 def main():
     repo = env("GITHUB_REPOSITORY")
     number = int(sys.argv[1])
+    event = os.environ.get("GITHUB_EVENT_NAME")
+    if event == "pull_request":
+        rest = json.loads(gh("api", f"repos/{repo}/pulls/{number}"))
+        if takes_bump_path(event, (rest.get("user") or {}).get("login")):
+            judge_bump(repo, number, rest)
+            return
     agent = env("JUDGE_AGENT_ID")
     environment = env("JUDGE_ENVIRONMENT_ID")
     angles = [
