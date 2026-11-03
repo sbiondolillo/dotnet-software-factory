@@ -9,8 +9,15 @@
 # The job posts its verdict as the check run judge-verdict, which main requires.
 # The check named judge is this job, and it passes when the verdict rejects.
 #
-# A pull request opened or pushed by the repository owner is judged on its head.
-# By hand: `gh workflow run judge.yml -f pr=<n>`. The job dedupes on the head SHA and the spec.
+# A pull request that the repository owner opened is judged on its head, at each
+# push. The gate reads the author of the pull request, not the pusher.
+# A pull request that dependabot[bot] opened takes the automatic path of #448:
+# .github/judge/bump.py tests the four conditions of a pure bump, and a pure bump
+# gets judge-verdict as success with no agent session, titled "Dependabot bump,
+# no agent read it". Any other Dependabot pull request gets no check run: the log
+# lists each failed condition, and the owner dispatches the judge by hand.
+# By hand: `gh workflow run judge.yml -f pr=<n>`. A dispatch always runs the full
+# judge, for any author. The full judge dedupes on the head SHA and the spec.
 # Secrets: JUDGE_ANTHROPIC_API_KEY (a dedicated workspace), JUDGE_GITHUB_RO_TOKEN
 # (fine-grained, this repo, Contents, Pull requests and Metadata read).
 # Variables: JUDGE_AGENT_ID, JUDGE_ENVIRONMENT_ID.
@@ -39,7 +46,10 @@ concurrency:
 jobs:
   judge:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.user.login == github.repository_owner
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || github.event.pull_request.user.login == github.repository_owner
+      || github.event.pull_request.user.login == 'dependabot[bot]'
     steps:
       - uses: actions/checkout@v7
       - name: Judge the pull request
