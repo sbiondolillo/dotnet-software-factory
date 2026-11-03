@@ -38,3 +38,61 @@ public static class GateNames
         _ => throw new ArgumentOutOfRangeException(nameof(name), name, "The gate has no text."),
     };
 }
+
+/// <summary>What <see cref="GateFactory.CreateAsync"/> gives: the gates in the order of the recipe, or the text of the comment
+/// that stops the run before the first build.</summary>
+public sealed record GateSet(IReadOnlyList<IGate> Gates, string? Stop);
+
+/// <summary>Maps each <see cref="GateName"/> of a choice to its gate, over the work tree at <paramref name="baseCommit"/>.
+/// <paramref name="progress"/> takes the progress lines of a gate that reads a baseline before the first build.</summary>
+public sealed class GateFactory(
+    Sandbox sandbox,
+    Git git,
+    string workTree,
+    string baseCommit,
+    IReadOnlyList<string> secretNames,
+    TextWriter? progress = null,
+    TextWriter? log = null,
+    bool skipIntegration = false)
+{
+    /// <summary>Gives a gate for each name of <see cref="RecipeRules.Gates"/>, in that order. The test gate of a choice with a
+    /// scope reads the baseline of its lost-test check. The API gate lists the public API of the base commit between
+    /// <c>api: start</c> and <c>api: listed</c>, and a listing that fails gives the stop text and no gate.</summary>
+    public async Task<GateSet> CreateAsync(RecipeChoice choice, Pin pin, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(choice);
+        List<IGate> gates = [];
+        foreach (GateName name in RecipeRules.Gates(choice))
+        {
+            switch (name)
+            {
+                case GateName.Scope:
+                    gates.Add(new ScopeGate(git, baseCommit, workTree, choice.Scope));
+                    break;
+                case GateName.Test:
+                    gates.Add(await TestGate
+                        .CreateAsync(sandbox, workTree, pin, secretNames, choice.Scope.Count is 0 ? null : choice.Scope, log, skipIntegration, cancellationToken)
+                        .ConfigureAwait(false));
+                    break;
+                case GateName.Api:
+                    await ProgressLine.WriteAsync(progress, "api: start").ConfigureAwait(false);
+                    ApiGateStart api = await ApiGate.CreateAsync(sandbox, log, cancellationToken).ConfigureAwait(false);
+                    if (api.Gate is not ApiGate apiGate)
+                    {
+                        return new GateSet([], api.Stop ?? "");
+                    }
+
+                    await ProgressLine.WriteAsync(progress, "api: listed").ConfigureAwait(false);
+                    gates.Add(apiGate);
+                    break;
+                case GateName.Check:
+                    gates.Add(new CheckGate(sandbox, choice.Check ?? throw new ArgumentException("The choice names the check gate and holds no check.", nameof(choice)), log));
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(choice), name, "The gate has no factory.");
+            }
+        }
+
+        return new GateSet(gates, null);
+    }
+}

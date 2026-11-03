@@ -38,6 +38,10 @@ _Avoid_: step, stage
 One more build after a gate or the review rejects the last build, with the faults of the rejection as Redo texts. A run has a budget of three Redos.
 _Avoid_: retry, attempt
 
+**Build loop**:
+The part of a run that repeats the build within the Redo budget: the build, the lint, the gates in the order of the recipe, then the review. Both run kinds run the one build loop.
+_Avoid_: redo loop, inner loop, attempt
+
 **Decline**:
 The end of a run before its first phase, on a fault of the issue's author, such as two recipe labels that exclude each other or a cleanup with no scope. The run posts the reason as a comment and builds nothing.
 _Avoid_: refusal, rejection (a rejection is the review's verdict on a build)

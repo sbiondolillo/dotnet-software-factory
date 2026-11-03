@@ -194,6 +194,20 @@ public static class RecipeRules
             + "New steps, state of a step class moved into a shared class, and new helpers pass.\n",
     };
 
+    /// <summary>The gates of a build of <paramref name="choice"/>, in the order they run, for both run kinds. The review runs after
+    /// every gate passes, so it has no place in the list.</summary>
+    public static IReadOnlyList<GateName> Gates(RecipeChoice choice)
+    {
+        ArgumentNullException.ThrowIfNull(choice);
+        return choice.Recipe switch
+        {
+            Recipe.Refactor when choice.Check is not null => [GateName.Test, GateName.Check],
+            Recipe.Cleanup => [GateName.Scope, GateName.Test, GateName.Check],
+            Recipe.Reframe => [GateName.Scope, GateName.Test, GateName.Api, GateName.Check],
+            _ => [GateName.Test],
+        };
+    }
+
     /// <summary>The words of the comment that a check before the first phase stops the run with, for a recipe with a check.</summary>
     public static PreCheckWords PreCheck(Recipe recipe) => recipe switch
     {

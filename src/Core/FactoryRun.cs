@@ -41,7 +41,6 @@ public sealed class FactoryRun(
     HttpMessageHandler? handler = null,
     Func<TimeSpan, CancellationToken, Task>? delay = null)
 {
-    private const int RedoBudget = 3;
     private readonly TimeProvider _clock = time ?? TimeProvider.System;
     private JobSummary _summary = new();
     private decimal _spend;
@@ -130,438 +129,74 @@ public sealed class FactoryRun(
         {
             try
             {
-                return await RunAgentsAsync(request, issue, choice, scenarios, agents, git, baseCommit, cancellationToken).ConfigureAwait(false);
+                if (choice.Check is string check && await PreCheckAsync(request, agents.Sandbox, check, choice.Recipe, cancellationToken).ConfigureAwait(false))
+                {
+                    return new FactoryRunResult(null, 0);
+                }
+
+                Pin pin;
+                if (choice.Recipe is Recipe.Behavior or Recipe.Refactor)
+                {
+                    await Say("plan: start").ConfigureAwait(false);
+                    PlanPhaseResult plan = await new PlanPhase(agents.Builder, RecipeRules.PlanText(choice.Recipe, scenarios))
+                        .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, request.Directory, cancellationToken).ConfigureAwait(false);
+                    if (!plan.Passed || (choice.Recipe is Recipe.Behavior && plan.Pin is null))
+                    {
+                        _summary.AddRow("plan", null, "failed");
+                        await Say("plan: failed").ConfigureAwait(false);
+                        await CommentAsync(request, "The plan phase failed:", plan.Failures, cancellationToken).ConfigureAwait(false);
+                        return new FactoryRunResult(null, 0);
+                    }
+
+                    _summary.AddRow("plan", null, "passed");
+                    await Say("plan: passed").ConfigureAwait(false);
+                    pin = plan.Pin is Pin planned && choice.Recipe is Recipe.Behavior ? planned : RecipeRules.TakePin(choice.Recipe, request.Directory);
+                }
+                else
+                {
+                    pin = RecipeRules.TakePin(choice.Recipe, request.Directory);
+                }
+
+                GateSet gates = await new GateFactory(agents.Sandbox, git, request.Directory, baseCommit, request.SecretNames, progress, log, request.SkipIntegration)
+                    .CreateAsync(choice, pin, cancellationToken).ConfigureAwait(false);
+                if (gates.Stop is string stop)
+                {
+                    await CommentAsync(request, stop, [], cancellationToken).ConfigureAwait(false);
+                    return new FactoryRunResult(null, 0);
+                }
+
+                var build = new FactoryBuild(
+                    new BuildPhase(agents.Builder, RecipeRules.BuildText(choice.Recipe, RunKind.Factory)), issue.Title, issue.Body, request.BuildModel, request.BuildTurns);
+                var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Factory));
+                var loop = new BuildLoop(_summary, _clock, progress, agents, agents.Lint(log), request.Directory, issue.Title, request.AuthorName, request.AuthorEmail);
+                BuildLoopResult result = await loop.RunAsync(
+                    build,
+                    gates.Gates,
+                    token => reviewPhase.RunAsync(issue.Title, issue.Body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, token),
+                    cancellationToken).ConfigureAwait(false);
+                if (result.End is not BuildLoopEnd.Passed)
+                {
+                    await PostAsync(request, result.Comment ?? "", cancellationToken).ConfigureAwait(false);
+                    return new FactoryRunResult(null, result.Redos);
+                }
+
+                await Say("deliver: start").ConfigureAwait(false);
+                TestGate testGate = gates.Gates.OfType<TestGate>().Single();
+                var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, testGate, choice, result.Redos));
+                PullRequest pullRequest = await deliver
+                    .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
+                return new FactoryRunResult(pullRequest, result.Redos);
             }
             catch (SessionBranchException exception)
             {
-                return await StopAsync(request, exception.Message, 0, cancellationToken).ConfigureAwait(false);
+                await CommentAsync(request, exception.Message, [], cancellationToken).ConfigureAwait(false);
+                return new FactoryRunResult(null, 0);
             }
             finally
             {
                 _sessions = agents.Sessions;
             }
         }
-    }
-
-    private async Task<FactoryRunResult> RunAgentsAsync(
-        FactoryRunRequest request,
-        GitHubIssue issue,
-        RecipeChoice choice,
-        IssueScenariosResult? scenarios,
-        RunAgents agents,
-        Git git,
-        string baseCommit,
-        CancellationToken cancellationToken)
-    {
-        if (choice is { Recipe: Recipe.Reframe, Check: string reframeCheck })
-        {
-            return await RunReframeAsync(request, issue, choice, reframeCheck, agents, git, baseCommit, cancellationToken).ConfigureAwait(false);
-        }
-
-        if (choice.Recipe is Recipe.Refactor)
-        {
-            return await RunRefactorAsync(request, issue, choice, agents, git, baseCommit, cancellationToken).ConfigureAwait(false);
-        }
-
-        if (choice is { Recipe: Recipe.Cleanup, Check: string cleanupCheck })
-        {
-            return await RunCleanupAsync(request, issue, choice, cleanupCheck, agents, git, baseCommit, cancellationToken).ConfigureAwait(false);
-        }
-
-        Agent agent = agents.Builder;
-        await Say("plan: start").ConfigureAwait(false);
-        PlanPhaseResult plan = await new PlanPhase(agent, RecipeRules.PlanText(Recipe.Behavior, scenarios))
-            .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, request.Directory, cancellationToken).ConfigureAwait(false);
-        if (!plan.Passed || plan.Pin is null)
-        {
-            _summary.AddRow("plan", null, "failed");
-            await Say("plan: failed").ConfigureAwait(false);
-            await CommentAsync(request, "The plan phase failed:", plan.Failures, cancellationToken).ConfigureAwait(false);
-            return new FactoryRunResult(null, 0);
-        }
-
-        _summary.AddRow("plan", null, "passed");
-        await Say("plan: passed").ConfigureAwait(false);
-        var buildPhase = new BuildPhase(agent, RecipeRules.BuildText(Recipe.Behavior, RunKind.Factory));
-        LintGate lintGate = agents.Lint(log);
-        var testGate = new TestGate(agents.Sandbox, request.Directory, plan.Pin, request.SecretNames, log: log, skipIntegration: request.SkipIntegration);
-        var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(Recipe.Behavior, RunKind.Factory));
-
-        int redos = 0;
-        string producer;
-        IReadOnlyList<string> redoTexts = [];
-        while (true)
-        {
-            await Say("build: start").ConfigureAwait(false);
-            long buildStart = _clock.GetTimestamp();
-            BuildPhaseResult built = await buildPhase.RunAsync(issue.Title, issue.Body, request.BuildModel, request.BuildTurns, redoTexts, cancellationToken).ConfigureAwait(false);
-            if (!built.Passed)
-            {
-                _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "failed");
-                return await StopAsync(request, built.Failure, redos, cancellationToken).ConfigureAwait(false);
-            }
-
-
-            await Say("lint: start").ConfigureAwait(false);
-            bool linted = await lintGate.RunAsync(request.Directory, issue.Title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
-            await agents.AfterLintAsync(linted, cancellationToken).ConfigureAwait(false);
-            _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "passed");
-            (redoTexts, producer) = await RunGateAsync(testGate, cancellationToken).ConfigureAwait(false);
-            if (redoTexts.Count is 0)
-            {
-                await Say("review: start").ConfigureAwait(false);
-                ReviewPhaseResult review = await reviewPhase
-                    .RunAsync(issue.Title, issue.Body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, cancellationToken).ConfigureAwait(false);
-                string reviewRow = _summary.AddRow("review", null, review.IsError ? "failed" : review.Approved ? "approved" : "blocked");
-                if (review.IsError)
-                {
-                    return await StopAsync(request, review.Blocking[0], redos, cancellationToken).ConfigureAwait(false);
-                }
-
-                await Say(review.Approved ? "review: approved" : "review: blocked").ConfigureAwait(false);
-                if (review.Approved)
-                {
-                    await Say("deliver: start").ConfigureAwait(false);
-                    var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, testGate, choice, redos));
-                    PullRequest pullRequest = await deliver
-                        .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
-                    return new FactoryRunResult(pullRequest, redos);
-                }
-
-                redoTexts = review.Blocking;
-                producer = reviewRow;
-            }
-
-            redoTexts = agents.NoteBuild(redoTexts);
-            if (redos >= RedoBudget)
-            {
-                await CommentAsync(request, $"The budget of {RedoBudget} Redos is spent. The last build still fails:", redoTexts, cancellationToken).ConfigureAwait(false);
-                return new FactoryRunResult(null, redos);
-            }
-
-            redos++;
-            _summary.AddRedos(redos, producer, redoTexts);
-            await Say($"redo: {redos}").ConfigureAwait(false);
-        }
-    }
-
-    private async Task<FactoryRunResult> RunRefactorAsync(
-        FactoryRunRequest request,
-        GitHubIssue issue,
-        RecipeChoice choice,
-        RunAgents agents,
-        Git git,
-        string baseCommit,
-        CancellationToken cancellationToken)
-    {
-        Sandbox sandbox = agents.Sandbox;
-        Agent agent = agents.Builder;
-        CheckGate? checkGate = null;
-        if (choice.Check is string check)
-        {
-            if (await PreCheckAsync(request, sandbox, check, choice.Recipe, cancellationToken).ConfigureAwait(false))
-            {
-                return new FactoryRunResult(null, 0);
-            }
-
-            checkGate = new CheckGate(sandbox, check, log);
-        }
-
-        await Say("plan: start").ConfigureAwait(false);
-        PlanPhaseResult plan = await new PlanPhase(agent, RecipeRules.PlanText(Recipe.Refactor))
-            .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, request.Directory, cancellationToken).ConfigureAwait(false);
-        if (!plan.Passed)
-        {
-            _summary.AddRow("plan", null, "failed");
-            await Say("plan: failed").ConfigureAwait(false);
-            await CommentAsync(request, "The plan phase failed:", plan.Failures, cancellationToken).ConfigureAwait(false);
-            return new FactoryRunResult(null, 0);
-        }
-
-        _summary.AddRow("plan", null, "passed");
-        await Say("plan: passed").ConfigureAwait(false);
-        Pin pin = RecipeRules.TakePin(choice.Recipe, request.Directory);
-        var buildPhase = new BuildPhase(agent, RecipeRules.BuildText(choice.Recipe, RunKind.Factory));
-        LintGate lintGate = agents.Lint(log);
-        var testGate = new TestGate(sandbox, request.Directory, pin, request.SecretNames, log: log, skipIntegration: request.SkipIntegration);
-        var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Factory));
-
-        int redos = 0;
-        string producer;
-        IReadOnlyList<string> redoTexts = [];
-        while (true)
-        {
-            await Say("build: start").ConfigureAwait(false);
-            long buildStart = _clock.GetTimestamp();
-            BuildPhaseResult built = await buildPhase.RunAsync(issue.Title, issue.Body, request.BuildModel, request.BuildTurns, redoTexts, cancellationToken).ConfigureAwait(false);
-            if (!built.Passed)
-            {
-                _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "failed");
-                return await StopAsync(request, built.Failure, redos, cancellationToken).ConfigureAwait(false);
-            }
-
-
-            await Say("lint: start").ConfigureAwait(false);
-            bool linted = await lintGate.RunAsync(request.Directory, issue.Title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
-            await agents.AfterLintAsync(linted, cancellationToken).ConfigureAwait(false);
-            _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "passed");
-            (redoTexts, producer) = await RunGateAsync(testGate, cancellationToken).ConfigureAwait(false);
-            if (redoTexts.Count is 0)
-            {
-                if (checkGate is not null)
-                {
-                    (redoTexts, producer) = await RunGateAsync(checkGate, cancellationToken).ConfigureAwait(false);
-                }
-
-                if (redoTexts.Count is 0)
-                {
-                    await Say("review: start").ConfigureAwait(false);
-                    ReviewPhaseResult review = await reviewPhase
-                        .RunAsync(issue.Title, issue.Body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, cancellationToken).ConfigureAwait(false);
-                    string reviewRow = _summary.AddRow("review", null, review.IsError ? "failed" : review.Approved ? "approved" : "blocked");
-                    if (review.IsError)
-                    {
-                        return await StopAsync(request, review.Blocking[0], redos, cancellationToken).ConfigureAwait(false);
-                    }
-
-                    await Say(review.Approved ? "review: approved" : "review: blocked").ConfigureAwait(false);
-                    if (review.Approved)
-                    {
-                        await Say("deliver: start").ConfigureAwait(false);
-                        var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, testGate, choice, redos));
-                        PullRequest pullRequest = await deliver
-                            .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
-                        return new FactoryRunResult(pullRequest, redos);
-                    }
-
-                    redoTexts = review.Blocking;
-                    producer = reviewRow;
-                }
-            }
-
-            redoTexts = agents.NoteBuild(redoTexts);
-            if (redos >= RedoBudget)
-            {
-                await CommentAsync(request, $"The budget of {RedoBudget} Redos is spent. The last build still fails:", redoTexts, cancellationToken).ConfigureAwait(false);
-                return new FactoryRunResult(null, redos);
-            }
-
-            redos++;
-            _summary.AddRedos(redos, producer, redoTexts);
-            await Say($"redo: {redos}").ConfigureAwait(false);
-        }
-    }
-
-    private async Task<FactoryRunResult> RunCleanupAsync(
-        FactoryRunRequest request,
-        GitHubIssue issue,
-        RecipeChoice choice,
-        string check,
-        RunAgents agents,
-        Git git,
-        string baseCommit,
-        CancellationToken cancellationToken)
-    {
-        Sandbox sandbox = agents.Sandbox;
-        Agent agent = agents.Builder;
-        if (await PreCheckAsync(request, sandbox, check, choice.Recipe, cancellationToken).ConfigureAwait(false))
-        {
-            return new FactoryRunResult(null, 0);
-        }
-
-        var buildPhase = new BuildPhase(agent, RecipeRules.BuildText(choice.Recipe, RunKind.Factory));
-        LintGate lintGate = agents.Lint(log);
-        var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Factory));
-        Pin pin = RecipeRules.TakePin(choice.Recipe, request.Directory);
-        var scopeGate = new ScopeGate(git, baseCommit, request.Directory, choice.Scope);
-        TestGate testGate = await TestGate
-            .CreateAsync(sandbox, request.Directory, pin, request.SecretNames, choice.Scope, log, request.SkipIntegration, cancellationToken)
-            .ConfigureAwait(false);
-        var checkGate = new CheckGate(sandbox, check, log);
-
-        int redos = 0;
-        string producer;
-        IReadOnlyList<string> redoTexts = [];
-        while (true)
-        {
-            await Say("build: start").ConfigureAwait(false);
-            long buildStart = _clock.GetTimestamp();
-            BuildPhaseResult built = await buildPhase.RunAsync(issue.Title, issue.Body, request.BuildModel, request.BuildTurns, redoTexts, cancellationToken).ConfigureAwait(false);
-            if (!built.Passed)
-            {
-                _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "failed");
-                return await StopAsync(request, built.Failure, redos, cancellationToken).ConfigureAwait(false);
-            }
-
-
-            await Say("lint: start").ConfigureAwait(false);
-            bool linted = await lintGate.RunAsync(request.Directory, issue.Title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
-            await agents.AfterLintAsync(linted, cancellationToken).ConfigureAwait(false);
-            _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "passed");
-            (redoTexts, producer) = await RunGateAsync(scopeGate, cancellationToken).ConfigureAwait(false);
-            if (redoTexts.Count is 0)
-            {
-                (redoTexts, producer) = await RunGateAsync(testGate, cancellationToken).ConfigureAwait(false);
-
-                if (redoTexts.Count is 0)
-                {
-                    (redoTexts, producer) = await RunGateAsync(checkGate, cancellationToken).ConfigureAwait(false);
-                    if (redoTexts.Count is 0)
-                    {
-                        await Say("review: start").ConfigureAwait(false);
-                        ReviewPhaseResult review = await reviewPhase
-                            .RunAsync(issue.Title, issue.Body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, cancellationToken).ConfigureAwait(false);
-                        string reviewRow = _summary.AddRow("review", null, review.IsError ? "failed" : review.Approved ? "approved" : "blocked");
-                        if (review.IsError)
-                        {
-                            return await StopAsync(request, review.Blocking[0], redos, cancellationToken).ConfigureAwait(false);
-                        }
-
-                        await Say(review.Approved ? "review: approved" : "review: blocked").ConfigureAwait(false);
-                        if (review.Approved)
-                        {
-                            await Say("deliver: start").ConfigureAwait(false);
-                            var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, testGate, choice, redos));
-                            PullRequest pullRequest = await deliver
-                                .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
-                            return new FactoryRunResult(pullRequest, redos);
-                        }
-
-                        redoTexts = review.Blocking;
-                        producer = reviewRow;
-                    }
-                }
-            }
-
-            redoTexts = agents.NoteBuild(redoTexts);
-            if (redos >= RedoBudget)
-            {
-                await CommentAsync(request, $"The budget of {RedoBudget} Redos is spent. The last build still fails:", redoTexts, cancellationToken).ConfigureAwait(false);
-                return new FactoryRunResult(null, redos);
-            }
-
-            redos++;
-            _summary.AddRedos(redos, producer, redoTexts);
-            await Say($"redo: {redos}").ConfigureAwait(false);
-        }
-    }
-
-    private async Task<FactoryRunResult> RunReframeAsync(
-        FactoryRunRequest request,
-        GitHubIssue issue,
-        RecipeChoice choice,
-        string check,
-        RunAgents agents,
-        Git git,
-        string baseCommit,
-        CancellationToken cancellationToken)
-    {
-        Sandbox sandbox = agents.Sandbox;
-        Agent agent = agents.Builder;
-        if (await PreCheckAsync(request, sandbox, check, choice.Recipe, cancellationToken).ConfigureAwait(false))
-        {
-            return new FactoryRunResult(null, 0);
-        }
-
-        var buildPhase = new BuildPhase(agent, RecipeRules.BuildText(choice.Recipe, RunKind.Factory));
-        LintGate lintGate = agents.Lint(log);
-        var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Factory));
-        Pin pin = RecipeRules.TakePin(choice.Recipe, request.Directory);
-        var scopeGate = new ScopeGate(git, baseCommit, request.Directory, choice.Scope);
-        TestGate testGate = await TestGate
-            .CreateAsync(sandbox, request.Directory, pin, request.SecretNames, choice.Scope, log, request.SkipIntegration, cancellationToken)
-            .ConfigureAwait(false);
-        await Say("api: start").ConfigureAwait(false);
-        ApiGateStart api = await ApiGate.CreateAsync(sandbox, log, cancellationToken).ConfigureAwait(false);
-        if (api.Gate is not ApiGate apiGate)
-        {
-            await CommentAsync(request, api.Stop ?? "", [], cancellationToken).ConfigureAwait(false);
-            return new FactoryRunResult(null, 0);
-        }
-
-        await Say("api: listed").ConfigureAwait(false);
-        var checkGate = new CheckGate(sandbox, check, log);
-
-        int redos = 0;
-        string producer;
-        IReadOnlyList<string> redoTexts = [];
-        while (true)
-        {
-            await Say("build: start").ConfigureAwait(false);
-            long buildStart = _clock.GetTimestamp();
-            BuildPhaseResult built = await buildPhase.RunAsync(issue.Title, issue.Body, request.BuildModel, request.BuildTurns, redoTexts, cancellationToken).ConfigureAwait(false);
-            if (!built.Passed)
-            {
-                _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "failed");
-                return await StopAsync(request, built.Failure, redos, cancellationToken).ConfigureAwait(false);
-            }
-
-            await Say("lint: start").ConfigureAwait(false);
-            bool linted = await lintGate.RunAsync(request.Directory, issue.Title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
-            await agents.AfterLintAsync(linted, cancellationToken).ConfigureAwait(false);
-            _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "passed");
-            (redoTexts, producer) = await RunGateAsync(scopeGate, cancellationToken).ConfigureAwait(false);
-            if (redoTexts.Count is 0)
-            {
-                (redoTexts, producer) = await RunGateAsync(testGate, cancellationToken).ConfigureAwait(false);
-            }
-
-            if (redoTexts.Count is 0)
-            {
-                (redoTexts, producer) = await RunGateAsync(apiGate, cancellationToken).ConfigureAwait(false);
-            }
-
-            if (redoTexts.Count is 0)
-            {
-                (redoTexts, producer) = await RunGateAsync(checkGate, cancellationToken).ConfigureAwait(false);
-                if (redoTexts.Count is 0)
-                {
-                    await Say("review: start").ConfigureAwait(false);
-                    ReviewPhaseResult review = await reviewPhase
-                        .RunAsync(issue.Title, issue.Body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, cancellationToken).ConfigureAwait(false);
-                    string reviewRow = _summary.AddRow("review", null, review.IsError ? "failed" : review.Approved ? "approved" : "blocked");
-                    if (review.IsError)
-                    {
-                        return await StopAsync(request, review.Blocking[0], redos, cancellationToken).ConfigureAwait(false);
-                    }
-
-                    await Say(review.Approved ? "review: approved" : "review: blocked").ConfigureAwait(false);
-                    if (review.Approved)
-                    {
-                        await Say("deliver: start").ConfigureAwait(false);
-                        var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, testGate, choice, redos));
-                        PullRequest pullRequest = await deliver
-                            .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
-                        return new FactoryRunResult(pullRequest, redos);
-                    }
-
-                    redoTexts = review.Blocking;
-                    producer = reviewRow;
-                }
-            }
-
-            redoTexts = agents.NoteBuild(redoTexts);
-            if (redos >= RedoBudget)
-            {
-                await CommentAsync(request, $"The budget of {RedoBudget} Redos is spent. The last build still fails:", redoTexts, cancellationToken).ConfigureAwait(false);
-                return new FactoryRunResult(null, redos);
-            }
-
-            redos++;
-            _summary.AddRedos(redos, producer, redoTexts);
-            await Say($"redo: {redos}").ConfigureAwait(false);
-        }
-    }
-
-    /// <summary>Runs <paramref name="gate"/> between its two progress lines, adds its row, and gives its Redo texts and the name of the row.</summary>
-    private async Task<(IReadOnlyList<string> RedoTexts, string Row)> RunGateAsync(IGate gate, CancellationToken cancellationToken)
-    {
-        string name = gate.Name.Text();
-        await Say($"{name}: start").ConfigureAwait(false);
-        long start = _clock.GetTimestamp();
-        GateOutcome outcome = await gate.RunAsync(cancellationToken).ConfigureAwait(false);
-        await Say($"{name}: {outcome.Result}").ConfigureAwait(false);
-        return (outcome.RedoTexts, _summary.AddRow(name, _clock.GetElapsedTime(start), outcome.Result));
     }
 
     /// <summary>Runs the check before the first phase, and posts the comment that stops the run when there is one.</summary>
@@ -586,13 +221,6 @@ public sealed class FactoryRun(
         version,
         agents.Sessions);
 
-    private async Task<FactoryRunResult> StopAsync(FactoryRunRequest request, string text, int redos, CancellationToken cancellationToken)
-    {
-        string shown = string.IsNullOrWhiteSpace(text) ? "claude answered with an error and no text." : text;
-        await CommentAsync(request, shown, [], cancellationToken).ConfigureAwait(false);
-        return new FactoryRunResult(null, redos);
-    }
-
     private async Task WriteSummaryAsync()
     {
         if (string.IsNullOrEmpty(summaryPath) || _summary.IsEmpty)
@@ -614,9 +242,12 @@ public sealed class FactoryRun(
 
     private Task Say(string line) => ProgressLine.WriteAsync(progress, line);
 
-    private async Task CommentAsync(FactoryRunRequest request, string lead, IReadOnlyList<string> texts, CancellationToken cancellationToken)
+    private Task CommentAsync(FactoryRunRequest request, string lead, IReadOnlyList<string> texts, CancellationToken cancellationToken) =>
+        PostAsync(request, CommentText.Fit(lead, texts), cancellationToken);
+
+    /// <summary>Writes <paramref name="body"/> as a progress line and posts it on the issue unchanged.</summary>
+    private async Task PostAsync(FactoryRunRequest request, string body, CancellationToken cancellationToken)
     {
-        string body = CommentText.Fit(lead, texts);
         await Say(body).ConfigureAwait(false);
         await client.PostCommentAsync(request.Owner, request.Repo, request.IssueNumber, body, cancellationToken).ConfigureAwait(false);
     }

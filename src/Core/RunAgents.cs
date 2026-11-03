@@ -6,7 +6,7 @@ namespace Core;
 /// What <see cref="RunAgents.StartAsync"/> needs: the clone, the branches, the path and what each agent reports to. The title and the
 /// author name the commit of a work tree change before the push of the scratch branch.
 /// </summary>
-internal sealed record RunAgentsSetup(
+public sealed record RunAgentsSetup(
     CommandRunner Runner,
     Git Git,
     string Owner,
@@ -34,7 +34,7 @@ internal sealed record RunAgentsSetup(
 /// run in a sandbox that holds no key. The host pushes the scratch branch before the first prompt, pulls it after each prompt of the
 /// builder, and deletes it on origin at the end.
 /// </summary>
-internal sealed class RunAgents : IAsyncDisposable
+public sealed class RunAgents : IAsyncDisposable
 {
     /// <summary>The Redo text of a build after which the head of the scratch branch on origin did not move.</summary>
     public const string NoCommitText = "The build pushed no commit to the session branch. Commit the work and push it to that branch.";
