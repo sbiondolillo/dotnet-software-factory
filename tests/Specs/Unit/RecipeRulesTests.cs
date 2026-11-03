@@ -280,4 +280,17 @@ public sealed class RecipeRulesTests
     [InlineData(Recipe.Behavior)]
     [InlineData(Recipe.Refactor)]
     public void ARecipeWithNoScopeHasNoThreadRule(Recipe recipe) => Assert.Equal("", RecipeRules.ThreadRules(recipe));
+
+    public static TheoryData<RecipeChoice, GateName[]> GateLists() => new()
+    {
+        { new RecipeChoice(Recipe.Behavior, [], null), [GateName.Test] },
+        { new RecipeChoice(Recipe.Refactor, [], null), [GateName.Test] },
+        { new RecipeChoice(Recipe.Refactor, [], "true"), [GateName.Test, GateName.Check] },
+        { new RecipeChoice(Recipe.Cleanup, ["README.md"], "true"), [GateName.Scope, GateName.Test, GateName.Check] },
+        { new RecipeChoice(Recipe.Reframe, ["src/"], "true"), [GateName.Scope, GateName.Test, GateName.Api, GateName.Check] },
+    };
+
+    [Theory]
+    [MemberData(nameof(GateLists))]
+    public void EachChoiceGetsItsGatesInOrder(RecipeChoice choice, GateName[] gates) => Assert.Equal(gates, RecipeRules.Gates(choice));
 }
