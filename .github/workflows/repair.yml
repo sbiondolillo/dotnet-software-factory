@@ -1,8 +1,8 @@
 # The repair loop: a red ci run, or a red factory run on a story, becomes an
 # issue with the label repair, written by one Managed Agents session, that
 # issue becomes a pull request with the label repair, built by factory.yml,
-# that pull request gets a Copilot review with every thread answered, and it
-# merges once the judge approved. The job holds the API key, the GitHub
+# that factory run settles the Copilot review, and the pull request merges
+# once the judge approved. The job holds the API key, the GitHub
 # token and the private key of the App dsf-builder. The session holds a
 # read-only repository token, the judge's agent and the judge's environment.
 #
@@ -24,12 +24,15 @@
 # App token lives one hour. With no green run, the step comments on the issue
 # and builds nothing.
 #
-# The Copilot step requests a review by copilot-pull-request-reviewer when the
-# head holds none, and polls until a review is on the head and no thread is
-# unresolved. The factory answers the threads within its run, three rounds at
-# most. A refusal, or a thread still open once that run ended, is one comment
-# on the issue and a stop for the SHA. The result is the step output copilot,
-# settled, refused or unanswered, for the merge stage.
+# The Copilot step waits for the factory run that the build step started, the
+# step output run, as #509 decided. That run requests the Copilot review,
+# answers each thread, three rounds at most, and ends success only when every
+# check is green, Copilot reviewed the head with no refusal, and no thread is
+# unresolved. On success the step reads the head SHA and gives settled. Any
+# other conclusion is one comment on the issue that links the run, and a stop
+# for the head: the run's log and job summary hold the reason. The result is
+# the step output copilot, settled or unsettled, with the head as sha, for the
+# merge stage.
 #
 # The merge step runs on settled alone, on the same head, as #355 decided. It
 # waits for the check run judge-verdict on that head, and arms GitHub's auto-
@@ -98,10 +101,9 @@
 # -f run=<run id>`. The merge step reads the switch on every event, and merges
 # nothing when it is not true. A run by hand with an issue number runs the
 # mint step, the build step, the Copilot step and the merge step:
-# `gh workflow run repair.yml -f issue=<n>`. A run by hand with a pull request
-# number runs the Copilot step and the merge step:
-# `gh workflow run repair.yml -f pr=<n>`. That is the route for a pull request
-# that waited while the switch was off.
+# `gh workflow run repair.yml -f issue=<n>`. The Copilot step waits on the run
+# the build step started, so a start at the Copilot step alone has no run to
+# wait on, and no input starts there.
 # Secrets: JUDGE_ANTHROPIC_API_KEY, JUDGE_GITHUB_RO_TOKEN, DSF_REPAIR_APP_PRIVATE_KEY.
 # Variables: JUDGE_AGENT_ID, JUDGE_ENVIRONMENT_ID, REPAIR_ENABLED, DSF_REPAIR_APP_ID.
 name: repair
@@ -120,10 +122,6 @@ on:
         description: The number of a repair issue, to build with no read
         required: false
         type: string
-      pr:
-        description: The number of a repair pull request, to watch with no read and no build
-        required: false
-        type: string
 
 # actions reruns the run, reads its log and starts factory.yml, for a build or
 # for the story of a flaky factory run. contents posts a comment on a commit of
@@ -136,7 +134,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: repair-${{ inputs.pr && format('pr-{0}', inputs.pr) || inputs.issue && format('issue-{0}', inputs.issue) || inputs.run || github.event.workflow_run.id }}
+  group: repair-${{ inputs.issue && format('issue-{0}', inputs.issue) || inputs.run || github.event.workflow_run.id }}
   cancel-in-progress: false
 
 jobs:
@@ -152,7 +150,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Read the red run
         id: read
-        if: ${{ !inputs.issue && !inputs.pr }}
+        if: ${{ !inputs.issue }}
         env:
           GH_TOKEN: ${{ github.token }}
           JUDGE_ANTHROPIC_API_KEY: ${{ secrets.JUDGE_ANTHROPIC_API_KEY }}
@@ -164,7 +162,7 @@ jobs:
         run: python3 .github/repair/read.py "$RUN_ID"
       - name: Mint the App token for the base branch
         id: app
-        if: ${{ !inputs.pr && (inputs.issue || steps.read.outputs.issue) }}
+        if: ${{ inputs.issue || steps.read.outputs.issue }}
         continue-on-error: true
         uses: actions/create-github-app-token@v2
         with:
@@ -174,7 +172,7 @@ jobs:
           permission-workflows: write
       - name: Build the repair issue
         id: build
-        if: ${{ !inputs.pr && (inputs.issue || steps.read.outputs.issue) }}
+        if: ${{ inputs.issue || steps.read.outputs.issue }}
         env:
           GH_TOKEN: ${{ github.token }}
           REPAIR_REF_TOKEN: ${{ steps.app.outputs.token }}
@@ -182,10 +180,10 @@ jobs:
         run: python3 .github/repair/build.py "$ISSUE"
       - name: Watch the Copilot review
         id: copilot
-        if: ${{ inputs.pr || steps.build.outputs.pr }}
+        if: ${{ steps.build.outputs.pr }}
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ inputs.pr || steps.build.outputs.pr }}
+          PR: ${{ steps.build.outputs.pr }}
           FACTORY_RUN: ${{ steps.build.outputs.run }}
         run: python3 .github/repair/copilot.py "$PR"
       - name: Merge the repair pull request
@@ -193,7 +191,7 @@ jobs:
         if: ${{ steps.copilot.outputs.copilot == 'settled' }}
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ inputs.pr || steps.build.outputs.pr }}
+          PR: ${{ steps.build.outputs.pr }}
           SHA: ${{ steps.copilot.outputs.sha }}
           REPAIR_ENABLED: ${{ vars.REPAIR_ENABLED }}
         run: python3 .github/repair/merge.py "$PR" "$SHA"
