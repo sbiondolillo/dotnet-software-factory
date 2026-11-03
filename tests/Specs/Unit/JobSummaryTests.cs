@@ -129,7 +129,7 @@ public sealed class JobSummaryTests
     {
         var summary = new JobSummary();
         summary.AddRedos(1, "test 1", ["\n\nsecond", "only", "", "\r\n"]);
-        string text = summary.Render();
+        string text = summary.Render(FactoryRun.SummaryHeading);
         Assert.Contains("- Redo 1, after test 1: second\n", text, StringComparison.Ordinal);
         Assert.Contains("- Redo 1, after test 1: only\n", text, StringComparison.Ordinal);
     }

@@ -148,14 +148,14 @@ public sealed class JobSummarySteps : IDisposable
     public void WhenSessions(string first, string firstRole, int firstCents, string second, string secondRole, int secondCents)
     {
         _summary.AddSessions([new SessionCost(first, firstRole, firstCents), new SessionCost(second, secondRole, secondCents)]);
-        _rendered = _summary.Render();
+        _rendered = _summary.Render(FactoryRun.SummaryHeading);
     }
 
     [When("the summary gets no session")]
     public void WhenNoSession()
     {
         _summary.AddSessions([]);
-        _rendered = _summary.Render();
+        _rendered = _summary.Render(FactoryRun.SummaryHeading);
     }
 
     [Then("the rendered summary ends with the lines")]

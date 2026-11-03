@@ -26,6 +26,7 @@ public sealed class FeedbackRunSteps : IDisposable
         shared.OtherCommands = _h.Commands;
         shared.OtherPrompts = _h.Prompts;
         shared.OtherTimeline = _h.Timeline;
+        shared.OtherSummary = () => _h.Summary;
         buildPhase.FirstPrompt = () => Build(1).Text;
         reviewPrompt.Lookup = () => _h.Prompts.FirstOrDefault(p => p.Kind is "review")?.Text;
     }
@@ -181,6 +182,12 @@ public sealed class FeedbackRunSteps : IDisposable
         }
 
         _h.BuildIsError = f.BuildIsError;
+        _h.ErrorBuilds.UnionWith(f.ErrorBuilds);
+        _h.ErrorReviews.UnionWith(f.ErrorReviews);
+        if (f.ErrorBuilds.Count + f.ErrorReviews.Count > 0)
+        {
+            _h.ErrorText = f.ErrorText;
+        }
         _h.Report = build => _reports.TryGetValue(build, out string? report) ? report : _defaultReport;
         try
         {
@@ -198,7 +205,7 @@ public sealed class FeedbackRunSteps : IDisposable
 
     [Then("FeedbackRun gives back a result with {int} thread(s) resolved, {int} thread(s) unresolved and {int} Redo(s)")]
     public void ThenResult(int resolved, int unresolved, int redos) =>
-        Assert.Equal(new FeedbackRunResult(resolved, unresolved, redos), Result with { Sessions = null });
+        Assert.Equal(new FeedbackRunResult(resolved, unresolved, redos), Result);
 
     [Then("FeedbackRun resolves the threads {string} and {string}")]
     public void ThenResolvesBoth(string first, string second) => Assert.Equal([first, second], Resolves);
@@ -380,6 +387,20 @@ public sealed class FeedbackRunSteps : IDisposable
 
     [Then("the run starts no session")]
     public void ThenNoSession() => Assert.Empty(_h.Managed!.Sessions);
+
+    [Then("FeedbackRun runs no dotnet command")]
+    public void ThenNoDotnet() => Assert.DoesNotContain(
+        _h.Commands,
+        c => c.Command is "docker" && c.Arguments[0] is "exec" && c.Arguments.SkipWhile(a => a != FeedbackRunHarness.ContainerId).Skip(1).FirstOrDefault() is "dotnet");
+
+    [Then("the job summary of the round is one section {string} with the rows {string}, {string} and {string}, in this order")]
+    public void ThenSummarySection(string heading, string first, string second, string third)
+    {
+        string[] lines = _h.Summary.Split('\n');
+        Assert.Equal(heading, lines[0]);
+        Assert.Single(lines, line => line.StartsWith("## ", StringComparison.Ordinal));
+        Assert.Equal([first, second, third], lines.Where(line => line.StartsWith("| ", StringComparison.Ordinal)).Skip(1).Select(line => line.Split('|')[1].Trim()));
+    }
 
     [Then("FeedbackRun removes the container")]
     public void ThenRemoved() => Assert.Contains("rm", _h.Events);

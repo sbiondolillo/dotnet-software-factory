@@ -82,10 +82,10 @@ public sealed class BuildLoopHarness : IAsyncDisposable
     public IReadOnlyList<string> Lines => [.. Progress.ToString().Split('\n').Select(line => line.TrimEnd('\r')).Where(line => line.Length > 0)];
 
     /// <summary>The rows of the job summary, after its header.</summary>
-    public IReadOnlyList<string> Rows => [.. Summary.Render().Split('\n').Where(line => line.StartsWith("| ", StringComparison.Ordinal)).Skip(1)];
+    public IReadOnlyList<string> Rows => [.. Summary.Render(FactoryRun.SummaryHeading).Split('\n').Where(line => line.StartsWith("| ", StringComparison.Ordinal)).Skip(1)];
 
     /// <summary>The Redo items of the job summary.</summary>
-    public IReadOnlyList<string> RedoItems => [.. Summary.Render().Split('\n').Where(line => line.StartsWith("- Redo ", StringComparison.Ordinal))];
+    public IReadOnlyList<string> RedoItems => [.. Summary.Render(FactoryRun.SummaryHeading).Split('\n').Where(line => line.StartsWith("- Redo ", StringComparison.Ordinal))];
 
     public static BuildOutcome Pass() => new(null, []);
 

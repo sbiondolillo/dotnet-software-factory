@@ -43,7 +43,8 @@ public sealed class FeedbackRunTests
         Assert.Contains(".factory/threads.json", h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
         Assert.Equal(1, result.Redos);
         Assert.Equal(["build", "build", "dotnet", "review"], h.Events.Where(e => e is "build" or "dotnet" or "review"));
-        Assert.Single(h.Commands, c => c.Command is "git" && c.Arguments[0] is "commit");
+        Assert.Contains("- Redo 1, after build 1: The report .factory/threads.json is absent. Write it.", h.Summary.Split('\n'));
+        Assert.Equal(2, h.Commands.Count(c => c.Command is "git" && c.Arguments[0] is "commit"));
     }
 
     [Theory]
@@ -224,11 +225,79 @@ public sealed class FeedbackRunTests
     }
 
     [Fact]
-    public async Task AnErrorFlagWithAFaultFreeReportStillGoesToTheGates()
+    public async Task AnErrorFlagOnTheBuildWithAFaultFreeReportStopsTheRoundWithAComment()
     {
         using var h = new FeedbackRunHarness { BuildIsError = true };
+        Assert.Equal(new FeedbackRunResult(0, 2, 0), await h.RunAsync(Ct));
+        Assert.Equal("build error", Assert.Single(h.CommentBodies));
+        Assert.Contains("| build 1 | ", h.Summary, StringComparison.Ordinal);
+        Assert.EndsWith("| failed |", h.Summary.Split('\n').Single(line => line.StartsWith("| build 1 |", StringComparison.Ordinal)), StringComparison.Ordinal);
+        Assert.DoesNotContain("### Redos", h.Summary, StringComparison.Ordinal);
+        Assert.Single(h.BuildPrompts);
+        Assert.DoesNotContain("dotnet", h.Events);
+        Assert.DoesNotContain("push", h.Events);
+        Assert.Empty(RepliedIds(h));
+        Assert.DoesNotContain(h.Events, e => e.StartsWith("resolve:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AnErrorFlagOnTheReviewStopsTheRoundWithAComment()
+    {
+        using var h = new FeedbackRunHarness { ErrorText = "API Error: 529 Overloaded" };
+        h.ErrorReviews.Add(1);
+        Assert.Equal(new FeedbackRunResult(0, 2, 0), await h.RunAsync(Ct));
+        Assert.Equal("API Error: 529 Overloaded", Assert.Single(h.CommentBodies));
+        Assert.EndsWith("| failed |", h.Summary.Split('\n').Single(line => line.StartsWith("| review 1 |", StringComparison.Ordinal)), StringComparison.Ordinal);
+        Assert.DoesNotContain("### Redos", h.Summary, StringComparison.Ordinal);
+        Assert.Single(h.BuildPrompts);
+        Assert.DoesNotContain("push", h.Events);
+        Assert.Empty(RepliedIds(h));
+        Assert.DoesNotContain(h.Events, e => e.StartsWith("resolve:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ARoundAppendsItsSectionToTheJobSummaryWithTheSessionsAtTheEnd()
+    {
+        using var h = new FeedbackRunHarness();
+        h.UseManaged();
+        File.WriteAllText(h.SummaryPath, "## Factory run\n");
         Assert.Equal(new FeedbackRunResult(2, 0, 0), await h.RunAsync(Ct));
-        Assert.Contains("dotnet", h.Events);
+        string summary = h.Summary;
+        Assert.StartsWith("## Factory run\n\n## Feedback run\n", summary, StringComparison.Ordinal);
+        string section = summary[summary.IndexOf("## Feedback run", StringComparison.Ordinal)..];
+        Assert.Equal(
+            ["build 1", "test 1", "review 1"],
+            section.Split('\n').Where(line => line.StartsWith("| ", StringComparison.Ordinal)).Skip(1).Select(line => line.Split('|')[1].Trim()));
+        Assert.Matches(@"\n### Sessions\n\n(- sesn_\d+, \w+, \$\d+\.\d\d\n)+$", section);
+    }
+
+    [Fact]
+    public async Task TwoRoundsAppendTwoSectionsInOrder()
+    {
+        using var h = new FeedbackRunHarness();
+        await h.RunAsync(Ct);
+        h.RedBuilds.Add(h.Builds + 1);
+        await h.RunAsync(Ct);
+        string[] headings = [.. h.Summary.Split('\n').Where(line => line.StartsWith("## ", StringComparison.Ordinal))];
+        Assert.Equal(["## Feedback run", "## Feedback run"], headings);
+        Assert.Contains("- Redo 1, after test 1: ", h.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ASummaryWriteThatFailsGoesToTheLogAndTheRoundStillPasses()
+    {
+        using var h = new FeedbackRunHarness();
+        h.SummaryPath = Path.Combine(h.CloneDirectory, "absent", "summary.md");
+        Assert.Equal(new FeedbackRunResult(2, 0, 0), await h.RunAsync(Ct));
+        Assert.StartsWith($"summary: cannot write {h.SummaryPath}: ", h.Log.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ARoundWithNoUnresolvedThreadWritesNoSummary()
+    {
+        using var h = new FeedbackRunHarness { Threads = [] };
+        await h.RunAsync(Ct);
+        Assert.False(File.Exists(h.SummaryPath));
     }
 
     [Fact]

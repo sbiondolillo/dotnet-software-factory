@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text;
-using System.Text.Json;
 
 namespace Core;
 
@@ -23,23 +22,30 @@ public sealed record FeedbackRunRequest(
     bool SkipIntegration = false,
     ManagedAgentsSettings? Managed = null);
 
-/// <summary>The outcome of a <see cref="FeedbackRun"/>: the threads resolved, the threads left unresolved, the Redos spent, and
-/// the Managed Agents sessions of the run with their cost, or null when no session ran. The run resolves each thread that it
-/// replies to, so the threads left unresolved are the threads with no reply.</summary>
-public sealed record FeedbackRunResult(int Resolved, int Unresolved, int Redos, IReadOnlyList<SessionCost>? Sessions = null);
+/// <summary>The outcome of a <see cref="FeedbackRun"/>: the threads resolved, the threads left unresolved, and the Redos spent.
+/// The run resolves each thread that it replies to, so the threads left unresolved are the threads with no reply.</summary>
+public sealed record FeedbackRunResult(int Resolved, int Unresolved, int Redos);
 
-/// <summary>Answers every unresolved review thread of a pull request within three Redos. The <paramref name="time"/>, the
-/// <paramref name="handler"/> and the <paramref name="delay"/> serve the Managed Agents path, when the request holds its settings.</summary>
+/// <summary>Answers every unresolved review thread of a pull request within the budget of the <see cref="BuildLoop"/>. The
+/// <paramref name="time"/>, the <paramref name="handler"/> and the <paramref name="delay"/> serve the Managed Agents path, when the
+/// request holds its settings. A round that builds appends its section <c>## Feedback run</c> to the file at
+/// <paramref name="summaryPath"/>, and a write that fails goes to <paramref name="log"/>.</summary>
 public sealed class FeedbackRun(
     CommandRunner runner,
     GitHubClient client,
     TextWriter? progress = null,
     TimeProvider? time = null,
     HttpMessageHandler? handler = null,
-    Func<TimeSpan, CancellationToken, Task>? delay = null)
+    Func<TimeSpan, CancellationToken, Task>? delay = null,
+    string? summaryPath = null,
+    TextWriter? log = null)
 {
-    private const int RedoBudget = 3;
-    private const string ReportPath = ".factory/threads.json";
+    /// <summary>The heading of the section of a round in the job summary.</summary>
+    public const string SummaryHeading = "Feedback run";
+
+    private readonly TimeProvider _clock = time ?? TimeProvider.System;
+    private JobSummary _summary = new();
+    private IReadOnlyList<SessionCost> _sessions = [];
 
     /// <summary>True when the last <see cref="RunAsync"/> ended on a closing issue that the recipe rules decline, with a
     /// comment on the pull request and no build.</summary>
@@ -47,22 +53,27 @@ public sealed class FeedbackRun(
 
     /// <summary>
     /// Builds an answer to each unresolved thread, gates and reviews it, pushes it, and replies to each thread. Then it
-    /// resolves each thread that it replied to, fixed or disputed. The reply of a disputed thread states the dispute. A
+    /// resolves each thread that it replied to, fixed or disputed. The reply of a disputed thread states the dispute. A round
+    /// that stops on an error or spends its budget posts the comment of the loop on the pull request and pushes nothing. A
     /// <see cref="SessionBranchException"/> posts its message on the pull request, and the run then throws it.
     /// </summary>
     public async Task<FeedbackRunResult> RunAsync(FeedbackRunRequest request, CancellationToken cancellationToken = default)
     {
         Declined = false;
+        _summary = new JobSummary();
+        _sessions = [];
         try
         {
             return await RunCoreAsync(request, cancellationToken).ConfigureAwait(false);
         }
         catch (SessionBranchException exception)
         {
-            string comment = CommentText.Fit(exception.Message, []);
-            await Say(comment).ConfigureAwait(false);
-            await client.PostCommentAsync(request.Owner, request.Repo, request.PullNumber, comment, cancellationToken).ConfigureAwait(false);
+            await PostAsync(request, CommentText.Fit(exception.Message, []), cancellationToken).ConfigureAwait(false);
             throw;
+        }
+        finally
+        {
+            await WriteSummaryAsync().ConfigureAwait(false);
         }
     }
 
@@ -87,16 +98,11 @@ public sealed class FeedbackRun(
             choice = RecipeRules.Parse(issue.Labels, issue.Body);
             if (choice.Declined is string refusal)
             {
-                string comment = CommentText.Fit(refusal, []);
-                await Say(comment).ConfigureAwait(false);
-                await client.PostCommentAsync(request.Owner, request.Repo, request.PullNumber, comment, cancellationToken).ConfigureAwait(false);
+                await PostAsync(request, CommentText.Fit(refusal, []), cancellationToken).ConfigureAwait(false);
                 Declined = true;
                 return new FeedbackRunResult(0, threads.Count, 0);
             }
         }
-
-        IReadOnlyList<string> scope = choice.Scope;
-        bool scoped = choice.Recipe is Recipe.Cleanup or Recipe.Reframe;
 
         var git = new Git(runner);
         await Say("clone: start").ConfigureAwait(false);
@@ -107,120 +113,86 @@ public sealed class FeedbackRun(
 
         string title = $"Answer the review threads of pull request #{request.PullNumber.ToString(CultureInfo.InvariantCulture)}";
         string body = Describe(threads, issueBody, RecipeRules.ThreadRules(choice.Recipe));
-        string reportFile = Path.Combine(request.Directory, ".factory", "threads.json");
 
         var setup = new RunAgentsSetup(
             runner, git, request.Owner, request.Repo, request.Token, request.Directory, request.RootDirectory, request.ImageTag,
             baseCommit, $"{branch}-session", title, request.AuthorName, request.AuthorEmail, request.Managed, handler,
-            delay, time, progress);
+            delay, time, progress, OnAnswer: (elapsed, answer) => _summary.Prompt(elapsed, answer.NumTurns, answer.CostUsd));
         RunAgents agents = await RunAgents.StartAsync(setup, cancellationToken).ConfigureAwait(false);
         await using (agents.ConfigureAwait(false))
         {
-            Sandbox sandbox = agents.Sandbox;
-            var buildPhase = new BuildPhase(agents.Builder, RecipeRules.BuildText(choice.Recipe, RunKind.Feedback));
-            LintGate lintGate = agents.Lint(null);
-            var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Feedback));
-            ScopeGate? scopeGate = scoped ? new ScopeGate(git, baseCommit, request.Directory, scope) : null;
-            TestGate testGate = await TestGate
-                .CreateAsync(sandbox, request.Directory, pin, request.SecretNames, scoped ? scope : null, skipIntegration: request.SkipIntegration, cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-            CheckGate? checkGate = choice.Check is string check ? new CheckGate(sandbox, check) : null;
-            int redos = 0;
-            IReadOnlyList<string> redoTexts = [];
-            IReadOnlyList<ReportItem> items = [];
-            while (true)
+            try
             {
-                if (File.Exists(reportFile))
+                GateSet gates = await new GateFactory(agents.Sandbox, git, request.Directory, baseCommit, request.SecretNames, progress, skipIntegration: request.SkipIntegration)
+                    .CreateAsync(choice, pin, cancellationToken).ConfigureAwait(false);
+                if (gates.Stop is string stop)
                 {
-                    File.Delete(reportFile);
+                    await PostAsync(request, stop, cancellationToken).ConfigureAwait(false);
+                    return new FeedbackRunResult(0, threads.Count, 0);
                 }
 
-                await Say("build: start").ConfigureAwait(false);
-                await buildPhase.RunAsync(title, body, request.BuildModel, request.BuildTurns, redoTexts, cancellationToken).ConfigureAwait(false);
-                (items, IReadOnlyList<string> faults) = ReadReport(reportFile, threads);
-                if (faults.Count > 0)
+                var build = new FeedbackBuild(
+                    new BuildPhase(agents.Builder, RecipeRules.BuildText(choice.Recipe, RunKind.Feedback)),
+                    title, body, request.BuildModel, request.BuildTurns, request.Directory, threads);
+                var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Feedback));
+                var loop = new BuildLoop(_summary, _clock, progress, agents, agents.Lint(null), request.Directory, title, request.AuthorName, request.AuthorEmail);
+                BuildLoopResult result = await loop.RunAsync(
+                    build,
+                    gates.Gates,
+                    token => reviewPhase.RunAsync(title, body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, token),
+                    cancellationToken).ConfigureAwait(false);
+                if (result.End is not BuildLoopEnd.Passed)
                 {
-                    redoTexts = faults;
-                }
-                else
-                {
-                    await Say("lint: start").ConfigureAwait(false);
-                    bool linted = await lintGate.RunAsync(request.Directory, title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
-                    await agents.AfterLintAsync(linted, cancellationToken).ConfigureAwait(false);
-                    IReadOnlyList<string> scopeFaults = scopeGate is null ? [] : await RunGateAsync(scopeGate, cancellationToken).ConfigureAwait(false);
-                    if (scopeFaults.Count > 0)
-                    {
-                        redoTexts = scopeFaults;
-                    }
-                    else
-                    {
-                        IReadOnlyList<string> gateFaults = await RunGateAsync(testGate, cancellationToken).ConfigureAwait(false);
-                        if (gateFaults.Count is 0 && checkGate is not null)
-                        {
-                            gateFaults = await RunGateAsync(checkGate, cancellationToken).ConfigureAwait(false);
-                        }
-
-                        if (gateFaults.Count > 0)
-                        {
-                            redoTexts = gateFaults;
-                        }
-                        else
-                        {
-                            await Say("review: start").ConfigureAwait(false);
-                            ReviewPhaseResult review = await reviewPhase
-                                .RunAsync(title, body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, cancellationToken).ConfigureAwait(false);
-                            await Say(review.Approved ? "review: approved" : "review: blocked").ConfigureAwait(false);
-                            if (review.Approved)
-                            {
-                                break;
-                            }
-
-                            redoTexts = review.Blocking;
-                        }
-                    }
+                    await PostAsync(request, result.Comment ?? "", cancellationToken).ConfigureAwait(false);
+                    return new FeedbackRunResult(0, threads.Count, result.Redos);
                 }
 
-                redoTexts = agents.NoteBuild(redoTexts);
-                if (redos >= RedoBudget)
+                await agents.MoveToAsync(branch, cancellationToken).ConfigureAwait(false);
+                await git.PushAsync(branch, request.Directory, request.Token, cancellationToken).ConfigureAwait(false);
+                int resolved = 0;
+                foreach (ReviewThread thread in threads)
                 {
-                    string comment = CommentText.Fit($"The budget of {RedoBudget} Redos is spent. The last build still fails:", redoTexts);
-                    await Say(comment).ConfigureAwait(false);
-                    await client.PostCommentAsync(request.Owner, request.Repo, request.PullNumber, comment, cancellationToken).ConfigureAwait(false);
-                    return new FeedbackRunResult(0, threads.Count, redos, Sessions(agents));
+                    ThreadAnswer answer = build.Answers.First(a => a.Id == thread.Id);
+                    await reviewThreads.ReplyAsync(thread.Id, answer.Reply, cancellationToken).ConfigureAwait(false);
+                    await reviewThreads.ResolveAsync(thread.Id, cancellationToken).ConfigureAwait(false);
+                    resolved++;
                 }
 
-                redos++;
-                await Say($"redo: {redos}").ConfigureAwait(false);
+                return new FeedbackRunResult(resolved, threads.Count - resolved, result.Redos);
             }
-
-            await agents.MoveToAsync(branch, cancellationToken).ConfigureAwait(false);
-            await git.PushAsync(branch, request.Directory, request.Token, cancellationToken).ConfigureAwait(false);
-            int resolved = 0;
-            foreach (ReviewThread thread in threads)
+            finally
             {
-                ReportItem item = items.First(i => i.Id == thread.Id);
-                await reviewThreads.ReplyAsync(thread.Id, item.Reply, cancellationToken).ConfigureAwait(false);
-                await reviewThreads.ResolveAsync(thread.Id, cancellationToken).ConfigureAwait(false);
-                resolved++;
+                _sessions = agents.Sessions;
             }
-
-            return new FeedbackRunResult(resolved, threads.Count - resolved, redos, Sessions(agents));
         }
     }
 
     private Task Say(string line) => ProgressLine.WriteAsync(progress, line);
 
-    /// <summary>Runs <paramref name="gate"/> between its two progress lines and gives its Redo texts.</summary>
-    private async Task<IReadOnlyList<string>> RunGateAsync(IGate gate, CancellationToken cancellationToken)
+    /// <summary>Writes <paramref name="body"/> as a progress line and posts it on the pull request unchanged.</summary>
+    private async Task PostAsync(FeedbackRunRequest request, string body, CancellationToken cancellationToken)
     {
-        string name = gate.Name.Text();
-        await Say($"{name}: start").ConfigureAwait(false);
-        GateOutcome outcome = await gate.RunAsync(cancellationToken).ConfigureAwait(false);
-        await Say($"{name}: {outcome.Result}").ConfigureAwait(false);
-        return outcome.RedoTexts;
+        await Say(body).ConfigureAwait(false);
+        await client.PostCommentAsync(request.Owner, request.Repo, request.PullNumber, body, cancellationToken).ConfigureAwait(false);
     }
 
-    private static IReadOnlyList<SessionCost>? Sessions(RunAgents agents) => agents.Sessions is { Count: > 0 } sessions ? sessions : null;
+    private async Task WriteSummaryAsync()
+    {
+        if (string.IsNullOrEmpty(summaryPath) || _summary.IsEmpty)
+        {
+            return;
+        }
+
+        _summary.AddSessions(_sessions);
+        try
+        {
+            await JobSummary.AppendToFileAsync(summaryPath, _summary.Render(SummaryHeading)).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            await ProgressLine.WriteAsync(log, $"summary: cannot write {summaryPath}: {exception.Message}").ConfigureAwait(false);
+        }
+    }
 
     /// <summary>
     /// Gives the body of the builder and the reviewer. With no closing issue, it is the threads and the report instructions.
@@ -261,7 +233,7 @@ public sealed class FeedbackRun(
             }
         }
 
-        text.Append("\nWhen the work is done, write the report ").Append(ReportPath)
+        text.Append("\nWhen the work is done, write the report ").Append(FeedbackBuild.ReportPath)
             .Append(", one JSON object with the key threads: a list with one item for each thread above. ")
             .Append("Each item has an id (the thread id), a status and a reply. ")
             .Append("The status fixed means that you changed the work tree to answer the thread. ")
@@ -274,65 +246,4 @@ public sealed class FeedbackRun(
 
         return text.ToString();
     }
-
-    private static (IReadOnlyList<ReportItem> Items, IReadOnlyList<string> Faults) ReadReport(string file, IReadOnlyList<ReviewThread> threads)
-    {
-        if (!File.Exists(file))
-        {
-            return ([], [$"The report {ReportPath} is absent. Write it."]);
-        }
-
-        JsonElement root;
-        try
-        {
-            using var document = JsonDocument.Parse(File.ReadAllText(file));
-            root = document.RootElement.Clone();
-        }
-        catch (JsonException)
-        {
-            return ([], [$"The report {ReportPath} is not JSON. Write one JSON object with a threads list."]);
-        }
-
-        if (root.ValueKind is not JsonValueKind.Object || !root.TryGetProperty("threads", out JsonElement list) || list.ValueKind is not JsonValueKind.Array)
-        {
-            return ([], [$"The report {ReportPath} is not one JSON object with a threads list."]);
-        }
-
-        var objects = list.EnumerateArray().Where(item => item.ValueKind is JsonValueKind.Object).ToList();
-        var items = new List<ReportItem>();
-        var faults = new List<string>();
-        foreach (ReviewThread thread in threads)
-        {
-            JsonElement? found = objects.Cast<JsonElement?>().FirstOrDefault(item => item!.Value.TryGetProperty("id", out JsonElement id) && id.ValueKind is JsonValueKind.String && id.GetString() == thread.Id);
-            if (found is not JsonElement element)
-            {
-                faults.Add($"The report {ReportPath} has no item for the thread {thread.Id}.");
-                continue;
-            }
-
-            string? status = element.TryGetProperty("status", out JsonElement s) && s.ValueKind is JsonValueKind.String ? s.GetString() : null;
-            bool statusOk = status is "fixed" or "disputed";
-            if (!statusOk)
-            {
-                string shown = element.TryGetProperty("status", out JsonElement raw) ? raw.ToString() : "missing";
-                faults.Add($"The item of the thread {thread.Id} has the status {shown}. The status is fixed or disputed.");
-            }
-
-            string? reply = element.TryGetProperty("reply", out JsonElement r) && r.ValueKind is JsonValueKind.String ? r.GetString() : null;
-            bool replyOk = !string.IsNullOrWhiteSpace(reply);
-            if (!replyOk)
-            {
-                faults.Add($"The item of the thread {thread.Id} has no reply. The reply holds a character other than whitespace.");
-            }
-
-            if (statusOk && replyOk)
-            {
-                items.Add(new ReportItem(thread.Id, reply!));
-            }
-        }
-
-        return (items, faults);
-    }
-
-    private sealed record ReportItem(string Id, string Reply);
 }

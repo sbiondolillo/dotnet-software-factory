@@ -105,6 +105,14 @@ public sealed partial class AgentOptionSteps(ConsoleProgramSteps console)
     [Then("the body of the pull request ends with the line {string}")]
     public void ThenBodyEnds(string line) => Assert.Equal(line, PullBody.Split('\n')[^1]);
 
+    [Then("the job summary of the program starts with the line {string} and holds no other line that starts with {string}")]
+    public void ThenSummaryStarts(string heading, string prefix)
+    {
+        string[] lines = File.ReadAllLines(H.Environment["GITHUB_STEP_SUMMARY"]);
+        Assert.Equal(heading, lines[0]);
+        Assert.Single(lines, line => line.StartsWith(prefix, StringComparison.Ordinal));
+    }
+
     [Then("the job summary of the program ends with the lines")]
     public void ThenSummaryEnds(string expected) =>
         Assert.EndsWith(

@@ -56,3 +56,18 @@ Feature: A feedback run on the pull request of a reframe issue keeps that issue'
     When a caller starts a feedback run
     Then FeedbackRun posts one comment on the pull request 10 that holds "The labels refactor and cleanup exclude each other"
     And FeedbackRun runs 0 build prompts in the run
+
+  Scenario: A reframe round runs the API gate after the test gate
+    Given GitHub answers the read of the pull request with the body "Closes #11"
+    And the issue 11 has the label "reframe" and the scope "README.md"
+    When a caller starts a feedback run
+    Then the job summary holds the row "api 1" with the result "same"
+    And FeedbackRun gives back a result with 2 threads resolved, 0 threads unresolved and 0 Redos
+
+  Scenario: A public API that the reframe round changes gets a Redo
+    Given GitHub answers the read of the pull request with the body "Closes #11"
+    And the issue 11 has the label "reframe" and the scope "README.md"
+    And the API printer lists "Core.Greeter.Hello()" on the base commit and lists nothing after the first build
+    When a caller starts a feedback run
+    Then the next build prompt holds a Redo text that holds "lost symbol: Core.Greeter.Hello()"
+    And the Redos list of the job summary holds the item "- Redo 1, after api 1: lost symbol: Core.Greeter.Hello()"

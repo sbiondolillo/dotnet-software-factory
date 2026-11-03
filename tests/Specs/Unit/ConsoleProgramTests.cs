@@ -237,6 +237,27 @@ public sealed class ConsoleProgramTests : IDisposable
     }
 
     [Fact]
+    public async Task AJobWithThreeRoundsWritesOneFactorySectionAndThreeFeedbackSectionsInOrder()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"summary-{Guid.NewGuid():N}.md");
+        _h.Environment["GITHUB_STEP_SUMMARY"] = path;
+        _h.Threads = "always";
+        _h.HeadSha = _ => $"{_h.CloneDirectories.Count:x8}{ConsoleHarness.DefaultSha[8..]}";
+        try
+        {
+            Assert.Equal(1, await StartAsync($"run {Repo} --issue 12"));
+            Assert.Equal(4, _h.CloneDirectories.Count);
+            Assert.Equal(
+                ["## Factory run", "## Feedback run", "## Feedback run", "## Feedback run"],
+                File.ReadAllLines(path).Where(line => line.StartsWith("## ", StringComparison.Ordinal)));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task AFeedbackWithTheBudgetSpentPostsOneCommentAndExits1()
     {
         _h.Threads = "always";

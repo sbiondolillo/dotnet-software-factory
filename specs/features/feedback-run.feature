@@ -78,10 +78,29 @@ Feature: A feedback run answers every unresolved review thread
     When a caller starts a feedback run
     Then FeedbackRun gives back a result with 2 threads resolved, 0 threads unresolved and 0 Redos
 
-  Scenario: An error flag from claude passes no gate
-    Given claude answers the build prompt with the error flag set
+  Scenario: An error flag from claude on the build stops the round with a comment
+    Given claude answers the first build prompt with the error flag set and the result text "API Error: 529 Overloaded"
     When a caller starts a feedback run
-    Then FeedbackRun gives back a result with 2 threads resolved, 0 threads unresolved and 0 Redos
+    Then FeedbackRun posts one comment on the pull request 10 that holds "API Error: 529 Overloaded"
+    And the job summary holds the row "build 1" with the result "failed"
+    And FeedbackRun runs no dotnet command
+    And git pushes no branch
+    And FeedbackRun adds no reply
+    And FeedbackRun gives back a result with 0 threads resolved, 2 threads unresolved and 0 Redos
+
+  Scenario: An error flag from claude on the review stops the round with a comment
+    Given claude answers the first review prompt with the error flag set and the result text "API Error: 529 Overloaded"
+    When a caller starts a feedback run
+    Then FeedbackRun posts one comment on the pull request 10 that holds "API Error: 529 Overloaded"
+    And the job summary holds the row "review 1" with the result "failed"
+    And FeedbackRun runs 1 build prompts in the run
+    And git pushes no branch
+    And FeedbackRun adds no reply
+    And FeedbackRun gives back a result with 0 threads resolved, 2 threads unresolved and 0 Redos
+
+  Scenario: A round appends its own section to the job summary
+    When a caller starts a feedback run
+    Then the job summary of the round is one section "## Feedback run" with the rows "build 1", "test 1" and "review 1", in this order
 
   Scenario: A missing report sends the run back to the build before any gate
     Given on the first build prompt the agent writes no report
