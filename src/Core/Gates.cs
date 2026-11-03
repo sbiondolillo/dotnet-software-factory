@@ -39,9 +39,9 @@ public static class GateNames
     };
 }
 
-/// <summary>What <see cref="GateFactory.CreateAsync"/> gives: the gates in the order of the recipe, or the text of the comment
-/// that stops the run before the first build.</summary>
-public sealed record GateSet(IReadOnlyList<IGate> Gates, string? Stop);
+/// <summary>What <see cref="GateFactory.CreateAsync"/> gives: the gates in the order of the recipe, the lint gate that runs after
+/// each build, or the text of the comment that stops the run before the first build.</summary>
+public sealed record GateSet(IReadOnlyList<IGate> Gates, LintGate Lint, string? Stop);
 
 /// <summary>Maps each <see cref="GateName"/> of a choice to its gate, over the work tree at <paramref name="baseCommit"/>.
 /// <paramref name="progress"/> takes the progress lines of a gate that reads a baseline before the first build.</summary>
@@ -55,12 +55,13 @@ public sealed class GateFactory(
     TextWriter? log = null,
     bool skipIntegration = false)
 {
-    /// <summary>Gives a gate for each name of <see cref="RecipeRules.Gates"/>, in that order. The test gate of a choice with a
+    /// <summary>Gives a gate for each name of <see cref="RecipeRules.Gates"/>, in that order, and the lint gate. The test gate of a choice with a
     /// scope reads the baseline of its lost-test check. The API gate lists the public API of the base commit between
     /// <c>api: start</c> and <c>api: listed</c>, and a listing that fails gives the stop text and no gate.</summary>
     public async Task<GateSet> CreateAsync(RecipeChoice choice, Pin pin, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(choice);
+        var lint = new LintGate(sandbox, git, log);
         List<IGate> gates = [];
         foreach (GateName name in RecipeRules.Gates(choice))
         {
@@ -79,7 +80,7 @@ public sealed class GateFactory(
                     ApiGateStart api = await ApiGate.CreateAsync(sandbox, log, cancellationToken).ConfigureAwait(false);
                     if (api.Gate is not ApiGate apiGate)
                     {
-                        return new GateSet([], api.Stop ?? "");
+                        return new GateSet([], lint, api.Stop ?? "");
                     }
 
                     await ProgressLine.WriteAsync(progress, "api: listed").ConfigureAwait(false);
@@ -93,6 +94,6 @@ public sealed class GateFactory(
             }
         }
 
-        return new GateSet(gates, null);
+        return new GateSet(gates, lint, null);
     }
 }

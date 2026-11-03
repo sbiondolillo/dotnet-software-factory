@@ -18,11 +18,17 @@ public sealed class Sandbox : IAsyncDisposable
     private readonly CommandRunner _runner;
     private readonly string _id;
 
-    private Sandbox(CommandRunner runner, string id)
+    private Sandbox(CommandRunner runner, string id, bool needsRestore)
     {
         _runner = runner;
         _id = id;
+        NeedsRestore = needsRestore;
     }
+
+    /// <summary>True when no agent ran in this container: the work tree has no <c>obj/</c> and the home holds no NuGet cache, so a
+    /// command that needs the packages runs <c>dotnet restore --locked-mode</c> first. True for a sandbox of
+    /// <see cref="StartForGatesAsync"/>, and false for one of <see cref="StartAsync(CommandRunner, string, string, string, CancellationToken)"/>.</summary>
+    public bool NeedsRestore { get; }
 
     /// <summary>Makes sure the image <paramref name="tag"/> exists, then starts a container over <paramref name="workTree"/> that holds
     /// <c>ANTHROPIC_API_KEY</c> and <c>ANTHROPIC_BASE_URL</c> for Claude Code.</summary>
@@ -32,7 +38,7 @@ public sealed class Sandbox : IAsyncDisposable
         string rootDirectory,
         string workTree,
         CancellationToken cancellationToken = default) =>
-        StartAsync(runner, tag, rootDirectory, workTree, ["--env", "ANTHROPIC_API_KEY", "--env", "ANTHROPIC_BASE_URL"], [], cancellationToken);
+        StartAsync(runner, tag, rootDirectory, workTree, ["--env", "ANTHROPIC_API_KEY", "--env", "ANTHROPIC_BASE_URL"], [], needsRestore: false, cancellationToken);
 
     /// <summary>Starts a container as <see cref="StartAsync(CommandRunner, string, string, string, CancellationToken)"/> does, with no
     /// Anthropic variable and with <c>.factory</c> and <c>specs</c> read-only: the gates run an agent's code, and a Managed
@@ -43,7 +49,7 @@ public sealed class Sandbox : IAsyncDisposable
         string rootDirectory,
         string workTree,
         CancellationToken cancellationToken = default) =>
-        StartAsync(runner, tag, rootDirectory, workTree, [], GateReadOnlyPaths, cancellationToken);
+        StartAsync(runner, tag, rootDirectory, workTree, [], GateReadOnlyPaths, needsRestore: true, cancellationToken);
 
     /// <summary>A path for a scratch directory named <paramref name="name"/>, outside the work tree, as a command sees it.</summary>
     internal static string ScratchPath(string name) => $"/tmp/{name}";
@@ -97,6 +103,7 @@ public sealed class Sandbox : IAsyncDisposable
         string workTree,
         IReadOnlyList<string> agentEnvironment,
         IReadOnlyList<string> readOnlyPaths,
+        bool needsRestore,
         CancellationToken cancellationToken)
     {
         foreach (string path in readOnlyPaths)
@@ -155,7 +162,7 @@ public sealed class Sandbox : IAsyncDisposable
             throw new SandboxException(run.StandardError);
         }
 
-        return new Sandbox(runner, run.StandardOutput.Trim());
+        return new Sandbox(runner, run.StandardOutput.Trim(), needsRestore);
     }
 
     // Docker resolves a bind source on the host, so a link that a branch commits would mount a directory of the runner.

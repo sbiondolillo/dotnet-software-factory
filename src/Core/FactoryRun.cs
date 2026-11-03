@@ -171,7 +171,7 @@ public sealed class FactoryRun(
                 var build = new FactoryBuild(
                     new BuildPhase(agents.Builder, RecipeRules.BuildText(choice.Recipe, RunKind.Factory)), issue.Title, issue.Body, request.BuildModel, request.BuildTurns);
                 var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Factory));
-                var loop = new BuildLoop(_summary, _clock, progress, agents, agents.Lint(log), request.Directory, issue.Title, request.AuthorName, request.AuthorEmail);
+                var loop = new BuildLoop(_summary, _clock, progress, agents.NoteBuild, gates.Lint, request.Directory, issue.Title, request.AuthorName, request.AuthorEmail);
                 BuildLoopResult result = await loop.RunAsync(
                     build,
                     gates.Gates,

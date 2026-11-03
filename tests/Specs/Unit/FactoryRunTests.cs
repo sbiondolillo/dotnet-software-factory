@@ -211,4 +211,34 @@ public sealed class FactoryRunTests
         CommandSpec only = Assert.Single(withName);
         Assert.Contains("tests/Integration", only.Arguments);
     }
+
+    [Fact]
+    public async Task OnTheManagedPathThePushOfTheSessionBranchComesBeforeEachPrompt()
+    {
+        using var h = new FactoryRunHarness();
+        h.UseManaged();
+        h.RedBuilds.Add(1);
+        await h.RunAsync(Ct);
+
+        string push = $"git push origin factory/{h.RunId}-session";
+        List<string> steps = [.. h.Timeline.Where(line => line == push || IsPrompt(line)).Select(line => line == push ? "push" : "prompt")];
+        Assert.Equal(["push", "prompt", "push", "prompt", "push", "prompt", "push", "prompt"], steps);
+    }
+
+    [Fact]
+    public async Task OnTheManagedPathTheCommitOfTheLintIsPushedBeforeTheReviewPrompt()
+    {
+        using var h = new FactoryRunHarness { ChangeAfterBuild = true };
+        h.UseManaged();
+        await h.RunAsync(Ct);
+
+        int review = h.Timeline.FindLastIndex(IsPrompt);
+        int commit = h.Timeline.FindLastIndex(review, line => line.StartsWith("git commit", StringComparison.Ordinal));
+        int push = h.Timeline.FindLastIndex(review, line => line == $"git push origin factory/{h.RunId}-session");
+        Assert.True(commit >= 0 && push > commit, string.Join(" | ", h.Timeline));
+    }
+
+    /// <summary>A prompt starts a session with its first message, or sends a message to a session that runs.</summary>
+    private static bool IsPrompt(string line) =>
+        line is "POST /v1/sessions" || (line.StartsWith("POST /v1/sessions/", StringComparison.Ordinal) && line.EndsWith("/events", StringComparison.Ordinal));
 }

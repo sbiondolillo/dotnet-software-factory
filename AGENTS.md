@@ -283,9 +283,9 @@ that runs `dotnet` through a `Sandbox` follows them too.
 - The restore puts the packages in the NuGet cache under the home directory of the
   container, so a command that needs them runs in the container that ran the restore.
 - A work tree that a Managed Agents session wrote has no `obj/` after the pull, because
-  `.gitignore` names it, and its container has no NuGet cache. So the lint gate of that
-  run has `restoreFirst` true: `dotnet restore --locked-mode` before
-  `dotnet format --no-restore`. A restore that exits with a code other than 0 throws
+  `.gitignore` names it, and its container has no NuGet cache. So the sandbox of that
+  run has `NeedsRestore` true, and its lint gate runs `dotnet restore --locked-mode`
+  before `dotnet format --no-restore`. A restore that exits with a code other than 0 throws
   `LintGateException`, and the format does not run.
 - Before work on a `dotnet new` template, such as one under `templates/`, read
   `docs/agents/dotnet-templates.md`.

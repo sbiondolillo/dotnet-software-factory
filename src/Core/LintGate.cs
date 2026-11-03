@@ -3,8 +3,8 @@ using System.Globalization;
 namespace Core;
 
 /// <summary>Formats a work tree with <c>dotnet format</c> through a <see cref="Sandbox"/> and commits the result.
-/// With <paramref name="restoreFirst"/> true, it runs <c>dotnet restore --locked-mode</c> first, for a tree that no command restored.</summary>
-public sealed class LintGate(Sandbox sandbox, Git git, TextWriter? log = null, bool restoreFirst = false)
+/// For a sandbox whose <see cref="Sandbox.NeedsRestore"/> is true, it runs <c>dotnet restore --locked-mode</c> first.</summary>
+public sealed class LintGate(Sandbox sandbox, Git git, TextWriter? log = null)
 {
     /// <summary>Formats <paramref name="workTree"/> and commits any change; returns true when a commit was made.</summary>
     public async Task<bool> RunAsync(
@@ -14,7 +14,7 @@ public sealed class LintGate(Sandbox sandbox, Git git, TextWriter? log = null, b
         string authorEmail,
         CancellationToken cancellationToken = default)
     {
-        if (restoreFirst)
+        if (sandbox.NeedsRestore)
         {
             CommandResult restore = await sandbox.RunAsync("dotnet", ["restore", "--locked-mode"], [], cancellationToken).ConfigureAwait(false);
             await ProgressLine.WriteAsync(log, string.Create(CultureInfo.InvariantCulture, $"command: dotnet restore --locked-mode exited {restore.ExitCode}")).ConfigureAwait(false);

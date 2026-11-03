@@ -19,7 +19,7 @@ public sealed class LintGateTests : IDisposable
         CommandResult format,
         CommandResult status,
         CommandResult? commit = null,
-        bool restoreFirst = false,
+        bool forGates = false,
         CommandResult? restore = null,
         CancellationToken token = default)
     {
@@ -39,11 +39,16 @@ public sealed class LintGateTests : IDisposable
                     _ => new CommandResult(),
                 });
             });
-        Sandbox sandbox = await Sandbox.StartAsync(mock.Object, "t:1", _directory.FullName, "/tree", token);
+        Sandbox sandbox = await StartAsync(mock.Object, forGates, token);
         _recorded.Clear();
         _tokens.Clear();
-        return new LintGate(sandbox, new Git(mock.Object), restoreFirst: restoreFirst);
+        return new LintGate(sandbox, new Git(mock.Object));
     }
+
+    /// <summary>Starts the sandbox of the gates, whose <see cref="Sandbox.NeedsRestore"/> is true, or the sandbox of Claude Code.</summary>
+    private Task<Sandbox> StartAsync(CommandRunner runner, bool forGates, CancellationToken token) => forGates
+        ? Sandbox.StartForGatesAsync(runner, "t:1", _directory.FullName, _directory.CreateSubdirectory("tree").FullName, token)
+        : Sandbox.StartAsync(runner, "t:1", _directory.FullName, "/tree", token);
 
     private static CommandResult Changed => new() { StandardOutput = " M A.cs\n" };
 
@@ -103,7 +108,7 @@ public sealed class LintGateTests : IDisposable
     }
 
     [Fact]
-    public async Task WithNoRestoreFirstTheGateRunsNoRestore()
+    public async Task ASandboxThatNeedsNoRestoreRunsNoRestore()
     {
         LintGate gate = await GateAsync(new CommandResult(), new CommandResult(), token: TestContext.Current.CancellationToken);
 
@@ -113,9 +118,9 @@ public sealed class LintGateTests : IDisposable
     }
 
     [Fact]
-    public async Task RestoreFirstRunsALockedRestoreBeforeTheFormat()
+    public async Task ASandboxThatNeedsARestoreRunsALockedRestoreBeforeTheFormat()
     {
-        LintGate gate = await GateAsync(new CommandResult(), new CommandResult(), token: TestContext.Current.CancellationToken, restoreFirst: true);
+        LintGate gate = await GateAsync(new CommandResult(), new CommandResult(), token: TestContext.Current.CancellationToken, forGates: true);
 
         await gate.RunAsync("/tree", "m", "n", "e@x", TestContext.Current.CancellationToken);
 
@@ -129,7 +134,7 @@ public sealed class LintGateTests : IDisposable
     public async Task AFailedRestoreThrowsWithTheCodeAndTheOutputAndRunsNoFormatAndNoGit()
     {
         var restore = new CommandResult { ExitCode = 1, StandardOutput = "error NU1004: The package references have changed" };
-        LintGate gate = await GateAsync(new CommandResult(), Changed, token: TestContext.Current.CancellationToken, restoreFirst: true, restore: restore);
+        LintGate gate = await GateAsync(new CommandResult(), Changed, token: TestContext.Current.CancellationToken, forGates: true, restore: restore);
 
         LintGateException exception = await Assert.ThrowsAsync<LintGateException>(
             () => gate.RunAsync("/tree", "m", "n", "e@x", TestContext.Current.CancellationToken));
@@ -141,14 +146,14 @@ public sealed class LintGateTests : IDisposable
     }
 
     [Fact]
-    public async Task RestoreFirstLogsTheRestoreLineBeforeTheFormatLine()
+    public async Task TheRestoreLineIsLoggedBeforeTheFormatLine()
     {
         var mock = new Mock<CommandRunner>(MockBehavior.Strict);
         mock.Setup(runner => runner.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CommandResult { StandardOutput = "abc\n" });
-        Sandbox sandbox = await Sandbox.StartAsync(mock.Object, "t:1", _directory.FullName, "/tree", TestContext.Current.CancellationToken);
+        Sandbox sandbox = await StartAsync(mock.Object, forGates: true, TestContext.Current.CancellationToken);
         using var log = new StringWriter();
-        var gate = new LintGate(sandbox, new Git(mock.Object), log, restoreFirst: true);
+        var gate = new LintGate(sandbox, new Git(mock.Object), log);
 
         await gate.RunAsync("/tree", "m", "n", "e@x", TestContext.Current.CancellationToken);
 

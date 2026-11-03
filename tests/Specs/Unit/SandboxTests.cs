@@ -46,6 +46,24 @@ public sealed class SandboxTests : IDisposable
     }
 
     [Fact]
+    public async Task TheSandboxOfClaudeCodeNeedsNoRestore()
+    {
+        await using Sandbox sandbox = await StartAsync(Runner(), TestContext.Current.CancellationToken);
+
+        Assert.False(sandbox.NeedsRestore);
+    }
+
+    [Fact]
+    public async Task TheSandboxOfTheGatesNeedsARestore()
+    {
+        DirectoryInfo tree = _directory.CreateSubdirectory("tree");
+
+        await using Sandbox sandbox = await Sandbox.StartForGatesAsync(Runner(), "t:1", _directory.FullName, tree.FullName, TestContext.Current.CancellationToken);
+
+        Assert.True(sandbox.NeedsRestore);
+    }
+
+    [Fact]
     public async Task AWorkTreeWithNoGitDirectoryGetsNoGitVolumeAndNoGitDirectory()
     {
         DirectoryInfo tree = _directory.CreateSubdirectory("tree");
