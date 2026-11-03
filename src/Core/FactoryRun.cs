@@ -41,6 +41,9 @@ public sealed class FactoryRun(
     HttpMessageHandler? handler = null,
     Func<TimeSpan, CancellationToken, Task>? delay = null)
 {
+    /// <summary>The heading of the section of a factory run in the job summary.</summary>
+    public const string SummaryHeading = "Factory run";
+
     private readonly TimeProvider _clock = time ?? TimeProvider.System;
     private JobSummary _summary = new();
     private decimal _spend;
@@ -232,7 +235,7 @@ public sealed class FactoryRun(
 
         try
         {
-            await JobSummary.AppendToFileAsync(summaryPath, _summary.Render()).ConfigureAwait(false);
+            await JobSummary.AppendToFileAsync(summaryPath, _summary.Render(SummaryHeading)).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {

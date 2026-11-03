@@ -94,7 +94,8 @@ Feature: The option --agent runs the agent phases as Claude Code in a sandbox or
     And a session answer costs 0 cents for the plan, 300 cents for a build and 37 cents for a review
     And GitHub answers each read of the review threads with the thread A until the resolve of the thread A, and with no thread after it
     When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10 --agent managed"
-    Then the job summary of the program ends with the lines
+    Then the job summary of the program starts with the line "## Feedback run" and holds no other line that starts with "## "
+    And the job summary of the program ends with the lines
       """
       ### Sessions
 

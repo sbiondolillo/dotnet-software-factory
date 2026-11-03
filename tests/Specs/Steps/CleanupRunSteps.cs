@@ -14,6 +14,8 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
 
     private FactoryRunHarness H => factory.Harness;
 
+    private string Summary => factory.OtherSummary?.Invoke() ?? H.Summary;
+
     private IEnumerable<(int Index, string[] Before, string[] After)> Execs()
     {
         int index = 0;
@@ -247,12 +249,12 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     [Then("the job summary holds the row {string} with the result {string}")]
     public void ThenSummaryRow(string name, string result)
     {
-        string row = H.Summary.Split('\n').Single(line => line.StartsWith($"| {name} |", StringComparison.Ordinal));
+        string row = Summary.Split('\n').Single(line => line.StartsWith($"| {name} |", StringComparison.Ordinal));
         Assert.Equal(result, row.Trim('|').Split('|')[4].Trim());
     }
 
     [Then("the Redos list of the job summary holds the item {string}")]
-    public void ThenSummaryRedo(string item) => Assert.Contains(item, H.Summary.Split('\n'));
+    public void ThenSummaryRedo(string item) => Assert.Contains(item, Summary.Split('\n'));
 
     [Then("no review prompt runs before it")]
     public void ThenNoReviewBefore()

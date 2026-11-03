@@ -65,6 +65,18 @@ public sealed class FeedbackRunHarness : IDisposable
 
     public HashSet<int> ErrorBuilds { get; } = [];
 
+    /// <summary>The reviews, by the number of the build they review, that claude answers with the error flag set.</summary>
+    public HashSet<int> ErrorReviews { get; } = [];
+
+    /// <summary>The result text of an answer with the error flag set.</summary>
+    public string ErrorText { get; set; } = "build error";
+
+    /// <summary>Gives the lines that the API printer writes after the build of the given number, 0 for the base commit.</summary>
+    public Func<int, string> ApiLines { get; set; } = _ => "";
+
+    /// <summary>True when the API printer exits with the code 1.</summary>
+    public bool ApiFails { get; set; }
+
     public HashSet<int> RedBuilds { get; } = [];
 
     public HashSet<int> RejectedBuilds { get; } = [];
@@ -108,6 +120,12 @@ public sealed class FeedbackRunHarness : IDisposable
     public Func<int, string?> Report { get; set; } = _ => FixedReport(ThreadA, ThreadB);
 
     public string CloneDirectory => _clone.FullName;
+
+    /// <summary>The file that the run names as its job summary.</summary>
+    public string SummaryPath => Path.Combine(_root.FullName, "summary.md");
+
+    /// <summary>The text of the job summary, or the empty string when the run wrote none.</summary>
+    public string Summary => File.Exists(SummaryPath) ? File.ReadAllText(SummaryPath) : "";
 
     /// <summary>The fake of the Managed Agents API, or null on the path of Claude Code in a sandbox.</summary>
     public ManagedRunFake? Managed { get; private set; }
@@ -154,7 +172,7 @@ public sealed class FeedbackRunHarness : IDisposable
         var request = new FeedbackRunRequest(
             Owner, Repo, Pull, Token, _clone.FullName, "factory-sandbox:test", _root.FullName,
             BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames, Managed: Managed is null ? null : ManagedRunFake.Settings());
-        var run = new FeedbackRun(mock.Object, client, Out, handler: new Handler(this), delay: (_, _) => Task.CompletedTask);
+        var run = new FeedbackRun(mock.Object, client, Out, handler: new Handler(this), delay: (_, _) => Task.CompletedTask, summaryPath: SummaryPath);
         try
         {
             return await run.RunAsync(request, cancellationToken);
@@ -270,6 +288,13 @@ public sealed class FeedbackRunHarness : IDisposable
             return new CommandResult { ExitCode = code, StandardOutput = output, StandardError = error };
         }
 
+        if (program is "dotnet" && arguments.Count > 1 && arguments[1] is ApiGate.Printer)
+        {
+            return ApiFails
+                ? new CommandResult { ExitCode = 1, StandardError = "printer failed" }
+                : new CommandResult { StandardOutput = ApiLines(_builds) };
+        }
+
         if (arguments.Count < 2 || arguments[1] is not "test")
         {
             return new CommandResult();
@@ -303,7 +328,7 @@ public sealed class FeedbackRunHarness : IDisposable
         string turns = arguments[arguments.IndexOf("--max-turns") + 1];
         string kind = text.StartsWith("Review the build", StringComparison.Ordinal) ? "review" : "build";
         bool error = Turn(kind, model, turns, text);
-        return new CommandResult { StandardOutput = Json(error, error ? "build error" : "done") };
+        return new CommandResult { StandardOutput = Json(error, error ? ErrorText : "done") };
     }
 
     /// <summary>Plays the agent of a session for one message. A preamble may come before the prompt, so the kind is found anywhere in the text.</summary>
@@ -311,7 +336,7 @@ public sealed class FeedbackRunHarness : IDisposable
     {
         string kind = text.Contains("Review the build", StringComparison.Ordinal) ? "review" : "build";
         bool error = Turn(kind, model, "", text);
-        return new ManagedTurn(error ? "build error" : "done", error, Pushes: kind is "build" && !NoPushBuilds.Contains(_builds));
+        return new ManagedTurn(error ? ErrorText : "done", error, Pushes: kind is "build" && !NoPushBuilds.Contains(_builds));
     }
 
     /// <summary>Records one prompt, writes what the agent writes for it and gives the error flag of the answer.</summary>
@@ -360,7 +385,7 @@ public sealed class FeedbackRunHarness : IDisposable
                 : """{"approved":true,"blocking":[]}""");
         }
 
-        return kind is "build" && (BuildIsError || ErrorBuilds.Contains(_builds));
+        return kind is "build" ? BuildIsError || ErrorBuilds.Contains(_builds) : ErrorReviews.Contains(_builds);
     }
 
     /// <summary>Writes a file of the agent. On the managed path a tracked file waits for the pull, and a file under .factory/ is also an output of the session.</summary>

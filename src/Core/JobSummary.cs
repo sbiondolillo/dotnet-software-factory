@@ -4,7 +4,7 @@ using System.Text;
 namespace Core;
 
 /// <summary>
-/// The job summary of a factory run: one table row for each phase that ran after the clone and one list item for each Redo text.
+/// The job summary of a run: one table row for each phase that ran after the clone and one list item for each Redo text.
 /// A Redo text is named after the row of the gate or the phase that produced it: <c>scope N</c>, <c>test N</c>, <c>api N</c>,
 /// <c>check N</c> or <c>review N</c>. A lost test is named after <c>test N</c>, whose gate found it.
 /// </summary>
@@ -63,10 +63,10 @@ public sealed class JobSummary
         await File.AppendAllTextAsync(path, gap + text, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>The Markdown text, ending with a line feed.</summary>
-    public string Render()
+    /// <summary>The Markdown text under the heading <c>## </c><paramref name="heading"/>, ending with a line feed.</summary>
+    public string Render(string heading)
     {
-        var text = new StringBuilder("## Factory run\n\n| phase | seconds | turns | spend | result |\n|---|---|---|---|---|\n");
+        StringBuilder text = new StringBuilder("## ").Append(heading).Append("\n\n| phase | seconds | turns | spend | result |\n|---|---|---|---|---|\n");
         foreach (string row in _rows)
         {
             text.Append(row).Append('\n');
@@ -90,7 +90,7 @@ public sealed class JobSummary
     }
 
     /// <summary>The Markdown section of the sessions alone, ending with a line feed, or the empty string with no session.</summary>
-    public string RenderSessions()
+    private string RenderSessions()
     {
         if (_sessions.Count is 0)
         {

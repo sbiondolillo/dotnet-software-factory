@@ -69,6 +69,9 @@ public sealed class FeedbackCleanupScopeSteps(FactoryRunSteps factory, FeedbackR
         Assert.Contains(name, prompt, StringComparison.Ordinal);
     }
 
+    [Given("the API printer lists {string} on the base commit and lists nothing after the first build")]
+    public void GivenApiLost(string line) => H.ApiLines = build => build is 1 ? "" : line + "\n";
+
     [Then("the test gate of the feedback run passes")]
     public void ThenGatePasses()
     {

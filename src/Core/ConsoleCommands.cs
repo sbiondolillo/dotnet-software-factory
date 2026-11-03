@@ -308,13 +308,8 @@ public static partial class ConsoleCommands
             var request = new FeedbackRunRequest(
                 options.Repo.Owner, options.Repo.Name, number, token, directory.FullName, ImageTag, host.RootDirectory,
                 Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration, options.Settings);
-            var feedbackRun = new FeedbackRun(host.Runner, client, host.Out, host.Time, host.Handler, host.Delay);
+            var feedbackRun = new FeedbackRun(host.Runner, client, host.Out, host.Time, host.Handler, host.Delay, host.Environment("GITHUB_STEP_SUMMARY"), host.Error);
             FeedbackRunResult result = await feedbackRun.RunAsync(request, cancellationToken).ConfigureAwait(false);
-            if (result.Sessions is { Count: > 0 } sessions)
-            {
-                await WriteSessionsAsync(host, sessions).ConfigureAwait(false);
-            }
-
             if (feedbackRun.Declined)
             {
                 return (null, true);
@@ -327,26 +322,6 @@ public static partial class ConsoleCommands
         finally
         {
             Remove(directory);
-        }
-    }
-
-    /// <summary>Appends the section of the sessions to the job summary, when <c>GITHUB_STEP_SUMMARY</c> names a file.</summary>
-    private static async Task WriteSessionsAsync(ConsoleHost host, IReadOnlyList<SessionCost> sessions)
-    {
-        if (host.Environment("GITHUB_STEP_SUMMARY") is not { Length: > 0 } path)
-        {
-            return;
-        }
-
-        var summary = new JobSummary();
-        summary.AddSessions(sessions);
-        try
-        {
-            await JobSummary.AppendToFileAsync(path, summary.RenderSessions()).ConfigureAwait(false);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-        {
-            await host.Error.WriteLineAsync($"summary: cannot write {path}: {exception.Message}").ConfigureAwait(false);
         }
     }
 
