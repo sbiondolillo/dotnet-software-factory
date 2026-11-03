@@ -29,8 +29,9 @@
 # answers each thread, three rounds at most, and ends success only when every
 # check is green, Copilot reviewed the head with no refusal, and no thread is
 # unresolved. On success the step reads the head SHA and gives settled. Any
-# other conclusion is one comment on the issue that links the run, and a stop
-# for the head: the run's log and job summary hold the reason. The result is
+# other conclusion is one comment that links the run, on the issue, or on the
+# pull request when it closes no issue, and a stop for the head: the run's log
+# and job summary hold the reason. The result is
 # the step output copilot, settled or unsettled, with the head as sha, for the
 # merge stage.
 #

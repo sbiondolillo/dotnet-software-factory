@@ -13,7 +13,8 @@ question, "did the run pass?", and reads no review and no thread.
   The step writes `copilot=unsettled` and `sha=<head>`. The run's log and job summary hold the reason.
 - No `completed` within the timeout: the step exits 1 with one line.
 
-A pull request that is closed or lacks the label `repair` ends the step with no output, and the run is never read.
+A pull request that is closed or lacks the label `repair` ends the step with no output, and the run is never read,
+even with FACTORY_RUN unset.
 
 Environment: GH_TOKEN, GITHUB_REPOSITORY, FACTORY_RUN (the id of the factory run, the step output `run` of build.py,
 required), REPAIR_COPILOT_TIMEOUT_SECONDS (default 7200), REPAIR_POLL_SECONDS (default 30).
@@ -57,7 +58,7 @@ def wait_for_run(repo, run_id, deadline, wait):
         if time.time() >= deadline:
             sys.exit(f"repair: the factory run {run_url(repo, run_id)} is {run['status']} after the timeout")
         print(f"repair: the factory run {run_url(repo, run_id)} is {run['status']}; waiting")
-        time.sleep(wait)
+        time.sleep(max(0, min(wait, deadline - time.time())))
 
 
 def output(**values):
@@ -78,7 +79,6 @@ def stop(repo, number, issue, sha, text):
 
 def main():
     repo = os.environ.get("GITHUB_REPOSITORY") or sys.exit("repair: GITHUB_REPOSITORY is not set")
-    run_id = os.environ.get("FACTORY_RUN") or sys.exit("repair: FACTORY_RUN is not set; there is no run to wait on")
     number = (
         int(sys.argv[1])
         if len(sys.argv) > 1 and sys.argv[1].isdigit()
@@ -89,6 +89,7 @@ def main():
     if pr["state"] != "OPEN" or LABEL not in labels:
         print(f"repair: pull request #{number} is {pr['state'].lower()} with the labels {labels}; nothing to watch")
         return
+    run_id = os.environ.get("FACTORY_RUN") or sys.exit("repair: FACTORY_RUN is not set; there is no run to wait on")
     wait = int(os.environ.get("REPAIR_POLL_SECONDS", "30"))
     deadline = time.time() + int(os.environ.get("REPAIR_COPILOT_TIMEOUT_SECONDS", "7200"))
     conclusion = wait_for_run(repo, run_id, deadline, wait)

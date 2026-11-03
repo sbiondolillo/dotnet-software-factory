@@ -119,7 +119,28 @@ class MainTests(unittest.TestCase):
                 ):
                     copilot.main()
                 self.assertIsInstance(stop.exception.code, str)
-                self.assertEqual(fake.calls, [])
+                self.assertFalse([call for call in fake.calls if call[0] == "run"])
+
+    def test_a_closed_pull_request_with_factory_run_unset_writes_nothing(self):
+        fake = FakeGitHub([("completed", "success")], state="CLOSED")
+        self.assertEqual(self.run_main(fake, {"FACTORY_RUN": ""}), "")
+
+    def test_the_wait_ends_at_the_deadline(self):
+        fake = FakeGitHub([("in_progress", "")])
+        clock = [1000.0]
+        slept = []
+
+        def sleep(seconds):
+            slept.append(seconds)
+            clock[0] += seconds
+
+        with (
+            mock.patch.object(copilot.time, "time", side_effect=lambda: clock[0]),
+            mock.patch.object(copilot.time, "sleep", side_effect=sleep),
+            self.assertRaises(SystemExit),
+        ):
+            self.run_main(fake, {"REPAIR_COPILOT_TIMEOUT_SECONDS": "5", "REPAIR_POLL_SECONDS": "3600"})
+        self.assertEqual(slept, [5])
 
 
 if __name__ == "__main__":
