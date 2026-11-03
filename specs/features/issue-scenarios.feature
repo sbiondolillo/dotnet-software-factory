@@ -64,17 +64,6 @@ Feature: The factory pins the scenarios of an issue as the owner wrote them
     When the factory runs the issue
     Then the first plan prompt holds "Write no other file: .factory/plan.md is the only file the plan phase writes."
 
-  Scenario: An issue whose ## Scenarios is None. writes no feature file and asks for the plan alone
-    Given the clone holds "specs/features/greeting.feature"
-    And an issue whose ## Scenarios holds the line "None." and one sentence that says why
-    When the factory runs the issue
-    Then the first plan prompt holds "Write no other file: .factory/plan.md is the only file the plan phase writes."
-    And the first plan prompt holds "The issue states that no scenario applies, so the build adds no feature file. Say so in one line of the plan."
-    And the first build prompt holds "The issue states that no scenario applies, so add and change no file under specs/features/ or tests/."
-    And the first build prompt lacks "Write unit tests"
-    And the work tree holds "specs/features/greeting.feature" as it is on main, and no other feature file
-    And the run gives back a pull request
-
   Scenario: A body with CRLF line ends gives a feature file with LF line ends
     Given an issue body with CRLF line ends and a block for "specs/features/greeting-name.feature"
     When the factory runs the issue
@@ -118,7 +107,7 @@ Feature: The factory pins the scenarios of an issue as the owner wrote them
 
     Examples:
       | the fault | the comment |
-      | a ## Scenarios heading with no fenced block | The heading ## Scenarios holds no fenced block. Put the scenarios of each feature file in a fenced block under it. |
+      | a ## Scenarios heading with no fenced block | The heading ## Scenarios holds no fenced block. Put the scenarios of each feature file in a fenced block under it. A change with no scenario takes the label refactor or cleanup, or goes to a direct build. |
       | a block with no closing fence | A fenced block under the heading ## Scenarios has no closing fence. |
       | a block whose first line is "Feature: Greeting" | Each fenced block under the heading ## Scenarios starts with the line # specs/features/<name>.feature. A block starts with 'Feature: Greeting'. |
       | a block whose first line is "# specs/features/../README.feature" | Each fenced block under the heading ## Scenarios starts with the line # specs/features/<name>.feature. A block starts with '# specs/features/../README.feature'. |
@@ -140,7 +129,7 @@ Feature: The factory pins the scenarios of an issue as the owner wrote them
       | removals that leave no feature file | The issue leaves no feature file under specs/features/. |
       | blocks and removals that leave every file as it is on main | The blocks and the removed scenarios leave every feature file as it is on main. |
       | both ## Scenarios and ## Acceptance criteria | The body holds both ## Scenarios and ## Acceptance criteria. Keep one of the two. |
-      | a ## Scenarios that holds the line "None." and a fenced block | The heading ## Scenarios holds the line None. and a fenced block. Keep one of the two. |
+      | a ## Scenarios whose first line is "None." | The heading ## Scenarios holds no fenced block. Put the scenarios of each feature file in a fenced block under it. A change with no scenario takes the label refactor or cleanup, or goes to a direct build. |
       | a block that starts "# specs/features/greeting.feature" outside ## Scenarios | A fenced block that starts with # specs/features/ sits outside the heading ## Scenarios. |
 
   Scenario: A comment lists every fault of the body

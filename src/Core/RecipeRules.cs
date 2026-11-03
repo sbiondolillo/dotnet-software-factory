@@ -40,10 +40,6 @@ public static class RecipeRules
         CannedAnswerText
         + "For each canned answer that a scenario depends on, name in the plan one test under tests/Integration/ that gets the same answer from the real service. ";
 
-    private const string NoScenarioPlanText = "The issue states that no scenario applies, so the build adds no feature file. Say so in one line of the plan. ";
-
-    private const string NoScenarioTail = "The issue states that no scenario applies, so add and change no file under specs/features/ or tests/. ";
-
     private const string ReframeBuildText = "Make the change the issue asks for to its config files first, then run dotnet format --no-restore once from the repo root, before any edit to a source file. Edit by hand only what the build still reports.";
 
     private const string ReframeReviewText = "Judge the build against every sentence of the issue: it changes only the paths under ## Scope, keeps the behavior of the program and makes the command under ## Check pass, and it keeps every test and every public type and member of the code under src/.";
@@ -108,7 +104,6 @@ public static class RecipeRules
             PlanLead,
             Named("The issue wrote these feature files, and the build makes their scenarios pass: ", given.Written)
             + Named("The issue removed these feature files: ", given.Removed)
-            + (NoScenario(given) ? NoScenarioPlanText : "")
             + $"Write the plan to {PlanPath}, stating each result the build owes. "
             + IntegrationText
             + $"Write no other file: {PlanPath} is the only file the plan phase writes. "
@@ -131,9 +126,8 @@ public static class RecipeRules
         _ => throw new ArgumentOutOfRangeException(nameof(recipe), recipe, "A cleanup and a reframe have no plan phase."),
     };
 
-    /// <summary>The words of the build prompt. A feedback run has no plan, so no text of <see cref="RunKind.Feedback"/> names one.
-    /// A behavior whose <paramref name="scenarios"/> write and remove no file states that no scenario applies.</summary>
-    public static BuildText BuildText(Recipe recipe, RunKind run, IssueScenariosResult? scenarios = null) => recipe switch
+    /// <summary>The words of the build prompt. A feedback run has no plan, so no text of <see cref="RunKind.Feedback"/> names one.</summary>
+    public static BuildText BuildText(Recipe recipe, RunKind run) => recipe switch
     {
         Recipe.Reframe => new(
             "Do the reframe of the issue below.",
@@ -158,7 +152,7 @@ public static class RecipeRules
             + ". Run dotnet build and dotnet test, and work until both pass."),
         _ => new(
             "Build the work of the issue below.",
-            BehaviorBuild(run, scenarios is not null && NoScenario(scenarios))
+            BehaviorBuild(run)
             + "Leave each feature file and each build settings file as it is; the build settings files are named "
             + SettingsFiles()
             + ". Run dotnet build and dotnet test, and work until both pass."),
@@ -218,19 +212,13 @@ public static class RecipeRules
         return new RecipeChoice(recipe, scope, check);
     }
 
-    private static string BehaviorBuild(RunKind run, bool noScenario) => (run, noScenario) switch
-    {
-        (RunKind.Factory, true) => $"Read the plan, {PlanPath}, and write the code that it asks for. " + NoScenarioTail,
-        (RunKind.Feedback, true) => "Write the code that the issue asks for. " + NoScenarioTail,
-        (RunKind.Factory, false) => $"Read the plan, {PlanPath}, and each feature file under {FeatureDirectory}. "
+    private static string BehaviorBuild(RunKind run) => run is RunKind.Factory
+        ? $"Read the plan, {PlanPath}, and each feature file under {FeatureDirectory}. "
             + "Write the code that the plan and the scenarios ask for. "
-            + BindText,
-        _ => $"Read each feature file under {FeatureDirectory}. "
+            + BindText
+        : $"Read each feature file under {FeatureDirectory}. "
             + "Write the code that the issue and the scenarios ask for. "
-            + BindText,
-    };
-
-    private static bool NoScenario(IssueScenariosResult scenarios) => scenarios is { Written.Count: 0, Removed.Count: 0 };
+            + BindText;
 
     private static string Named(string lead, IReadOnlyList<string> paths) =>
         paths.Count is 0 ? "" : lead + string.Join(", ", paths) + ". ";

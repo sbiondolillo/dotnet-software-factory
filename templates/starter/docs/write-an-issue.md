@@ -6,7 +6,7 @@ The factory reads the labels, the title and the body of the issue, and nothing e
 
 | The change | Label | The body holds |
 |---|---|---|
-| A feature, a bug fix, or a new test for behavior the program already has | none | the story, `**Today.**`, `**What changes.**`, `## Scenarios` when the change adds or edits a scenario or when no scenario applies, `## Removed scenarios` when it removes one, and `## Context` when a scenario needs a fact of the world |
+| A feature, a bug fix, or a new test for behavior the program already has | none | the story, `**Today.**`, `**What changes.**`, `## Scenarios` when the change adds or edits a scenario, `## Removed scenarios` when it removes one, and `## Context` when a scenario needs a fact of the world |
 | A change to the structure of the code that adds no behavior. Every test stays as it is | `refactor` | prose, then `## Check` when a command can tell the new structure from the old |
 | A fix to a test, a config file or a document. The program stays as it is | `cleanup` | prose, then `## Scope` and `## Check` |
 | A change to the code, the tests or the config that keeps the behavior, such as a format sweep or a framework upgrade. Every passing test keeps passing, and the public API of `src/` stays as it is | `reframe` | prose, then `## Scope` and `## Check` |
@@ -45,7 +45,7 @@ The title states what the person can do after the change, or the end state, in t
 | the story | `As a <role>, I want to <ability>, so that <benefit>.` The role is a real user of the program: a repo owner, a person who runs the console program. A story with no real role is a sign that the change is a refactor, a cleanup or a reframe. |
 | `**Today.**` | What `main` does now that stops that person, in 3 sentences or fewer. |
 | `**What changes.**` | Each file and each program that a scenario names, with the kind of each thing. Then each change to a document. Then each invariant. |
-| `## Scenarios` | One fenced block for each feature file that the change adds or edits. The scenarios are the tests, word for word. A change that only removes scenarios has no `## Scenarios`. A change under `src/` whose result no scenario can state holds the line `None.` and one sentence that says why, and no fenced block. An example is the text of a prompt in `src/Core/*.cs`, which the owner reads in the diff of the pull request. A fix to a test, a config file or a document takes the label `cleanup`. |
+| `## Scenarios` | One fenced block for each feature file that the change adds or edits. The scenarios are the tests, word for word. A change that only removes scenarios has no `## Scenarios`. A fix to a test, a config file or a document takes the label `cleanup`. |
 | `## Removed scenarios` | One list item for each scenario that the change removes. |
 | `## Context` | Facts of the world that a scenario needs, each with its source. |
 
@@ -161,7 +161,6 @@ Read the draft once for each row. File it when every row passes. A person with C
 | pseudocode | list each sentence that names a step the code takes, a member it calls, a constructor, a test method, or a numbered sequence | the list is empty |
 | blocks | each fenced block under `## Scenarios` | it starts with the path line of one feature file, takes the form that the file on `main` picks, and parses as Gherkin, under a `Feature:` line for a block of scenarios. A whole-file block for a file on `main` holds each scenario of that file that the change keeps |
 | scenarios | each scenario | it names the real program, and each `Then` states one observable result |
-| no scenario | a `## Scenarios` that holds no fenced block | its first line is `None.`, the next sentence says why no scenario applies, and the change is under `src/` |
 | placeholders | search the draft for each `<...>` placeholder of the template | none is left |
 | scenario names | list the names of the scenarios of each feature file after the change | no two give one test name, and no block holds one name twice |
 | removed | each line under `## Removed scenarios` | it is a list item: a path in backticks, a colon, and a name that the file on `main` holds |

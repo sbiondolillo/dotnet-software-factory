@@ -182,7 +182,7 @@ public sealed class FactoryRun(
 
         _summary.AddRow("plan", null, "passed");
         await Say("plan: passed").ConfigureAwait(false);
-        var buildPhase = new BuildPhase(agent, RecipeRules.BuildText(Recipe.Behavior, RunKind.Factory, scenarios));
+        var buildPhase = new BuildPhase(agent, RecipeRules.BuildText(Recipe.Behavior, RunKind.Factory));
         LintGate lintGate = agents.Lint(log);
         var testGate = new TestGate(agents.Sandbox, log, request.SkipIntegration);
         var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(Recipe.Behavior, RunKind.Factory));

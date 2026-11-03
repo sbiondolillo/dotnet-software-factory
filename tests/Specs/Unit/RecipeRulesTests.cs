@@ -7,8 +7,6 @@ public sealed class RecipeRulesTests
 {
     private const string Body = "## Scope\nREADME.md\n\n## Check\n\n```sh\ntrue\n```\n";
 
-    private static readonly IssueScenariosResult NoScenario = new([], [], []);
-
     [Theory]
     [InlineData("cleanup", "reframe", Recipe.Reframe, "The labels reframe and cleanup exclude each other: each one names a kind of run. Keep one of the two labels.")]
     [InlineData("behavior", "reframe", Recipe.Reframe, "The labels reframe and behavior exclude each other: each one names a kind of run. Keep one of the two labels.")]
@@ -110,26 +108,7 @@ public sealed class RecipeRulesTests
             "The issue wrote these feature files, and the build makes their scenarios pass: specs/features/a.feature. The issue removed these feature files: specs/features/gone.feature. Write the plan to .factory/plan.md",
             text.Instructions,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("no scenario applies", text.Instructions, StringComparison.Ordinal);
         Assert.Contains("Write no other file: .factory/plan.md is the only file the plan phase writes.", text.Instructions, StringComparison.Ordinal);
-    }
-
-    [Theory]
-    [InlineData("specs/features/a.feature", null)]
-    [InlineData(null, "specs/features/gone.feature")]
-    public void ScenariosThatWriteOrRemoveAFileGetNoNoScenarioSentence(string? written, string? removed)
-    {
-        PlanText text = RecipeRules.PlanText(Recipe.Behavior, new IssueScenariosResult([], written is null ? [] : [written], removed is null ? [] : [removed]));
-        Assert.DoesNotContain("no scenario applies", text.Instructions, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void ScenariosThatWriteNoFileAskForAOneLinePlan()
-    {
-        PlanText text = RecipeRules.PlanText(Recipe.Behavior, NoScenario);
-        Assert.Equal(PlanMode.PlanOnly, text.Mode);
-        Assert.StartsWith("The issue states that no scenario applies, so the build adds no feature file. Say so in one line of the plan. Write the plan", text.Instructions, StringComparison.Ordinal);
-        Assert.DoesNotContain("Write Gherkin scenarios", text.Instructions, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -167,7 +146,6 @@ public sealed class RecipeRulesTests
         Assert.StartsWith("Read the plan, .factory/plan.md, and each feature file under specs/features/. Write the code that the plan and the scenarios ask for. ", text, StringComparison.Ordinal);
         Assert.Contains("Bind every scenario of every feature file, in step classes under tests/Specs/Steps/.", text, StringComparison.Ordinal);
         Assert.Contains("Write unit tests for the new code under tests/Specs/Unit/.", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("no scenario applies", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -177,23 +155,6 @@ public sealed class RecipeRulesTests
         Assert.StartsWith("Read each feature file under specs/features/. Write the code that the issue and the scenarios ask for. ", text, StringComparison.Ordinal);
         Assert.Contains("Bind every scenario of every feature file", text, StringComparison.Ordinal);
     }
-
-    [Theory]
-    [InlineData(RunKind.Factory, "Read the plan, .factory/plan.md, and write the code that it asks for. ")]
-    [InlineData(RunKind.Feedback, "Write the code that the issue asks for. ")]
-    public void ANoScenarioBuildAsksForTheCodeAloneAndLeavesTheTests(RunKind run, string start)
-    {
-        string text = RecipeRules.BuildText(Recipe.Behavior, run, NoScenario).Instructions;
-        Assert.StartsWith(start + "The issue states that no scenario applies, so add and change no file under specs/features/ or tests/. ", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("Bind every scenario", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("Write unit tests", text, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void ScenariosThatWriteAFileGetTheBehaviorBuild() =>
-        Assert.Equal(
-            RecipeRules.BuildText(Recipe.Behavior, RunKind.Factory),
-            RecipeRules.BuildText(Recipe.Behavior, RunKind.Factory, new IssueScenariosResult([], ["specs/features/a.feature"], [])));
 
     [Theory]
     [InlineData(Recipe.Behavior)]
@@ -249,7 +210,6 @@ public sealed class RecipeRulesTests
         {
             Assert.DoesNotContain(".factory/plan.md", RecipeRules.BuildText(recipe, RunKind.Feedback).Lead, StringComparison.Ordinal);
             Assert.DoesNotContain(".factory/plan.md", RecipeRules.BuildText(recipe, RunKind.Feedback).Instructions, StringComparison.Ordinal);
-            Assert.DoesNotContain(".factory/plan.md", RecipeRules.BuildText(recipe, RunKind.Feedback, NoScenario).Instructions, StringComparison.Ordinal);
             Assert.DoesNotContain(".factory/plan.md", RecipeRules.ReviewSteps(recipe, RunKind.Feedback), StringComparison.Ordinal);
             Assert.DoesNotContain(".factory/plan.md", RecipeRules.ThreadRules(recipe), StringComparison.Ordinal);
         }
