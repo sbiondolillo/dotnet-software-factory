@@ -252,4 +252,37 @@ public sealed class FeedbackRunTests
         Assert.Empty(RepliedIds(h));
         Assert.Contains("rm", h.Events);
     }
+
+    [Fact]
+    public async Task OnTheManagedPathThePushOfTheSessionBranchComesBeforeEachPrompt()
+    {
+        using var h = new FeedbackRunHarness();
+        h.UseManaged();
+        h.RedBuilds.Add(1);
+        await h.RunAsync(Ct);
+
+        List<string> steps = [.. h.Timeline.Where(line => IsSessionPush(line) || IsPrompt(line)).Select(line => IsSessionPush(line) ? "push" : "prompt")];
+        Assert.Equal(["push", "prompt", "push", "prompt", "push", "prompt"], steps);
+    }
+
+    [Fact]
+    public async Task OnTheManagedPathABuildThatPushesNoCommitPutsThatFactInTheNextBuildPrompt()
+    {
+        using var h = new FeedbackRunHarness();
+        h.UseManaged();
+        h.NoPushBuilds.Add(1);
+        h.RedBuilds.Add(1);
+        await h.RunAsync(Ct);
+
+        List<SeenPrompt> builds = [.. h.BuildPrompts];
+        Assert.Equal(2, builds.Count);
+        Assert.DoesNotContain(RunAgents.NoCommitText, builds[0].Text, StringComparison.Ordinal);
+        Assert.Contains(RunAgents.NoCommitText, builds[1].Text, StringComparison.Ordinal);
+    }
+
+    private static bool IsSessionPush(string line) => line.StartsWith("git push origin ", StringComparison.Ordinal) && line.EndsWith("-session", StringComparison.Ordinal) && !line.Contains("--delete", StringComparison.Ordinal);
+
+    /// <summary>A prompt starts a session with its first message, or sends a message to a session that runs.</summary>
+    private static bool IsPrompt(string line) =>
+        line is "POST /v1/sessions" || (line.StartsWith("POST /v1/sessions/", StringComparison.Ordinal) && line.EndsWith("/events", StringComparison.Ordinal));
 }
