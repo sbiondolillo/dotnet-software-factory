@@ -429,7 +429,7 @@ def wait_for_merge(repo, number, sha, base, deadline, wait):
         if time.time() >= deadline:
             sys.exit(
                 f"repair: pull request #{number} is not merged after the timeout; "
-                f"`gh workflow run repair.yml -f pr={number}` arms the auto-merge again"
+                "the auto-merge is disarmed, and the owner merges it by hand"
             )
         time.sleep(wait)
 

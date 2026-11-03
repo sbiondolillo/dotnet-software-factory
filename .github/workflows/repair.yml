@@ -103,7 +103,9 @@
 # mint step, the build step, the Copilot step and the merge step:
 # `gh workflow run repair.yml -f issue=<n>`. The Copilot step waits on the run
 # the build step started, so a start at the Copilot step alone has no run to
-# wait on, and no input starts there.
+# wait on, and no input starts there. A run by hand on an issue that holds its
+# pull request already starts no factory run, so it stops at the Copilot step
+# with an exit 1, and the owner merges that pull request by hand.
 # Secrets: JUDGE_ANTHROPIC_API_KEY, JUDGE_GITHUB_RO_TOKEN, DSF_REPAIR_APP_PRIVATE_KEY.
 # Variables: JUDGE_AGENT_ID, JUDGE_ENVIRONMENT_ID, REPAIR_ENABLED, DSF_REPAIR_APP_ID.
 name: repair

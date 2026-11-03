@@ -6,7 +6,7 @@ issue number and `copilot=on`, under GITHUB_TOKEN. The factory runs at main, pus
 request with `Closes #<n>` under FACTORY_SELF_TOKEN, and posts `Opened <url>` on the issue. This job reads that
 comment and sets the label repair on the pull request. The factory keeps its Redo bound of three, and posts
 the last gate output on the issue when the bound is spent. With `copilot=on` it then requests a Copilot code
-review and answers each thread through FeedbackRun, three rounds at most, which copilot.py watches.
+review and answers each thread through FeedbackRun, three rounds at most. copilot.py waits for that run.
 
 A repair issue with the label factory is a fault of the factory itself, so the factory of main may be the broken
 one. Decided in #399 and #403, this job builds it with the factory at its last green ref: the head SHA of the last

@@ -11,6 +11,7 @@ from unittest import mock
 import copilot
 
 SHA = "a" * 40
+LATER = "c" * 40
 RUN = "123"
 
 
@@ -18,17 +19,21 @@ class FakeGitHub:
     """Answers each gh call copilot.py makes: the pull request, the run's status in order, the comments of a target,
     and a new comment, which it stores."""
 
-    def __init__(self, runs, state="OPEN", labels=("repair",), body="Closes #5"):
+    def __init__(self, runs, state="OPEN", labels=("repair",), body="Closes #5", heads=(SHA,)):
         self.runs = list(runs)
-        self.pr = {"state": state, "labels": [{"name": n} for n in labels], "body": body, "headRefOid": SHA}
+        self.heads = list(heads)
+        self.pr = {"state": state, "labels": [{"name": n} for n in labels], "body": body}
         self.comments = []
         self.calls = []
 
     def __call__(self, *args, input_text=None):
         self.calls.append(args)
         if args[:2] == ("pr", "view"):
-            return json.dumps(self.pr)
+            head = self.heads.pop(0) if len(self.heads) > 1 else self.heads[0]
+            return json.dumps({**self.pr, "headRefOid": head})
         if args[:2] == ("run", "view"):
+            if sum(call[:2] == ("run", "view") for call in self.calls) > 10:
+                raise AssertionError("the step reads the run past its timeout")
             status, conclusion = self.runs.pop(0) if len(self.runs) > 1 else self.runs[0]
             return json.dumps({"status": status, "conclusion": conclusion})
         if args[0] == "api" and args[1].endswith("/comments"):
@@ -61,6 +66,14 @@ class MainTests(unittest.TestCase):
         fake = FakeGitHub([("in_progress", ""), ("completed", "success")])
         self.assertEqual(self.run_main(fake), f"copilot=settled\nsha={SHA}\n")
         self.assertEqual(fake.comments, [])
+
+    def test_the_head_is_read_after_the_run_ends(self):
+        fake = FakeGitHub([("in_progress", ""), ("completed", "success")], heads=(SHA, LATER))
+        self.assertEqual(self.run_main(fake), f"copilot=settled\nsha={LATER}\n")
+
+    def test_a_run_that_completes_as_the_timeout_passes_is_read(self):
+        fake = FakeGitHub([("completed", "success")])
+        self.assertEqual(self.run_main(fake, {"REPAIR_COPILOT_TIMEOUT_SECONDS": "0"}), f"copilot=settled\nsha={SHA}\n")
 
     def test_a_run_that_fails_posts_one_comment_and_gives_unsettled(self):
         fake = FakeGitHub([("completed", "failure")])
