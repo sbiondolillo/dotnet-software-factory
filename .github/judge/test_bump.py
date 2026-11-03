@@ -69,12 +69,37 @@ COMMITS = [
     },
 ]
 
-COMMIT_FILES = {RELOCK: [{"filename": path, "status": "modified"} for path in LOCKS]}
+LOCK_CHANGES = [158, 3, 4, 4]
 
-FILES = [{"filename": "Directory.Packages.props", "status": "modified", "patch": PROPS_PATCH}]
-FILES += [{"filename": path, "status": "modified", "patch": LOCK_PATCH} for path in LOCKS]
+DETAILS = {
+    RELOCK: {
+        "files": [
+            {"filename": path, "status": "modified", "additions": n, "deletions": n}
+            for path, n in zip(LOCKS, LOCK_CHANGES)
+        ],
+        "stats": {"additions": 169, "deletions": 169, "total": 338},
+    }
+}
+
+FILES = [
+    {"filename": "Directory.Packages.props", "status": "modified", "additions": 2, "deletions": 2, "patch": PROPS_PATCH}
+]
+FILES += [
+    {"filename": path, "status": "modified", "additions": n, "deletions": n, "patch": LOCK_PATCH}
+    for path, n in zip(LOCKS, LOCK_CHANGES)
+]
 
 PACKAGES = [("Microsoft.Extensions.Hosting", "10.0.13", "10.0.14"), ("System.CommandLine", "2.0.13", "2.0.14")]
+
+
+def set_patch(file, patch):
+    """Gives the file the patch, with `additions` and `deletions` that count its lines, as GitHub does."""
+    lines = patch.split("\n")
+    file.update(
+        patch=patch,
+        additions=sum(line.startswith("+") for line in lines),
+        deletions=sum(line.startswith("-") for line in lines),
+    )
 
 
 def props_patch(old, new):
@@ -85,11 +110,11 @@ class PureBumpTests(unittest.TestCase):
     def setUp(self):
         self.pr = copy.deepcopy(PR)
         self.commits = copy.deepcopy(COMMITS)
-        self.commit_files = copy.deepcopy(COMMIT_FILES)
+        self.details = copy.deepcopy(DETAILS)
         self.files = copy.deepcopy(FILES)
 
     def failed(self):
-        return bump.failures(self.pr, self.commits, self.commit_files, self.files)[0]
+        return bump.failures(self.pr, self.commits, self.details, self.files)[0]
 
     def assertFails(self, condition):
         failed = self.failed()
@@ -97,7 +122,7 @@ class PureBumpTests(unittest.TestCase):
         self.assertTrue(all(line.startswith(f"{condition}: ") for line in failed), failed)
 
     def test_pull_request_432_is_a_pure_bump(self):
-        failed, packages = bump.failures(PR, COMMITS, COMMIT_FILES, FILES)
+        failed, packages = bump.failures(PR, COMMITS, DETAILS, FILES)
         self.assertEqual(failed, [])
         self.assertEqual(packages, PACKAGES)
 
@@ -144,11 +169,20 @@ class PureBumpTests(unittest.TestCase):
         self.assertFails(2)
 
     def test_a_later_commit_that_changes_another_file_fails_2(self):
-        self.commit_files[RELOCK].append({"filename": "Directory.Packages.props", "status": "modified"})
+        props = {"filename": "Directory.Packages.props", "status": "modified", "additions": 0, "deletions": 0}
+        self.details[RELOCK]["files"].append(props)
         self.assertFails(2)
 
     def test_a_later_commit_whose_files_are_not_read_fails_2(self):
-        del self.commit_files[RELOCK]
+        del self.details[RELOCK]
+        self.assertFails(2)
+
+    def test_a_later_commit_whose_files_fall_short_of_its_stats_fails_2(self):
+        self.details[RELOCK]["files"].pop()
+        self.assertFails(2)
+
+    def test_a_later_commit_with_no_stats_fails_2(self):
+        del self.details[RELOCK]["stats"]
         self.assertFails(2)
 
     def test_a_list_of_commits_shorter_than_the_pull_request_fails_2(self):
@@ -193,6 +227,11 @@ class PureBumpTests(unittest.TestCase):
 
     # Condition 4
 
+    def test_a_patch_cut_short_of_the_additions_and_deletions_fails_4(self):
+        self.files[0]["additions"] = 3
+        self.files[0]["deletions"] = 3
+        self.assertFails(4)
+
     def test_a_missing_patch_fails_4(self):
         del self.files[0]["patch"]
         self.assertFails(4)
@@ -203,50 +242,69 @@ class PureBumpTests(unittest.TestCase):
         self.assertFails(4)
 
     def test_a_prerelease_version_fails_4(self):
-        self.files[0]["patch"] = props_patch(
-            '    <PackageVersion Include="Moq" Version="4.21.0" />',
-            '    <PackageVersion Include="Moq" Version="4.22.0-beta.1" />',
+        set_patch(
+            self.files[0],
+            props_patch(
+                '    <PackageVersion Include="Moq" Version="4.21.0" />',
+                '    <PackageVersion Include="Moq" Version="4.22.0-beta.1" />',
+            ),
         )
         self.assertFails(4)
 
     def test_a_new_major_version_fails_4(self):
-        self.files[0]["patch"] = props_patch(
-            '    <PackageVersion Include="Moq" Version="4.21.0" />',
-            '    <PackageVersion Include="Moq" Version="5.0.0" />',
+        set_patch(
+            self.files[0],
+            props_patch(
+                '    <PackageVersion Include="Moq" Version="4.21.0" />',
+                '    <PackageVersion Include="Moq" Version="5.0.0" />',
+            ),
         )
         self.assertFails(4)
 
     def test_another_name_fails_4(self):
-        self.files[0]["patch"] = props_patch(
-            '    <PackageVersion Include="Moq" Version="4.21.0" />',
-            '    <PackageVersion Include="Moq2" Version="4.21.1" />',
+        set_patch(
+            self.files[0],
+            props_patch(
+                '    <PackageVersion Include="Moq" Version="4.21.0" />',
+                '    <PackageVersion Include="Moq2" Version="4.21.1" />',
+            ),
         )
         self.assertFails(4)
 
     def test_another_indent_fails_4(self):
-        self.files[0]["patch"] = props_patch(
-            '    <PackageVersion Include="Moq" Version="4.21.0" />',
-            '  <PackageVersion Include="Moq" Version="4.21.1" />',
+        set_patch(
+            self.files[0],
+            props_patch(
+                '    <PackageVersion Include="Moq" Version="4.21.0" />',
+                '  <PackageVersion Include="Moq" Version="4.21.1" />',
+            ),
         )
         self.assertFails(4)
 
     def test_a_line_that_is_not_a_package_version_fails_4(self):
-        self.files[0]["patch"] = props_patch(
-            "    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>",
-            "    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>",
+        set_patch(
+            self.files[0],
+            props_patch(
+                "    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>",
+                "    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>",
+            ),
         )
         self.assertFails(4)
 
     def test_an_added_line_with_no_removed_line_fails_4(self):
-        self.files[0]["patch"] = (
-            '@@ -1,2 +1,3 @@\n   <ItemGroup>\n+    <PackageVersion Include="Moq" Version="4.21.0" />'
+        set_patch(
+            self.files[0],
+            '@@ -1,2 +1,3 @@\n   <ItemGroup>\n+    <PackageVersion Include="Moq" Version="4.21.0" />',
         )
         self.assertFails(4)
 
     def test_an_extra_attribute_fails_4(self):
-        self.files[0]["patch"] = props_patch(
-            '    <PackageVersion Include="Moq" Version="4.21.0" />',
-            '    <PackageVersion Include="Moq" Version="4.21.1" Condition="true" />',
+        set_patch(
+            self.files[0],
+            props_patch(
+                '    <PackageVersion Include="Moq" Version="4.21.0" />',
+                '    <PackageVersion Include="Moq" Version="4.21.1" Condition="true" />',
+            ),
         )
         self.assertFails(4)
 
@@ -289,7 +347,7 @@ def answers(pr=PR, heads=None):
         f"repos/{REPO}/pulls/432": read_pr,
         f"repos/{REPO}/pulls/432/commits": COMMITS,
         f"repos/{REPO}/pulls/432/files": FILES,
-        f"repos/{REPO}/commits/{RELOCK}": {"files": COMMIT_FILES[RELOCK]},
+        f"repos/{REPO}/commits/{RELOCK}": DETAILS[RELOCK],
     }
 
 
@@ -340,9 +398,12 @@ class AutomaticPathTests(unittest.TestCase):
 
     def test_a_dependabot_pull_request_that_is_not_a_pure_bump_posts_nothing(self):
         files = copy.deepcopy(FILES)
-        files[0]["patch"] = props_patch(
-            '    <PackageVersion Include="Moq" Version="4.21.0" />',
-            '    <PackageVersion Include="Moq" Version="5.0.0" />',
+        set_patch(
+            files[0],
+            props_patch(
+                '    <PackageVersion Include="Moq" Version="4.21.0" />',
+                '    <PackageVersion Include="Moq" Version="5.0.0" />',
+            ),
         )
         gh = FakeGh({**answers(), f"repos/{REPO}/pulls/432/files": files})
         with mock.patch.object(judge, "gh", gh), mock.patch("builtins.print") as printed:

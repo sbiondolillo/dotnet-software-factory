@@ -253,15 +253,13 @@ def judge_bump(repo, number, pr):
     """The automatic path for a Dependabot pull request: judge-verdict as success on a pure bump, nothing otherwise."""
     head = pr["head"]["sha"]
     commits = api_list(f"repos/{repo}/pulls/{number}/commits")
-    commit_files = {
-        c["sha"]: json.loads(gh("api", f"repos/{repo}/commits/{c['sha']}")).get("files") or [] for c in commits[1:]
-    }
+    details = {c["sha"]: json.loads(gh("api", f"repos/{repo}/commits/{c['sha']}")) for c in commits[1:]}
     files = api_list(f"repos/{repo}/pulls/{number}/files")
     after = json.loads(gh("api", f"repos/{repo}/pulls/{number}"))
     if after["head"]["sha"] != head:
         print(f"judge: the head of pull request #{number} moved off {head[:7]} while the job read it; nothing posted")
         return
-    failed, packages = bump.failures(after, commits, commit_files, files)
+    failed, packages = bump.failures(after, commits, details, files)
     if failed:
         print(f"judge: pull request #{number} {head[:7]} is not a pure bump; no check run. Dispatch the judge by hand.")
         for line in failed:

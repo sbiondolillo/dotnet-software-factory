@@ -9,11 +9,13 @@ The four conditions:
 2. The first commit has the author `dependabot[bot]` and `verification.verified` true. Each later commit has the
    author `github-actions[bot]`, the first message line `Regenerate the lock files`, and changes only
    `packages.lock.json` files. The author is the GitHub account, `author.login` of the commit, not its free-text name.
+   The `files` of a later commit sum to the `stats` of that commit, since GitHub caps the files of one commit.
 3. Each changed file has the status `modified` and no `previous_filename`. Its path is `Directory.Packages.props` at
    the root, or a `packages.lock.json` file. The list holds `changed_files` of the pull request.
 4. Each removed line of the patch of `Directory.Packages.props` pairs in order with one added line. Both lines are
    `<PackageVersion Include="<name>" Version="<version>" />`, with the same name and the same indent. Each version is
-   dotted digits, and the first number is the same in both.
+   dotted digits, and the first number is the same in both. The patch holds as many removed and added lines as the
+   `deletions` and `additions` of the file, since GitHub can cut a long patch.
 """
 
 import re
@@ -40,9 +42,9 @@ def author_failures(pr):
     return [] if author == DEPENDABOT else [f"1: the author of the pull request is {author!r}, not {DEPENDABOT}"]
 
 
-def commit_failures(pr, commits, commit_files):
-    """`commits` is the list of `GET /repos/<repo>/pulls/<n>/commits`. `commit_files` maps the SHA of each later commit
-    to the `files` of `GET /repos/<repo>/commits/<sha>`."""
+def commit_failures(pr, commits, details):
+    """`commits` is the list of `GET /repos/<repo>/pulls/<n>/commits`. `details` maps the SHA of each later commit to
+    the answer of `GET /repos/<repo>/commits/<sha>`, with its `files` and its `stats`."""
     if not commits:
         return ["2: the pull request lists no commit"]
     found = []
@@ -61,10 +63,15 @@ def commit_failures(pr, commits, commit_files):
         message = ((commit.get("commit") or {}).get("message") or "").split("\n", 1)[0]
         if message != RELOCK_MESSAGE:
             found.append(f"2: the later commit {sha[:7]} has the message {message!r}, not {RELOCK_MESSAGE!r}")
-        files = commit_files.get(sha)
+        detail = details.get(sha) or {}
+        files, stats = detail.get("files"), detail.get("stats") or {}
         if not files:
             found.append(f"2: the files of the later commit {sha[:7]} are not read")
             continue
+        for key in ("additions", "deletions"):
+            total = sum(file.get(key) or 0 for file in files)
+            if not isinstance(stats.get(key), int) or total != stats[key]:
+                found.append(f"2: the files of the later commit {sha[:7]} hold {total} of its {stats.get(key)} {key}")
         for file in files:
             if not is_lock(file.get("filename") or ""):
                 found.append(f"2: the later commit {sha[:7]} changes {file.get('filename')!r}")
@@ -102,6 +109,11 @@ def bumps(files):
             removed.append(line[1:])
         elif line.startswith("+"):
             added.append(line[1:])
+    if (len(removed), len(added)) != (props[0].get("deletions"), props[0].get("additions")):
+        return [
+            f"4: the patch of {PROPS} holds {len(removed)} of its {props[0].get('deletions')} removed lines "
+            f"and {len(added)} of its {props[0].get('additions')} added lines"
+        ], []
     if not removed or len(removed) != len(added):
         return [f"4: {len(removed)} removed lines and {len(added)} added lines of {PROPS} do not pair"], []
     found, packages = [], []
@@ -120,10 +132,10 @@ def bumps(files):
     return found, packages
 
 
-def failures(pr, commits, commit_files, files):
+def failures(pr, commits, details, files):
     """(each failed condition, each package as (name, old, new)). The pull request is a pure bump when the first list
     is empty."""
-    found = author_failures(pr) + commit_failures(pr, commits, commit_files) + file_failures(pr, files)
+    found = author_failures(pr) + commit_failures(pr, commits, details) + file_failures(pr, files)
     found_bumps, packages = bumps(files)
     return found + found_bumps, packages
 
