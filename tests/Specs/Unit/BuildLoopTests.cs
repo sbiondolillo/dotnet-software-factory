@@ -393,4 +393,22 @@ public sealed class BuildLoopTests
 
         Assert.Equal(new BuildLoopResult(BuildLoopEnd.Stopped, 0, "first"), h.Result);
     }
+
+    [Theory]
+    [InlineData("build: start", new string[0])]
+    [InlineData("test: start", new[] { "build", "lint" })]
+    [InlineData("review: start", new[] { "build", "lint", "test" })]
+    [InlineData("redo: 1", new[] { "build", "lint", "test", "review" })]
+    public async Task ACancelDuringAProgressWriteThrowsBeforeTheNextCall(string line, string[] calls)
+    {
+        await using var h = new BuildLoopHarness();
+        h.Gates.Add(GateName.Test);
+        h.Reviews[0] = BuildLoopHarness.ReviewBlocks("again");
+        h.CancelOnLine = line;
+        await h.RunAsync();
+
+        Assert.IsAssignableFrom<OperationCanceledException>(h.Thrown);
+        Assert.Equal(calls, h.Calls);
+        Assert.Equal(line, h.Lines[^1]);
+    }
 }

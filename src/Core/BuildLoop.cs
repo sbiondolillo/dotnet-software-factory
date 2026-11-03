@@ -70,7 +70,7 @@ public sealed class BuildLoop(
         IReadOnlyList<string> redoTexts = [];
         while (true)
         {
-            await Say("build: start").ConfigureAwait(false);
+            await SayAsync("build: start", cancellationToken).ConfigureAwait(false);
             long buildStart = clock.GetTimestamp();
             BuildOutcome built = await build.RunAsync(redoTexts, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
@@ -80,7 +80,7 @@ public sealed class BuildLoop(
                 return Stopped(redos, stop);
             }
 
-            await Say("lint: start").ConfigureAwait(false);
+            await SayAsync("lint: start", cancellationToken).ConfigureAwait(false);
             bool linted = await lint.RunAsync(workTree, message, authorName, authorEmail, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             await agents.AfterLintAsync(linted, cancellationToken).ConfigureAwait(false);
@@ -99,7 +99,7 @@ public sealed class BuildLoop(
 
             if (redoTexts.Count is 0)
             {
-                await Say("review: start").ConfigureAwait(false);
+                await SayAsync("review: start", cancellationToken).ConfigureAwait(false);
                 ReviewPhaseResult reviewed = await review(cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
                 string reviewRow = summary.AddRow("review", null, reviewed.IsError ? "failed" : reviewed.Approved ? "approved" : "blocked");
@@ -108,7 +108,7 @@ public sealed class BuildLoop(
                     return Stopped(redos, reviewed.Blocking.Count is 0 ? "" : reviewed.Blocking[0]);
                 }
 
-                await Say(reviewed.Approved ? "review: approved" : "review: blocked").ConfigureAwait(false);
+                await SayAsync(reviewed.Approved ? "review: approved" : "review: blocked", cancellationToken).ConfigureAwait(false);
                 if (reviewed.Approved)
                 {
                     return new BuildLoopResult(BuildLoopEnd.Passed, redos);
@@ -129,7 +129,7 @@ public sealed class BuildLoop(
 
             redos++;
             summary.AddRedos(redos, producer, redoTexts);
-            await Say($"redo: {redos}").ConfigureAwait(false);
+            await SayAsync($"redo: {redos}", cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -140,13 +140,18 @@ public sealed class BuildLoop(
     private async Task<(IReadOnlyList<string> RedoTexts, string Row)> RunGateAsync(IGate gate, CancellationToken cancellationToken)
     {
         string name = gate.Name.Text();
-        await Say($"{name}: start").ConfigureAwait(false);
+        await SayAsync($"{name}: start", cancellationToken).ConfigureAwait(false);
         long start = clock.GetTimestamp();
         GateOutcome outcome = await gate.RunAsync(cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        await Say($"{name}: {outcome.Result}").ConfigureAwait(false);
+        await SayAsync($"{name}: {outcome.Result}", cancellationToken).ConfigureAwait(false);
         return (outcome.RedoTexts, summary.AddRow(name, clock.GetElapsedTime(start), outcome.Result));
     }
 
-    private Task Say(string line) => ProgressLine.WriteAsync(progress, line);
+    /// <summary>Writes one progress line, then throws when the token is cancelled, so no call follows a cancel.</summary>
+    private async Task SayAsync(string line, CancellationToken cancellationToken)
+    {
+        await ProgressLine.WriteAsync(progress, line).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+    }
 }

@@ -23,8 +23,11 @@ public sealed class BuildLoopHarness : IAsyncDisposable
     private int _lints;
     private int _pushes;
 
-    public BuildLoopHarness() =>
+    public BuildLoopHarness()
+    {
         File.WriteAllText(Path.Combine(_root.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
+        Progress = new CancellingWriter(Source);
+    }
 
     /// <summary>The gates of the loop, in order.</summary>
     public List<GateName> Gates { get; } = [];
@@ -56,7 +59,14 @@ public sealed class BuildLoopHarness : IAsyncDisposable
     /// <summary>The Redo texts that each build got, in order.</summary>
     public List<IReadOnlyList<string>> BuildTexts { get; } = [];
 
-    public StringWriter Progress { get; } = new();
+    /// <summary>A progress line whose write cancels <see cref="Source"/>, or null for none.</summary>
+    public string? CancelOnLine
+    {
+        get => Progress.CancelOn;
+        set => Progress.CancelOn = value;
+    }
+
+    public CancellingWriter Progress { get; }
 
     public JobSummary Summary { get; } = new();
 
@@ -203,5 +213,22 @@ public sealed class BuildLoopHarness : IAsyncDisposable
                 ? Next(script, call)
                 : new GateOutcome("passed", []));
         }
+    }
+}
+
+/// <summary>A writer of progress lines that cancels a token source when it writes the line <see cref="CancelOn"/>.</summary>
+public sealed class CancellingWriter(CancellationTokenSource source) : StringWriter(System.Globalization.CultureInfo.InvariantCulture)
+{
+    public string? CancelOn { get; set; }
+
+    public override Task WriteLineAsync(string? value)
+    {
+        Task written = base.WriteLineAsync(value);
+        if (value is not null && value == CancelOn)
+        {
+            source.Cancel();
+        }
+
+        return written;
     }
 }
