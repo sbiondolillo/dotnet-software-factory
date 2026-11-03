@@ -9,7 +9,10 @@ public enum GateName
     Check,
 }
 
-/// <summary>What a gate found: <paramref name="Result"/> is the text of its row, and <paramref name="RedoTexts"/> is empty on a pass.</summary>
+/// <summary>What a gate found: <paramref name="Result"/> is the text of its row, and <paramref name="RedoTexts"/> are the faults
+/// that give a Redo. The build passes the gate when <paramref name="RedoTexts"/> is empty. The test gate gives a lost test as a
+/// Redo text under the result <c>passed</c>, so a caller reads <paramref name="RedoTexts"/>, never <paramref name="Result"/>, to
+/// decide on a Redo.</summary>
 public sealed record GateOutcome(string Result, IReadOnlyList<string> RedoTexts);
 
 /// <summary>A deterministic test of a build. A gate never stops the run, and it writes no row and no progress line.</summary>
