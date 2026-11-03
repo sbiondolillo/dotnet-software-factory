@@ -84,9 +84,9 @@ public sealed class RunLogTests : IDisposable
         using var harness = new TestGateHarness();
         await harness.StartAsync(TestContext.Current.CancellationToken);
         File.WriteAllText(Path.Combine(harness.WorkTree.FullName, "global.json"), "{}");
-        TestGateResult result = await new TestGate(harness.Sandbox!, _log).RunAsync(
-            harness.WorkTree.FullName, harness.Pin, [], TestContext.Current.CancellationToken);
-        Assert.False(result.Passed);
+        GateOutcome result = await harness.RunAsync(
+            new TestGate(harness.Sandbox!, harness.WorkTree.FullName, harness.Pin, [], log: _log), TestContext.Current.CancellationToken);
+        Assert.Equal("failed", result.Result);
         Assert.Empty(harness.Seen);
         Assert.Empty(Lines);
     }
@@ -98,9 +98,9 @@ public sealed class RunLogTests : IDisposable
         harness.Answers["test"] = new CommandResult { ExitCode = 1 };
         harness.Trx = null;
         await harness.StartAsync(TestContext.Current.CancellationToken);
-        TestGateResult result = await new TestGate(harness.Sandbox!, _log).RunAsync(
-            harness.WorkTree.FullName, harness.Pin, [], TestContext.Current.CancellationToken);
-        Assert.False(result.Passed);
+        GateOutcome result = await harness.RunAsync(
+            new TestGate(harness.Sandbox!, harness.WorkTree.FullName, harness.Pin, [], log: _log), TestContext.Current.CancellationToken);
+        Assert.Equal("failed", result.Result);
         string last = Lines[^1];
         Assert.StartsWith("command: dotnet test --no-restore --logger trx --results-directory /work/", last, StringComparison.Ordinal);
         Assert.EndsWith(" exited 1", last, StringComparison.Ordinal);

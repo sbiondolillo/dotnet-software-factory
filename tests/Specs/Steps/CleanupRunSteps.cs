@@ -244,6 +244,16 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
         Assert.Contains("standard error of the check", text, StringComparison.Ordinal);
     }
 
+    [Then("the job summary holds the row {string} with the result {string}")]
+    public void ThenSummaryRow(string name, string result)
+    {
+        string row = H.Summary.Split('\n').Single(line => line.StartsWith($"| {name} |", StringComparison.Ordinal));
+        Assert.Equal(result, row.Trim('|').Split('|')[4].Trim());
+    }
+
+    [Then("the Redos list of the job summary holds the item {string}")]
+    public void ThenSummaryRedo(string item) => Assert.Contains(item, H.Summary.Split('\n'));
+
     [Then("no review prompt runs before it")]
     public void ThenNoReviewBefore()
     {

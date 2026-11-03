@@ -11,7 +11,7 @@ public sealed class TestGateSteps : IDisposable
     private const string Out = "reason on standard output";
     private const string Err = "reason on standard error";
     private readonly TestGateHarness _harness = new();
-    private TestGateResult? _result;
+    private GateOutcome? _result;
     private bool _started;
 
     public void Dispose() => _harness.Dispose();
@@ -110,12 +110,12 @@ public sealed class TestGateSteps : IDisposable
     [Then("the test gate gives back a passed result")]
     public void ThenPassed()
     {
-        Assert.True(_result!.Passed, string.Join("\n", _result.Evidence));
-        Assert.Empty(_result.Evidence);
+        Assert.True(_result!.Result is "passed", string.Join("\n", _result.RedoTexts));
+        Assert.Empty(_result.RedoTexts);
     }
 
     [Then("the test gate gives back a failed result")]
-    public void ThenFailed() => Assert.False(_result!.Passed);
+    public void ThenFailed() => Assert.Equal("failed", _result!.Result);
 
     [Then("the commands ran in the order restore, build, format check, test, integration and no other")]
     public void ThenOrder() => Assert.Equal(["restore", "build", "format", "test", "run"], _harness.Seen.Select(c => c.Subcommand));
@@ -179,12 +179,12 @@ public sealed class TestGateSteps : IDisposable
     public void ThenTestEvidence() => Command("test");
 
     [Then("the evidence is one text")]
-    public void ThenOneText() => Assert.Single(_result!.Evidence);
+    public void ThenOneText() => Assert.Single(_result!.RedoTexts);
 
     [Then("the evidence names the test command and holds the code 1 and the reason")]
     public void ThenTestReason()
     {
-        string text = Assert.Single(_result!.Evidence);
+        string text = Assert.Single(_result!.RedoTexts);
         Assert.Contains("dotnet test", text, StringComparison.Ordinal);
         Assert.Contains("code 1", text, StringComparison.Ordinal);
         Assert.Contains(Out, text, StringComparison.Ordinal);
@@ -193,7 +193,7 @@ public sealed class TestGateSteps : IDisposable
     [Then("the evidence names the integration command and holds the code 1 and the summary")]
     public void ThenIntegrationEvidence()
     {
-        string text = Assert.Single(_result!.Evidence);
+        string text = Assert.Single(_result!.RedoTexts);
         Assert.Contains("dotnet run", text, StringComparison.Ordinal);
         Assert.Contains("code 1", text, StringComparison.Ordinal);
         Assert.Contains("Failed: 1", text, StringComparison.Ordinal);
@@ -215,7 +215,7 @@ public sealed class TestGateSteps : IDisposable
 
     private void Joined(params string[] parts)
     {
-        string all = string.Join("\n", _result!.Evidence);
+        string all = string.Join("\n", _result!.RedoTexts);
         foreach (string part in parts)
         {
             Assert.Contains(part, all, StringComparison.Ordinal);
@@ -226,7 +226,7 @@ public sealed class TestGateSteps : IDisposable
 
     private void Command(string subcommand)
     {
-        string text = Assert.Single(_result!.Evidence);
+        string text = Assert.Single(_result!.RedoTexts);
         int code = subcommand is "format" ? 2 : 1;
         Assert.Contains($"dotnet {subcommand}", text, StringComparison.Ordinal);
         Assert.Contains($"code {code}", text, StringComparison.Ordinal);

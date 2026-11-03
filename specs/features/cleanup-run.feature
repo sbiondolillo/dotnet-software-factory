@@ -110,6 +110,8 @@ Feature: A cleanup run fixes a test, a config file or a document
     When a caller starts a run
     Then the next build prompt holds a Redo text that holds "outside the scope: src/Core/Greeter.cs"
     And no review prompt runs before it
+    And the job summary holds the row "scope 1" with the result "out of scope"
+    And the Redos list of the job summary holds the item "- Redo 1, after scope 1: outside the scope: src/Core/Greeter.cs"
 
   Scenario: A directory entry covers the paths below it
     Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "tests/Specs/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
@@ -226,6 +228,8 @@ Feature: A cleanup run fixes a test, a config file or a document
       | check: red |
       | build: start |
       | lint: start |
+      | scope: start |
+      | scope: in scope |
       | test: start |
       | test: passed |
       | check: start |

@@ -8,25 +8,64 @@ namespace Core;
 /// <param name="Tests">The tests of the TRX file, or null when the gate stopped before it read one.</param>
 public sealed record TestGateResult(bool Passed, IReadOnlyList<string> Evidence, IReadOnlyList<ReportedTest>? Tests = null);
 
-/// <summary>Judges a work tree the way CI does: the pin, the four build commands, the TRX file and the integration suite,
-/// which <c>skipIntegration</c> true leaves out.</summary>
-public sealed class TestGate(Sandbox sandbox, TextWriter? log = null, bool skipIntegration = false)
+/// <summary>The test gate: it judges a work tree the way CI does, by the pin, the four build commands, the TRX file and the
+/// integration suite, which <paramref name="skipIntegration"/> true leaves out. The integration command alone gets
+/// <paramref name="secretNames"/>. A changed pinned path for which <paramref name="pinExempt"/> is true is no pin fault.
+/// <paramref name="basePassed"/>, the tests that passed on the base commit as <c>class.method</c>, is the baseline of the
+/// lost-test check, or null for a run with no such check.</summary>
+public sealed class TestGate(
+    Sandbox sandbox,
+    string workTree,
+    Pin pin,
+    IReadOnlyList<string> secretNames,
+    Func<string, bool>? pinExempt = null,
+    IReadOnlySet<string>? basePassed = null,
+    TextWriter? log = null,
+    bool skipIntegration = false) : IGate
 {
-    /// <summary>Runs the gate over <paramref name="workTree"/>; the integration command alone gets <paramref name="secretNames"/>.</summary>
-    public Task<TestGateResult> RunAsync(
-        string workTree,
-        Pin pin,
-        IReadOnlyList<string> secretNames,
-        CancellationToken cancellationToken = default) =>
-        RunAsync(workTree, pin, secretNames, null, cancellationToken);
+    /// <inheritdoc/>
+    public GateName Name => GateName.Test;
 
-    /// <summary>Runs the gate; a changed pinned path for which <paramref name="pinExempt"/> is true is no pin evidence.</summary>
-    public async Task<TestGateResult> RunAsync(
+    /// <summary>The tests of the TRX file of the last <see cref="RunAsync"/>, or null when it stopped before it read one.</summary>
+    public IReadOnlyList<ReportedTest>? Tests { get; private set; }
+
+    /// <summary>Gives the gate of a run. With a <paramref name="scope"/>, for a cleanup or a reframe, a pinned path in the scope
+    /// that is not a feature file is no pin fault, and the gate first runs the tests of <paramref name="workTree"/>, which holds
+    /// the base commit, for the baseline of the lost-test check.</summary>
+    public static async Task<TestGate> CreateAsync(
+        Sandbox sandbox,
         string workTree,
         Pin pin,
         IReadOnlyList<string> secretNames,
-        Func<string, bool>? pinExempt,
+        IReadOnlyList<string>? scope,
+        TextWriter? log = null,
+        bool skipIntegration = false,
         CancellationToken cancellationToken = default)
+    {
+        if (scope is null)
+        {
+            return new TestGate(sandbox, workTree, pin, secretNames, log: log, skipIntegration: skipIntegration);
+        }
+
+        IReadOnlySet<string> passed = await ReadPassedTestsAsync(sandbox, workTree, log, cancellationToken).ConfigureAwait(false);
+        return new TestGate(sandbox, workTree, pin, secretNames, path => CleanupGate.PinExempt(scope, path), passed, log, skipIntegration);
+    }
+
+    /// <summary>Gives <c>failed</c> with one Redo text for each fact that failed the gate, or <c>passed</c>, with one Redo text
+    /// for each test of the baseline that no longer passes.</summary>
+    public async Task<GateOutcome> RunAsync(CancellationToken cancellationToken = default)
+    {
+        TestGateResult result = await JudgeAsync(cancellationToken).ConfigureAwait(false);
+        Tests = result.Tests;
+        if (!result.Passed)
+        {
+            return new GateOutcome("failed", result.Evidence);
+        }
+
+        return new GateOutcome("passed", basePassed is null ? [] : CleanupGate.LostTests(basePassed, result));
+    }
+
+    private async Task<TestGateResult> JudgeAsync(CancellationToken cancellationToken)
     {
         PinComparison comparison = pin.Compare(workTree);
         List<string> pinEvidence = [.. comparison.Changed, .. comparison.Added, .. comparison.Removed];
@@ -133,16 +172,17 @@ public sealed class TestGate(Sandbox sandbox, TextWriter? log = null, bool skipI
             : new TestGateResult(false, [Describe("run", integration)], tests);
     }
 
-    /// <summary>Runs the tests of <paramref name="workTree"/> and gives the tests that passed, as <c>class.method</c>.</summary>
-    public async Task<IReadOnlySet<string>> ReadPassedTestsAsync(string workTree, CancellationToken cancellationToken = default)
+    private static async Task<IReadOnlySet<string>> ReadPassedTestsAsync(Sandbox sandbox, string workTree, TextWriter? log, CancellationToken cancellationToken)
     {
-        await RunDotnetAsync(["restore", "--locked-mode"], [], cancellationToken).ConfigureAwait(false);
+        await RunDotnetAsync(sandbox, log, ["restore", "--locked-mode"], [], cancellationToken).ConfigureAwait(false);
         string resultsName = ".test-base-" + Guid.NewGuid().ToString("N");
         string hostResults = Path.Combine(workTree, resultsName);
         HashSet<string> passed = new(StringComparer.Ordinal);
         try
         {
             await RunDotnetAsync(
+                sandbox,
+                log,
                 ["test", "--no-restore", "--logger", "trx", "--results-directory", $"{Sandbox.WorkDirectory}/{resultsName}"],
                 [],
                 cancellationToken).ConfigureAwait(false);
@@ -168,7 +208,10 @@ public sealed class TestGate(Sandbox sandbox, TextWriter? log = null, bool skipI
         return passed;
     }
 
-    private async Task<CommandResult> RunDotnetAsync(string[] arguments, IReadOnlyList<string> secretNames, CancellationToken cancellationToken)
+    private Task<CommandResult> RunDotnetAsync(string[] arguments, IReadOnlyList<string> names, CancellationToken cancellationToken) =>
+        RunDotnetAsync(sandbox, log, arguments, names, cancellationToken);
+
+    private static async Task<CommandResult> RunDotnetAsync(Sandbox sandbox, TextWriter? log, string[] arguments, IReadOnlyList<string> secretNames, CancellationToken cancellationToken)
     {
         CommandResult result = await sandbox.RunAsync("dotnet", arguments, secretNames, cancellationToken).ConfigureAwait(false);
         await ProgressLine.WriteAsync(

@@ -63,6 +63,8 @@ public sealed class FeedbackCleanupScopeTests
         h.FirstBuildChanges.Add("src/Core/Greeter.cs");
         await h.RunAsync(Ct);
         Assert.Contains("outside the scope: src/Core/Greeter.cs", h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
+        string[] lines = h.Out.ToString().Split('\n');
+        Assert.Equal(["scope: start", "scope: out of scope"], lines.Where(l => l.StartsWith("scope:", StringComparison.Ordinal)).Take(2));
         Assert.Equal("test: start", h.Out.ToString().Split('\n').First(l => l.StartsWith("test:", StringComparison.Ordinal)));
         Assert.Equal(1, h.Out.ToString().Split('\n').Count(l => l is "test: start"));
     }

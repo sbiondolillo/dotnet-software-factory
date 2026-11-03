@@ -184,7 +184,7 @@ public sealed class FactoryRun(
         await Say("plan: passed").ConfigureAwait(false);
         var buildPhase = new BuildPhase(agent, RecipeRules.BuildText(Recipe.Behavior, RunKind.Factory));
         LintGate lintGate = agents.Lint(log);
-        var testGate = new TestGate(agents.Sandbox, log, request.SkipIntegration);
+        var testGate = new TestGate(agents.Sandbox, request.Directory, plan.Pin, request.SecretNames, log: log, skipIntegration: request.SkipIntegration);
         var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(Recipe.Behavior, RunKind.Factory));
 
         int redos = 0;
@@ -206,12 +206,8 @@ public sealed class FactoryRun(
             bool linted = await lintGate.RunAsync(request.Directory, issue.Title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
             await agents.AfterLintAsync(linted, cancellationToken).ConfigureAwait(false);
             _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "passed");
-            long testStart = _clock.GetTimestamp();
-            await Say("test: start").ConfigureAwait(false);
-            TestGateResult gate = await testGate.RunAsync(request.Directory, plan.Pin, request.SecretNames, cancellationToken).ConfigureAwait(false);
-            await Say(gate.Passed ? "test: passed" : "test: failed").ConfigureAwait(false);
-            producer = _summary.AddRow("test", _clock.GetElapsedTime(testStart), gate.Passed ? "passed" : "failed");
-            if (gate.Passed)
+            (redoTexts, producer) = await RunGateAsync(testGate, cancellationToken).ConfigureAwait(false);
+            if (redoTexts.Count is 0)
             {
                 await Say("review: start").ConfigureAwait(false);
                 ReviewPhaseResult review = await reviewPhase
@@ -226,7 +222,7 @@ public sealed class FactoryRun(
                 if (review.Approved)
                 {
                     await Say("deliver: start").ConfigureAwait(false);
-                    var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, gate, choice, redos));
+                    var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, testGate, choice, redos));
                     PullRequest pullRequest = await deliver
                         .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
                     return new FactoryRunResult(pullRequest, redos);
@@ -234,10 +230,6 @@ public sealed class FactoryRun(
 
                 redoTexts = review.Blocking;
                 producer = reviewRow;
-            }
-            else
-            {
-                redoTexts = gate.Evidence;
             }
 
             redoTexts = agents.NoteBuild(redoTexts);
@@ -264,22 +256,15 @@ public sealed class FactoryRun(
     {
         Sandbox sandbox = agents.Sandbox;
         Agent agent = agents.Builder;
-        string? check = choice.Check;
-        if (check is not null)
+        CheckGate? checkGate = null;
+        if (choice.Check is string check)
         {
-            CommandResult first = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
-            await Say(first.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
-            if (first.ExitCode is 0)
+            if (await PreCheckAsync(request, sandbox, check, choice.Recipe, cancellationToken).ConfigureAwait(false))
             {
-                await CommentAsync(request, "The check passes before the plan, so there is nothing to refactor.", [], cancellationToken).ConfigureAwait(false);
                 return new FactoryRunResult(null, 0);
             }
 
-            if (first.ExitCode is 126 or 127)
-            {
-                await CommentAsync(request, $"The check command exited with the code {first.ExitCode} before the plan, so it did not run. Its standard error:", [first.StandardError], cancellationToken).ConfigureAwait(false);
-                return new FactoryRunResult(null, 0);
-            }
+            checkGate = new CheckGate(sandbox, check, log);
         }
 
         await Say("plan: start").ConfigureAwait(false);
@@ -298,7 +283,7 @@ public sealed class FactoryRun(
         Pin pin = RecipeRules.TakePin(choice.Recipe, request.Directory);
         var buildPhase = new BuildPhase(agent, RecipeRules.BuildText(choice.Recipe, RunKind.Factory));
         LintGate lintGate = agents.Lint(log);
-        var testGate = new TestGate(agents.Sandbox, log, request.SkipIntegration);
+        var testGate = new TestGate(sandbox, request.Directory, pin, request.SecretNames, log: log, skipIntegration: request.SkipIntegration);
         var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Factory));
 
         int redos = 0;
@@ -320,31 +305,15 @@ public sealed class FactoryRun(
             bool linted = await lintGate.RunAsync(request.Directory, issue.Title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
             await agents.AfterLintAsync(linted, cancellationToken).ConfigureAwait(false);
             _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "passed");
-            long testStart = _clock.GetTimestamp();
-            await Say("test: start").ConfigureAwait(false);
-            TestGateResult gate = await testGate.RunAsync(request.Directory, pin, request.SecretNames, cancellationToken).ConfigureAwait(false);
-            await Say(gate.Passed ? "test: passed" : "test: failed").ConfigureAwait(false);
-            producer = _summary.AddRow("test", _clock.GetElapsedTime(testStart), gate.Passed ? "passed" : "failed");
-            if (!gate.Passed)
+            (redoTexts, producer) = await RunGateAsync(testGate, cancellationToken).ConfigureAwait(false);
+            if (redoTexts.Count is 0)
             {
-                redoTexts = gate.Evidence;
-            }
-            else
-            {
-                CommandResult? after = null;
-                if (check is not null)
+                if (checkGate is not null)
                 {
-                    long checkStart = _clock.GetTimestamp();
-                    after = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
-                    await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
-                    producer = _summary.AddRow("check", _clock.GetElapsedTime(checkStart), after.ExitCode is 0 ? "green" : "red");
+                    (redoTexts, producer) = await RunGateAsync(checkGate, cancellationToken).ConfigureAwait(false);
                 }
 
-                if (after is not null && after.ExitCode is not 0)
-                {
-                    redoTexts = [CleanupGate.CheckRedo(after)];
-                }
-                else
+                if (redoTexts.Count is 0)
                 {
                     await Say("review: start").ConfigureAwait(false);
                     ReviewPhaseResult review = await reviewPhase
@@ -359,7 +328,7 @@ public sealed class FactoryRun(
                     if (review.Approved)
                     {
                         await Say("deliver: start").ConfigureAwait(false);
-                        var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, gate, choice, redos));
+                        var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, testGate, choice, redos));
                         PullRequest pullRequest = await deliver
                             .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
                         return new FactoryRunResult(pullRequest, redos);
@@ -395,30 +364,23 @@ public sealed class FactoryRun(
     {
         Sandbox sandbox = agents.Sandbox;
         Agent agent = agents.Builder;
-        CommandResult first = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
-        await Say(first.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
-        if (first.ExitCode is 0)
+        if (await PreCheckAsync(request, sandbox, check, choice.Recipe, cancellationToken).ConfigureAwait(false))
         {
-            await CommentAsync(request, "The check passes before the build, so there is nothing to clean up.", [], cancellationToken).ConfigureAwait(false);
             return new FactoryRunResult(null, 0);
         }
 
-        if (first.ExitCode is 126 or 127)
-        {
-            await CommentAsync(request, $"The check command exited with the code {first.ExitCode} before the build, so it did not run. Its standard error:", [first.StandardError], cancellationToken).ConfigureAwait(false);
-            return new FactoryRunResult(null, 0);
-        }
-
-        IReadOnlyList<string> scope = choice.Scope;
         var buildPhase = new BuildPhase(agent, RecipeRules.BuildText(choice.Recipe, RunKind.Factory));
         LintGate lintGate = agents.Lint(log);
-        var testGate = new TestGate(agents.Sandbox, log, request.SkipIntegration);
         var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Factory));
         Pin pin = RecipeRules.TakePin(choice.Recipe, request.Directory);
-        IReadOnlySet<string> basePassed = await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false);
+        var scopeGate = new ScopeGate(git, baseCommit, request.Directory, choice.Scope);
+        TestGate testGate = await TestGate
+            .CreateAsync(sandbox, request.Directory, pin, request.SecretNames, choice.Scope, log, request.SkipIntegration, cancellationToken)
+            .ConfigureAwait(false);
+        var checkGate = new CheckGate(sandbox, check, log);
 
         int redos = 0;
-        string producer = "";
+        string producer;
         IReadOnlyList<string> redoTexts = [];
         while (true)
         {
@@ -435,26 +397,16 @@ public sealed class FactoryRun(
             await Say("lint: start").ConfigureAwait(false);
             bool linted = await lintGate.RunAsync(request.Directory, issue.Title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
             await agents.AfterLintAsync(linted, cancellationToken).ConfigureAwait(false);
-            producer = _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "passed");
-            redoTexts = await CleanupGate.ScopeFaultsAsync(git, baseCommit, request.Directory, scope, cancellationToken).ConfigureAwait(false);
+            _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "passed");
+            (redoTexts, producer) = await RunGateAsync(scopeGate, cancellationToken).ConfigureAwait(false);
             if (redoTexts.Count is 0)
             {
-                long testStart = _clock.GetTimestamp();
-                await Say("test: start").ConfigureAwait(false);
-                TestGateResult gate = await testGate
-                    .RunAsync(request.Directory, pin, request.SecretNames, path => CleanupGate.PinExempt(scope, path), cancellationToken)
-                    .ConfigureAwait(false);
-                await Say(gate.Passed ? "test: passed" : "test: failed").ConfigureAwait(false);
-                producer = _summary.AddRow("test", _clock.GetElapsedTime(testStart), gate.Passed ? "passed" : "failed");
-                redoTexts = !gate.Passed ? gate.Evidence : CleanupGate.LostTests(basePassed, gate);
+                (redoTexts, producer) = await RunGateAsync(testGate, cancellationToken).ConfigureAwait(false);
 
                 if (redoTexts.Count is 0)
                 {
-                    long checkStart = _clock.GetTimestamp();
-                    CommandResult after = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
-                    await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
-                    producer = _summary.AddRow("check", _clock.GetElapsedTime(checkStart), after.ExitCode is 0 ? "green" : "red");
-                    if (after.ExitCode is 0)
+                    (redoTexts, producer) = await RunGateAsync(checkGate, cancellationToken).ConfigureAwait(false);
+                    if (redoTexts.Count is 0)
                     {
                         await Say("review: start").ConfigureAwait(false);
                         ReviewPhaseResult review = await reviewPhase
@@ -469,7 +421,7 @@ public sealed class FactoryRun(
                         if (review.Approved)
                         {
                             await Say("deliver: start").ConfigureAwait(false);
-                            var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, gate, choice, redos));
+                            var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, testGate, choice, redos));
                             PullRequest pullRequest = await deliver
                                 .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
                             return new FactoryRunResult(pullRequest, redos);
@@ -477,10 +429,6 @@ public sealed class FactoryRun(
 
                         redoTexts = review.Blocking;
                         producer = reviewRow;
-                    }
-                    else
-                    {
-                        redoTexts = [CleanupGate.CheckRedo(after)];
                     }
                 }
             }
@@ -510,38 +458,32 @@ public sealed class FactoryRun(
     {
         Sandbox sandbox = agents.Sandbox;
         Agent agent = agents.Builder;
-        CommandResult first = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
-        await Say(first.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
-        if (first.ExitCode is 0)
+        if (await PreCheckAsync(request, sandbox, check, choice.Recipe, cancellationToken).ConfigureAwait(false))
         {
-            await CommentAsync(request, "The check passes before the build, so there is nothing to reframe.", [], cancellationToken).ConfigureAwait(false);
             return new FactoryRunResult(null, 0);
         }
 
-        if (first.ExitCode is 126 or 127)
-        {
-            await CommentAsync(request, $"The check command exited with the code {first.ExitCode} before the build, so it did not run. Its standard error:", [first.StandardError], cancellationToken).ConfigureAwait(false);
-            return new FactoryRunResult(null, 0);
-        }
-
-        IReadOnlyList<string> scope = choice.Scope;
         var buildPhase = new BuildPhase(agent, RecipeRules.BuildText(choice.Recipe, RunKind.Factory));
         LintGate lintGate = agents.Lint(log);
-        var testGate = new TestGate(agents.Sandbox, log, request.SkipIntegration);
         var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Factory));
         Pin pin = RecipeRules.TakePin(choice.Recipe, request.Directory);
-        IReadOnlySet<string> basePassed = await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false);
-        ApiListing baseApi = await ListApiAsync(sandbox, cancellationToken).ConfigureAwait(false);
-        if (baseApi.Lines is null)
+        var scopeGate = new ScopeGate(git, baseCommit, request.Directory, choice.Scope);
+        TestGate testGate = await TestGate
+            .CreateAsync(sandbox, request.Directory, pin, request.SecretNames, choice.Scope, log, request.SkipIntegration, cancellationToken)
+            .ConfigureAwait(false);
+        await Say("api: start").ConfigureAwait(false);
+        ApiGateStart api = await ApiGate.CreateAsync(sandbox, log, cancellationToken).ConfigureAwait(false);
+        if (api.Gate is not ApiGate apiGate)
         {
-            await CommentAsync(request, "The public API of the base commit could not be listed, so there is no build:", [baseApi.Fault ?? ""], cancellationToken).ConfigureAwait(false);
+            await CommentAsync(request, api.Stop ?? "", [], cancellationToken).ConfigureAwait(false);
             return new FactoryRunResult(null, 0);
         }
 
         await Say("api: listed").ConfigureAwait(false);
+        var checkGate = new CheckGate(sandbox, check, log);
 
         int redos = 0;
-        string producer = "";
+        string producer;
         IReadOnlyList<string> redoTexts = [];
         while (true)
         {
@@ -557,41 +499,22 @@ public sealed class FactoryRun(
             await Say("lint: start").ConfigureAwait(false);
             bool linted = await lintGate.RunAsync(request.Directory, issue.Title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
             await agents.AfterLintAsync(linted, cancellationToken).ConfigureAwait(false);
-            producer = _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "passed");
-            redoTexts = await CleanupGate.ScopeFaultsAsync(git, baseCommit, request.Directory, scope, cancellationToken).ConfigureAwait(false);
-            TestGateResult? gate = null;
+            _summary.AddRow("build", _clock.GetElapsedTime(buildStart), "passed");
+            (redoTexts, producer) = await RunGateAsync(scopeGate, cancellationToken).ConfigureAwait(false);
             if (redoTexts.Count is 0)
             {
-                long testStart = _clock.GetTimestamp();
-                await Say("test: start").ConfigureAwait(false);
-                gate = await testGate
-                    .RunAsync(request.Directory, pin, request.SecretNames, path => CleanupGate.PinExempt(scope, path), cancellationToken)
-                    .ConfigureAwait(false);
-                await Say(gate.Passed ? "test: passed" : "test: failed").ConfigureAwait(false);
-                producer = _summary.AddRow("test", _clock.GetElapsedTime(testStart), gate.Passed ? "passed" : "failed");
-                redoTexts = !gate.Passed ? gate.Evidence : CleanupGate.LostTests(basePassed, gate);
+                (redoTexts, producer) = await RunGateAsync(testGate, cancellationToken).ConfigureAwait(false);
             }
 
             if (redoTexts.Count is 0)
             {
-                long apiStart = _clock.GetTimestamp();
-                ApiListing api = await ListApiAsync(sandbox, cancellationToken).ConfigureAwait(false);
-                redoTexts = api.Lines is null ? [api.Fault ?? ""] : ApiGate.Compare(baseApi.Lines, api.Lines);
-                if (api.Lines is not null)
-                {
-                    await Say(redoTexts.Count is 0 ? "api: same" : "api: changed").ConfigureAwait(false);
-                }
-
-                producer = _summary.AddRow("api", _clock.GetElapsedTime(apiStart), redoTexts.Count is 0 ? "same" : "changed");
+                (redoTexts, producer) = await RunGateAsync(apiGate, cancellationToken).ConfigureAwait(false);
             }
 
-            if (redoTexts.Count is 0 && gate is not null)
+            if (redoTexts.Count is 0)
             {
-                long checkStart = _clock.GetTimestamp();
-                CommandResult after = await RunCheckAsync(sandbox, check, cancellationToken).ConfigureAwait(false);
-                await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
-                producer = _summary.AddRow("check", _clock.GetElapsedTime(checkStart), after.ExitCode is 0 ? "green" : "red");
-                if (after.ExitCode is 0)
+                (redoTexts, producer) = await RunGateAsync(checkGate, cancellationToken).ConfigureAwait(false);
+                if (redoTexts.Count is 0)
                 {
                     await Say("review: start").ConfigureAwait(false);
                     ReviewPhaseResult review = await reviewPhase
@@ -606,7 +529,7 @@ public sealed class FactoryRun(
                     if (review.Approved)
                     {
                         await Say("deliver: start").ConfigureAwait(false);
-                        var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, gate, choice, redos));
+                        var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, testGate, choice, redos));
                         PullRequest pullRequest = await deliver
                             .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
                         return new FactoryRunResult(pullRequest, redos);
@@ -614,10 +537,6 @@ public sealed class FactoryRun(
 
                     redoTexts = review.Blocking;
                     producer = reviewRow;
-                }
-                else
-                {
-                    redoTexts = [CleanupGate.CheckRedo(after)];
                 }
             }
 
@@ -634,10 +553,30 @@ public sealed class FactoryRun(
         }
     }
 
-    private Task<ApiListing> ListApiAsync(Sandbox sandbox, CancellationToken cancellationToken) =>
-        ApiGate.ListAsync(sandbox, progress, log, cancellationToken);
+    /// <summary>Runs <paramref name="gate"/> between its two progress lines, adds its row, and gives its Redo texts and the name of the row.</summary>
+    private async Task<(IReadOnlyList<string> RedoTexts, string Row)> RunGateAsync(IGate gate, CancellationToken cancellationToken)
+    {
+        string name = gate.Name.Text();
+        await Say($"{name}: start").ConfigureAwait(false);
+        long start = _clock.GetTimestamp();
+        GateOutcome outcome = await gate.RunAsync(cancellationToken).ConfigureAwait(false);
+        await Say($"{name}: {outcome.Result}").ConfigureAwait(false);
+        return (outcome.RedoTexts, _summary.AddRow(name, _clock.GetElapsedTime(start), outcome.Result));
+    }
 
-    private DeliveryFacts Facts(RunAgents agents, string baseCommit, TestGateResult gate, RecipeChoice choice, int redos) => new(
+    /// <summary>Runs the check before the first phase, and posts the comment that stops the run when there is one.</summary>
+    private async Task<bool> PreCheckAsync(FactoryRunRequest request, Sandbox sandbox, string check, Recipe recipe, CancellationToken cancellationToken)
+    {
+        if (await CheckGate.PreCheckAsync(sandbox, check, recipe, progress, log, cancellationToken).ConfigureAwait(false) is not string stop)
+        {
+            return false;
+        }
+
+        await CommentAsync(request, stop, [], cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    private DeliveryFacts Facts(RunAgents agents, string baseCommit, TestGate gate, RecipeChoice choice, int redos) => new(
         baseCommit,
         gate.Tests?.Count(test => test.Outcome is TestOutcome.Passed) ?? 0,
         choice.Check is not null,
@@ -653,9 +592,6 @@ public sealed class FactoryRun(
         await CommentAsync(request, shown, [], cancellationToken).ConfigureAwait(false);
         return new FactoryRunResult(null, redos);
     }
-
-    private Task<CommandResult> RunCheckAsync(Sandbox sandbox, string command, CancellationToken cancellationToken) =>
-        CleanupGate.RunCheckAsync(sandbox, command, progress, cancellationToken, log);
 
     private async Task WriteSummaryAsync()
     {
