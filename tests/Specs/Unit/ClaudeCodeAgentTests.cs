@@ -230,4 +230,24 @@ public sealed class ClaudeCodeAgentTests : IDisposable
 
         await Assert.ThrowsAsync<ClaudeCodeException>(() => RunAsync(agent, "hi", "plan.md"));
     }
+
+    [Fact]
+    public async Task AFactoryDirectoryThatIsALinkBeforeThePromptThrowsAndDeletesNothingOutside()
+    {
+        DirectoryInfo outside = Directory.CreateDirectory(Path.Combine(_directory.FullName, "elsewhere"));
+        string kept = Path.Combine(outside.FullName, "plan.md");
+        File.WriteAllText(kept, "a file of the runner");
+        Directory.CreateSymbolicLink(Path.Combine(_tree.FullName, ".factory"), outside.FullName);
+        bool ran = false;
+        ClaudeCodeAgent agent = await AgentAsync(() =>
+        {
+            ran = true;
+            return new CommandResult { StandardOutput = Ok };
+        });
+
+        await Assert.ThrowsAsync<ClaudeCodeException>(() => RunAsync(agent, "hi", "plan.md"));
+
+        Assert.False(ran);
+        Assert.Equal("a file of the runner", File.ReadAllText(kept));
+    }
 }

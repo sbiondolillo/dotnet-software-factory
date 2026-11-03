@@ -26,6 +26,7 @@ public sealed class ClaudeCodeAgent(
 
         foreach (string name in request.Outputs)
         {
+            RefuseLink(name);
             string path = OutputPath(name);
             if (File.Exists(path))
             {
@@ -88,7 +89,8 @@ public sealed class ClaudeCodeAgent(
 
     /// <summary>Throws when the output <paramref name="name"/> or <c>.factory</c> is a symbolic link. The container writes the
     /// work tree, and a link would put a file of the runner in the answer, and from there in a comment. The check runs before
-    /// and after the read, so a swap during the read throws too.</summary>
+    /// the delete that comes before the prompt, so the delete stays under the work tree, and before and after the read, so a
+    /// swap during the read throws too.</summary>
     private void RefuseLink(string name)
     {
         if (new DirectoryInfo(Path.Combine(workTree, ".factory")).LinkTarget is not null || new FileInfo(OutputPath(name)).LinkTarget is not null)

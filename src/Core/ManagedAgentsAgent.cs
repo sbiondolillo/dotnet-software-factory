@@ -234,6 +234,7 @@ public sealed class ManagedAgentsAgent(
 
         var resources = new JsonArray();
         string factory = Path.Combine(workTree, ".factory");
+        RefuseLinkedFactory(factory);
         if (Directory.Exists(factory))
         {
             foreach (string path in Directory.EnumerateFiles(factory).Order(StringComparer.Ordinal))
@@ -536,6 +537,7 @@ public sealed class ManagedAgentsAgent(
         }
 
         string factory = Path.Combine(workTree, ".factory");
+        RefuseLinkedFactory(factory);
         var texts = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach ((string name, (string id, _)) in files)
         {
@@ -556,6 +558,16 @@ public sealed class ManagedAgentsAgent(
         }
 
         return (missing, texts);
+    }
+
+    /// <summary>Throws when <paramref name="factory"/> is a symbolic link. An upload from it would send a file of the runner to
+    /// the session, and a download into it would write outside the work tree.</summary>
+    private static void RefuseLinkedFactory(string factory)
+    {
+        if (new DirectoryInfo(factory).LinkTarget is not null)
+        {
+            throw new ClaudeCodeException("The directory .factory/ of the work tree is a symbolic link, so the host neither uploads from it nor downloads into it.");
+        }
     }
 
     private async Task<Dictionary<string, (string Id, DateTimeOffset At)>> ListFilesAsync(DateTimeOffset after, CancellationToken cancellationToken)

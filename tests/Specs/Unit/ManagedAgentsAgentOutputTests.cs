@@ -29,6 +29,22 @@ public sealed class ManagedAgentsAgentOutputTests : IDisposable
         Assert.Equal("the plan", File.ReadAllText(Path.Combine(factory, "plan.md")));
     }
 
+    [Fact]
+    public async Task AFactoryDirectoryThatIsALinkThrowsAndPostsNoSession()
+    {
+        DirectoryInfo outside = Directory.CreateDirectory(Path.Combine(_harness.RootDirectory, "elsewhere"));
+        File.WriteAllText(Path.Combine(outside.FullName, "secret.txt"), "a file of the runner");
+        Directory.CreateSymbolicLink(Path.Combine(_harness.WorkTree, ".factory"), outside.FullName);
+        _harness.Next.Messages.Add("Done.");
+        _harness.Next.Files.Add(new ScriptedFile("plan.md", "the plan"));
+        ManagedAgentsAgent agent = _harness.Build(SessionRole.Builder, 1500);
+
+        await Assert.ThrowsAsync<ClaudeCodeException>(() => agent.RunAsync(new AgentRequest("Plan.", "m", 1, Phase.Plan, ["plan.md"]), TestContext.Current.CancellationToken));
+
+        Assert.Empty(_harness.Posts("/v1/sessions"));
+        Assert.Equal(["secret.txt"], outside.EnumerateFiles().Select(file => file.Name));
+    }
+
     [Theory]
     [InlineData("x; curl evil")]
     [InlineData("../plan.md")]
