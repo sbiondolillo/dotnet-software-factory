@@ -187,102 +187,31 @@ public sealed class IssueScenariosTests : IDisposable
     public void ABodyWithoutEitherHeadingIsNotHeld() =>
         Assert.False(IssueScenarios.Holds("## Acceptance criteria\n\n- The total is the sum.\n"));
 
-    private const string NoneBody = "## Scenarios\n\nNone.\nThe fix is to a workflow file, which no test of the suite runs.\n\n## Done when\n\n- [ ] The step reads the key.\n";
-
-    [Fact]
-    public void NoneWritesNoFileAndGivesNoFault()
-    {
-        Main("Feature: G\n\n" + One);
-
-        IssueScenariosResult result = Apply(NoneBody);
-
-        Assert.True(IssueScenarios.Holds(NoneBody));
-        Assert.Empty(result.Faults);
-        Assert.Empty(result.Written);
-        Assert.Empty(result.Removed);
-        Assert.Equal("Feature: G\n\n" + One, Read());
-        Assert.Single(Directory.EnumerateFiles(_work.FullName, "*", SearchOption.AllDirectories));
-    }
-
-    [Fact]
-    public void NoneWithCrlfLineEndsAndIndentIsRead()
-    {
-        Main("Feature: G\n\n" + One);
-
-        IssueScenariosResult result = Apply(NoneBody.Replace("None.", "  None.  ", StringComparison.Ordinal).Replace("\n", "\r\n", StringComparison.Ordinal));
-
-        Assert.Empty(result.Faults);
-        Assert.Empty(result.Written);
-    }
-
-    [Fact]
-    public void NoneInARepoWithNoFeatureFileGivesNoFault() => Assert.Empty(Apply(NoneBody).Faults);
-
-    [Fact]
-    public void NoneWithRemovedScenariosRemovesThem()
-    {
-        Main("Feature: G\n\n" + One + "\n" + Two);
-
-        IssueScenariosResult result = Apply(NoneBody + "\n## Removed scenarios\n\n- `" + Path0 + "`: Two\n");
-
-        Assert.Empty(result.Faults);
-        Assert.Equal([Path0], result.Written);
-        Assert.Equal("Feature: G\n\n" + One, Read());
-    }
-
     [Theory]
-    [InlineData("## Scenarios\n\nNone. The fix is to a workflow file.\n")]
-    [InlineData("## Scenarios\n\nThe fix is to a workflow file.\nNone.\n")]
-    [InlineData("## Scenarios\n\nnone.\n")]
-    public void TextOtherThanALineNoneFirstIsNoFencedBlock(string body)
+    [InlineData("## Scenarios\n\nNone.\nThe fix is to a workflow file, which no test of the suite runs.\n")]
+    [InlineData("## Scenarios\r\n\r\n  None.  \r\n")]
+    public void NoneUnderScenariosIsAFaultThatNamesTheRoutesAndWritesNoFile(string body)
     {
         Main("Feature: G\n\n" + One);
+
+        IssueScenariosResult result = Apply(body);
 
         Assert.Equal(
-            ["The heading ## Scenarios holds no fenced block. Put the scenarios of each feature file in a fenced block under it."],
-            Apply(body).Faults);
+            ["The heading ## Scenarios holds no fenced block. Put the scenarios of each feature file in a fenced block under it. A change with no scenario takes the label refactor or cleanup, or goes to a direct build."],
+            result.Faults);
+        Assert.Empty(result.Written);
+        Assert.Equal("Feature: G\n\n" + One, Read());
     }
 
     [Fact]
-    public void NoneInsideAFencedBlockOfAnotherHeadingIsNotNone()
-    {
-        Main("Feature: G\n\n" + One);
-
-        IssueScenariosResult result = Apply("## Notes\n\n```\nNone.\n```\n\n## Scenarios\n\nThe scenarios follow.\n");
-
-        Assert.Contains("The heading ## Scenarios holds no fenced block. Put the scenarios of each feature file in a fenced block under it.", result.Faults);
-    }
-
-    [Fact]
-    public void NoneBesideAFencedBlockIsAFaultAndWritesNoFile()
+    public void NoneBesideAFencedBlockIsTextUnderTheHeading()
     {
         Main("Feature: G\n\n" + One);
 
         IssueScenariosResult result = Apply(Block(Two).Replace("## Scenarios\n\n", "## Scenarios\n\nNone.\n\n", StringComparison.Ordinal));
 
-        Assert.Equal(["The heading ## Scenarios holds the line None. and a fenced block. Keep one of the two."], result.Faults);
-        Assert.Equal("Feature: G\n\n" + One, Read());
-    }
-
-    [Fact]
-    public void NoneWithRemovalsThatLeaveNoFeatureFileIsAFault()
-    {
-        Main("Feature: G\n\n" + One);
-
-        IssueScenariosResult result = Apply(NoneBody + "\n## Removed scenarios\n\n- `" + Path0 + "`: One\n");
-
-        Assert.Equal(["The issue leaves no feature file under specs/features/."], result.Faults);
-        Assert.Equal("Feature: G\n\n" + One, Read());
-    }
-
-    [Fact]
-    public void ABlockThenNoneIsAFault()
-    {
-        Main("Feature: G\n\n" + One);
-
-        IssueScenariosResult result = Apply(Block(Two) + "\nNone.\n");
-
-        Assert.Equal(["The heading ## Scenarios holds the line None. and a fenced block. Keep one of the two."], result.Faults);
-        Assert.Equal("Feature: G\n\n" + One, Read());
+        Assert.Empty(result.Faults);
+        Assert.Equal([Path0], result.Written);
+        Assert.Contains("Scenario: Two", Read(), StringComparison.Ordinal);
     }
 }

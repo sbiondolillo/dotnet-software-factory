@@ -195,9 +195,6 @@ public sealed class IssueScenariosSteps(FactoryRunSteps factory, PlanPhaseSteps 
         _removed.Add(Removed(Greeting, "No name gets the world"));
     }
 
-    [Given("an issue whose ## Scenarios holds the line {string} and one sentence that says why")]
-    public void GivenNone(string line) => _body = $"## Scenarios\n\n{line}\nThe fix is to a workflow file, which no test of the suite runs.\n";
-
     [Given("a block whose step holds a doc string fenced with ``` and indented 6 spaces")]
     public void GivenDocStringBlock() => Whole(GreetingName, LetterText);
 
@@ -288,9 +285,8 @@ public sealed class IssueScenariosSteps(FactoryRunSteps factory, PlanPhaseSteps 
             case "blocks and removals that leave every file as it is on main":
                 Scenarios(Greeting, NameSpan);
                 break;
-            case "a ## Scenarios that holds the line \"None.\" and a fenced block":
-                Scenarios(Greeting, LongSpan);
-                _body = Compose().Replace("## Scenarios\n\n", "## Scenarios\n\nNone.\n\n", StringComparison.Ordinal);
+            case "a ## Scenarios whose first line is \"None.\"":
+                _body = "## Scenarios\n\nNone.\nThe fix is to a workflow file, which no test of the suite runs.\n";
                 break;
             case "both ## Scenarios and ## Acceptance criteria":
                 Scenarios(Greeting, LongSpan);
@@ -479,24 +475,8 @@ public sealed class IssueScenariosSteps(FactoryRunSteps factory, PlanPhaseSteps 
     public void ThenProgressEnds(string line) =>
         Assert.Equal(line, H.Progress.ToString().Split('\n').Select(l => l.TrimEnd('\r')).Last(l => l.Length > 0));
 
-    [Then("the work tree holds {string} as it is on main, and no other feature file")]
-    public void ThenOnlyMainFeature(string path)
-    {
-        Assert.Equal(_main[path], Read(path));
-        string features = Path.Combine(H.CloneDirectory, "specs", "features");
-        Assert.Equal(
-            [path],
-            Directory.EnumerateFiles(features, "*.feature", SearchOption.AllDirectories).Select(file => Path.GetRelativePath(H.CloneDirectory, file).Replace('\\', '/')));
-    }
-
     [Then("the first build prompt holds {string}")]
     public void ThenFirstBuildHolds(string text) => Assert.Contains(text, H.Prompts.First(p => p.Kind is "build").Text, StringComparison.Ordinal);
-
-    [Then("the first build prompt lacks {string}")]
-    public void ThenFirstBuildLacks(string text) => Assert.DoesNotContain(text, H.Prompts.First(p => p.Kind is "build").Text, StringComparison.Ordinal);
-
-    [Then("the run gives back a pull request")]
-    public void ThenPull() => Assert.NotNull(Result.PullRequest);
 
     [Then("the run gives back no pull request and {int} Redos")]
     public void ThenNoPull(int redos)

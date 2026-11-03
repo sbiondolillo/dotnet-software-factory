@@ -396,31 +396,6 @@ public sealed class PlanPhaseTests : IDisposable
     }
 
     [Fact]
-    public async Task ScenariosThatWriteNoFilePassWithThePlanAlone()
-    {
-        _h.Write("specs/features/a.feature", PlanPhaseHarness.SoundFeature);
-        _h.Text = RecipeRules.PlanText(Recipe.Behavior, new IssueScenariosResult([], [], []));
-        _h.AgentWrites(null, ".factory/plan.md", "No scenario applies.");
-
-        PlanPhaseResult result = await _h.RunAsync();
-
-        Assert.True(result.Passed, string.Join("; ", result.Failures));
-        Assert.Single(_h.Prompts);
-    }
-
-    [Fact]
-    public async Task ScenariosThatWriteNoFileFailAPlanThatAddsAFeatureFile()
-    {
-        _h.Text = RecipeRules.PlanText(Recipe.Behavior, new IssueScenariosResult([], [], []));
-        _h.AgentWritesSoundFiles(null);
-
-        PlanPhaseResult result = await _h.RunAsync();
-
-        Assert.False(result.Passed);
-        Assert.Contains(result.Failures, failure => failure.Contains("specs/features/", StringComparison.Ordinal));
-    }
-
-    [Fact]
     public async Task ThePromptWrapsTheIssueAroundTheLeadAndTheInstructions()
     {
         _h.Text = new PlanText("LEAD", "INSTRUCTIONS", PlanMode.PlanOnly);
