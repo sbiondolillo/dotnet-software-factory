@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
-"""The Copilot stage of the repair loop: a repair pull request gets a Copilot review, and every thread an answer.
+"""The Copilot stage of the repair loop: the step waits for the factory run that build.py started, and reads its
+conclusion.
 
-The job requests `copilot-pull-request-reviewer` on the pull request when its head holds no review by Copilot and
-no request is pending, as ConsoleCommands.WatchAsync does, and polls as PullRequestWatch does. Settled is a review
-by Copilot on the head, no refusal on the head, and zero unresolved threads.
+The factory run, started with `copilot=on`, owns the decision that Copilot is settled, as #509 decided. It requests
+the Copilot review, answers each thread through FeedbackRun for three rounds at most, and ends `success` only when
+every check is green, Copilot reviewed the head with no refusal, and no thread is unresolved. So this step asks one
+question, "did the run pass?", and reads no review and no thread.
 
-The builder of the first loop is factory.yml, which build.py starts with `copilot=on`, decided in #358. So the
-factory requests the review as well, and answers each thread through FeedbackRun within its run, three rounds at
-most, under FACTORY_SELF_TOKEN. This job waits while that run is in progress, and counts the rounds by the head: each
-push after the first head is one round. A refusal by Copilot, a thread still unresolved once the run ended, or a
-fourth round, is a comment on the issue and a stop for the head SHA. The Managed Agents
-builder, #370, answers each thread in a feedback session, and this job then posts the replies with its own token.
+- `success`: the step reads the head SHA of the pull request once, and writes `copilot=settled` and `sha=<head>`.
+- Any other conclusion: one comment under the marker `<!-- repair-copilot:<sha> -->`, on the issue the pull
+  request closes, or on the pull request when it closes none. The comment links the run and names its conclusion.
+  The step writes `copilot=unsettled` and `sha=<head>`. The run's log and job summary hold the reason.
+- No `completed` within the timeout: the step exits 1 with one line.
 
-Environment: GH_TOKEN, GITHUB_REPOSITORY, FACTORY_RUN (the id of the builder's run, optional),
-REPAIR_COPILOT_TIMEOUT_SECONDS (default 7200), REPAIR_POLL_SECONDS (default 30).
-Argument: the number of the repair pull request. The result goes to GITHUB_OUTPUT as `copilot`, one of `settled`,
-`refused` or `unanswered`, with the head SHA as `sha`, for the merge stage.
+A pull request that is closed or lacks the label `repair` ends the step with no output, and the run is never read,
+even with FACTORY_RUN unset.
+
+Environment: GH_TOKEN, GITHUB_REPOSITORY, FACTORY_RUN (the id of the factory run, the step output `run` of build.py,
+required), REPAIR_COPILOT_TIMEOUT_SECONDS (default 7200), REPAIR_POLL_SECONDS (default 30).
+Argument: the number of the repair pull request. The result goes to GITHUB_OUTPUT as `copilot`, `settled` or
+`unsettled`, with the head SHA as `sha`, for the merge stage.
 """
 
 import json
@@ -28,57 +32,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from judge import gh  # noqa: E402
 
 LABEL = "repair"
-REVIEWER = "copilot-pull-request-reviewer"
-REFUSAL = "Copilot was unable to review this pull request"
 MARKER = "<!-- repair-copilot:{sha} -->"
-WORKFLOW = "factory.yml"
-ROUNDS = 3
-QUERY = """query($o: String!, $r: String!, $n: Int!) { repository(owner: $o, name: $r) { pullRequest(number: $n) {
-  id state headRefOid body labels(first: 50) { nodes { name } }
-  reviewRequests(first: 50) { nodes { requestedReviewer { ... on Bot { login } ... on User { login } } } }
-  reviews(first: 100) { nodes { state body author { login } commit { oid } } }
-  reviewThreads(first: 100) { nodes { id isResolved } } } } }"""
-REQUEST = (
-    "mutation($id: ID!, $logins: [String!]) "
-    "{ requestReviewsByLogin(input: {pullRequestId: $id, botLogins: $logins}) { pullRequest { id } } }"
-)
+FIELDS = "state,labels,body,headRefOid"
 
 
 def read_pull_request(repo, number):
-    owner, name = repo.split("/")
-    answer = json.loads(
-        gh("api", "graphql", "-f", f"query={QUERY}", "-F", f"o={owner}", "-F", f"r={name}", "-F", f"n={number}")
-    )
-    return answer["data"]["repository"]["pullRequest"]
-
-
-def reviews_on(pr, sha):
-    """The reviews by Copilot on a commit, in GitHub's order, oldest first."""
-    return [
-        r
-        for r in pr["reviews"]["nodes"]
-        if (r.get("author") or {}).get("login") == REVIEWER and ((r.get("commit") or {}).get("oid") or "") == sha
-    ]
-
-
-def refusal(pr, sha):
-    """The body of the last review by Copilot on the commit when it is a refusal, or None, as Review.Refusal."""
-    last = reviews_on(pr, sha)[-1:] or [None]
-    if last[0] and last[0].get("state") == "COMMENTED" and (last[0].get("body") or "").startswith(REFUSAL):
-        return last[0]["body"]
-    return None
-
-
-def requested(pr):
-    return any((n.get("requestedReviewer") or {}).get("login") == REVIEWER for n in pr["reviewRequests"]["nodes"])
-
-
-def unresolved(pr):
-    return [t["id"] for t in pr["reviewThreads"]["nodes"] if not t["isResolved"]]
-
-
-def request_review(pr):
-    gh("api", "graphql", "-f", f"query={REQUEST}", "-F", f"id={pr['id']}", "-f", f"logins[]={REVIEWER}")
+    return json.loads(gh("pr", "view", str(number), "-R", repo, "--json", FIELDS))
 
 
 def closing_issue(body):
@@ -86,29 +45,20 @@ def closing_issue(body):
     return int(match.group(1)) if match else None
 
 
-def builder_running(repo):
-    """Whether the builder's run is in progress: the run FACTORY_RUN names, or any run of factory.yml by
-    workflow_dispatch otherwise. The owner's label runs do not count."""
-    run_id = os.environ.get("FACTORY_RUN")
-    if run_id:
-        return json.loads(gh("run", "view", run_id, "-R", repo, "--json", "status"))["status"] != "completed"
-    runs = json.loads(
-        gh(
-            "run",
-            "list",
-            "-R",
-            repo,
-            "--workflow",
-            WORKFLOW,
-            "--event",
-            "workflow_dispatch",
-            "--limit",
-            "30",
-            "--json",
-            "status",
-        )
-    )
-    return any(run["status"] != "completed" for run in runs)
+def run_url(repo, run_id):
+    return f"https://github.com/{repo}/actions/runs/{run_id}"
+
+
+def wait_for_run(repo, run_id, deadline, wait):
+    """The conclusion of the run once its status is `completed`. The step exits 1 when the deadline passes first."""
+    while True:
+        run = json.loads(gh("run", "view", run_id, "-R", repo, "--json", "status,conclusion"))
+        if run["status"] == "completed":
+            return run["conclusion"]
+        if time.time() >= deadline:
+            sys.exit(f"repair: the factory run {run_url(repo, run_id)} is {run['status']} after the timeout")
+        print(f"repair: the factory run {run_url(repo, run_id)} is {run['status']}; waiting")
+        time.sleep(max(0, min(wait, deadline - time.time())))
 
 
 def output(**values):
@@ -117,16 +67,14 @@ def output(**values):
             out.write(f"{name}={value}\n")
 
 
-def stop(repo, number, issue, sha, result, text):
-    """One comment on the issue for the SHA, then the result for the merge stage. The comment goes on the pull
-    request when it closes no issue."""
+def stop(repo, number, issue, sha, text):
+    """One comment for the SHA, on the issue, or on the pull request when it closes no issue."""
     target = ("issue", str(issue)) if issue is not None else ("pr", str(number))
     comments = gh("api", f"repos/{repo}/issues/{target[1]}/comments", "--paginate", "--jq", ".[].body")
     marker = MARKER.format(sha=sha)
     if marker not in comments:
         gh(target[0], "comment", target[1], "-R", repo, "--body-file", "-", input_text=f"{marker}\n{text}")
-    output(copilot=result, sha=sha)
-    print(f"repair: {result} on {sha[:7]}: {text.splitlines()[0]}")
+    print(f"repair: unsettled on {sha[:7]}: {text.splitlines()[0]}")
 
 
 def main():
@@ -137,70 +85,28 @@ def main():
         else sys.exit("repair: give the number of a repair pull request")
     )
     pr = read_pull_request(repo, number)
-    labels = [item["name"] for item in pr["labels"]["nodes"]]
+    labels = [item["name"] for item in pr["labels"]]
     if pr["state"] != "OPEN" or LABEL not in labels:
         print(f"repair: pull request #{number} is {pr['state'].lower()} with the labels {labels}; nothing to watch")
         return
-    issue = closing_issue(pr["body"])
+    run_id = os.environ.get("FACTORY_RUN") or sys.exit("repair: FACTORY_RUN is not set; there is no run to wait on")
     wait = int(os.environ.get("REPAIR_POLL_SECONDS", "30"))
     deadline = time.time() + int(os.environ.get("REPAIR_COPILOT_TIMEOUT_SECONDS", "7200"))
-    asked = set()
-    heads = [pr["headRefOid"]]
-    while True:
-        sha = pr["headRefOid"]
-        if sha != heads[-1]:
-            heads.append(sha)
-            if len(heads) > ROUNDS + 1:
-                stop(
-                    repo,
-                    number,
-                    issue,
-                    sha,
-                    "unanswered",
-                    f"Pull request #{number} took {ROUNDS} rounds of answers to Copilot, and `{sha}` starts a fourth. "
-                    f"The loop stops for this SHA. The owner reads the threads.",
-                )
-                return
-        if (body := refusal(pr, sha)) is not None:
-            stop(
-                repo,
-                number,
-                issue,
-                sha,
-                "refused",
-                f"Copilot refused to review pull request #{number} on `{sha}`. The loop stops for this SHA.\n\n"
-                f"> {body.splitlines()[0]}",
-            )
-            return
-        threads = unresolved(pr)
-        if reviews_on(pr, sha):
-            if not threads:
-                output(copilot="settled", sha=sha)
-                print(f"repair: Copilot reviewed {sha[:7]} and every thread is resolved")
-                return
-            if not builder_running(repo):
-                stop(
-                    repo,
-                    number,
-                    issue,
-                    sha,
-                    "unanswered",
-                    f"Copilot left {len(threads)} unresolved thread{'s' if len(threads) != 1 else ''} "
-                    f"on `{sha}` of pull request #{number}, "
-                    f"and the builder's run ended. The loop stops for this SHA. The owner reads the threads.",
-                )
-                return
-        elif sha not in asked and not requested(pr):
-            request_review(pr)
-            asked.add(sha)
-            print(f"repair: requested a review by {REVIEWER} on {sha[:7]}")
-        if time.time() >= deadline:
-            sys.exit(
-                f"repair: pull request #{number} is not settled on {sha[:7]} after the timeout: "
-                f"{len(reviews_on(pr, sha))} reviews by Copilot on the head, {len(threads)} unresolved threads"
-            )
-        time.sleep(wait)
-        pr = read_pull_request(repo, number)
+    conclusion = wait_for_run(repo, run_id, deadline, wait)
+    sha = read_pull_request(repo, number)["headRefOid"]
+    if conclusion == "success":
+        output(copilot="settled", sha=sha)
+        print(f"repair: the factory run {run_url(repo, run_id)} passed; settled on {sha[:7]}")
+        return
+    stop(
+        repo,
+        number,
+        closing_issue(pr["body"]),
+        sha,
+        f"The factory run {run_url(repo, run_id)} of pull request #{number} ended `{conclusion}` on `{sha}`. "
+        "The loop stops for this head. The owner reads the run: its log and job summary name the reason.",
+    )
+    output(copilot="unsettled", sha=sha)
 
 
 if __name__ == "__main__":

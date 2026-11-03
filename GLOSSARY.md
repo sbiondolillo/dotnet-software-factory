@@ -46,6 +46,10 @@ _Avoid_: redo loop, inner loop, attempt
 The end of a run before its first phase, on a fault of the issue's author, such as two recipe labels that exclude each other or a cleanup with no scope. The run posts the reason as a comment and builds nothing.
 _Avoid_: refusal, rejection (a rejection is the review's verdict on a build)
 
+**Settled**:
+A pull request whose factory run passed. Every check is green, Copilot reviewed the head with no refusal, and no thread is unresolved.
+_Avoid_: approved (an approval is the judge's verdict), reviewed
+
 ## Issue sections
 
 **Scope**:
