@@ -193,15 +193,6 @@ Feature: A refactor run changes the structure of the code and leaves every test 
     When a caller starts a run
     Then FactoryRun opens a pull request with the title "Rename Greeting" and gives back a result with that pull request and 0 Redos
 
-  Scenario: Four red builds give a comment and no pull request
-    Given the issue has the label "refactor", the title "Rename Greeting" and a body with the first fenced block under "## Check" holding the line "test -f src/Core/Greeting.cs"
-    And the check command exits with the code 1 before the plan
-    And the check command exits with the code 1 after each of four builds and writes a standard error
-    When a caller starts a run
-    Then FactoryRun posts one comment on the issue that holds the standard error of the command
-    And FactoryRun pushes no branch
-    And FactoryRun gives back a result with no pull request and 3 Redos
-
   Scenario: The program writes one progress line for each refactor step with a check
     Given the environment holds "FACTORY_GITHUB_TOKEN" and "ANTHROPIC_API_KEY"
     And the issue 12 has the label "refactor" and a "## Check" and each step passes

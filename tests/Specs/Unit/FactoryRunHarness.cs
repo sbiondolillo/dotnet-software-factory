@@ -7,7 +7,7 @@ using Moq;
 namespace Specs.Unit;
 
 /// <summary>One prompt the agent got: its kind (plan, build or review), model, turn limit and text.</summary>
-public sealed record SeenPrompt(string Kind, string Model, string Turns, string Text, int BuildsBefore);
+public sealed record SeenPrompt(string Kind, string Model, string Turns, string Text);
 
 /// <summary>One request GitHub got.</summary>
 public sealed record SeenRequest(string Method, string Uri, string? Content);
@@ -431,7 +431,7 @@ public sealed class FactoryRunHarness : IDisposable
             _reviews++;
         }
 
-        Prompts.Add(new SeenPrompt(kind, model, turns, text, _builds));
+        Prompts.Add(new SeenPrompt(kind, model, turns, text));
         bool refactor = Labels.Contains("refactor");
         bool planOnly = refactor || text.Contains("Write no other file:", StringComparison.Ordinal);
         if (kind is "plan" && AgentWritesPlan)

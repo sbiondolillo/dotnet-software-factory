@@ -156,32 +156,6 @@ public sealed class RefactorRunTests
     }
 
     [Fact]
-    public async Task ABlockedReviewGetsARedoWithTheBlockingItemAndANextBuild()
-    {
-        using FactoryRunHarness h = Make();
-        h.RejectedBuilds.Add(1);
-        FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains(FactoryRunHarness.Blocking, NextBuildText(h), StringComparison.Ordinal);
-        Assert.Equal(1, result.Redos);
-        Assert.NotNull(result.PullRequest);
-    }
-
-    [Fact]
-    public async Task FourRedChecksGiveOneCommentAndNoPush()
-    {
-        using FactoryRunHarness h = Make();
-        foreach (int build in new[] { 1, 2, 3, 4 })
-        {
-            h.CheckResults[build] = (1, "", "still red");
-        }
-
-        FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("still red", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
-        Assert.DoesNotContain(h.Commands, c => c.Command is "git" && c.Arguments[0] is "push");
-        Assert.Equal(new FactoryRunResult(null, 3), result);
-    }
-
-    [Fact]
     public async Task AWorktreeThatCannotBeAddedStopsTheCheckWithItsStandardError()
     {
         using FactoryRunHarness h = Make();

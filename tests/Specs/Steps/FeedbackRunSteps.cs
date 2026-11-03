@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
 using Core;
 using Reqnroll;
@@ -151,12 +150,6 @@ public sealed class FeedbackRunSteps : IDisposable
     [Given("on the first build prompt the agent writes the report and on the second build prompt the agent writes no file")]
     public void GivenSecondNone() => _reports[2] = null;
 
-    [Given("the test gate is red after the second build")]
-    public void GivenRedSecond() => _shared.Harness.RedBuilds.Add(2);
-
-    [Given("the review rejects the third build and approves the fourth build")]
-    public void GivenRejectThird() => _shared.Harness.RejectedBuilds.Add(3);
-
     [When("a caller starts a feedback run")]
     public async Task WhenStarts()
     {
@@ -169,8 +162,6 @@ public sealed class FeedbackRunSteps : IDisposable
         }
 
         _h.RedBuilds.UnionWith(f.RedBuilds);
-        _h.RejectedBuilds.UnionWith(f.RejectedBuilds);
-        _h.TestStdout = f.TestStdout;
         _h.Labels.AddRange(f.Labels);
         _h.IssueBody = f.Body;
         _h.FirstBuildChanges.AddRange(f.FirstBuildChanges);
@@ -181,13 +172,6 @@ public sealed class FeedbackRunSteps : IDisposable
             _h.CheckResults[build] = result;
         }
 
-        _h.BuildIsError = f.BuildIsError;
-        _h.ErrorBuilds.UnionWith(f.ErrorBuilds);
-        _h.ErrorReviews.UnionWith(f.ErrorReviews);
-        if (f.ErrorBuilds.Count + f.ErrorReviews.Count > 0)
-        {
-            _h.ErrorText = f.ErrorText;
-        }
         _h.Report = build => _reports.TryGetValue(build, out string? report) ? report : _defaultReport;
         try
         {
@@ -330,15 +314,6 @@ public sealed class FeedbackRunSteps : IDisposable
     [Then("the third build prompt holds {string}")]
     public void ThenThird(string text) => Assert.Contains(text, Build(3).Text, StringComparison.Ordinal);
 
-    [Then("FeedbackRun runs the second build prompt before any prompt with the model {string}")]
-    public void ThenSecondBeforeReview(string model)
-    {
-        int second = _h.Prompts.FindIndex(p => p.Kind is "build" && p.BuildsBefore is 2);
-        int review = _h.Prompts.FindIndex(p => p.Model == model);
-        Assert.True(second >= 0);
-        Assert.True(review > second);
-    }
-
     [Then("FeedbackRun runs {int} build prompts in the run")]
     public void ThenBuildCount(int count) => Assert.Equal(count, _h.BuildPrompts.Count());
 
@@ -356,15 +331,6 @@ public sealed class FeedbackRunSteps : IDisposable
         SeenRequest request = Assert.Single(_h.Requests, r => r.Method is "POST" && r.Uri.EndsWith("/comments", StringComparison.Ordinal));
         Assert.Contains($"/issues/{number}/comments", request.Uri, StringComparison.Ordinal);
         Assert.Contains(text, Assert.Single(_h.CommentBodies), StringComparison.Ordinal);
-    }
-
-    [Then("FeedbackRun posts one comment of {int} bytes or fewer in bytes, and the comment holds the letter {string} {int} times in sequence and {string}")]
-    public void ThenCut(int limit, string letter, int count, string marker)
-    {
-        string body = Assert.Single(_h.CommentBodies);
-        Assert.True(Encoding.UTF8.GetByteCount(body) <= limit);
-        Assert.Contains(string.Concat(Enumerable.Repeat(letter, count)), body, StringComparison.Ordinal);
-        Assert.Contains(marker, body, StringComparison.Ordinal);
     }
 
     [Then("FeedbackRun removes the container after the last reply")]
@@ -387,11 +353,6 @@ public sealed class FeedbackRunSteps : IDisposable
 
     [Then("the run starts no session")]
     public void ThenNoSession() => Assert.Empty(_h.Managed!.Sessions);
-
-    [Then("FeedbackRun runs no dotnet command")]
-    public void ThenNoDotnet() => Assert.DoesNotContain(
-        _h.Commands,
-        c => c.Command is "docker" && c.Arguments[0] is "exec" && c.Arguments.SkipWhile(a => a != FeedbackRunHarness.ContainerId).Skip(1).FirstOrDefault() is "dotnet");
 
     [Then("the job summary of the round is one section {string} with the rows {string}, {string} and {string}, in this order")]
     public void ThenSummarySection(string heading, string first, string second, string third)

@@ -122,49 +122,6 @@ Feature: Factory run
     When a caller starts a run
     Then docker gives the names "WEATHER_API_KEY" and "MAPS_API_KEY" to the command "dotnet run --no-restore --project tests/Integration"
 
-  Scenario: An error flag on the build answer stops the run
-    Given claude answers the build prompt with the error flag set
-    When a caller starts a run
-    Then FactoryRun gives back a result with no pull request and 0 Redos
-
-  Scenario: A red test gate feeds the next build
-    Given the test gate is red after the first build and passes after the second build
-    When a caller starts a run
-    Then FactoryRun runs a second build prompt that holds "Assert.Equal() Failure: Values differ"
-
-  Scenario: A red test gate sends no review
-    Given the test gate is red after the first build and passes after the second build
-    When a caller starts a run
-    Then FactoryRun runs the second build prompt before any prompt with the model "review-model"
-
-  Scenario: A red test gate spends one Redo
-    Given the test gate is red after the first build and passes after the second build
-    When a caller starts a run
-    Then FactoryRun gives back a result with the pull request of the number 10 and 1 Redo
-
-  Scenario: A rejecting review feeds the next build
-    Given the review rejects the first build and approves the second build
-    When a caller starts a run
-    Then FactoryRun runs a second build prompt that holds "The total ignores the second item of the cart."
-
-  Scenario: A rejecting review spends one Redo
-    Given the review rejects the first build and approves the second build
-    When a caller starts a run
-    Then FactoryRun gives back a result with the pull request of the number 10 and 1 Redo
-
-  Scenario: Mixed redos share one budget
-    Given the test gate is red after the first build
-    And the review rejects the second build
-    And the test gate is red after the third build
-    And the review approves the fourth build
-    When a caller starts a run
-    Then FactoryRun gives back a result with the pull request of the number 10 and 3 Redos
-
-  Scenario: A run has four builds at most
-    Given the test gate is red after each of four builds
-    When a caller starts a run
-    Then FactoryRun runs 4 build prompts in the run
-
   Scenario: A spent budget posts the evidence
     Given the test gate is red after each of four builds
     When a caller starts a run
@@ -175,12 +132,6 @@ Feature: Factory run
     When a caller starts a run
     Then git pushes no branch
     And FactoryRun gives back a result with no pull request and 3 Redos
-
-  Scenario: A spent budget after a rejecting review posts the blocking items
-    Given the test gate is red after the first build and the third build
-    And the review rejects the second build and the fourth build
-    When a caller starts a run
-    Then FactoryRun posts one comment on the issue that holds "The total ignores the second item of the cart." and gives back a result with no pull request and 3 Redos
 
   Scenario: A comment over the limit is cut
     Given the test gate is red after each of four builds

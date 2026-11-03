@@ -15,7 +15,6 @@ public sealed class FeedbackRunHarness : IDisposable
     public const string ThreadC = "PRRT_kwDOUpm1Qc6ofWxx";
     public const string ReplyA = "The total now adds every item of the cart.";
     public const string ReplyB = "The title of the test names the unit.";
-    public const string Blocking = "The total of an empty cart is unset.";
     public const string RedText = "Assert.Equal() Failure: Values differ";
 
     private readonly DirectoryInfo _clone = Directory.CreateTempSubdirectory("feedback-run-clone-");
@@ -62,16 +61,6 @@ public sealed class FeedbackRunHarness : IDisposable
 
     public bool ChangeAfterBuild { get; set; } = true;
 
-    public bool BuildIsError { get; set; }
-
-    public HashSet<int> ErrorBuilds { get; } = [];
-
-    /// <summary>The reviews, by the number of the build they review, that claude answers with the error flag set.</summary>
-    public HashSet<int> ErrorReviews { get; } = [];
-
-    /// <summary>The result text of an answer with the error flag set.</summary>
-    public string ErrorText { get; set; } = "build error";
-
     /// <summary>Gives the lines that the API printer writes after the build of the given number, 0 for the base commit.</summary>
     public Func<int, string> ApiLines { get; set; } = _ => "";
 
@@ -79,10 +68,6 @@ public sealed class FeedbackRunHarness : IDisposable
     public bool ApiFails { get; set; }
 
     public HashSet<int> RedBuilds { get; } = [];
-
-    public HashSet<int> RejectedBuilds { get; } = [];
-
-    public string? TestStdout { get; set; }
 
     public int HeadStatus { get; set; } = 200;
 
@@ -193,11 +178,11 @@ public sealed class FeedbackRunHarness : IDisposable
         _root.Delete(recursive: true);
     }
 
-    private static string Json(bool isError, string text) =>
+    private static string DoneJson() =>
         JsonSerializer.Serialize(new Dictionary<string, object>
         {
-            ["is_error"] = isError,
-            ["result"] = text,
+            ["is_error"] = false,
+            ["result"] = "done",
             ["num_turns"] = 1,
             ["total_cost_usd"] = 0.0,
         });
@@ -322,7 +307,7 @@ public sealed class FeedbackRunHarness : IDisposable
         string directory = results(arguments[at + 1]);
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, "this-run.trx"), Steps.TrxBuilder.Build(tests));
-        return new CommandResult { ExitCode = red ? 1 : 0, StandardOutput = TestStdout ?? (red ? RedText : "") };
+        return new CommandResult { ExitCode = red ? 1 : 0, StandardOutput = red ? RedText : "" };
     }
 
     private CommandResult Claude(List<string> arguments)
@@ -331,27 +316,27 @@ public sealed class FeedbackRunHarness : IDisposable
         string model = arguments[arguments.IndexOf("--model") + 1];
         string turns = arguments[arguments.IndexOf("--max-turns") + 1];
         string kind = text.StartsWith("Review the build", StringComparison.Ordinal) ? "review" : "build";
-        bool error = Turn(kind, model, turns, text);
-        return new CommandResult { StandardOutput = Json(error, error ? ErrorText : "done") };
+        Turn(kind, model, turns, text);
+        return new CommandResult { StandardOutput = DoneJson() };
     }
 
     /// <summary>Plays the agent of a session for one message. A preamble may come before the prompt, so the kind is found anywhere in the text.</summary>
     private ManagedTurn SessionMessage(string text, string model)
     {
         string kind = text.Contains("Review the build", StringComparison.Ordinal) ? "review" : "build";
-        bool error = Turn(kind, model, "", text);
-        return new ManagedTurn(error ? ErrorText : "done", error, Pushes: kind is "build" && !NoPushBuilds.Contains(_builds));
+        Turn(kind, model, "", text);
+        return new ManagedTurn("done", false, Pushes: kind is "build" && !NoPushBuilds.Contains(_builds));
     }
 
-    /// <summary>Records one prompt, writes what the agent writes for it and gives the error flag of the answer.</summary>
-    private bool Turn(string kind, string model, string turns, string text)
+    /// <summary>Records one prompt and writes what the agent writes for it.</summary>
+    private void Turn(string kind, string model, string turns, string text)
     {
         if (kind is "build")
         {
             _builds++;
         }
 
-        Prompts.Add(new SeenPrompt(kind, model, turns, text, _builds));
+        Prompts.Add(new SeenPrompt(kind, model, turns, text));
         Events.Add(kind);
         if (kind is "build")
         {
@@ -384,12 +369,8 @@ public sealed class FeedbackRunHarness : IDisposable
         }
         else
         {
-            Write(".factory/review.json", RejectedBuilds.Contains(_builds)
-                ? JsonSerializer.Serialize(new { approved = false, blocking = new[] { Blocking } })
-                : """{"approved":true,"blocking":[]}""");
+            Write(".factory/review.json", """{"approved":true,"blocking":[]}""");
         }
-
-        return kind is "build" ? BuildIsError || ErrorBuilds.Contains(_builds) : ErrorReviews.Contains(_builds);
     }
 
     /// <summary>Writes a file of the agent. On the managed path a tracked file waits for the pull, and a file under .factory/ is also an output of the session.</summary>

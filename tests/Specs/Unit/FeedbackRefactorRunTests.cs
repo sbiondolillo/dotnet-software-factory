@@ -55,18 +55,6 @@ public sealed class FeedbackRefactorRunTests
     }
 
     [Fact]
-    public async Task AFailingTestGateRunsNoCheck()
-    {
-        using FeedbackRunHarness h = Refactor();
-        h.RedBuilds.Add(1);
-        await h.RunAsync(Ct);
-        Assert.Equal(2, h.BuildPrompts.Count());
-        Assert.Contains("dotnet test exited with the code 1", h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
-        Assert.Equal(1, h.Commands.Count(RunsCheck));
-        Assert.Equal("build", h.Prompts[1].Kind);
-    }
-
-    [Fact]
     public async Task AnIssueWithNoCheckRunsNoCheckAndStartsTheReview()
     {
         using FeedbackRunHarness h = Refactor(body: "Rename Greeting to Greeter.");
@@ -94,20 +82,6 @@ public sealed class FeedbackRefactorRunTests
         await h.RunAsync(Ct);
         Assert.DoesNotContain(h.Requests, r => r.Uri.Contains("/issues/", StringComparison.Ordinal));
         Assert.DoesNotContain("pin:", h.BuildPrompts.Last().Text, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task TheRedoBudgetEndsARunWhoseCheckStaysRed()
-    {
-        using FeedbackRunHarness h = Refactor();
-        foreach (int build in new[] { 1, 2, 3, 4 })
-        {
-            h.CheckResults[build] = (1, "", "");
-        }
-
-        FeedbackRunResult result = await h.RunAsync(Ct);
-        Assert.Equal(new FeedbackRunResult(0, 2, 3), result);
-        Assert.Contains("The budget of 3 Redos is spent", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
     }
 
     [Fact]

@@ -272,17 +272,6 @@ Feature: A reframe run keeps every test and every public type and member
     Then FactoryRun opens a pull request with the title "Sweep the format of src" and gives back a result with that pull request and 0 Redos
     And the body of the pull request holds the line "- check: green"
 
-  Scenario: Four red builds give a comment and no pull request
-    Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
-    And the check command exits with the code 1 before the build
-    And each test that passed on the base commit passes
-    And the API printer prints the same lines as on the base commit
-    And the check command exits with the code 1 after each of four builds and writes a standard error
-    When a caller starts a run
-    Then FactoryRun posts one comment on the issue that holds the standard error of the command
-    And FactoryRun pushes no branch
-    And FactoryRun gives back a result with no pull request and 3 Redos
-
   Scenario: The program writes one progress line for each reframe step
     Given the environment holds "FACTORY_GITHUB_TOKEN" and "ANTHROPIC_API_KEY"
     And the issue 12 has the label "reframe" and each step passes

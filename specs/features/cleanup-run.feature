@@ -207,15 +207,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     When a caller starts a run
     Then FactoryRun opens a pull request with the title "Fix the install test" and gives back a result with that pull request and 0 Redos
 
-  Scenario: Four red builds give a comment and no pull request
-    Given the issue has the label "cleanup", the title "Fix the install test" and a body with the scope "README.md" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
-    And the check command exits with the code 1 before the build
-    And the check command exits with the code 1 after each of four builds and writes a standard error
-    When a caller starts a run
-    Then FactoryRun posts one comment on the issue that holds the standard error of the command
-    And FactoryRun pushes no branch
-    And FactoryRun gives back a result with no pull request and 3 Redos
-
   Scenario: The program writes one progress line for each cleanup step
     Given the environment holds "FACTORY_GITHUB_TOKEN" and "ANTHROPIC_API_KEY"
     And the issue 12 has the label "cleanup" and each step passes

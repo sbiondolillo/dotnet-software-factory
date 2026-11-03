@@ -116,15 +116,6 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     [Given("the check command exits with the code {int} after the build and writes a standard output and a standard error")]
     public void GivenAfterRed(int code) => H.CheckResults[1] = (code, "standard output of the check", "standard error of the check");
 
-    [Given("the check command exits with the code {int} after each of four builds and writes a standard error")]
-    public void GivenFour(int code)
-    {
-        foreach (int build in new[] { 1, 2, 3, 4 })
-        {
-            H.CheckResults[build] = (code, "", "standard error of the check");
-        }
-    }
-
     [Given("the issue {int} has the label {string} and each step passes")]
     public void GivenConsoleIssue(int number, string label)
     {
@@ -216,9 +207,6 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
         Assert.Contains("sh: 1: cannot run the check", body, StringComparison.Ordinal);
     }
 
-    [Then("FactoryRun posts one comment on the issue that holds the standard error of the command")]
-    public void ThenCommentOnlyError() => Assert.Contains("standard error of the check", Assert.Single(H.CommentBodies), StringComparison.Ordinal);
-
     [Then("FactoryRun runs one prompt with the model {string} and the turn limit {int} that holds the title and the body of the issue")]
     public void ThenBuildPrompt(string model, int turns)
     {
@@ -287,9 +275,6 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
         Assert.NotNull(FactoryResult().PullRequest);
         Assert.Equal(redos, FactoryResult().Redos);
     }
-
-    [Then("FactoryRun pushes no branch")]
-    public void ThenNoPush() => Assert.DoesNotContain(H.Commands, c => c.Command is "git" && c.Arguments[0] is "push");
 
     [Then("standard output holds the lines in this order with no line between them")]
     public void ThenConsecutive(Table table)

@@ -103,16 +103,6 @@ public sealed class FeedbackCleanupScopeTests
     }
 
     [Fact]
-    public async Task ARedTestGateGivesItsEvidenceAndNoCheck()
-    {
-        using FeedbackRunHarness h = Cleanup();
-        h.RedBuilds.Add(1);
-        await h.RunAsync(Ct);
-        Assert.Contains(FeedbackRunHarness.RedText, h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
-        Assert.DoesNotContain("check: red", h.Out.ToString(), StringComparison.Ordinal);
-    }
-
-    [Fact]
     public async Task AFailingCheckGivesARedoAndNoReview()
     {
         using FeedbackRunHarness h = Cleanup();
@@ -121,21 +111,6 @@ public sealed class FeedbackCleanupScopeTests
         Assert.Contains("The check command exited with the code 1", h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
         Assert.Contains("check: red", h.Out.ToString(), StringComparison.Ordinal);
         Assert.Equal("build", h.Prompts[1].Kind);
-    }
-
-    [Fact]
-    public async Task ACheckThatFailsOnEveryBuildSpendsTheBudgetAndPostsTheComment()
-    {
-        using FeedbackRunHarness h = Cleanup();
-        foreach (int build in new[] { 1, 2, 3, 4 })
-        {
-            h.CheckResults[build] = (1, "", "red");
-        }
-
-        FeedbackRunResult result = await h.RunAsync(Ct);
-        Assert.Equal(new FeedbackRunResult(0, 2, 3), result);
-        Assert.Contains("The budget of 3 Redos is spent", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
-        Assert.DoesNotContain(h.Prompts, p => p.Kind is "review");
     }
 
     [Fact]

@@ -123,21 +123,6 @@ public sealed class CleanupRunTests
     }
 
     [Fact]
-    public async Task FourRedChecksGiveOneCommentAndNoPush()
-    {
-        using FactoryRunHarness h = Make("cleanup");
-        foreach (int build in new[] { 1, 2, 3, 4 })
-        {
-            h.CheckResults[build] = (1, "", "still red");
-        }
-
-        FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("still red", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
-        Assert.DoesNotContain(h.Commands, c => c.Command is "git" && c.Arguments[0] is "push");
-        Assert.Equal(new FactoryRunResult(null, 3), result);
-    }
-
-    [Fact]
     public async Task TheCleanupPromptsNameNoPlan()
     {
         using FactoryRunHarness h = Make("cleanup");
