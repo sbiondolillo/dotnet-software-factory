@@ -55,7 +55,7 @@ public sealed class ManagedAgentsAgent(
     /// <inheritdoc />
     public override async Task<AgentAnswer> RunAsync(AgentRequest request, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        RefuseUnsafeOutputs(request);
         ObjectDisposedException.ThrowIf(_disposed, this);
         string prompt = request.Prompt;
         string model = request.Model;
@@ -541,10 +541,17 @@ public sealed class ManagedAgentsAgent(
         {
             byte[] bytes = await client.DownloadAsync(id, cancellationToken).ConfigureAwait(false);
             Directory.CreateDirectory(factory);
-            await File.WriteAllBytesAsync(Path.Combine(factory, name), bytes, cancellationToken).ConfigureAwait(false);
+            string path = Path.Combine(factory, name);
+            if (new FileInfo(path).LinkTarget is not null)
+            {
+                // A write follows a link, so the link goes first and the write makes a plain file.
+                File.Delete(path);
+            }
+
+            await File.WriteAllBytesAsync(path, bytes, cancellationToken).ConfigureAwait(false);
             if (outputs.Contains(name))
             {
-                texts[name] = await File.ReadAllTextAsync(Path.Combine(factory, name), cancellationToken).ConfigureAwait(false);
+                texts[name] = Encoding.UTF8.GetString(bytes);
             }
         }
 

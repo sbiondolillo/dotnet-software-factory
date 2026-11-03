@@ -184,4 +184,50 @@ public sealed class ClaudeCodeAgentTests : IDisposable
         Assert.DoesNotContain("--env", args);
         Assert.Equal(["--output-format", "json", "--dangerously-skip-permissions"], args.TakeLast(3));
     }
+
+    [Theory]
+    [InlineData("x; rm -rf /")]
+    [InlineData("../secret")]
+    [InlineData("/etc/passwd")]
+    [InlineData("..")]
+    public async Task AnOutputNameThatIsNotAPlainBaseNameThrowsAndRunsNoExec(string name)
+    {
+        ClaudeCodeAgent agent = await AgentAsync(new CommandResult { StandardOutput = Ok });
+
+        await Assert.ThrowsAsync<ArgumentException>(() => RunAsync(agent, "hi", name));
+
+        Assert.False(Executed);
+    }
+
+    [Fact]
+    public async Task AnOutputThatThePromptMakesALinkThrowsAndHoldsNoTextOfItsTarget()
+    {
+        string outside = Path.Combine(_directory.FullName, "secret.txt");
+        File.WriteAllText(outside, "a secret of the runner");
+        ClaudeCodeAgent agent = await AgentAsync(() =>
+        {
+            Directory.CreateDirectory(Path.Combine(_tree.FullName, ".factory"));
+            File.CreateSymbolicLink(Output("review.json"), outside);
+            return new CommandResult { StandardOutput = Ok };
+        });
+
+        ClaudeCodeException exception = await Assert.ThrowsAsync<ClaudeCodeException>(() => RunAsync(agent, "hi", "review.json"));
+
+        Assert.Contains("symbolic link", exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AFactoryDirectoryThatThePromptMakesALinkThrows()
+    {
+        DirectoryInfo outside = Directory.CreateDirectory(Path.Combine(_directory.FullName, "elsewhere"));
+        File.WriteAllText(Path.Combine(outside.FullName, "plan.md"), "a file of the runner");
+        ClaudeCodeAgent agent = await AgentAsync(() =>
+        {
+            Directory.CreateSymbolicLink(Path.Combine(_tree.FullName, ".factory"), outside.FullName);
+            return new CommandResult { StandardOutput = Ok };
+        });
+
+        await Assert.ThrowsAsync<ClaudeCodeException>(() => RunAsync(agent, "hi", "plan.md"));
+    }
 }

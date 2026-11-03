@@ -39,4 +39,18 @@ public abstract class Agent
 
     /// <summary>Runs <paramref name="request"/> and gives its answer.</summary>
     public abstract Task<AgentAnswer> RunAsync(AgentRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Throws <see cref="ArgumentException"/> when an output of <paramref name="request"/> is not a plain base name of
+    /// letters, digits, <c>.</c>, <c>-</c> and <c>_</c>. An adapter puts each name in a path and in a shell command.</summary>
+    protected static void RefuseUnsafeOutputs(AgentRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        foreach (string name in request.Outputs)
+        {
+            if (name is "." or ".." || name.Length is 0 || !name.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_'))
+            {
+                throw new ArgumentException($"The output name \"{name}\" is not a plain base name.", nameof(request));
+            }
+        }
+    }
 }

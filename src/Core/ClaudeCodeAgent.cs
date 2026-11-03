@@ -18,7 +18,7 @@ public sealed class ClaudeCodeAgent(
     /// <inheritdoc />
     public override async Task<AgentAnswer> RunAsync(AgentRequest request, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        RefuseUnsafeOutputs(request);
         if (Encoding.UTF8.GetByteCount(request.Prompt) >= PromptLimit)
         {
             throw new ClaudeCodeException($"The prompt holds {PromptLimit} bytes or more in UTF-8, the limit of one argument.");
@@ -61,7 +61,10 @@ public sealed class ClaudeCodeAgent(
             string path = OutputPath(name);
             if (File.Exists(path))
             {
-                outputs[name] = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+                RefuseLink(name);
+                string output = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+                RefuseLink(name);
+                outputs[name] = output;
             }
         }
 
@@ -82,6 +85,17 @@ public sealed class ClaudeCodeAgent(
     }
 
     private string OutputPath(string name) => Path.Combine(workTree, ".factory", name);
+
+    /// <summary>Throws when the output <paramref name="name"/> or <c>.factory</c> is a symbolic link. The container writes the
+    /// work tree, and a link would put a file of the runner in the answer, and from there in a comment. The check runs before
+    /// and after the read, so a swap during the read throws too.</summary>
+    private void RefuseLink(string name)
+    {
+        if (new DirectoryInfo(Path.Combine(workTree, ".factory")).LinkTarget is not null || new FileInfo(OutputPath(name)).LinkTarget is not null)
+        {
+            throw new ClaudeCodeException($"The output {name} under .factory/ is a symbolic link, so the host does not read it.");
+        }
+    }
 
     private static JsonDocument? ParseObject(string text)
     {
