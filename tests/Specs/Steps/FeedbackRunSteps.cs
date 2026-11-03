@@ -389,7 +389,9 @@ public sealed class FeedbackRunSteps : IDisposable
     public void ThenNoSession() => Assert.Empty(_h.Managed!.Sessions);
 
     [Then("FeedbackRun runs no dotnet command")]
-    public void ThenNoDotnet() => Assert.DoesNotContain("dotnet", _h.Events);
+    public void ThenNoDotnet() => Assert.DoesNotContain(
+        _h.Commands,
+        c => c.Command is "docker" && c.Arguments[0] is "exec" && c.Arguments.SkipWhile(a => a != FeedbackRunHarness.ContainerId).Skip(1).FirstOrDefault() is "dotnet");
 
     [Then("the job summary of the round is one section {string} with the rows {string}, {string} and {string}, in this order")]
     public void ThenSummarySection(string heading, string first, string second, string third)

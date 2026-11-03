@@ -70,6 +70,16 @@ public sealed class FeedbackBuildTests : IDisposable
     }
 
     [Fact]
+    public async Task AReportWithAGoodItemAndAFaultGivesNoAnswer()
+    {
+        var agent = new FakeAgent(new ClaudeCodeResult("done", 1, 0m, false), () => WriteReport(Report((A, "fixed", "fixed it"))));
+        FeedbackBuild build = Build(agent);
+        BuildOutcome outcome = await build.RunAsync([], Ct);
+        Assert.Equal([$"The report {FeedbackBuild.ReportPath} has no item for the thread {B}."], outcome.RedoTexts);
+        Assert.Empty(build.Answers);
+    }
+
+    [Fact]
     public async Task TheBuildDeletesTheReportOfTheBuildBeforeAndAnAbsentReportIsARedoText()
     {
         WriteReport(Report((A, "fixed", "x"), (B, "fixed", "y")));

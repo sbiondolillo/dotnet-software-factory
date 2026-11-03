@@ -44,6 +44,7 @@ public sealed class FeedbackRunTests
         Assert.Equal(1, result.Redos);
         Assert.Equal(["build", "build", "dotnet", "review"], h.Events.Where(e => e is "build" or "dotnet" or "review"));
         Assert.Contains("- Redo 1, after build 1: The report .factory/threads.json is absent. Write it.", h.Summary.Split('\n'));
+        Assert.Equal(2, h.Commands.Count(c => c.Command is "git" && c.Arguments[0] is "commit"));
     }
 
     [Theory]
@@ -280,6 +281,15 @@ public sealed class FeedbackRunTests
         string[] headings = [.. h.Summary.Split('\n').Where(line => line.StartsWith("## ", StringComparison.Ordinal))];
         Assert.Equal(["## Feedback run", "## Feedback run"], headings);
         Assert.Contains("- Redo 1, after test 1: ", h.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ASummaryWriteThatFailsGoesToTheLogAndTheRoundStillPasses()
+    {
+        using var h = new FeedbackRunHarness();
+        h.SummaryPath = Path.Combine(h.CloneDirectory, "absent", "summary.md");
+        Assert.Equal(new FeedbackRunResult(2, 0, 0), await h.RunAsync(Ct));
+        Assert.StartsWith($"summary: cannot write {h.SummaryPath}: ", h.Log.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

@@ -26,6 +26,7 @@ public sealed class FeedbackRunHarness : IDisposable
     {
         File.WriteAllText(Path.Combine(_root.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
         Threads = [ThreadA, ThreadB];
+        SummaryPath = Path.Combine(_root.FullName, "summary.md");
     }
 
     public string Owner { get; set; } = "sbiondolillo";
@@ -122,7 +123,10 @@ public sealed class FeedbackRunHarness : IDisposable
     public string CloneDirectory => _clone.FullName;
 
     /// <summary>The file that the run names as its job summary.</summary>
-    public string SummaryPath => Path.Combine(_root.FullName, "summary.md");
+    public string SummaryPath { get; set; } = "";
+
+    /// <summary>The log of the run, which takes the line of a summary write that fails.</summary>
+    public StringWriter Log { get; } = new();
 
     /// <summary>The text of the job summary, or the empty string when the run wrote none.</summary>
     public string Summary => File.Exists(SummaryPath) ? File.ReadAllText(SummaryPath) : "";
@@ -172,7 +176,7 @@ public sealed class FeedbackRunHarness : IDisposable
         var request = new FeedbackRunRequest(
             Owner, Repo, Pull, Token, _clone.FullName, "factory-sandbox:test", _root.FullName,
             BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames, Managed: Managed is null ? null : ManagedRunFake.Settings());
-        var run = new FeedbackRun(mock.Object, client, Out, handler: new Handler(this), delay: (_, _) => Task.CompletedTask, summaryPath: SummaryPath);
+        var run = new FeedbackRun(mock.Object, client, Out, handler: new Handler(this), delay: (_, _) => Task.CompletedTask, summaryPath: SummaryPath, log: Log);
         try
         {
             return await run.RunAsync(request, cancellationToken);
