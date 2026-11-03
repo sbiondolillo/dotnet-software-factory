@@ -13,7 +13,7 @@ public sealed class ManagedAgentsAgentSteps(ExceptionState exceptionState) : IDi
     private readonly ManagedAgentsHarness _harness = new();
     private readonly CancellationTokenSource _cancel = new();
     private ManagedAgentsAgent? _agent;
-    private ClaudeCodeResult? _result;
+    private AgentAnswer? _result;
     private string _prompt = "";
 
     public void Dispose()
@@ -24,12 +24,12 @@ public sealed class ManagedAgentsAgentSteps(ExceptionState exceptionState) : IDi
 
     private static string Unescape(string text) => text.Replace("\\n", "\n", StringComparison.Ordinal);
 
-    private async Task RunAsync(string prompt, string model, string phase = "agent")
+    private async Task RunAsync(string prompt, string model, Phase phase = Phase.Build, params string[] outputs)
     {
         _prompt = prompt;
         try
         {
-            _result = await _agent!.RunAsync(prompt, model, 200, phase, _cancel.Token);
+            _result = await _agent!.RunAsync(new AgentRequest(prompt, model, 200, phase, outputs), _cancel.Token);
         }
         catch (ClaudeCodeException exception)
         {
@@ -168,7 +168,13 @@ public sealed class ManagedAgentsAgentSteps(ExceptionState exceptionState) : IDi
     public async Task WhenRuns(string prompt, string model) => await RunAsync(prompt, model);
 
     [When("the caller runs the prompt {string} with the phase {string} and the model {string}")]
-    public async Task WhenRunsPhase(string prompt, string phase, string model) => await RunAsync(prompt, model, phase);
+    public async Task WhenRunsPhase(string prompt, string phase, string model) => await RunAsync(prompt, model, Enum.Parse<Phase>(phase, ignoreCase: true));
+
+    [When("the caller runs the prompt {string} with the model {string} and the output {string}")]
+    public async Task WhenRunsOutput(string prompt, string model, string output) => await RunAsync(prompt, model, Phase.Build, output);
+
+    [When("the caller runs the prompt {string} with the model {string} and the outputs {string} and {string}")]
+    public async Task WhenRunsOutputs(string prompt, string model, string first, string second) => await RunAsync(prompt, model, Phase.Build, first, second);
 
     [When("the caller runs a prompt of {int} letters {string} with the model {string}")]
     public async Task WhenRunsLong(int count, string letter, string model) =>
@@ -295,6 +301,12 @@ public sealed class ManagedAgentsAgentSteps(ExceptionState exceptionState) : IDi
 
     [Then("the answer text holds {string}")]
     public void ThenTextHolds(string text) => Assert.Contains(text, _result!.Result, StringComparison.Ordinal);
+
+    [Then("the answer holds the output {string} with the text {string}")]
+    public void ThenOutput(string name, string text) => Assert.Equal(new Dictionary<string, string> { [name] = text }, _result!.Outputs);
+
+    [Then("the answer holds no output")]
+    public void ThenNoOutput() => Assert.Empty(_result!.Outputs);
 
     [Then("the answer error flag is {word}")]
     public void ThenError(string flag) => Assert.Equal(flag is "true", _result!.IsError);

@@ -44,7 +44,7 @@ Feature: ManagedAgentsAgent runs each prompt as one message of a Managed Agents 
 
   Scenario: The preamble checks out and pulls the session branch as the bot, with .factory excluded, before the prompt
     Given a builder agent with the budget 1500 cents
-    When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5"
+    When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5" and the outputs "review.json" and "threads.json"
     Then the first message holds these texts in this order:
       | text |
       | cd /workspace/factory-scratch |
@@ -74,7 +74,6 @@ Feature: ManagedAgentsAgent runs each prompt as one message of a Managed Agents 
       | Build the change. |
       | git status --porcelain |
       | git push origin HEAD:factory/7-session |
-      | outputs: |
 
   Scenario: The reviewer sends no tail, and its token is read-only
     Given a reviewer agent with the budget 300 cents
@@ -84,7 +83,6 @@ Feature: ManagedAgentsAgent runs each prompt as one message of a Managed Agents 
     And the first message holds these texts in this order:
       | text |
       | Review the change. |
-      | outputs: |
     And the first token was minted with read access
 
   Scenario: The answer text is the last agent.message of the turn
@@ -94,11 +92,21 @@ Feature: ManagedAgentsAgent runs each prompt as one message of a Managed Agents 
     Then the answer text is "Done, the build passes."
     And the answer error flag is false
 
-  Scenario: The line outputs: is not part of the answer text
+  Scenario: The preamble removes only the outputs that the request names, and the message asks for no line of outputs
+    Given a reviewer agent with the budget 300 cents
+    When the caller runs the prompt "Review the change." with the model "claude-sonnet-5-5" and the output "review.json"
+    Then the first message holds these texts in this order:
+      | text |
+      | rm -f .factory/review.json |
+      | rm -f /mnt/session/outputs/review.json |
+      | Review the change. |
+    And the first message does not hold "rm -f .factory/threads.json"
+    And the first message does not hold "outputs:"
+
+  Scenario: A request that names no output removes no file in the preamble
     Given a builder agent with the budget 1500 cents
-    And the next turn holds the agent messages "Done.\noutputs:"
     When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5"
-    Then the answer text is "Done."
+    Then the first message does not hold "rm -f"
 
   Scenario: The turn count is the count of span.model_request_end events of the turn, over pages of the event list
     Given a builder agent with the budget 1500 cents
@@ -146,21 +154,34 @@ Feature: ManagedAgentsAgent runs each prompt as one message of a Managed Agents 
     And the work tree file ".factory/review.json" holds "{}"
     And the work tree has no file ".factory/threads.json"
 
-  Scenario: A file the outputs line names that is late in the list is waited for
+  Scenario: An output that the request names and that is late in the list is waited for and comes back as its text
     Given a builder agent with the budget 1500 cents
-    And the next turn holds the agent messages "Done.\noutputs: plan.md"
+    And the next turn holds the agent messages "Done."
     And the next turn creates the file "plan.md" holding "the plan", listed only after 3 reads of the file list
-    When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5"
+    When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5" and the output "plan.md"
     Then the answer error flag is false
+    And the answer holds the output "plan.md" with the text "the plan"
     And the work tree file ".factory/plan.md" holds "the plan"
 
-  Scenario: A file the outputs line names that never lists is an error answer that names it
+  Scenario: An output that the request names and that never lists is absent, the answer is no error, and the log names it
     Given a builder agent with the budget 1500 cents
-    And the next turn holds the agent messages "Done.\noutputs: plan.md"
-    When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5"
-    Then the answer error flag is true
-    And the answer text holds "plan.md"
+    And the next turn holds the agent messages "Done."
+    When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5" and the output "plan.md"
+    Then the answer error flag is false
+    And the answer text is "Done."
+    And the answer holds no output
     And the agent waited no more than 60 seconds for the file list
+    And the log holds these lines in this order:
+      | text |
+      | session: the request names the output plan.md, and the file list of the session sesn_1 did not hold it after 60 s |
+
+  Scenario: A file of the session that the request does not name lands under .factory and is not an output
+    Given a builder agent with the budget 1500 cents
+    And the next turn creates the file "notes.md" holding "a note"
+    When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5"
+    Then the answer error flag is false
+    And the answer holds no output
+    And the work tree file ".factory/notes.md" holds "a note"
 
   Scenario: The top-level files of .factory in the work tree are uploaded and mounted at the session start
     Given the work tree file ".factory/issue.md" holds "the issue"
@@ -204,11 +225,11 @@ Feature: ManagedAgentsAgent runs each prompt as one message of a Managed Agents 
 
   Scenario: A push that fails with Authentication failed rotates the token and asks for the push again
     Given a builder agent with the budget 1500 cents
-    And the next turn holds the agent messages "The push failed: fatal: Authentication failed for 'https://github.com/sbiondolillo/factory-scratch/'\noutputs: plan.md"
+    And the next turn holds the agent messages "The push failed: fatal: Authentication failed for 'https://github.com/sbiondolillo/factory-scratch/'"
     And the next turn holds 2 model requests
     And the next turn ends with the session cost at "40" cents
     And the next turn creates the file "plan.md" holding "the plan"
-    And the turn after it holds the agent messages "Pushed.\noutputs: plan.md"
+    And the turn after it holds the agent messages "Pushed."
     And the turn after it holds 1 model requests
     And the turn after it ends with the session cost at "55" cents
     When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5"
@@ -223,8 +244,8 @@ Feature: ManagedAgentsAgent runs each prompt as one message of a Managed Agents 
 
   Scenario: A second Authentication failed after the rotation is the answer with an error
     Given a builder agent with the budget 1500 cents
-    And the next turn holds the agent messages "fatal: Authentication failed for 'https://github.com/sbiondolillo/factory-scratch/'\noutputs:"
-    And the turn after it holds the agent messages "fatal: Authentication failed for 'https://github.com/sbiondolillo/factory-scratch/'\noutputs:"
+    And the next turn holds the agent messages "fatal: Authentication failed for 'https://github.com/sbiondolillo/factory-scratch/'"
+    And the turn after it holds the agent messages "fatal: Authentication failed for 'https://github.com/sbiondolillo/factory-scratch/'"
     When the caller runs the prompt "Build the change." with the model "claude-sonnet-5-5"
     Then the answer error flag is true
     And the answer text holds "Authentication failed"

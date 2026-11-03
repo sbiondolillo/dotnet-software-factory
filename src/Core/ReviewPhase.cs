@@ -9,7 +9,8 @@ public sealed record ReviewPhaseResult(bool Approved, IReadOnlyList<string> Bloc
 /// <summary>Asks the agent to review the build against the issue, by the steps of <paramref name="jobSteps"/>, and reads its verdict.</summary>
 public sealed class ReviewPhase(Agent agent, Git git, string jobSteps)
 {
-    private const string VerdictPath = ".factory/review.json";
+    private const string VerdictName = "review.json";
+    private const string VerdictPath = ".factory/" + VerdictName;
     private const string CutMarker = "[cut]";
     private const int PromptLimit = 131071;
 
@@ -26,34 +27,41 @@ public sealed class ReviewPhase(Agent agent, Git git, string jobSteps)
         string diff = await git.ReadDiffAsync(baseCommit, workTree, cancellationToken).ConfigureAwait(false);
         string prompt = BuildPrompt(title, body, baseCommit, diff);
 
-        string verdictFile = Path.Combine(workTree, ".factory", "review.json");
-        if (File.Exists(verdictFile))
-        {
-            File.Delete(verdictFile);
-        }
-
-        ClaudeCodeResult answer = await agent.RunAsync(prompt, model, maxTurns, "review", cancellationToken).ConfigureAwait(false);
+        AgentAnswer answer = await agent.RunAsync(new AgentRequest(prompt, model, maxTurns, Phase.Review, [VerdictName]), cancellationToken).ConfigureAwait(false);
         if (answer.IsError)
         {
-            return new ReviewPhaseResult(false, [string.IsNullOrWhiteSpace(answer.Result) ? "claude answered with an error and no text." : answer.Result], true);
+            return new ReviewPhaseResult(false, [answer.Result], true);
         }
 
-        return ReadVerdict(verdictFile);
+        return ParseVerdict(answer.Outputs.GetValueOrDefault(VerdictName));
     }
 
     private static ReviewPhaseResult Reject(string item) => new(false, [item]);
 
-    private static ReviewPhaseResult ReadVerdict(string path)
+    /// <summary>The verdict that <paramref name="text"/> states, or a rejection that names its fault. Null text is a verdict the
+    /// agent did not write.</summary>
+    private static ReviewPhaseResult ParseVerdict(string? text)
     {
         string fault = $"{VerdictPath} must hold one JSON object with approved (true or false) and blocking (a list of texts)";
+        if (text is null)
+        {
+            return Reject($"{fault}: the file is absent.");
+        }
+
         JsonDocument document;
         try
         {
-            document = ClaudeCodeAgent.ReadJsonFile(path);
+            document = JsonDocument.Parse(text);
         }
-        catch (ClaudeCodeOutputException exception)
+        catch (JsonException)
         {
-            return Reject($"{fault}: {exception.Message}");
+            return Reject($"{fault}: the text is not one JSON object.");
+        }
+
+        if (document.RootElement.ValueKind is not JsonValueKind.Object)
+        {
+            document.Dispose();
+            return Reject($"{fault}: the text is not one JSON object.");
         }
 
         using (document)

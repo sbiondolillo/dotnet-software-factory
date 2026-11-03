@@ -3,15 +3,12 @@ using System.Text;
 
 namespace Core;
 
-/// <summary>The texts that go around each prompt of a Managed Agents session: the preamble before it, the tail of the
-/// builder and the ending after it.</summary>
+/// <summary>The texts that go around each prompt of a Managed Agents session: the preamble before it and the tail of the
+/// builder after it.</summary>
 internal static class SessionPrompt
 {
     /// <summary>The text a session's answer starts with when a command of the preamble fails.</summary>
     public const string PreambleFailed = "preamble failed:";
-
-    /// <summary>The start of the last line of an answer, which names the files the agent copied to the outputs.</summary>
-    public const string OutputsLine = "outputs:";
 
     /// <summary>The text of a push that GitHub refused for the token.</summary>
     public const string AuthenticationFailed = "Authentication failed";
@@ -19,22 +16,25 @@ internal static class SessionPrompt
     /// <summary>Where a session finds the dotnet SDK.</summary>
     public const string Dotnet = "/root/.dotnet/dotnet";
 
-    /// <summary>The whole text of one message: the preamble, the prompt, the tail for a builder, and the ending.</summary>
-    public static string Compose(string prompt, string repo, string branch, string baseCommit, IReadOnlyList<string> uploads, SessionRole role)
+    /// <summary>The whole text of one message: the preamble, the prompt, and the tail for a builder. <paramref name="outputs"/>
+    /// are the base names of the outputs the request names.</summary>
+    public static string Compose(
+        string prompt, string repo, string branch, string baseCommit, IReadOnlyList<string> uploads, IReadOnlyList<string> outputs, SessionRole role)
     {
         var text = new StringBuilder();
-        text.Append(Preamble(repo, branch, baseCommit, uploads)).Append("\n\n## The task\n\n").Append(prompt).Append("\n\n");
+        text.Append(Preamble(repo, branch, baseCommit, uploads, outputs)).Append("\n\n## The task\n\n").Append(prompt);
         if (role is SessionRole.Builder)
         {
-            text.Append(Tail(repo, branch)).Append("\n\n");
+            text.Append("\n\n").Append(Tail(repo, branch));
         }
 
-        return text.Append(Ending()).ToString();
+        return text.ToString();
     }
 
     /// <summary>The commands that put the session's clone at the head of <paramref name="branch"/>, clean, before any edit. A work
-    /// tree that a turn before left dirty is committed, not refused.</summary>
-    public static string Preamble(string repo, string branch, string baseCommit, IReadOnlyList<string> uploads)
+    /// tree that a turn before left dirty is committed, not refused. The preamble removes each of <paramref name="outputs"/> from
+    /// <c>.factory/</c> and from the outputs directory, so a file the host reads after the prompt is one that the prompt wrote.</summary>
+    public static string Preamble(string repo, string branch, string baseCommit, IReadOnlyList<string> uploads, IReadOnlyList<string> outputs)
     {
         var text = new StringBuilder();
         text.Append(CultureInfo.InvariantCulture, $$"""
@@ -61,9 +61,13 @@ internal static class SessionPrompt
             text.Append(CultureInfo.InvariantCulture, $"cp /mnt/session/uploads/{name} .factory/{name}\n");
         }
 
+        if (outputs.Count > 0)
+        {
+            text.Append("rm -f").AppendJoin("", outputs.Select(name => $" .factory/{name}")).Append('\n');
+            text.Append("rm -f").AppendJoin("", outputs.Select(name => $" /mnt/session/outputs/{name}")).Append('\n');
+        }
+
         text.Append(CultureInfo.InvariantCulture, $$"""
-            rm -f .factory/review.json .factory/threads.json
-            rm -f /mnt/session/outputs/review.json /mnt/session/outputs/threads.json
             [ -z "$(git status --porcelain)" ] || { git add -A && git commit -q -m "wip: the uncommitted work of the turn before"; }
             ```
 
@@ -102,17 +106,6 @@ internal static class SessionPrompt
         git push origin HEAD:{branch}
         ```
 
-        When the push fails, put the output of the push in your final message. End your final message with the same
-        `{OutputsLine}` line as your last final message.
-        """;
-
-    /// <summary>The instruction for the last line of the final message.</summary>
-    public static string Ending() =>
-        $"""
-        ## The last line
-
-        End your final message with one line that starts with `{OutputsLine}`. After it, put the base name of each file you
-        copied to `/mnt/session/outputs/` for this task, separated by spaces. With no such file, the line is `{OutputsLine}`
-        alone.
+        When the push fails, put the output of the push in your final message.
         """;
 }

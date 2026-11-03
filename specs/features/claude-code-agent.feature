@@ -1,4 +1,4 @@
-Feature: ClaudeCodeAgent runs one prompt in the sandbox and reads a JSON file the agent wrote
+Feature: ClaudeCodeAgent runs one prompt in the sandbox and reads the outputs that the request names
 
   Scenario: The docker exec arguments carry claude, the prompt, the model and the turn limit
     Given a ClaudeCodeAgent built over a Sandbox over a mock CommandRunner
@@ -13,12 +13,12 @@ Feature: ClaudeCodeAgent runs one prompt in the sandbox and reads a JSON file th
     Then the result error flag is false
     And the result has the turn count 1, the cost 0.0098972 and the result text "ok"
 
-  Scenario: An error answer with no result member gives back an empty result text
+  Scenario: An error answer with no result member gives back the text of an error with no text
     Given a ClaudeCodeAgent built over a Sandbox over a mock CommandRunner
     And docker exec exits with the code 1 and writes to standard output '{"type":"result","subtype":"error_max_turns","is_error":true,"num_turns":2,"total_cost_usd":0.0044689,"errors":[]}'
     When a caller runs the prompt "Write a file." with the model "claude-haiku-4-5-20251001" and the turn limit 1
     Then the result error flag is true
-    And the result has the turn count 2, the cost 0.0044689 and an empty result text
+    And the result has the turn count 2, the cost 0.0044689 and the result text "The agent answered with an error and no text."
 
   Scenario: An error answer with a sentence gives back that sentence
     Given a ClaudeCodeAgent built over a Sandbox over a mock CommandRunner
@@ -48,22 +48,17 @@ Feature: ClaudeCodeAgent runs one prompt in the sandbox and reads a JSON file th
     And the exception message holds "131072"
     And the runner runs no docker exec
 
-  Scenario: A file holding one JSON object is read as a JSON document
+  Scenario: A named output that the prompt writes comes back as its text
     Given a ClaudeCodeAgent built over a Sandbox over a mock CommandRunner
-    And a file at a path holds '{"verdict":"approved","items":[]}'
-    When the caller reads the JSON file at the path
-    Then the document root has the property "verdict" with the value "approved" and the property "items" with 0 elements
+    And docker exec writes "the plan" to ".factory/plan.md", exits with the code 0 and writes to standard output '{"is_error":false,"num_turns":1,"total_cost_usd":0.001,"result":"ok"}'
+    When a caller runs the prompt "Plan the work." with the model "claude-haiku-4-5-20251001", the turn limit 1 and the output "plan.md"
+    Then the result holds the output "plan.md" with the text "the plan"
 
-  Scenario: A missing file throws ClaudeCodeOutputException naming the path
+  Scenario: A named output that the prompt does not write is absent, and its file of the turn before is deleted
     Given a ClaudeCodeAgent built over a Sandbox over a mock CommandRunner
-    And no file is at a path
-    When the caller reads the JSON file at the path
-    Then the read throws ClaudeCodeOutputException
-    And the exception message holds the path
-
-  Scenario: A file holding not json throws ClaudeCodeOutputException naming the path
-    Given a ClaudeCodeAgent built over a Sandbox over a mock CommandRunner
-    And a file at a path holds 'not json'
-    When the caller reads the JSON file at the path
-    Then the read throws ClaudeCodeOutputException
-    And the exception message holds the path
+    And the work tree file ".factory/review.json" holds '{"approved":true}' before the prompt
+    And docker exec exits with the code 0 and writes to standard output '{"is_error":false,"num_turns":1,"total_cost_usd":0.001,"result":"ok"}'
+    When a caller runs the prompt "Review the build." with the model "claude-haiku-4-5-20251001", the turn limit 1 and the output "review.json"
+    Then the result error flag is false
+    And the result holds no output
+    And the work tree of the prompt has no file ".factory/review.json"

@@ -21,7 +21,7 @@ public sealed class ManagedAgentsAgent(
     int budgetCents,
     TextWriter? log = null,
     TimeProvider? time = null,
-    Action<TimeSpan, ClaudeCodeResult>? onAnswer = null) : Agent, IAsyncDisposable
+    Action<TimeSpan, AgentAnswer>? onAnswer = null) : Agent, IAsyncDisposable
 {
     private static readonly TimeSpan TokenAge = TimeSpan.FromMinutes(50);
     private static readonly TimeSpan FileWait = TimeSpan.FromSeconds(60);
@@ -53,14 +53,13 @@ public sealed class ManagedAgentsAgent(
     private string SessionPath => $"/v1/sessions/{_sessionId}";
 
     /// <inheritdoc />
-    public override async Task<ClaudeCodeResult> RunAsync(
-        string prompt,
-        string model,
-        int maxTurns,
-        string phase,
-        CancellationToken cancellationToken = default)
+    public override async Task<AgentAnswer> RunAsync(AgentRequest request, CancellationToken cancellationToken = default)
     {
+        RefuseUnsafeOutputs(request);
         ObjectDisposedException.ThrowIf(_disposed, this);
+        string prompt = request.Prompt;
+        string model = request.Model;
+        string phase = request.Phase.Text();
         if (_model is not null && _model != model)
         {
             throw new ClaudeCodeException(
@@ -72,18 +71,18 @@ public sealed class ManagedAgentsAgent(
         decimal before = _cents;
         if (_sessionId is null)
         {
-            await CreateSessionAsync(prompt, model, cancellationToken).ConfigureAwait(false);
+            await CreateSessionAsync(prompt, model, request.Outputs, cancellationToken).ConfigureAwait(false);
         }
         else
         {
             await RotateWhenOldAsync(cancellationToken).ConfigureAwait(false);
-            var body = new JsonObject { ["events"] = new JsonArray(UserMessage(Compose(prompt))) };
+            var body = new JsonObject { ["events"] = new JsonArray(UserMessage(Compose(prompt, request.Outputs))) };
             await client.SendAsync(HttpMethod.Post, $"{SessionPath}/events", body, cancellationToken).ConfigureAwait(false);
         }
 
         await ProgressLine.WriteAsync(
             log,
-            string.Create(CultureInfo.InvariantCulture, $"session: {phase} max turns {maxTurns}, not enforced: the budget bounds the session")).ConfigureAwait(false);
+            string.Create(CultureInfo.InvariantCulture, $"session: {phase} max turns {request.MaxTurns}, not enforced: the budget bounds the session")).ConfigureAwait(false);
 
         Turn turn = await WaitForTurnAsync(cancellationToken).ConfigureAwait(false);
         await WriteEventsAsync(turn.NewEvents, cancellationToken).ConfigureAwait(false);
@@ -103,7 +102,7 @@ public sealed class ManagedAgentsAgent(
         JsonElement session = await client.SendAsync(HttpMethod.Get, SessionPath, null, cancellationToken).ConfigureAwait(false);
         _cents = Math.Max(_cents, ListCost(session));
 
-        ClaudeCodeResult answer = await AnswerAsync(turn, Normalize((_cents - before) / 100m), cancellationToken).ConfigureAwait(false);
+        AgentAnswer answer = await AnswerAsync(turn, Normalize((_cents - before) / 100m), request.Outputs, cancellationToken).ConfigureAwait(false);
         if (pushedAgain && PushFailed(turn))
         {
             answer = answer with { IsError = true };
@@ -213,21 +212,6 @@ public sealed class ManagedAgentsAgent(
         return null;
     }
 
-    /// <summary>Splits the last line <c>outputs: a b</c> off the answer, and gives the names it lists, or null with no such line.</summary>
-    private static (string Text, IReadOnlyList<string>? Outputs) SplitOutputs(string text)
-    {
-        string trimmed = text.TrimEnd();
-        int lineStart = trimmed.LastIndexOf('\n') + 1;
-        string last = trimmed[lineStart..].Trim().Trim('`');
-        if (!last.StartsWith(SessionPrompt.OutputsLine, StringComparison.Ordinal))
-        {
-            return (text, null);
-        }
-
-        string[] names = last[SessionPrompt.OutputsLine.Length..].Split([' ', '\t', ','], StringSplitOptions.RemoveEmptyEntries);
-        return (trimmed[..lineStart].TrimEnd(), [.. names.Select(Path.GetFileName).OfType<string>().Where(n => n.Length > 0)]);
-    }
-
     private static JsonObject UserMessage(string text) =>
         new()
         {
@@ -238,9 +222,10 @@ public sealed class ManagedAgentsAgent(
     private static bool IsSafeName(string name) =>
         name.Length > 0 && name is not "." and not ".." && Path.GetFileName(name) == name && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
 
-    private string Compose(string prompt) => SessionPrompt.Compose(prompt, repo, sessionBranch, baseCommit, _uploads, role);
+    private string Compose(string prompt, IReadOnlyList<string> outputs) =>
+        SessionPrompt.Compose(prompt, repo, sessionBranch, baseCommit, _uploads, outputs, role);
 
-    private async Task CreateSessionAsync(string prompt, string model, CancellationToken cancellationToken)
+    private async Task CreateSessionAsync(string prompt, string model, IReadOnlyList<string> outputs, CancellationToken cancellationToken)
     {
         if (client.AgentId.Length is 0 || client.EnvironmentId.Length is 0)
         {
@@ -249,13 +234,15 @@ public sealed class ManagedAgentsAgent(
 
         var resources = new JsonArray();
         string factory = Path.Combine(workTree, ".factory");
+        RefuseLinkedFactory(factory);
         if (Directory.Exists(factory))
         {
             foreach (string path in Directory.EnumerateFiles(factory).Order(StringComparer.Ordinal))
             {
                 string name = Path.GetFileName(path);
-                if (!IsSafeName(name))
+                if (!IsSafeName(name) || new FileInfo(path).LinkTarget is not null)
                 {
+                    // An upload reads through a link, so a linked file would send a file of the runner to the session.
                     continue;
                 }
 
@@ -286,7 +273,7 @@ public sealed class ManagedAgentsAgent(
                 ["max_list_cost"] = new JsonObject { ["amount"] = budgetCents.ToString(CultureInfo.InvariantCulture), ["currency"] = "USD" },
             },
             ["resources"] = resources,
-            ["initial_events"] = new JsonArray(UserMessage(Compose(prompt))),
+            ["initial_events"] = new JsonArray(UserMessage(Compose(prompt, outputs))),
         };
         JsonElement session = await client.SendAsync(HttpMethod.Post, "/v1/sessions", body, cancellationToken).ConfigureAwait(false);
         _sessionId = Text(session, "id") ?? throw new ClaudeCodeException("POST /v1/sessions answered with no session id.");
@@ -491,58 +478,57 @@ public sealed class ManagedAgentsAgent(
         }
     }
 
-    private async Task<ClaudeCodeResult> AnswerAsync(Turn turn, decimal cost, CancellationToken cancellationToken)
+    private async Task<AgentAnswer> AnswerAsync(Turn turn, decimal cost, IReadOnlyList<string> outputs, CancellationToken cancellationToken)
     {
-        string text = LastText(turn);
+        string result = LastText(turn);
         int turns = turn.Events.Count(e => Type(e) is "span.model_request_end");
         string? stop = turn.Events.Where(e => Type(e) is "session.status_idle").Select(StopReason).LastOrDefault();
-        (string result, IReadOnlyList<string>? outputs) = SplitOutputs(text);
 
         if (stop is "budget_reached")
         {
-            await DownloadAsync(turn, [], cancellationToken).ConfigureAwait(false);
+            (_, Dictionary<string, string> spent) = await DownloadAsync(turn, outputs, wait: false, cancellationToken).ConfigureAwait(false);
             string budget = string.Create(
                 CultureInfo.InvariantCulture,
                 $"The session {_sessionId} reached its budget of {budgetCents} cents (${Normalize(budgetCents / 100m)}) before the agent finished.");
-            return new ClaudeCodeResult(result.Length > 0 ? $"{budget} {result}" : budget, turns, cost, true);
+            return new AgentAnswer(result.Length > 0 ? $"{budget} {result}" : budget, turns, cost, true, spent, []);
         }
 
         if (stop is not null and not "end_turn")
         {
-            await DownloadAsync(turn, [], cancellationToken).ConfigureAwait(false);
-            return new ClaudeCodeResult($"The session {_sessionId} stopped with the reason {stop}. {result}".TrimEnd(), turns, cost, true);
+            (_, Dictionary<string, string> stopped) = await DownloadAsync(turn, outputs, wait: false, cancellationToken).ConfigureAwait(false);
+            return new AgentAnswer($"The session {_sessionId} stopped with the reason {stop}. {result}".TrimEnd(), turns, cost, true, stopped, []);
         }
 
-        string? missing = await DownloadAsync(turn, outputs ?? [], cancellationToken).ConfigureAwait(false);
+        (string? missing, Dictionary<string, string> texts) = await DownloadAsync(turn, outputs, wait: true, cancellationToken).ConfigureAwait(false);
         if (missing is not null)
         {
-            return new ClaudeCodeResult(
+            await ProgressLine.WriteAsync(
+                log,
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"The answer names the output file {missing}, and the file list of the session {_sessionId} did not hold it after {FileWait.TotalSeconds} s."),
-                turns,
-                cost,
-                true);
+                    $"session: the request names the output {missing}, and the file list of the session {_sessionId} did not hold it after {FileWait.TotalSeconds} s")).ConfigureAwait(false);
         }
 
-        return new ClaudeCodeResult(result, turns, cost, result.StartsWith(SessionPrompt.PreambleFailed, StringComparison.Ordinal));
+        return new AgentAnswer(result, turns, cost, result.StartsWith(SessionPrompt.PreambleFailed, StringComparison.Ordinal), texts, []);
     }
 
     /// <summary>Downloads into <c>.factory/</c> of the work tree each file the session created after the message, the newest
-    /// of each name. It waits for each name in <paramref name="expected"/>, and gives the first one missing at the end of the wait.</summary>
-    private async Task<string?> DownloadAsync(Turn turn, IReadOnlyList<string> expected, CancellationToken cancellationToken)
+    /// of each name, and gives the text of each of <paramref name="outputs"/> among them. With <paramref name="wait"/>, it waits
+    /// for each name of <paramref name="outputs"/>, and gives the first one missing at the end of the wait.</summary>
+    private async Task<(string? Missing, Dictionary<string, string> Texts)> DownloadAsync(
+        Turn turn, IReadOnlyList<string> outputs, bool wait, CancellationToken cancellationToken)
     {
         DateTimeOffset posted = turn.Events.Count > 0 && Text(turn.Events[0], "processed_at") is { } stamp
             && DateTimeOffset.TryParse(stamp, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTimeOffset at)
             ? at
             : DateTimeOffset.MinValue;
-        int polls = (int)(FileWait / ManagedAgentsClient.PollDelay);
+        int polls = wait ? (int)(FileWait / ManagedAgentsClient.PollDelay) : 0;
         Dictionary<string, (string Id, DateTimeOffset At)> files = [];
         string? missing = null;
         for (int poll = 0; ; poll++)
         {
             files = await ListFilesAsync(posted, cancellationToken).ConfigureAwait(false);
-            missing = expected.FirstOrDefault(name => !files.ContainsKey(name));
+            missing = wait ? outputs.FirstOrDefault(name => !files.ContainsKey(name)) : null;
             if (missing is null || poll >= polls)
             {
                 break;
@@ -552,14 +538,37 @@ public sealed class ManagedAgentsAgent(
         }
 
         string factory = Path.Combine(workTree, ".factory");
+        RefuseLinkedFactory(factory);
+        var texts = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach ((string name, (string id, _)) in files)
         {
             byte[] bytes = await client.DownloadAsync(id, cancellationToken).ConfigureAwait(false);
             Directory.CreateDirectory(factory);
-            await File.WriteAllBytesAsync(Path.Combine(factory, name), bytes, cancellationToken).ConfigureAwait(false);
+            string path = Path.Combine(factory, name);
+            if (new FileInfo(path).LinkTarget is not null)
+            {
+                // A write follows a link, so the link goes first and the write makes a plain file.
+                File.Delete(path);
+            }
+
+            await File.WriteAllBytesAsync(path, bytes, cancellationToken).ConfigureAwait(false);
+            if (outputs.Contains(name))
+            {
+                texts[name] = Encoding.UTF8.GetString(bytes);
+            }
         }
 
-        return missing;
+        return (missing, texts);
+    }
+
+    /// <summary>Throws when <paramref name="factory"/> is a symbolic link. An upload from it would send a file of the runner to
+    /// the session, and a download into it would write outside the work tree.</summary>
+    private static void RefuseLinkedFactory(string factory)
+    {
+        if (new DirectoryInfo(factory).LinkTarget is not null)
+        {
+            throw new ClaudeCodeException("The directory .factory/ of the work tree is a symbolic link, so the host neither uploads from it nor downloads into it.");
+        }
     }
 
     private async Task<Dictionary<string, (string Id, DateTimeOffset At)>> ListFilesAsync(DateTimeOffset after, CancellationToken cancellationToken)

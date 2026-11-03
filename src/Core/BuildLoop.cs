@@ -1,8 +1,9 @@
 namespace Core;
 
 /// <summary>What one build gave: <paramref name="Stop"/> is the text of an error that stops the run, or null when the build
-/// passed, and <paramref name="RedoTexts"/> are the faults of the build itself, which give a Redo after the build row.</summary>
-public sealed record BuildOutcome(string? Stop, IReadOnlyList<string> RedoTexts);
+/// passed, and <paramref name="RedoTexts"/> are the faults of the build itself, which give a Redo after the build row.
+/// <paramref name="Faults"/> are the faults the agent knows about the build, which join the Redo texts of a rejection.</summary>
+public sealed record BuildOutcome(string? Stop, IReadOnlyList<string> RedoTexts, IReadOnlyList<string> Faults);
 
 /// <summary>One build of a run, given the Redo texts of the last rejection, or none before the first build.</summary>
 public interface IBuild
@@ -32,7 +33,7 @@ public sealed record BuildLoopResult(BuildLoopEnd End, int Redos, string? Commen
 /// The build loop of a run: the build, the lint, the gates in the order of the recipe, then the review, repeated within the
 /// budget of <see cref="RedoBudget"/> Redos. It writes every row of <paramref name="summary"/> and every progress line of the
 /// loop. The lint commits a change of <paramref name="workTree"/> with <paramref name="message"/> and the author.
-/// <paramref name="noteBuild"/> takes the Redo texts of a rejected build and gives the texts of the next one.
+/// The faults of a rejected build join its Redo texts, after the gates and the review.
 /// A token that is cancelled when an await returns throws <see cref="OperationCanceledException"/> before the next call.
 /// The loop catches nothing: an exception of a phase, the lint or a gate reaches the caller unchanged, and the rows so far stay.
 /// </summary>
@@ -40,7 +41,6 @@ public sealed class BuildLoop(
     JobSummary summary,
     TimeProvider clock,
     TextWriter? progress,
-    Func<IReadOnlyList<string>, IReadOnlyList<string>> noteBuild,
     LintGate lint,
     string workTree,
     string message,
@@ -49,9 +49,6 @@ public sealed class BuildLoop(
 {
     /// <summary>The Redos a run can spend.</summary>
     public const int RedoBudget = 3;
-
-    /// <summary>The text of the stop comment for an error that came with no text.</summary>
-    public const string NoTextError = "claude answered with an error and no text.";
 
     /// <summary>Runs <paramref name="build"/>, the lint, each of <paramref name="gates"/> in order until one gives Redo texts,
     /// and <paramref name="review"/> after every gate passes, until the review approves, an error stops the loop or the
@@ -77,14 +74,14 @@ public sealed class BuildLoop(
             cancellationToken.ThrowIfCancellationRequested();
             if (built.Stop is string stop)
             {
-                summary.AddRow("build", clock.GetElapsedTime(buildStart), "failed");
+                summary.AddRow(Phase.Build.Text(), clock.GetElapsedTime(buildStart), "failed");
                 return Stopped(redos, stop);
             }
 
             await SayAsync("lint: start", cancellationToken).ConfigureAwait(false);
             await lint.RunAsync(workTree, message, authorName, authorEmail, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            string producer = summary.AddRow("build", clock.GetElapsedTime(buildStart), "passed");
+            string producer = summary.AddRow(Phase.Build.Text(), clock.GetElapsedTime(buildStart), "passed");
             redoTexts = built.RedoTexts;
             foreach (IGate gate in gates)
             {
@@ -101,7 +98,7 @@ public sealed class BuildLoop(
                 await SayAsync("review: start", cancellationToken).ConfigureAwait(false);
                 ReviewPhaseResult reviewed = await review(cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
-                string reviewRow = summary.AddRow("review", null, reviewed.IsError ? "failed" : reviewed.Approved ? "approved" : "blocked");
+                string reviewRow = summary.AddRow(Phase.Review.Text(), null, reviewed.IsError ? "failed" : reviewed.Approved ? "approved" : "blocked");
                 if (reviewed.IsError)
                 {
                     return Stopped(redos, reviewed.Blocking.Count is 0 ? "" : reviewed.Blocking[0]);
@@ -117,7 +114,7 @@ public sealed class BuildLoop(
                 producer = reviewRow;
             }
 
-            redoTexts = noteBuild(redoTexts);
+            redoTexts = [.. redoTexts, .. built.Faults.Where(fault => !redoTexts.Contains(fault))];
             if (redos >= RedoBudget)
             {
                 return new BuildLoopResult(
@@ -133,7 +130,7 @@ public sealed class BuildLoop(
     }
 
     private static BuildLoopResult Stopped(int redos, string text) =>
-        new(BuildLoopEnd.Stopped, redos, CommentText.Fit(string.IsNullOrWhiteSpace(text) ? NoTextError : text, []));
+        new(BuildLoopEnd.Stopped, redos, CommentText.Fit(text, []));
 
     /// <summary>Runs <paramref name="gate"/> between its two progress lines, adds its row, and gives its Redo texts and the name of the row.</summary>
     private async Task<(IReadOnlyList<string> RedoTexts, string Row)> RunGateAsync(IGate gate, CancellationToken cancellationToken)

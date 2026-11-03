@@ -26,7 +26,7 @@ public sealed record RunAgentsSetup(
     TimeProvider? Time = null,
     TextWriter? Progress = null,
     TextWriter? Log = null,
-    Action<TimeSpan, ClaudeCodeResult>? OnAnswer = null);
+    Action<TimeSpan, AgentAnswer>? OnAnswer = null);
 
 /// <summary>
 /// The agents and the sandbox of one run. With no settings, both agents are Claude Code in one <see cref="Core.Sandbox"/>, and the
@@ -36,22 +36,18 @@ public sealed record RunAgentsSetup(
 /// </summary>
 public sealed class RunAgents : IAsyncDisposable
 {
-    /// <summary>The Redo text of a build after which the head of the scratch branch on origin did not move.</summary>
-    public const string NoCommitText = "The build pushed no commit to the session branch. Commit the work and push it to that branch.";
-
     private readonly RunAgentsSetup _setup;
     private readonly ManagedAgentsAgent? _builder;
     private readonly ManagedAgentsAgent? _reviewer;
     private readonly HttpClient? _http;
     private readonly HttpMessageHandler? _ownHandler;
     private bool _pushed;
-    private bool _pushedNothing;
 
     private RunAgents(RunAgentsSetup setup, Sandbox sandbox)
     {
         _setup = setup;
         Sandbox = sandbox;
-        var agent = new ClaudeCodeAgent(sandbox, setup.Log, setup.Time, setup.OnAnswer);
+        var agent = new ClaudeCodeAgent(sandbox, setup.Directory, setup.Log, setup.Time, setup.OnAnswer);
         Builder = agent;
         Reviewer = agent;
     }
@@ -101,10 +97,6 @@ public sealed class RunAgents : IAsyncDisposable
         Sandbox sandbox = await Sandbox.StartAsync(setup.Runner, setup.ImageTag, setup.RootDirectory, setup.Directory, cancellationToken).ConfigureAwait(false);
         return new RunAgents(setup, sandbox);
     }
-
-    /// <summary>Adds <see cref="NoCommitText"/> to the Redo texts when the last build pushed no commit.</summary>
-    public IReadOnlyList<string> NoteBuild(IReadOnlyList<string> redoTexts) =>
-        _pushedNothing && !redoTexts.Contains(NoCommitText) ? [.. redoTexts, NoCommitText] : redoTexts;
 
     /// <summary>Puts the session's commits on <paramref name="branch"/>, for the push that delivers them. With no session, the work is on the branch, and the call does nothing.</summary>
     public async Task CollectAsync(string branch, CancellationToken cancellationToken = default)
@@ -192,27 +184,27 @@ public sealed class RunAgents : IAsyncDisposable
     /// <summary>
     /// A session agent with the branch work of the host around each prompt: the push of the scratch branch before each prompt, and
     /// for the builder the pull after each prompt, the check that no commit tracks a file under <c>.factory/</c>, and the read of the
-    /// remote head around each build prompt. A tracked file under <c>.factory/</c>, before a prompt or after a pull, throws
+    /// remote head around each prompt of <see cref="Phase.Build"/>, whose answer gains the fault <see cref="NoCommitText"/> when the
+    /// head did not move. A tracked file under <c>.factory/</c>, before a prompt or after a pull, throws
     /// <see cref="SessionBranchException"/>, which stops the run whatever the phase. The session uploads what <c>.factory/</c> holds and
     /// follows a link there, so a head branch that tracks a file there stops before the first session starts.
     /// </summary>
     private sealed class BranchAgent(RunAgents owner, ManagedAgentsAgent inner, bool pulls) : Agent
     {
-        public override async Task<ClaudeCodeResult> RunAsync(
-            string prompt,
-            string model,
-            int maxTurns,
-            string phase,
-            CancellationToken cancellationToken = default)
+        /// <summary>The fault of a build after which the head of the scratch branch on origin did not move.</summary>
+        public const string NoCommitText = "The build pushed no commit to the session branch. Commit the work and push it to that branch.";
+
+        public override async Task<AgentAnswer> RunAsync(AgentRequest request, CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(request);
             RunAgentsSetup setup = owner._setup;
             await owner.PushScratchAsync(cancellationToken).ConfigureAwait(false);
             await RefuseTrackedFilesAsync(setup, cancellationToken).ConfigureAwait(false);
-            bool build = pulls && phase is "build";
+            bool build = pulls && request.Phase is Phase.Build;
             string? before = build
                 ? await setup.Git.ReadRemoteHeadAsync(setup.ScratchBranch, setup.Directory, setup.Token, cancellationToken).ConfigureAwait(false)
                 : null;
-            ClaudeCodeResult answer = await inner.RunAsync(prompt, model, maxTurns, phase, cancellationToken).ConfigureAwait(false);
+            AgentAnswer answer = await inner.RunAsync(request, cancellationToken).ConfigureAwait(false);
             if (!pulls)
             {
                 return answer;
@@ -222,7 +214,10 @@ public sealed class RunAgents : IAsyncDisposable
             if (build)
             {
                 string? after = await setup.Git.ReadRemoteHeadAsync(setup.ScratchBranch, setup.Directory, setup.Token, cancellationToken).ConfigureAwait(false);
-                owner._pushedNothing = after == before;
+                if (after == before)
+                {
+                    answer = answer with { Faults = [.. answer.Faults, NoCommitText] };
+                }
             }
 
             await RefuseTrackedFilesAsync(setup, cancellationToken).ConfigureAwait(false);

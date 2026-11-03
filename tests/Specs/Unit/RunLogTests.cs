@@ -34,10 +34,11 @@ public sealed class RunLogTests : IDisposable
         return await Sandbox.StartAsync(mock.Object, "t:1", _directory.FullName, "/tree", TestContext.Current.CancellationToken);
     }
 
-    private async Task<ClaudeCodeResult> AskAsync(CommandResult answer, string prompt = "hi")
+    private async Task<AgentAnswer> AskAsync(CommandResult answer, string prompt = "hi")
     {
         Sandbox sandbox = await SandboxAsync(_ => answer);
-        return await new ClaudeCodeAgent(sandbox, _log, new FakeTime()).RunAsync(prompt, "m", 1, "plan", TestContext.Current.CancellationToken);
+        return await new ClaudeCodeAgent(sandbox, _directory.FullName, _log, new FakeTime())
+            .RunAsync(new AgentRequest(prompt, "m", 1, Phase.Plan, []), TestContext.Current.CancellationToken);
     }
 
     [Fact]

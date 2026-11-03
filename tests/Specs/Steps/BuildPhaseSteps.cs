@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using Core;
 using Reqnroll;
@@ -43,7 +42,7 @@ public sealed class BuildPhaseSteps(IssueState issue) : IDisposable
     public void GivenSetNoText()
     {
         _h.IsError = true;
-        _h.OmitResult = true;
+        _h.ResultText = Agent.NoTextError;
     }
 
     [When("I run the build phase with no Redo texts")]
@@ -64,9 +63,8 @@ public sealed class BuildPhaseSteps(IssueState issue) : IDisposable
     [Then("the build prompt ran with the model {string} and the turn limit {int}")]
     public void ThenModel(string model, int turns)
     {
-        List<string> args = _h.ExecArguments[0];
-        Assert.Equal(model, args[args.IndexOf("--model") + 1]);
-        Assert.Equal(turns.ToString(CultureInfo.InvariantCulture), args[args.IndexOf("--max-turns") + 1]);
+        AgentRequest request = _h.Requests[0];
+        Assert.Equal((model, turns, Phase.Build), (request.Model, request.MaxTurns, request.Phase));
     }
 
     [Then("the build prompt holds {string} and {string}")]

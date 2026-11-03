@@ -79,17 +79,6 @@ public sealed class ReviewPhaseTests
     }
 
     [Fact]
-    public async Task AnErrorAnswerWithWhitespaceTextGivesOneNonEmptyItem()
-    {
-        using var h = new ReviewPhaseHarness { IsError = true, ResultText = "  \n" };
-
-        ReviewPhaseResult result = await h.RunAsync();
-
-        Assert.False(result.Approved);
-        Assert.False(string.IsNullOrWhiteSpace(Assert.Single(result.Blocking)));
-    }
-
-    [Fact]
     public async Task AnErrorAnswerBeatsAnApprovalInTheFile()
     {
         using var h = new ReviewPhaseHarness { IsError = true, ResultText = "Invalid API key", VerdictToWrite = "{\"approved\": true}" };
@@ -102,15 +91,58 @@ public sealed class ReviewPhaseTests
     }
 
     [Fact]
-    public async Task ALeftoverVerdictIsGoneBeforeTheAgentRuns()
+    public async Task ThePromptIsAReviewRequestThatAsksForTheVerdict()
+    {
+        using var h = new ReviewPhaseHarness { VerdictToWrite = "{\"approved\": true}" };
+
+        ReviewPhaseResult result = await h.RunAsync(model: "m", turns: 5);
+
+        AgentRequest request = Assert.Single(h.Requests);
+        Assert.Equal((Phase.Review, "m", 5), (request.Phase, request.Model, request.MaxTurns));
+        Assert.Equal(["review.json"], request.Outputs);
+        Assert.True(result.Approved);
+    }
+
+    [Fact]
+    public async Task TheVerdictComesFromTheOutputsOfTheAnswerAndNotFromTheDisk()
+    {
+        using var h = new ReviewPhaseHarness { VerdictToWrite = "{\"approved\": false, \"blocking\": [\"on disk\"]}" };
+        h.Agent.ReadsDisk = false;
+        h.Agent.Answer(FakeAgent.Done() with { Outputs = new Dictionary<string, string> { ["review.json"] = "{\"approved\": true}" } }, 1);
+
+        ReviewPhaseResult result = await h.RunAsync();
+
+        Assert.True(result.Approved);
+    }
+
+    [Fact]
+    public async Task AVerdictFileThatThePromptDidNotWriteIsAbsent()
     {
         using var h = new ReviewPhaseHarness();
         h.Write(".factory/review.json", "{\"approved\": true}");
 
         ReviewPhaseResult result = await h.RunAsync();
 
-        Assert.Null(h.VerdictBeforeAgent);
         Assert.False(result.Approved);
+        Assert.Equal(
+            ".factory/review.json must hold one JSON object with approved (true or false) and blocking (a list of texts): the file is absent.",
+            Assert.Single(result.Blocking));
+    }
+
+    [Theory]
+    [InlineData("not json")]
+    [InlineData("[]")]
+    [InlineData("")]
+    public async Task AVerdictThatIsNotOneJsonObjectIsARejectionThatSaysSo(string text)
+    {
+        using var h = new ReviewPhaseHarness { VerdictToWrite = text };
+
+        ReviewPhaseResult result = await h.RunAsync();
+
+        Assert.False(result.Approved);
+        Assert.Equal(
+            ".factory/review.json must hold one JSON object with approved (true or false) and blocking (a list of texts): the text is not one JSON object.",
+            Assert.Single(result.Blocking));
     }
 
     [Fact]

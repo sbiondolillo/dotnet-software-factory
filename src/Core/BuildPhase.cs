@@ -2,8 +2,9 @@ using System.Text;
 
 namespace Core;
 
-/// <summary>The outcome of <see cref="BuildPhase"/>: passed, or failed with the text claude gave.</summary>
-public sealed record BuildPhaseResult(bool Passed, string Failure);
+/// <summary>The outcome of <see cref="BuildPhase"/>: passed, or failed with the text the agent gave. <paramref name="Outputs"/>
+/// holds the text of each output the agent wrote, and <paramref name="Faults"/> the faults the agent knows about the build.</summary>
+public sealed record BuildPhaseResult(bool Passed, string Failure, IReadOnlyDictionary<string, string> Outputs, IReadOnlyList<string> Faults);
 
 /// <summary>Asks the agent for the work that <paramref name="text"/> states, around the issue and the Redo texts.</summary>
 public sealed class BuildPhase(Agent agent, BuildText text)
@@ -11,18 +12,20 @@ public sealed class BuildPhase(Agent agent, BuildText text)
     private const int PromptLimit = 131071;
     private const string CutMarker = "[cut]";
 
-    /// <summary>Runs one build prompt built from the issue and the Redo texts.</summary>
+    /// <summary>Runs one build prompt built from the issue and the Redo texts, and asks for the base names of
+    /// <paramref name="outputs"/>.</summary>
     public async Task<BuildPhaseResult> RunAsync(
         string title,
         string body,
         string model,
         int maxTurns,
         IReadOnlyList<string> redoTexts,
+        IReadOnlyList<string> outputs,
         CancellationToken cancellationToken = default)
     {
         string prompt = BuildPrompt(title, body, redoTexts);
-        ClaudeCodeResult answer = await agent.RunAsync(prompt, model, maxTurns, "build", cancellationToken).ConfigureAwait(false);
-        return answer.IsError ? new BuildPhaseResult(false, answer.Result) : new BuildPhaseResult(true, "");
+        AgentAnswer answer = await agent.RunAsync(new AgentRequest(prompt, model, maxTurns, Phase.Build, outputs), cancellationToken).ConfigureAwait(false);
+        return new BuildPhaseResult(!answer.IsError, answer.IsError ? answer.Result : "", answer.Outputs, answer.Faults);
     }
 
     private static int Bytes(string text) => Encoding.UTF8.GetByteCount(text);

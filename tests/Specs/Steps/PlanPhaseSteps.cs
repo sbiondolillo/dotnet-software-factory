@@ -1,4 +1,3 @@
-using System.Globalization;
 using Core;
 using Reqnroll;
 using Specs.Unit;
@@ -123,7 +122,7 @@ public sealed class PlanPhaseSteps(IssueState issue) : IDisposable
     public void GivenEachError(string text) => _h.Answer(null, true, text);
 
     [Given("claude answers the first run with the error flag set and no result text")]
-    public void GivenFirstErrorNoText() => _h.Answer(1, true, "");
+    public void GivenFirstErrorNoText() => _h.Answer(1, true, Agent.NoTextError);
 
     [When("I run the plan phase")]
     public async Task WhenIRun() =>
@@ -132,9 +131,9 @@ public sealed class PlanPhaseSteps(IssueState issue) : IDisposable
     [Then("the first prompt ran with the model {string} and the turn limit {int}")]
     public void ThenFirstModel(string model, int turns)
     {
-        List<string> args = _h.ExecArguments[0];
-        Assert.Equal(model, args[args.IndexOf("--model") + 1]);
-        Assert.Equal(turns.ToString(CultureInfo.InvariantCulture), args[args.IndexOf("--max-turns") + 1]);
+        AgentRequest request = _h.Requests[0];
+        Assert.Equal((model, turns, Phase.Plan), (request.Model, request.MaxTurns, request.Phase));
+        Assert.Equal(["plan.md"], request.Outputs);
     }
 
     [Then("the first prompt holds {string}, {string}, {string} and {string}")]
@@ -187,13 +186,6 @@ public sealed class PlanPhaseSteps(IssueState issue) : IDisposable
 
     [Then("the result holds {int} failure")]
     public void ThenHoldsFailures(int count) => Assert.Equal(count, Result.Failures.Count);
-
-    [Then("each command the plan phase ran is a docker command")]
-    public void ThenAllDocker()
-    {
-        Assert.NotEmpty(_h.Recorded);
-        Assert.All(_h.Recorded, spec => Assert.Equal("docker", spec.Command));
-    }
 
     private static void AssertHolds(string prompt, params string[] texts)
     {

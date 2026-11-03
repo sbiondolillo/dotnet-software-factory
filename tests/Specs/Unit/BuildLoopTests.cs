@@ -190,39 +190,6 @@ public sealed class BuildLoopTests
     }
 
     [Theory]
-    [InlineData(true, "")]
-    [InlineData(true, " \n")]
-    [InlineData(false, "")]
-    [InlineData(false, "\t")]
-    public async Task AnErrorWithNoTextStopsWithTheFixedSentence(bool ofBuild, string text)
-    {
-        await using var h = new BuildLoopHarness();
-        if (ofBuild)
-        {
-            h.Builds[0] = BuildLoopHarness.BuildStop(text);
-        }
-        else
-        {
-            h.Reviews[0] = BuildLoopHarness.ReviewError(text);
-        }
-
-        await h.RunAsync();
-
-        Assert.Equal(new BuildLoopResult(BuildLoopEnd.Stopped, 0, "claude answered with an error and no text."), h.Result);
-        Assert.Equal(BuildLoop.NoTextError, h.Result!.Comment);
-    }
-
-    [Fact]
-    public async Task AReviewErrorWithNoBlockingTextStopsWithTheFixedSentence()
-    {
-        await using var h = new BuildLoopHarness();
-        h.Reviews[0] = () => new ReviewPhaseResult(false, [], IsError: true);
-        await h.RunAsync();
-
-        Assert.Equal(new BuildLoopResult(BuildLoopEnd.Stopped, 0, BuildLoop.NoTextError), h.Result);
-    }
-
-    [Theory]
     [InlineData("build")]
     [InlineData("lint")]
     [InlineData("scope")]
@@ -347,15 +314,41 @@ public sealed class BuildLoopTests
     }
 
     [Fact]
-    public async Task TheNoteOfARejectedBuildGivesTheRedoTextsOfTheNextBuild()
+    public async Task TheFaultsOfARejectedBuildFollowTheRedoTextsOfTheReviewOnce()
     {
-        await using var h = new BuildLoopHarness { NoteBuild = texts => [.. texts, "noted"] };
+        await using var h = new BuildLoopHarness();
+        h.Builds[0] = BuildLoopHarness.BuildFaults("no commit", "again");
         h.Reviews[0] = BuildLoopHarness.ReviewBlocks("again");
         h.Reviews.Add(BuildLoopHarness.Approve);
         await h.RunAsync();
 
         Assert.Equal(new BuildLoopResult(BuildLoopEnd.Passed, 1), h.Result);
-        Assert.Equal(["again", "noted"], h.BuildTexts[1]);
+        Assert.Equal(["again", "no commit"], h.BuildTexts[1]);
+        Assert.Equal(["- Redo 1, after review 1: again", "- Redo 1, after review 1: no commit"], h.RedoItems);
+    }
+
+    [Fact]
+    public async Task TheFaultsOfABuildFollowTheRedoTextsOfAGateAndTheOrderOfTheRunStays()
+    {
+        await using var h = new BuildLoopHarness();
+        h.Gates.Add(GateName.Test);
+        h.Builds[0] = BuildLoopHarness.BuildFaults("no commit");
+        h.Builds.Add(BuildLoopHarness.Pass);
+        h.GateAnswers[GateName.Test] = [BuildLoopHarness.GateFails("test failed"), () => new GateOutcome("passed", [])];
+        await h.RunAsync();
+
+        Assert.Equal(["build", "lint", "test", "build", "lint", "test", "review"], h.Calls);
+        Assert.Equal(["test failed", "no commit"], h.BuildTexts[1]);
+    }
+
+    [Fact]
+    public async Task TheFaultsOfABuildThatTheReviewApprovesGiveNoRedo()
+    {
+        await using var h = new BuildLoopHarness();
+        h.Builds[0] = BuildLoopHarness.BuildFaults("no commit");
+        await h.RunAsync();
+
+        Assert.Equal(new BuildLoopResult(BuildLoopEnd.Passed, 0), h.Result);
     }
 
     [Fact]

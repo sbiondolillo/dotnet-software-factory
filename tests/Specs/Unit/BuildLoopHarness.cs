@@ -46,9 +46,6 @@ public sealed class BuildLoopHarness : IAsyncDisposable
     /// <summary>The answer of <c>git status --porcelain</c> after the format: a line here makes the lint commit.</summary>
     public string Status { get; set; } = "";
 
-    /// <summary>The note of each rejected build: it takes the Redo texts and gives the texts of the next build. The default gives them unchanged.</summary>
-    public Func<IReadOnlyList<string>, IReadOnlyList<string>> NoteBuild { get; set; } = texts => texts;
-
     /// <summary>Every call of the loop, in order.</summary>
     public List<string> Calls { get; } = [];
 
@@ -83,13 +80,16 @@ public sealed class BuildLoopHarness : IAsyncDisposable
     /// <summary>The Redo items of the job summary.</summary>
     public IReadOnlyList<string> RedoItems => [.. Summary.Render(FactoryRun.SummaryHeading).Split('\n').Where(line => line.StartsWith("- Redo ", StringComparison.Ordinal))];
 
-    public static BuildOutcome Pass() => new(null, []);
+    public static BuildOutcome Pass() => new(null, [], []);
 
     public static ReviewPhaseResult Approve() => new(true, []);
 
-    public static Func<BuildOutcome> BuildStop(string text) => () => new BuildOutcome(text, []);
+    public static Func<BuildOutcome> BuildStop(string text) => () => new BuildOutcome(text, [], []);
 
-    public static Func<BuildOutcome> BuildRedo(params string[] texts) => () => new BuildOutcome(null, texts);
+    public static Func<BuildOutcome> BuildRedo(params string[] texts) => () => new BuildOutcome(null, texts, []);
+
+    /// <summary>A build that passes with <paramref name="faults"/>, the faults that the agent knows about it.</summary>
+    public static Func<BuildOutcome> BuildFaults(params string[] faults) => () => new BuildOutcome(null, [], faults);
 
     public static Func<GateOutcome> GateFails(params string[] texts) => () => new GateOutcome("failed", texts);
 
@@ -112,7 +112,7 @@ public sealed class BuildLoopHarness : IAsyncDisposable
             .Returns((CommandSpec spec, CancellationToken _) => Task.FromResult(Reply(spec)));
         _sandbox = await Sandbox.StartAsync(mock.Object, "factory-sandbox:test", _root.FullName, _work.FullName, TestContext.Current.CancellationToken);
         var lint = new LintGate(_sandbox, new Git(mock.Object));
-        var loop = new BuildLoop(Summary, Clock, Progress, NoteBuild, lint, _work.FullName, "Add a total", "Ada", "ada@example.com");
+        var loop = new BuildLoop(Summary, Clock, Progress, lint, _work.FullName, "Add a total", "Ada", "ada@example.com");
         try
         {
             Result = await loop.RunAsync(new FakeBuild(this), [.. Gates.Select(name => new FakeGate(this, name))], ReviewAsync, Source.Token);
