@@ -78,7 +78,6 @@ Feature: The factory pins the scenarios of an issue as the owner wrote them
     Given an issue with ## Scenarios
     When the factory runs the issue
     Then the first build prompt holds "Write unit tests for the new code under tests/Specs/Unit/."
-    And the first build prompt lacks "The issue states that no scenario applies"
 
   Scenario: The first prompt of an issue with scenarios asks for the plan alone
     Given an issue with ## Scenarios

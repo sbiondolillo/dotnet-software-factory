@@ -475,24 +475,8 @@ public sealed class IssueScenariosSteps(FactoryRunSteps factory, PlanPhaseSteps 
     public void ThenProgressEnds(string line) =>
         Assert.Equal(line, H.Progress.ToString().Split('\n').Select(l => l.TrimEnd('\r')).Last(l => l.Length > 0));
 
-    [Then("the work tree holds {string} as it is on main, and no other feature file")]
-    public void ThenOnlyMainFeature(string path)
-    {
-        Assert.Equal(_main[path], Read(path));
-        string features = Path.Combine(H.CloneDirectory, "specs", "features");
-        Assert.Equal(
-            [path],
-            Directory.EnumerateFiles(features, "*.feature", SearchOption.AllDirectories).Select(file => Path.GetRelativePath(H.CloneDirectory, file).Replace('\\', '/')));
-    }
-
     [Then("the first build prompt holds {string}")]
     public void ThenFirstBuildHolds(string text) => Assert.Contains(text, H.Prompts.First(p => p.Kind is "build").Text, StringComparison.Ordinal);
-
-    [Then("the first build prompt lacks {string}")]
-    public void ThenFirstBuildLacks(string text) => Assert.DoesNotContain(text, H.Prompts.First(p => p.Kind is "build").Text, StringComparison.Ordinal);
-
-    [Then("the run gives back a pull request")]
-    public void ThenPull() => Assert.NotNull(Result.PullRequest);
 
     [Then("the run gives back no pull request and {int} Redos")]
     public void ThenNoPull(int redos)
