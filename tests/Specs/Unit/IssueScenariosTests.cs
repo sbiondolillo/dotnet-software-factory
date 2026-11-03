@@ -202,4 +202,16 @@ public sealed class IssueScenariosTests : IDisposable
         Assert.Empty(result.Written);
         Assert.Equal("Feature: G\n\n" + One, Read());
     }
+
+    [Fact]
+    public void NoneBesideAFencedBlockIsTextUnderTheHeading()
+    {
+        Main("Feature: G\n\n" + One);
+
+        IssueScenariosResult result = Apply(Block(Two).Replace("## Scenarios\n\n", "## Scenarios\n\nNone.\n\n", StringComparison.Ordinal));
+
+        Assert.Empty(result.Faults);
+        Assert.Equal([Path0], result.Written);
+        Assert.Contains("Scenario: Two", Read(), StringComparison.Ordinal);
+    }
 }
