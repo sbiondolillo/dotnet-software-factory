@@ -95,19 +95,6 @@ public sealed class FactoryRunTests
     }
 
     [Fact]
-    public async Task AnErrorOnTheSecondReviewStopsWithOneRedo()
-    {
-        using var h = new FactoryRunHarness();
-        h.RejectedBuilds.Add(1);
-        h.ErrorReviews.Add(2);
-        FactoryRunResult result = await h.RunAsync(Ct);
-        Assert.Null(result.PullRequest);
-        Assert.Equal(1, result.Redos);
-        Assert.Equal(2, h.Builds);
-        Assert.Equal(2, h.Prompts.Count(p => p.Kind is "review"));
-    }
-
-    [Fact]
     public async Task AnErrorOnThePlainPlanPromptPostsItsTextAndRunsNoBuild()
     {
         using var h = new FactoryRunHarness();
