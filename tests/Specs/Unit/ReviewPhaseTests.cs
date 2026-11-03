@@ -1,4 +1,3 @@
-using System.Text;
 using Core;
 using Moq;
 using Xunit;
@@ -177,42 +176,21 @@ public sealed class ReviewPhaseTests
     }
 
     [Fact]
-    public async Task ASurrogatePairDiffIsCutOnWholeCharactersAndFits()
+    public async Task TheDiffIsTheOnePieceOfThePromptAndTheIssueAndTheBaseAreFixed()
     {
-        using var h = new ReviewPhaseHarness { DiffText = string.Concat(Enumerable.Repeat("\U0001F600", 60000)) };
+        string diff = "START" + new string('a', 200000);
+        using var h = new ReviewPhaseHarness { DiffText = diff };
 
         await h.RunAsync();
 
-        string prompt = h.Prompts[0];
-        Assert.True(Encoding.UTF8.GetByteCount(prompt) <= 131071);
-        Assert.EndsWith("[cut]", prompt, StringComparison.Ordinal);
-        for (int i = 0; i < prompt.Length; i++)
-        {
-            if (char.IsHighSurrogate(prompt[i]))
-            {
-                Assert.True(i + 1 < prompt.Length && char.IsLowSurrogate(prompt[i + 1]));
-                i++;
-            }
-            else
-            {
-                Assert.False(char.IsLowSurrogate(prompt[i]));
-            }
-        }
-    }
-
-    [Fact]
-    public async Task ACutDiffKeepsItsStartAndTheIssueAndTheBase()
-    {
-        using var h = new ReviewPhaseHarness { DiffText = "START" + new string('a', 200000) };
-
-        await h.RunAsync();
-
-        string prompt = h.Prompts[0];
-        Assert.Contains("START" + new string('a', 1000), prompt, StringComparison.Ordinal);
-        Assert.EndsWith("[cut]", prompt, StringComparison.Ordinal);
-        Assert.Contains("Add a checkout total", prompt, StringComparison.Ordinal);
-        Assert.Contains("The checkout shows the total of the cart.", prompt, StringComparison.Ordinal);
-        Assert.Contains(ReviewPhaseHarness.DefaultBase, prompt, StringComparison.Ordinal);
+        AgentPrompt prompt = Assert.Single(h.Requests).Prompt;
+        Assert.Equal([diff], prompt.Pieces);
+        Assert.EndsWith(diff, prompt.Text, StringComparison.Ordinal);
+        string cut = prompt.Compose(["PIECE"]);
+        Assert.EndsWith("PIECE", cut, StringComparison.Ordinal);
+        Assert.Contains("Add a checkout total", cut, StringComparison.Ordinal);
+        Assert.Contains("The checkout shows the total of the cart.", cut, StringComparison.Ordinal);
+        Assert.Contains(ReviewPhaseHarness.DefaultBase, cut, StringComparison.Ordinal);
     }
 
     [Fact]

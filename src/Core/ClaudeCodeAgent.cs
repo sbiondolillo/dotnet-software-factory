@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
 
 namespace Core;
@@ -13,16 +12,14 @@ public sealed class ClaudeCodeAgent(
     TimeProvider? time = null,
     Action<TimeSpan, AgentAnswer>? onAnswer = null) : Agent
 {
-    private const int PromptLimit = 131072;
+    private const int PromptLimit = 131071;
 
     /// <inheritdoc />
     public override async Task<AgentAnswer> RunAsync(AgentRequest request, CancellationToken cancellationToken = default)
     {
         RefuseUnsafeOutputs(request);
-        if (Encoding.UTF8.GetByteCount(request.Prompt) >= PromptLimit)
-        {
-            throw new ClaudeCodeException($"The prompt holds {PromptLimit} bytes or more in UTF-8, the limit of one argument.");
-        }
+        string prompt = request.Prompt.Fit(PromptLimit) ?? throw new ClaudeCodeException(
+            $"The issue and the job hold more than {PromptLimit} bytes in UTF-8, and no Redo text can be cut to make room.");
 
         foreach (string name in request.Outputs)
         {
@@ -41,7 +38,7 @@ public sealed class ClaudeCodeAgent(
         CommandResult result = await sandbox.RunAsync(
             "claude",
             [
-                "-p", request.Prompt,
+                "-p", prompt,
                 "--model", request.Model,
                 "--max-turns", request.MaxTurns.ToString(CultureInfo.InvariantCulture),
                 "--output-format", "json",

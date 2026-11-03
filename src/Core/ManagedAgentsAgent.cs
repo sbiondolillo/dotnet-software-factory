@@ -57,7 +57,7 @@ public sealed class ManagedAgentsAgent(
     {
         RefuseUnsafeOutputs(request);
         ObjectDisposedException.ThrowIf(_disposed, this);
-        string prompt = request.Prompt;
+        string prompt = request.Prompt.Text;
         string model = request.Model;
         string phase = request.Phase.Text();
         if (_model is not null && _model != model)

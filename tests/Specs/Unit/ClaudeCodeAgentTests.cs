@@ -48,7 +48,7 @@ public sealed class ClaudeCodeAgentTests : IDisposable
     }
 
     private static Task<AgentAnswer> RunAsync(ClaudeCodeAgent agent, string prompt = "hi", params string[] outputs) =>
-        agent.RunAsync(new AgentRequest(prompt, "m", 1, Phase.Build, outputs), TestContext.Current.CancellationToken);
+        agent.RunAsync(new AgentRequest(FakeAgent.Whole(prompt), "m", 1, Phase.Build, outputs), TestContext.Current.CancellationToken);
 
     private bool Executed => _recorded.Exists(s => s.Arguments[0] == "exec");
 
@@ -157,8 +157,33 @@ public sealed class ClaudeCodeAgentTests : IDisposable
 
         ClaudeCodeException exception = await Assert.ThrowsAsync<ClaudeCodeException>(() => RunAsync(agent, string.Concat(Enumerable.Repeat(letter, count))));
 
-        Assert.Contains("131072", exception.Message, StringComparison.Ordinal);
+        Assert.Equal("The issue and the job hold more than 131071 bytes in UTF-8, and no Redo text can be cut to make room.", exception.Message);
         Assert.False(Executed);
+    }
+
+    [Fact]
+    public async Task APromptWhoseFixedPartIsOverTheLimitThrowsAndRunsNoExec()
+    {
+        ClaudeCodeAgent agent = await AgentAsync(new CommandResult { StandardOutput = Ok });
+        var prompt = new AgentPrompt(["piece"], pieces => new string('b', 131071) + pieces[0]);
+
+        await Assert.ThrowsAsync<ClaudeCodeException>(() =>
+            agent.RunAsync(new AgentRequest(prompt, "m", 1, Phase.Build, []), TestContext.Current.CancellationToken));
+
+        Assert.False(Executed);
+    }
+
+    [Fact]
+    public async Task APieceOverTheLimitReachesExecCutToFit()
+    {
+        ClaudeCodeAgent agent = await AgentAsync(new CommandResult { StandardOutput = Ok });
+        var prompt = new AgentPrompt([new string('a', 200000)], pieces => "Lead.\n" + pieces[0]);
+
+        await agent.RunAsync(new AgentRequest(prompt, "m", 1, Phase.Build, []), TestContext.Current.CancellationToken);
+
+        List<string> args = [.. _recorded.Single(s => s.Arguments[0] == "exec").Arguments];
+        Assert.Equal(prompt.Fit(131071), args[args.IndexOf("-p") + 1]);
+        Assert.Equal(131071, System.Text.Encoding.UTF8.GetByteCount(args[args.IndexOf("-p") + 1]));
     }
 
     [Fact]

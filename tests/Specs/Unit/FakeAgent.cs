@@ -22,7 +22,10 @@ public sealed class FakeAgent(string workTree) : Agent
     public List<AgentRequest> Requests { get; } = [];
 
     /// <summary>The prompt of each request, in order.</summary>
-    public IReadOnlyList<string> Prompts => [.. Requests.Select(request => request.Prompt)];
+    public IReadOnlyList<string> Prompts => [.. Requests.Select(request => request.Prompt.Text)];
+
+    /// <summary>A prompt of <paramref name="text"/> with no cuttable piece.</summary>
+    public static AgentPrompt Whole(string text) => new([], _ => text);
 
     /// <summary>An answer with no error, no output and no fault.</summary>
     public static AgentAnswer Done(string result = "done") => new(result, 1, 0m, false, new Dictionary<string, string>(), []);

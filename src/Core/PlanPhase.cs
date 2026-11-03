@@ -82,7 +82,7 @@ public sealed class PlanPhase(Agent agent, PlanText text)
         Dictionary<string, string> baseline,
         CancellationToken cancellationToken)
     {
-        AgentAnswer answer = await agent.RunAsync(new AgentRequest(prompt, model, maxTurns, Phase.Plan, [PlanName]), cancellationToken).ConfigureAwait(false);
+        AgentAnswer answer = await agent.RunAsync(new AgentRequest(new AgentPrompt([], _ => prompt), model, maxTurns, Phase.Plan, [PlanName]), cancellationToken).ConfigureAwait(false);
         if (answer.IsError)
         {
             return ([answer.Result], true);
