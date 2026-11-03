@@ -49,6 +49,32 @@ public sealed class AgentPromptTests
         Assert.True(Bytes(Fixed + $"<{new string('a', a + 1)}[cut]><{new string('b', b + 1)}[cut]><short>") > 500);
     }
 
+    [Fact]
+    public void PiecesOfDifferentWidthsAreCutToTheSameNumberOfBytes()
+    {
+        AgentPrompt prompt = Prompt(new string('a', 1000), new string('é', 1000));
+
+        string text = Assert.IsType<string>(prompt.Fit(500));
+
+        int a = Regex.Match(text, "a{2,}").Length;
+        int e = Regex.Match(text, "é+").Length;
+        Assert.InRange(Math.Abs(a - Bytes(new string('é', e))), 0, 1);
+        Assert.True(Bytes(text) <= 500);
+    }
+
+    [Fact]
+    public void APieceOfExactlyTheCutSizeStaysWhole()
+    {
+        string shorter = new('b', 50);
+        AgentPrompt prompt = Prompt(new string('a', 1000), shorter);
+
+        string text = Assert.IsType<string>(prompt.Fit(Bytes(Fixed) + 4 + 100));
+
+        Assert.Contains($"<{shorter}>", text, StringComparison.Ordinal);
+        Assert.Contains($"<{new string('a', 45)}[cut]>", text, StringComparison.Ordinal);
+        Assert.Single(text.Split("[cut]").Skip(1));
+    }
+
     [Theory]
     [InlineData("é")]
     [InlineData("\U0001F600")]
