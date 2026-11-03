@@ -21,6 +21,7 @@ public sealed class BuildLoopHarness : IAsyncDisposable
     private int _builds;
     private int _reviews;
     private int _lints;
+    private int _pushes;
 
     public BuildLoopHarness() =>
         File.WriteAllText(Path.Combine(_root.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
@@ -40,7 +41,16 @@ public sealed class BuildLoopHarness : IAsyncDisposable
     /// <summary>The answers of <c>dotnet format</c> in the lint, one for each call.</summary>
     public List<Func<CommandResult>> Formats { get; } = [() => new CommandResult()];
 
-    /// <summary>Every call of the loop, in order.</summary>
+    /// <summary>The answer of <c>git status --porcelain</c> after the format: a line here makes the lint commit.</summary>
+    public string Status { get; set; } = "";
+
+    /// <summary>The answers of <c>git push</c>, one for each call.</summary>
+    public List<Func<CommandResult>> Pushes { get; } = [() => new CommandResult()];
+
+    /// <summary>True for the Managed Agents path, where the host pushes the commit of the lint to the scratch branch.</summary>
+    public bool Managed { get; set; }
+
+    /// <summary>Every call of the loop, in order, with <c>push</c> for a push of the scratch branch.</summary>
     public List<string> Calls { get; } = [];
 
     /// <summary>The Redo texts that each build got, in order.</summary>
@@ -97,7 +107,8 @@ public sealed class BuildLoopHarness : IAsyncDisposable
         var git = new Git(mock.Object);
         var setup = new RunAgentsSetup(
             mock.Object, git, "octo", "shop", "token", _work.FullName, _root.FullName, "factory-sandbox:test",
-            "base", "factory/1-session", "Add a total", "Ada", "ada@example.com", null);
+            "base", "factory/1-session", "Add a total", "Ada", "ada@example.com",
+            Managed ? new ManagedAgentsSettings("key", "agent", "env", "1", "2", "pem") : null);
         _agents = await RunAgents.StartAsync(setup, TestContext.Current.CancellationToken);
         var loop = new BuildLoop(Summary, Clock, Progress, _agents, _agents.Lint(null), _work.FullName, "Add a total", "Ada", "ada@example.com");
         try
@@ -134,6 +145,20 @@ public sealed class BuildLoopHarness : IAsyncDisposable
 
     private CommandResult Reply(CommandSpec spec)
     {
+        if (spec.Command is "git")
+        {
+            switch (spec.Arguments[0])
+            {
+                case "status":
+                    return new CommandResult { StandardOutput = Status };
+                case "push":
+                    Calls.Add("push");
+                    return Next(Pushes, _pushes++);
+                default:
+                    return new CommandResult();
+            }
+        }
+
         if (spec.Command is not "docker")
         {
             return new CommandResult();

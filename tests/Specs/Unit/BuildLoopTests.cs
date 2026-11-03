@@ -275,6 +275,8 @@ public sealed class BuildLoopTests
     [InlineData("build", new string[0])]
     [InlineData("lint", new string[0])]
     [InlineData("scope", new[] { "| build 1 | 5 | 0 | $0 | passed |" })]
+    [InlineData("test", new[] { "| build 1 | 5 | 0 | $0 | passed |", "| scope 1 | 2 | 0 | $0 | passed |" })]
+    [InlineData("api", new[] { "| build 1 | 5 | 0 | $0 | passed |", "| scope 1 | 2 | 0 | $0 | passed |", "| test 1 | 2 | 0 | $0 | passed |" })]
     [InlineData("check", new[] { "| build 1 | 5 | 0 | $0 | passed |", "| scope 1 | 2 | 0 | $0 | passed |", "| test 1 | 2 | 0 | $0 | passed |", "| api 1 | 2 | 0 | $0 | passed |" })]
     [InlineData("review", new[] { "| build 1 | 5 | 0 | $0 | passed |", "| scope 1 | 2 | 0 | $0 | passed |", "| test 1 | 2 | 0 | $0 | passed |", "| api 1 | 2 | 0 | $0 | passed |", "| check 1 | 2 | 0 | $0 | passed |" })]
     public async Task AnExceptionOfADependencyReachesTheCallerUnchangedAndTheRowsSoFarStay(string point, string[] rows)
@@ -342,5 +344,53 @@ public sealed class BuildLoopTests
         await h.RunAsync();
 
         Assert.Equal(["| build 1 | 5 | 0 | $0 | passed |", "| test 1 | 42 | 0 | $0 | passed |", "| check 1 | 2 | 0 | $0 | passed |", "| review 1 | 7 | 3 | $0.5 | approved |"], h.Rows);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task OnTheManagedPathTheLintCommitIsPushedBeforeTheGates(bool commits, bool managed)
+    {
+        await using var h = new BuildLoopHarness { Managed = managed, Status = commits ? " M src/Greeter.cs\n" : "" };
+        h.Gates.Add(GateName.Test);
+        await h.RunAsync();
+
+        Assert.Equal(commits && managed ? ["build", "lint", "push", "test", "review"] : ["build", "lint", "test", "review"], h.Calls);
+    }
+
+    [Fact]
+    public async Task ACancelDuringThePushOfTheLintCommitThrowsAndNoGateRuns()
+    {
+        await using var h = new BuildLoopHarness { Managed = true, Status = " M src/Greeter.cs\n" };
+        h.Gates.Add(GateName.Test);
+        h.Pushes[0] = h.Cancels(() => new CommandResult());
+        await h.RunAsync();
+
+        Assert.IsAssignableFrom<OperationCanceledException>(h.Thrown);
+        Assert.Equal(["build", "lint", "push"], h.Calls);
+        Assert.Empty(h.Rows);
+    }
+
+    [Fact]
+    public async Task ACancelDuringTheLintThrowsBeforeThePush()
+    {
+        await using var h = new BuildLoopHarness { Managed = true, Status = " M src/Greeter.cs\n" };
+        h.Gates.Add(GateName.Test);
+        h.Formats[0] = h.Cancels(() => new CommandResult());
+        await h.RunAsync();
+
+        Assert.IsAssignableFrom<OperationCanceledException>(h.Thrown);
+        Assert.Equal(["build", "lint"], h.Calls);
+    }
+
+    [Fact]
+    public async Task AReviewErrorStopsWithItsFirstText()
+    {
+        await using var h = new BuildLoopHarness();
+        h.Reviews[0] = () => new ReviewPhaseResult(false, ["first", "second"], IsError: true);
+        await h.RunAsync();
+
+        Assert.Equal(new BuildLoopResult(BuildLoopEnd.Stopped, 0, "first"), h.Result);
     }
 }

@@ -129,7 +129,63 @@ public sealed class FactoryRun(
         {
             try
             {
-                return await RunAgentsAsync(request, issue, choice, scenarios, agents, git, baseCommit, cancellationToken).ConfigureAwait(false);
+                if (choice.Check is string check && await PreCheckAsync(request, agents.Sandbox, check, choice.Recipe, cancellationToken).ConfigureAwait(false))
+                {
+                    return new FactoryRunResult(null, 0);
+                }
+
+                Pin pin;
+                if (choice.Recipe is Recipe.Behavior or Recipe.Refactor)
+                {
+                    await Say("plan: start").ConfigureAwait(false);
+                    PlanPhaseResult plan = await new PlanPhase(agents.Builder, RecipeRules.PlanText(choice.Recipe, scenarios))
+                        .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, request.Directory, cancellationToken).ConfigureAwait(false);
+                    if (!plan.Passed || (choice.Recipe is Recipe.Behavior && plan.Pin is null))
+                    {
+                        _summary.AddRow("plan", null, "failed");
+                        await Say("plan: failed").ConfigureAwait(false);
+                        await CommentAsync(request, "The plan phase failed:", plan.Failures, cancellationToken).ConfigureAwait(false);
+                        return new FactoryRunResult(null, 0);
+                    }
+
+                    _summary.AddRow("plan", null, "passed");
+                    await Say("plan: passed").ConfigureAwait(false);
+                    pin = plan.Pin is Pin planned && choice.Recipe is Recipe.Behavior ? planned : RecipeRules.TakePin(choice.Recipe, request.Directory);
+                }
+                else
+                {
+                    pin = RecipeRules.TakePin(choice.Recipe, request.Directory);
+                }
+
+                GateSet gates = await new GateFactory(agents.Sandbox, git, request.Directory, baseCommit, request.SecretNames, progress, log, request.SkipIntegration)
+                    .CreateAsync(choice, pin, cancellationToken).ConfigureAwait(false);
+                if (gates.Stop is string stop)
+                {
+                    await CommentAsync(request, stop, [], cancellationToken).ConfigureAwait(false);
+                    return new FactoryRunResult(null, 0);
+                }
+
+                var build = new FactoryBuild(
+                    new BuildPhase(agents.Builder, RecipeRules.BuildText(choice.Recipe, RunKind.Factory)), issue.Title, issue.Body, request.BuildModel, request.BuildTurns);
+                var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Factory));
+                var loop = new BuildLoop(_summary, _clock, progress, agents, agents.Lint(log), request.Directory, issue.Title, request.AuthorName, request.AuthorEmail);
+                BuildLoopResult result = await loop.RunAsync(
+                    build,
+                    gates.Gates,
+                    token => reviewPhase.RunAsync(issue.Title, issue.Body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, token),
+                    cancellationToken).ConfigureAwait(false);
+                if (result.End is not BuildLoopEnd.Passed)
+                {
+                    await PostAsync(request, result.Comment ?? "", cancellationToken).ConfigureAwait(false);
+                    return new FactoryRunResult(null, result.Redos);
+                }
+
+                await Say("deliver: start").ConfigureAwait(false);
+                TestGate testGate = gates.Gates.OfType<TestGate>().Single();
+                var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, testGate, choice, result.Redos));
+                PullRequest pullRequest = await deliver
+                    .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
+                return new FactoryRunResult(pullRequest, result.Redos);
             }
             catch (SessionBranchException exception)
             {
@@ -141,75 +197,6 @@ public sealed class FactoryRun(
                 _sessions = agents.Sessions;
             }
         }
-    }
-
-    private async Task<FactoryRunResult> RunAgentsAsync(
-        FactoryRunRequest request,
-        GitHubIssue issue,
-        RecipeChoice choice,
-        IssueScenariosResult? scenarios,
-        RunAgents agents,
-        Git git,
-        string baseCommit,
-        CancellationToken cancellationToken)
-    {
-        if (choice.Check is string check && await PreCheckAsync(request, agents.Sandbox, check, choice.Recipe, cancellationToken).ConfigureAwait(false))
-        {
-            return new FactoryRunResult(null, 0);
-        }
-
-        Pin pin;
-        if (choice.Recipe is Recipe.Behavior or Recipe.Refactor)
-        {
-            await Say("plan: start").ConfigureAwait(false);
-            PlanPhaseResult plan = await new PlanPhase(agents.Builder, RecipeRules.PlanText(choice.Recipe, scenarios))
-                .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, request.Directory, cancellationToken).ConfigureAwait(false);
-            if (!plan.Passed || (choice.Recipe is Recipe.Behavior && plan.Pin is null))
-            {
-                _summary.AddRow("plan", null, "failed");
-                await Say("plan: failed").ConfigureAwait(false);
-                await CommentAsync(request, "The plan phase failed:", plan.Failures, cancellationToken).ConfigureAwait(false);
-                return new FactoryRunResult(null, 0);
-            }
-
-            _summary.AddRow("plan", null, "passed");
-            await Say("plan: passed").ConfigureAwait(false);
-            pin = plan.Pin is Pin planned && choice.Recipe is Recipe.Behavior ? planned : RecipeRules.TakePin(choice.Recipe, request.Directory);
-        }
-        else
-        {
-            pin = RecipeRules.TakePin(choice.Recipe, request.Directory);
-        }
-
-        GateSet gates = await new GateFactory(agents.Sandbox, git, request.Directory, baseCommit, request.SecretNames, progress, log, request.SkipIntegration)
-            .CreateAsync(choice, pin, cancellationToken).ConfigureAwait(false);
-        if (gates.Stop is string stop)
-        {
-            await CommentAsync(request, stop, [], cancellationToken).ConfigureAwait(false);
-            return new FactoryRunResult(null, 0);
-        }
-
-        var build = new FactoryBuild(
-            new BuildPhase(agents.Builder, RecipeRules.BuildText(choice.Recipe, RunKind.Factory)), issue.Title, issue.Body, request.BuildModel, request.BuildTurns);
-        var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Factory));
-        var loop = new BuildLoop(_summary, _clock, progress, agents, agents.Lint(log), request.Directory, issue.Title, request.AuthorName, request.AuthorEmail);
-        BuildLoopResult result = await loop.RunAsync(
-            build,
-            gates.Gates,
-            token => reviewPhase.RunAsync(issue.Title, issue.Body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, token),
-            cancellationToken).ConfigureAwait(false);
-        if (result.End is not BuildLoopEnd.Passed)
-        {
-            await PostAsync(request, result.Comment ?? "", cancellationToken).ConfigureAwait(false);
-            return new FactoryRunResult(null, result.Redos);
-        }
-
-        await Say("deliver: start").ConfigureAwait(false);
-        TestGate testGate = gates.Gates.OfType<TestGate>().Single();
-        var deliver = new Deliver(git, new PullRequests(client), client, Facts(agents, baseCommit, testGate, choice, result.Redos));
-        PullRequest pullRequest = await deliver
-            .RunAsync(request.Directory, request.RunId, request.Owner, request.Repo, request.BaseBranch, request.IssueNumber, issue.Title, request.Token, cancellationToken).ConfigureAwait(false);
-        return new FactoryRunResult(pullRequest, result.Redos);
     }
 
     /// <summary>Runs the check before the first phase, and posts the comment that stops the run when there is one.</summary>
