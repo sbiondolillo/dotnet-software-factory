@@ -109,8 +109,11 @@ public sealed class FeedbackRunSteps : IDisposable
     [Given("each dotnet command exits with the code 0 and the TRX file holds one passed test for each scenario")]
     public void GivenDotnet() => _shared.Harness.RedBuilds.Clear();
 
+    /// <summary>The harness approves every review, so the step sets nothing.</summary>
     [Given("on a review prompt the agent writes an approving review")]
-    public void GivenApproves() => _shared.Harness.RejectedBuilds.Clear();
+    public static void GivenApproves()
+    {
+    }
 
     [Given("GitHub answers each reply and each resolve with the status code 200 and no errors")]
     public void GivenReplies() => _h.ReplyErrorThread = null;
