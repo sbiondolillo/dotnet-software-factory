@@ -46,8 +46,9 @@ def commit_failures(pr, commits, commit_files):
     if not commits:
         return ["2: the pull request lists no commit"]
     found = []
-    if len(commits) < (pr.get("commits") or 0):
-        found.append(f"2: the list of commits holds {len(commits)} of the {pr.get('commits')} of the pull request")
+    expected = pr.get("commits")
+    if not isinstance(expected, int) or len(commits) < expected:
+        found.append(f"2: the list of commits holds {len(commits)} of the {expected} of the pull request")
     first = commits[0]
     if login(first) != DEPENDABOT:
         found.append(f"2: the first commit {first.get('sha', '')[:7]} has the author {login(first)!r}")

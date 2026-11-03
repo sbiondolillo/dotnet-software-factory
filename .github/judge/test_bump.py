@@ -155,6 +155,10 @@ class PureBumpTests(unittest.TestCase):
         self.pr["commits"] = 3
         self.assertFails(2)
 
+    def test_a_pull_request_with_no_commit_count_fails_2(self):
+        del self.pr["commits"]
+        self.assertFails(2)
+
     def test_no_commit_fails_2(self):
         self.commits = []
         self.assertFails(2)
