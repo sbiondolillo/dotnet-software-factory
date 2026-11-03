@@ -78,12 +78,13 @@ Feature: A run writes a job summary with one row for each phase and the reason f
     When the run delivers with 0 Redos
     Then the summary holds the row "| plan | 51 | 12 | $0.6213 | passed |"
 
-  Scenario: A cleanup run has the rows build, test, check and review
+  Scenario: A cleanup run has the rows build, scope, test, check and review
     Given the issue has the label "cleanup"
     When the run delivers with 0 Redos
     Then the summary rows are in this order
       | row      |
       | build 1  |
+      | scope 1  |
       | test 1   |
       | check 1  |
       | review 1 |

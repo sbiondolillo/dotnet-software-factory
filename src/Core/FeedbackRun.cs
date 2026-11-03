@@ -119,12 +119,12 @@ public sealed class FeedbackRun(
             Sandbox sandbox = agents.Sandbox;
             var buildPhase = new BuildPhase(agents.Builder, RecipeRules.BuildText(choice.Recipe, RunKind.Feedback));
             LintGate lintGate = agents.Lint(null);
-            var testGate = new TestGate(sandbox, skipIntegration: request.SkipIntegration);
             var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Feedback));
-
-            IReadOnlySet<string> basePassed = scoped
-                ? await testGate.ReadPassedTestsAsync(request.Directory, cancellationToken).ConfigureAwait(false)
-                : new HashSet<string>();
+            ScopeGate? scopeGate = scoped ? new ScopeGate(git, baseCommit, request.Directory, scope) : null;
+            TestGate testGate = await TestGate
+                .CreateAsync(sandbox, request.Directory, pin, request.SecretNames, scoped ? scope : null, skipIntegration: request.SkipIntegration, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+            CheckGate? checkGate = choice.Check is string check ? new CheckGate(sandbox, check) : null;
             int redos = 0;
             IReadOnlyList<string> redoTexts = [];
             IReadOnlyList<ReportItem> items = [];
@@ -147,26 +147,17 @@ public sealed class FeedbackRun(
                     await Say("lint: start").ConfigureAwait(false);
                     bool linted = await lintGate.RunAsync(request.Directory, title, request.AuthorName, request.AuthorEmail, cancellationToken).ConfigureAwait(false);
                     await agents.AfterLintAsync(linted, cancellationToken).ConfigureAwait(false);
-                    IReadOnlyList<string> scopeFaults = scoped
-                        ? await CleanupGate.ScopeFaultsAsync(git, baseCommit, request.Directory, scope, cancellationToken).ConfigureAwait(false)
-                        : [];
+                    IReadOnlyList<string> scopeFaults = scopeGate is null ? [] : await RunGateAsync(scopeGate, cancellationToken).ConfigureAwait(false);
                     if (scopeFaults.Count > 0)
                     {
                         redoTexts = scopeFaults;
                     }
                     else
                     {
-                        await Say("test: start").ConfigureAwait(false);
-                        TestGateResult gate = scoped
-                            ? await testGate.RunAsync(request.Directory, pin, request.SecretNames, path => CleanupGate.PinExempt(scope, path), cancellationToken).ConfigureAwait(false)
-                            : await testGate.RunAsync(request.Directory, pin, request.SecretNames, cancellationToken).ConfigureAwait(false);
-                        await Say(gate.Passed ? "test: passed" : "test: failed").ConfigureAwait(false);
-                        IReadOnlyList<string> gateFaults = !gate.Passed ? gate.Evidence : scoped ? CleanupGate.LostTests(basePassed, gate) : [];
-                        if (gate.Passed && gateFaults.Count is 0 && choice.Check is string check)
+                        IReadOnlyList<string> gateFaults = await RunGateAsync(testGate, cancellationToken).ConfigureAwait(false);
+                        if (gateFaults.Count is 0 && checkGate is not null)
                         {
-                            CommandResult after = await CleanupGate.RunCheckAsync(sandbox, check, progress, cancellationToken).ConfigureAwait(false);
-                            await Say(after.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
-                            gateFaults = after.ExitCode is 0 ? [] : [CleanupGate.CheckRedo(after)];
+                            gateFaults = await RunGateAsync(checkGate, cancellationToken).ConfigureAwait(false);
                         }
 
                         if (gateFaults.Count > 0)
@@ -218,6 +209,16 @@ public sealed class FeedbackRun(
     }
 
     private Task Say(string line) => ProgressLine.WriteAsync(progress, line);
+
+    /// <summary>Runs <paramref name="gate"/> between its two progress lines and gives its Redo texts.</summary>
+    private async Task<IReadOnlyList<string>> RunGateAsync(IGate gate, CancellationToken cancellationToken)
+    {
+        string name = gate.Name.Text();
+        await Say($"{name}: start").ConfigureAwait(false);
+        GateOutcome outcome = await gate.RunAsync(cancellationToken).ConfigureAwait(false);
+        await Say($"{name}: {outcome.Result}").ConfigureAwait(false);
+        return outcome.RedoTexts;
+    }
 
     private static IReadOnlyList<SessionCost>? Sessions(RunAgents agents) => agents.Sessions is { Count: > 0 } sessions ? sessions : null;
 

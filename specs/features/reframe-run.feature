@@ -151,6 +151,8 @@ Feature: A reframe run keeps every test and every public type and member
     When a caller starts a run
     Then the next build prompt holds a Redo text that holds "outside the scope: docs/README.md"
     And no review prompt runs before it
+    And the job summary holds the row "scope 1" with the result "out of scope"
+    And the Redos list of the job summary holds the item "- Redo 1, after scope 1: outside the scope: docs/README.md"
 
   Scenario: A change under src with the same tests and API reaches the review
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
@@ -295,6 +297,8 @@ Feature: A reframe run keeps every test and every public type and member
       | api: listed |
       | build: start |
       | lint: start |
+      | scope: start |
+      | scope: in scope |
       | test: start |
       | test: passed |
       | api: start |

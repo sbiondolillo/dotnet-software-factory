@@ -83,6 +83,7 @@ public sealed class CleanupRunTests
         SeenPrompt second = h.Prompts.Where(p => p.Kind is "build").ElementAt(1);
         Assert.Contains(redo, second.Text, StringComparison.Ordinal);
         Assert.True(h.Prompts.FindIndex(p => p.Kind is "review") > h.Prompts.IndexOf(second));
+        Assert.Contains($"- Redo 1, after scope 1: {redo}", h.Summary.Split('\n'));
     }
 
     [Fact]

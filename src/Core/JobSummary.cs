@@ -5,9 +5,8 @@ namespace Core;
 
 /// <summary>
 /// The job summary of a factory run: one table row for each phase that ran after the clone and one list item for each Redo text.
-/// A Redo text is named after the row of the phase that produced it: <c>test N</c>, <c>check N</c> or <c>review N</c>;
-/// the scope faults of a cleanup run (found after the lint gate, before the test gate) are named after <c>build N</c>,
-/// and a lost test is named after <c>test N</c>, whose gate found it.
+/// A Redo text is named after the row of the gate or the phase that produced it: <c>scope N</c>, <c>test N</c>, <c>api N</c>,
+/// <c>check N</c> or <c>review N</c>. A lost test is named after <c>test N</c>, whose gate found it.
 /// </summary>
 public sealed class JobSummary
 {

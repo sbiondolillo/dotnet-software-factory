@@ -9,7 +9,7 @@ public sealed class TestGateTests : IDisposable
 
     public void Dispose() => _harness.Dispose();
 
-    private async Task<TestGateResult> RunAsync(params string[] names)
+    private async Task<GateOutcome> RunAsync(params string[] names)
     {
         await _harness.StartAsync(TestContext.Current.CancellationToken);
         return await _harness.RunAsync(names, TestContext.Current.CancellationToken);
@@ -23,15 +23,15 @@ public sealed class TestGateTests : IDisposable
         File.WriteAllText(Path.Combine(root, "specs", "features", "new.feature"), "Feature: New\n");
         File.Delete(Path.Combine(root, "global.json"));
 
-        TestGateResult result = await RunAsync();
+        GateOutcome result = await RunAsync();
 
-        Assert.False(result.Passed);
+        Assert.Equal("failed", result.Result);
         Assert.Equal(0, _harness.DockerCommands);
-        string all = string.Join("\n", result.Evidence);
+        string all = string.Join("\n", result.RedoTexts);
         Assert.Contains("specs/features/checkout.feature", all, StringComparison.Ordinal);
         Assert.Contains("specs/features/new.feature", all, StringComparison.Ordinal);
         Assert.Contains("global.json", all, StringComparison.Ordinal);
-        Assert.Equal(3, result.Evidence.Count);
+        Assert.Equal(3, result.RedoTexts.Count);
     }
 
     [Theory]
@@ -42,11 +42,11 @@ public sealed class TestGateTests : IDisposable
     {
         _harness.Answers[subcommand] = new CommandResult { ExitCode = code, StandardOutput = "OUT", StandardError = "ERR" };
 
-        TestGateResult result = await RunAsync();
+        GateOutcome result = await RunAsync();
 
-        Assert.False(result.Passed);
+        Assert.Equal("failed", result.Result);
         Assert.Equal(subcommand, _harness.Seen[^1].Subcommand);
-        string text = Assert.Single(result.Evidence);
+        string text = Assert.Single(result.RedoTexts);
         Assert.Contains($"dotnet {name}", text, StringComparison.Ordinal);
         Assert.Contains($"code {code}", text, StringComparison.Ordinal);
         Assert.Contains("OUT", text, StringComparison.Ordinal);
@@ -58,11 +58,11 @@ public sealed class TestGateTests : IDisposable
     {
         _harness.Answers["test"] = new CommandResult { ExitCode = 1, StandardOutput = "OUT", StandardError = "ERR" };
 
-        TestGateResult result = await RunAsync();
+        GateOutcome result = await RunAsync();
 
-        Assert.False(result.Passed);
+        Assert.Equal("failed", result.Result);
         Assert.Equal("test", _harness.Seen[^1].Subcommand);
-        string text = Assert.Single(result.Evidence);
+        string text = Assert.Single(result.RedoTexts);
         Assert.Contains("dotnet test", text, StringComparison.Ordinal);
         Assert.Contains("OUT", text, StringComparison.Ordinal);
         Assert.Contains("ERR", text, StringComparison.Ordinal);
@@ -74,11 +74,11 @@ public sealed class TestGateTests : IDisposable
         _harness.Answers["test"] = new CommandResult { ExitCode = 1 };
         _harness.Trx = [TestGateHarness.PassingFeatureTest, ("Specs.Unit.CheckoutTests", "AddsTwoPrices", "Failed", "Assert.Equal() Failure: Values differ")];
 
-        TestGateResult result = await RunAsync();
+        GateOutcome result = await RunAsync();
 
-        Assert.False(result.Passed);
+        Assert.Equal("failed", result.Result);
         Assert.DoesNotContain(_harness.Seen, c => c.Subcommand is "run");
-        string all = string.Join("\n", result.Evidence);
+        string all = string.Join("\n", result.RedoTexts);
         Assert.Contains("Specs.Unit.CheckoutTests", all, StringComparison.Ordinal);
         Assert.Contains("AddsTwoPrices", all, StringComparison.Ordinal);
         Assert.Contains("Assert.Equal() Failure: Values differ", all, StringComparison.Ordinal);
@@ -89,10 +89,10 @@ public sealed class TestGateTests : IDisposable
     {
         _harness.Trx = [TestGateHarness.PassingFeatureTest, ("Specs.Unit.CheckoutTests", "AddsInFrench", "NotExecuted", null)];
 
-        TestGateResult result = await RunAsync();
+        GateOutcome result = await RunAsync();
 
-        Assert.False(result.Passed);
-        string text = Assert.Single(result.Evidence);
+        Assert.Equal("failed", result.Result);
+        string text = Assert.Single(result.RedoTexts);
         Assert.Contains("Specs.Unit.CheckoutTests", text, StringComparison.Ordinal);
         Assert.Contains("AddsInFrench", text, StringComparison.Ordinal);
     }
@@ -102,10 +102,10 @@ public sealed class TestGateTests : IDisposable
     {
         _harness.Trx = [TestGateHarness.PassingUnitTest];
 
-        TestGateResult result = await RunAsync();
+        GateOutcome result = await RunAsync();
 
-        Assert.False(result.Passed);
-        string text = Assert.Single(result.Evidence);
+        Assert.Equal("failed", result.Result);
+        string text = Assert.Single(result.RedoTexts);
         Assert.Contains("specs/features/checkout.feature", text, StringComparison.Ordinal);
         Assert.Contains("The total is the sum of the prices", text, StringComparison.Ordinal);
         Assert.Contains("TheTotalIsTheSumOfThePrices", text, StringComparison.Ordinal);
@@ -118,10 +118,10 @@ public sealed class TestGateTests : IDisposable
         harness.Trx = [("Specs.Features.FFeature", "APerLocationTotal", "Passed", null)];
         await harness.StartAsync(TestContext.Current.CancellationToken);
 
-        TestGateResult result = await harness.RunAsync([], TestContext.Current.CancellationToken);
+        GateOutcome result = await harness.RunAsync([], TestContext.Current.CancellationToken);
 
-        Assert.False(result.Passed);
-        Assert.Contains("APer_LocationTotal", Assert.Single(result.Evidence), StringComparison.Ordinal);
+        Assert.Equal("failed", result.Result);
+        Assert.Contains("APer_LocationTotal", Assert.Single(result.RedoTexts), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -134,10 +134,10 @@ public sealed class TestGateTests : IDisposable
             ("Specs.Features.CheckoutFeature", "TheTotalIsTheSumOfThePrices", "Failed", "boom"),
         ];
 
-        TestGateResult result = await RunAsync();
+        GateOutcome result = await RunAsync();
 
-        Assert.False(result.Passed);
-        Assert.Contains("TheTotalIsTheSumOfThePrices", string.Join("\n", result.Evidence), StringComparison.Ordinal);
+        Assert.Equal("failed", result.Result);
+        Assert.Contains("TheTotalIsTheSumOfThePrices", string.Join("\n", result.RedoTexts), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -145,9 +145,9 @@ public sealed class TestGateTests : IDisposable
     {
         _harness.WriteEarlierTrx("Failed");
 
-        TestGateResult result = await RunAsync();
+        GateOutcome result = await RunAsync();
 
-        Assert.True(result.Passed, string.Join("\n", result.Evidence));
+        Assert.True(result.Result is "passed", string.Join("\n", result.RedoTexts));
     }
 
     [Fact]
@@ -157,10 +157,10 @@ public sealed class TestGateTests : IDisposable
         _harness.Answers["test"] = new CommandResult { ExitCode = 1, StandardOutput = "reason" };
         _harness.Trx = null;
 
-        TestGateResult result = await RunAsync();
+        GateOutcome result = await RunAsync();
 
-        Assert.False(result.Passed);
-        string text = Assert.Single(result.Evidence);
+        Assert.Equal("failed", result.Result);
+        string text = Assert.Single(result.RedoTexts);
         Assert.Contains("dotnet test", text, StringComparison.Ordinal);
         Assert.Contains("reason", text, StringComparison.Ordinal);
     }
@@ -170,10 +170,10 @@ public sealed class TestGateTests : IDisposable
     {
         _harness.Trx = null;
 
-        TestGateResult result = await RunAsync();
+        GateOutcome result = await RunAsync();
 
-        Assert.False(result.Passed);
-        string text = Assert.Single(result.Evidence);
+        Assert.Equal("failed", result.Result);
+        string text = Assert.Single(result.RedoTexts);
         Assert.Contains("specs/features/checkout.feature", text, StringComparison.Ordinal);
         Assert.Contains("TheTotalIsTheSumOfThePrices", text, StringComparison.Ordinal);
     }
@@ -183,10 +183,10 @@ public sealed class TestGateTests : IDisposable
     {
         _harness.Answers["run"] = new CommandResult { ExitCode = 1, StandardOutput = "Failed: 1" };
 
-        TestGateResult result = await RunAsync();
+        GateOutcome result = await RunAsync();
 
-        Assert.False(result.Passed);
-        string text = Assert.Single(result.Evidence);
+        Assert.Equal("failed", result.Result);
+        string text = Assert.Single(result.RedoTexts);
         Assert.Contains("dotnet run", text, StringComparison.Ordinal);
         Assert.Contains("code 1", text, StringComparison.Ordinal);
         Assert.Contains("Failed: 1", text, StringComparison.Ordinal);
@@ -200,7 +200,7 @@ public sealed class TestGateTests : IDisposable
             _harness.Answers[key] = new CommandResult { StandardError = "An issue was encountered verifying workloads" };
         }
 
-        Assert.True((await RunAsync()).Passed);
+        Assert.Equal("passed", (await RunAsync()).Result);
     }
 
     [Fact]
@@ -218,10 +218,10 @@ public sealed class TestGateTests : IDisposable
         using var harness = new TestGateHarness();
         Directory.CreateDirectory(Path.Combine(harness.WorkTree.FullName, "specs", "features", "sub"));
         File.WriteAllText(Path.Combine(harness.WorkTree.FullName, "specs", "features", "sub", "other.feature"), "Feature: Other\n\n  Scenario: Another one\n    Given x\n");
-        TestGateResult result = await RunWithNewPin(harness);
+        GateOutcome result = await RunWithNewPin(harness);
 
-        Assert.False(result.Passed);
-        string text = Assert.Single(result.Evidence);
+        Assert.Equal("failed", result.Result);
+        string text = Assert.Single(result.RedoTexts);
         Assert.Contains("specs/features/sub/other.feature", text, StringComparison.Ordinal);
         Assert.Contains("AnotherOne", text, StringComparison.Ordinal);
     }
@@ -233,10 +233,10 @@ public sealed class TestGateTests : IDisposable
         _harness.Trx = [TestGateHarness.PassingFeatureTest, ("Specs.Unit.CheckoutTests", "AddsTwoPrices", "Failed", "Assert.Equal() Failure: Values differ")];
         await _harness.StartAsync(TestContext.Current.CancellationToken);
 
-        TestGateResult result = await _harness.RunAsync([], true, TestContext.Current.CancellationToken);
+        GateOutcome result = await _harness.RunAsync([], true, TestContext.Current.CancellationToken);
 
-        Assert.False(result.Passed);
-        Assert.Contains(result.Evidence, e => e.Contains("Specs.Unit.CheckoutTests.AddsTwoPrices", StringComparison.Ordinal));
+        Assert.Equal("failed", result.Result);
+        Assert.Contains(result.RedoTexts, e => e.Contains("Specs.Unit.CheckoutTests.AddsTwoPrices", StringComparison.Ordinal));
         Assert.DoesNotContain(_harness.Seen, c => c.Subcommand is "run");
     }
 
@@ -245,19 +245,100 @@ public sealed class TestGateTests : IDisposable
     {
         await _harness.StartAsync(TestContext.Current.CancellationToken);
 
-        TestGateResult result = await _harness.RunAsync([], true, TestContext.Current.CancellationToken);
+        GateOutcome result = await _harness.RunAsync([], true, TestContext.Current.CancellationToken);
 
-        Assert.True(result.Passed);
-        Assert.NotNull(result.Tests);
+        Assert.Equal("passed", result.Result);
+        Assert.NotNull(_harness.Gate!.Tests);
         Assert.Equal(
             ["Specs.Features.CheckoutFeature.TheTotalIsTheSumOfThePrices", "Specs.Unit.CheckoutTests.AddsTwoPrices"],
-            result.Tests.Select(t => $"{t.ClassName}.{t.Method}"));
+            _harness.Gate!.Tests.Select(t => $"{t.ClassName}.{t.Method}"));
     }
 
-    private static async Task<TestGateResult> RunWithNewPin(TestGateHarness harness)
+    [Fact]
+    public async Task TheGateIsNamedTest()
+    {
+        await _harness.StartAsync(TestContext.Current.CancellationToken);
+        var gate = new TestGate(_harness.Sandbox!, _harness.WorkTree.FullName, _harness.Pin, []);
+        Assert.Equal(GateName.Test, GateSandbox.NameOf(gate));
+    }
+
+    [Fact]
+    public async Task ATestOfTheBaselineThatNoLongerPassesIsALostTestUnderPassed()
+    {
+        await _harness.StartAsync(TestContext.Current.CancellationToken);
+        var basePassed = new HashSet<string>(StringComparer.Ordinal) { "Specs.Unit.CheckoutTests.AddsTwoPrices", "Specs.Unit.GreeterTests.Greets" };
+
+        GateOutcome result = await _harness.RunAsync(
+            new TestGate(_harness.Sandbox!, _harness.WorkTree.FullName, _harness.Pin, [], basePassed: basePassed),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("passed", result.Result);
+        Assert.Equal(["lost test: Specs.Unit.GreeterTests.Greets"], result.RedoTexts);
+    }
+
+    [Fact]
+    public async Task TheFactoryWithNoScopeRunsNoCommandAndChecksNoLostTest()
+    {
+        await _harness.StartAsync(TestContext.Current.CancellationToken);
+        TestGate gate = await TestGate.CreateAsync(
+            _harness.Sandbox!, _harness.WorkTree.FullName, _harness.Pin, [], null, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Empty(_harness.Seen);
+
+        _harness.Trx = [TestGateHarness.PassingFeatureTest];
+        GateOutcome result = await _harness.RunAsync(gate, TestContext.Current.CancellationToken);
+
+        Assert.Equal("passed", result.Result);
+        Assert.Empty(result.RedoTexts);
+    }
+
+    [Fact]
+    public async Task TheFactoryWithAScopeReadsTheBaselineFromTheTestsOfTheBase()
+    {
+        await _harness.StartAsync(TestContext.Current.CancellationToken);
+        TestGate gate = await TestGate.CreateAsync(
+            _harness.Sandbox!, _harness.WorkTree.FullName, _harness.Pin, [], ["README.md"], cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal(["restore", "test"], _harness.Seen.Select(c => c.Subcommand));
+
+        _harness.Trx = [TestGateHarness.PassingFeatureTest];
+        GateOutcome result = await _harness.RunAsync(gate, TestContext.Current.CancellationToken);
+
+        Assert.Equal("passed", result.Result);
+        Assert.Equal(["lost test: Specs.Unit.CheckoutTests.AddsTwoPrices"], result.RedoTexts);
+    }
+
+    [Fact]
+    public async Task TheFactoryWithAScopeExemptsAPinnedPathInTheScope()
+    {
+        await _harness.StartAsync(TestContext.Current.CancellationToken);
+        TestGate gate = await TestGate.CreateAsync(
+            _harness.Sandbox!, _harness.WorkTree.FullName, _harness.Pin, [], ["global.json"], cancellationToken: TestContext.Current.CancellationToken);
+        File.WriteAllText(Path.Combine(_harness.WorkTree.FullName, "global.json"), """{"sdk":{"version":"10.0.101"}}""");
+
+        GateOutcome result = await _harness.RunAsync(gate, TestContext.Current.CancellationToken);
+
+        Assert.Equal("passed", result.Result);
+        Assert.Empty(result.RedoTexts);
+    }
+
+    [Fact]
+    public async Task AFailedGateIsFailedAndChecksNoLostTest()
+    {
+        _harness.Answers["build"] = new CommandResult { ExitCode = 1 };
+        await _harness.StartAsync(TestContext.Current.CancellationToken);
+        var basePassed = new HashSet<string>(StringComparer.Ordinal) { "Specs.Unit.GreeterTests.Greets" };
+
+        GateOutcome result = await _harness.RunAsync(
+            new TestGate(_harness.Sandbox!, _harness.WorkTree.FullName, _harness.Pin, [], basePassed: basePassed),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("failed", result.Result);
+        Assert.DoesNotContain(result.RedoTexts, text => text.StartsWith("lost test:", StringComparison.Ordinal));
+    }
+
+    private static async Task<GateOutcome> RunWithNewPin(TestGateHarness harness)
     {
         await harness.StartAsync(TestContext.Current.CancellationToken);
-        return await new TestGate(harness.Sandbox!).RunAsync(
-            harness.WorkTree.FullName, Pin.Take(harness.WorkTree.FullName), [], TestContext.Current.CancellationToken);
+        return await harness.RunAsync(
+            new TestGate(harness.Sandbox!, harness.WorkTree.FullName, Pin.Take(harness.WorkTree.FullName), []), TestContext.Current.CancellationToken);
     }
 }

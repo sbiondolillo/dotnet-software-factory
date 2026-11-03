@@ -23,6 +23,10 @@ public sealed record RecipeChoice(Recipe Recipe, IReadOnlyList<string> Scope, st
 /// <summary>The words of a build prompt: the lead before the issue, and the instructions after it.</summary>
 public sealed record BuildText(string Lead, string Instructions);
 
+/// <summary>The words of the comment that stops a run whose check runs before the first phase: <paramref name="When"/> names that
+/// phase, such as <c>before the plan</c>, and <paramref name="Work"/> names the work, such as <c>refactor</c>.</summary>
+public sealed record PreCheckWords(string When, string Work);
+
 /// <summary>Holds every rule that a recipe picks: the labels and the body it reads, its pin, and the texts of its prompts.</summary>
 public static class RecipeRules
 {
@@ -188,6 +192,15 @@ public static class RecipeRules
             + "A wrapper around the body, such as a retry, is an edit. "
             + "An edit to a step that an existing scenario uses keeps what the step does and what it asserts. "
             + "New steps, state of a step class moved into a shared class, and new helpers pass.\n",
+    };
+
+    /// <summary>The words of the comment that a check before the first phase stops the run with, for a recipe with a check.</summary>
+    public static PreCheckWords PreCheck(Recipe recipe) => recipe switch
+    {
+        Recipe.Refactor => new("before the plan", "refactor"),
+        Recipe.Cleanup => new("before the build", "clean up"),
+        Recipe.Reframe => new("before the build", "reframe"),
+        _ => throw new ArgumentOutOfRangeException(nameof(recipe), recipe, "A behavior has no check."),
     };
 
     /// <summary>The sentence of a feedback run on a thread that asks for a change outside the scope, for a cleanup and a

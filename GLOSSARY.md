@@ -61,3 +61,7 @@ _Avoid_: check (see Check), validation
 **Pin**:
 The fingerprint, taken before the build, of the files that the build must leave as they are. A refactor pins every test file and the build settings files, and every other recipe pins the feature files and the build settings files.
 _Avoid_: snapshot, baseline
+
+**Baseline**:
+What a gate reads from the base commit before the first build, and holds from its construction: the tests that passed, for the lost-test check of the test gate, and the listing of the public API, for the API gate.
+_Avoid_: snapshot, prepare

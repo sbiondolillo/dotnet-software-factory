@@ -61,11 +61,21 @@ internal sealed class TestGateHarness : IDisposable
         DockerCommands = 0;
     }
 
-    public Task<TestGateResult> RunAsync(IReadOnlyList<string> names, CancellationToken cancellationToken) =>
+    /// <summary>The gate of the last <see cref="RunAsync(IReadOnlyList{string}, CancellationToken)"/>.</summary>
+    public TestGate? Gate { get; private set; }
+
+    public Task<GateOutcome> RunAsync(IReadOnlyList<string> names, CancellationToken cancellationToken) =>
         RunAsync(names, false, cancellationToken);
 
-    public Task<TestGateResult> RunAsync(IReadOnlyList<string> names, bool skipIntegration, CancellationToken cancellationToken) =>
-        new TestGate(_sandbox!, skipIntegration: skipIntegration).RunAsync(WorkTree.FullName, Pin, names, cancellationToken);
+    public Task<GateOutcome> RunAsync(IReadOnlyList<string> names, bool skipIntegration, CancellationToken cancellationToken) =>
+        RunAsync(new TestGate(_sandbox!, WorkTree.FullName, Pin, names, skipIntegration: skipIntegration), cancellationToken);
+
+    /// <summary>Runs <paramref name="gate"/> through <see cref="IGate"/>.</summary>
+    public Task<GateOutcome> RunAsync(TestGate gate, CancellationToken cancellationToken)
+    {
+        Gate = gate;
+        return GateSandbox.RunAsync(gate, cancellationToken);
+    }
 
     public void WriteEarlierTrx(string outcome)
     {
