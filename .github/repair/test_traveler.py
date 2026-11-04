@@ -36,6 +36,9 @@ class RoundTripTests(unittest.TestCase):
             ("a space in the run", {"run": "https://x y"}),
             ("a backtick in the session", {"session": "a`b"}),
             ("an empty head SHA", {"sha": ""}),
+            ("a line separator", {"target": "a\u2028b"}),
+            ("a target that ends like a pull request", {"target": "`x` (pull request #5)"}),
+            ("a negative story", {"story": -1}),
         ):
             with self.subTest(name), self.assertRaises(ValueError):
                 traveler.render(dataclasses.replace(BARE, **fields))

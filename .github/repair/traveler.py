@@ -39,10 +39,13 @@ class Traveler:
 def render(traveler):
     """The block, from its heading `## Run` to its last line feed. read.py appends it to the body it files."""
     texts = (traveler.run, traveler.target, traveler.sha, traveler.session)
+    numbers = (traveler.story, traveler.pull_request)
     if (
-        any(not text or text != text.strip() or "\n" in text or "\r" in text for text in texts)
+        any(text != text.strip() or text.splitlines() != [text] for text in texts)
         or any(c.isspace() for c in traveler.run)
         or "`" in traveler.sha + traveler.session
+        or TARGET.match(f"Target branch: {traveler.target}")["pr"] is not None
+        or any(number is not None and number < 0 for number in numbers)
     ):
         raise ValueError(f"traveler: a field that parse cannot read back: {traveler}")
     pull_request = f" (pull request #{traveler.pull_request})" if traveler.pull_request is not None else ""
