@@ -13,13 +13,14 @@ A verdict other than success is one comment on the issue and no merge.
 
 The path rule, decided in #406 and in its addendum of 2026-11-01: the job merges no repair pull request whose diff
 touches a path of GUARDED. GUARDED holds every path under .github/workflows/ except factory.yml, and .github/judge/,
-.github/repair/ and .claude/skills/change/JUDGES.md. The refusal is one comment on the issue that names each such
-path. A workflow on pull_request runs from the pull request's own copy. A workflow with `checks: write` can post a
-green judge-verdict, and verdict() reads that check by its name alone. judge.py reads .github/judge/ and JUDGES.md as
-the rules of the judge. So a repair that adds or edits a workflow, or edits those files, judges itself. repair.yml
-and .github/repair/ run from main, so an edit there acts only after a merge, and this rule is in .github/repair/. So
-a repair that edits the rule is refused by the rule. A change to a path of GUARDED stays the owner's direct change.
-.github/agents/, src/, sandbox/ and the other paths are open to a repair. The rule runs before the wait for the
+.github/repair/, .github/shared/ and .claude/skills/change/JUDGES.md. The refusal is one comment on the issue that
+names each such path. A workflow on pull_request runs from the pull request's own copy. A workflow with `checks:
+write` can post a green judge-verdict, and verdict() reads that check by its name alone. judge.py reads
+.github/judge/ and JUDGES.md as the rules of the judge, and imports .github/shared/. So a repair that adds or edits a
+workflow, or edits those files, judges itself. repair.yml and .github/repair/ run from main, so an edit there acts
+only after a merge, and this rule is in .github/repair/. So a repair that edits the rule is refused by the rule. A
+change to a path of GUARDED stays the owner's direct change. .github/agents/, src/, sandbox/ and the other paths are
+open to a repair. The rule runs before the wait for the
 judge, so a refused pull request spends no wait and starts no gate run.
 
 factory.yml is open, so a fault in it stays repairable, except for its `on:` key and its `permissions:` keys. The
@@ -121,9 +122,9 @@ import signal
 import sys
 import time
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "judge"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "shared"))
 import traveler  # noqa: E402
-from judge import gh  # noqa: E402
+from github import GitHub, GitHubError  # noqa: E402
 
 LABEL = "repair"
 FACTORY_LABEL = "factory"
@@ -139,6 +140,7 @@ GUARDED = (
     ".github/workflows/",
     ".github/judge/",
     ".github/repair/",
+    ".github/shared/",
     ".claude/skills/change/JUDGES.md",
 )
 FACTORY = ".github/workflows/factory.yml"
@@ -160,16 +162,16 @@ NODE = r"(?:^[ \t]*|[-?][ \t]+|:[ \t]*)"
 FORM = re.compile(rf"""{NODE}(?:[\[{{!&*"']|\?(?:[ \t]|$))""")
 
 
-def read_pull_request(repo, number):
-    return json.loads(gh("pr", "view", str(number), "-R", repo, "--json", FIELDS))
+def read_pull_request(gh, repo, number):
+    return json.loads(gh.run("pr", "view", str(number), "-R", repo, "--json", FIELDS))
 
 
-def default_branch(repo):
-    return gh("api", f"repos/{repo}", "--jq", ".default_branch").strip()
+def default_branch(gh, repo):
+    return gh.run("api", f"repos/{repo}", "--jq", ".default_branch").strip()
 
 
-def read_issue(repo, issue):
-    return json.loads(gh("issue", "view", str(issue), "-R", repo, "--json", "body,labels"))
+def read_issue(gh, repo, issue):
+    return json.loads(gh.run("issue", "view", str(issue), "-R", repo, "--json", "body,labels"))
 
 
 def guarded(paths):
@@ -245,13 +247,13 @@ def changed_keys(base, head):
     return [cause for cause in ("on:", "permissions:", UNREADABLE) if cause in causes]
 
 
-def file_at(repo, path, sha):
+def file_at(gh, repo, path, sha):
     """The text of the file at the commit, or None when the commit holds no such file. Any other failure ends the job,
     so a failed read merges nothing."""
     try:
-        return gh("api", "-H", "Accept: application/vnd.github.raw+json", f"repos/{repo}/contents/{path}?ref={sha}")
-    except SystemExit as error:
-        if "HTTP 404" in str(error):
+        return gh.run("api", "-H", "Accept: application/vnd.github.raw+json", f"repos/{repo}/contents/{path}?ref={sha}")
+    except GitHubError as error:
+        if error.status == 404:
             return None
         raise
 
@@ -268,39 +270,34 @@ def refused(paths, keys):
     return items
 
 
-def changed_files(repo, number):
+def changed_files(gh, repo, number):
     """The files of the diff of the pull request, as (the count of entries, every path). A rename gives both paths.
-    Each line of the output is one entry as a JSON array, so a path that holds a line feed stays one path."""
-    lines = gh(
-        "api",
-        f"repos/{repo}/pulls/{number}/files?per_page=100",
-        "--paginate",
-        "--jq",
-        ".[] | [.filename, .previous_filename] | @json",
-    ).splitlines()
-    entries = [json.loads(line) for line in lines if line]
-    return len(entries), [path for entry in entries for path in entry if path]
+    api_list reads each entry as one JSON line, so a path that holds a line feed stays one path."""
+    entries = gh.api_list(f"repos/{repo}/pulls/{number}/files")
+    return len(entries), [
+        path for entry in entries for path in (entry["filename"], entry.get("previous_filename")) if path
+    ]
 
 
-def red_run_branch(repo, ticket):
+def red_run_branch(gh, repo, ticket):
     """The head branch of the red run that the traveler names, or None with no traveler or a run of another repo."""
     match = ticket and re.fullmatch(rf"https://github\.com/{re.escape(repo)}/actions/runs/(\d+)", ticket.run)
     if not match:
         return None
-    return json.loads(gh("api", f"repos/{repo}/actions/runs/{match.group(1)}"))["head_branch"]
+    return json.loads(gh.run("api", f"repos/{repo}/actions/runs/{match.group(1)}"))["head_branch"]
 
 
-def verdict(repo, sha):
+def verdict(gh, repo, sha):
     """The latest check run named judge-verdict on the commit: (status, conclusion), or None when the judge
     posted none."""
-    answer = json.loads(gh("api", f"repos/{repo}/commits/{sha}/check-runs?check_name={CHECK}&filter=latest"))
+    answer = json.loads(gh.run("api", f"repos/{repo}/commits/{sha}/check-runs?check_name={CHECK}&filter=latest"))
     runs = answer.get("check_runs") or []
     return (runs[0]["status"], runs[0].get("conclusion")) if runs else None
 
 
-def gate_runs(repo, branch):
+def gate_runs(gh, repo, branch):
     runs = json.loads(
-        gh(
+        gh.run(
             "run",
             "list",
             "-R",
@@ -320,19 +317,19 @@ def gate_runs(repo, branch):
     return {run["databaseId"]: run for run in runs}
 
 
-def dispatch_gate(repo, branch, number, timeout=180):
+def dispatch_gate(gh, repo, branch, number, timeout=180):
     """Starts factory.yml at the branch on the story, and gives back its run once the list holds it.
 
     The run is new since the dispatch, on the branch, and named `#<story>` by the run-name of factory.yml.
     """
-    before = gate_runs(repo, branch)
-    gh("workflow", "run", WORKFLOW, "-R", repo, "--ref", branch, "-f", f"issue={number}", "-f", "base=main")
+    before = gate_runs(gh, repo, branch)
+    gh.run("workflow", "run", WORKFLOW, "-R", repo, "--ref", branch, "-f", f"issue={number}", "-f", "base=main")
     deadline = time.time() + timeout
     while time.time() < deadline:
         time.sleep(10)
         new = [
             run
-            for run_id, run in gate_runs(repo, branch).items()
+            for run_id, run in gate_runs(gh, repo, branch).items()
             if run_id not in before and run["displayTitle"] == f"#{number}"
         ]
         if new:
@@ -340,10 +337,10 @@ def dispatch_gate(repo, branch, number, timeout=180):
     sys.exit(f"repair: the dispatch of {WORKFLOW} at {branch} for the story #{number} shows no run after {timeout} s")
 
 
-def wait_for_gate(repo, run, deadline, wait):
+def wait_for_gate(gh, repo, run, deadline, wait):
     """The conclusion of the gate run once it completed. The job exits when the run is not complete by the deadline."""
     while True:
-        current = json.loads(gh("run", "view", str(run["databaseId"]), "-R", repo, "--json", "status,conclusion"))
+        current = json.loads(gh.run("run", "view", str(run["databaseId"]), "-R", repo, "--json", "status,conclusion"))
         if current["status"] == "completed":
             return current["conclusion"]
         if time.time() >= deadline:
@@ -355,19 +352,19 @@ def wait_for_gate(repo, run, deadline, wait):
         time.sleep(wait)
 
 
-def stop(repo, number, issue, sha, text):
+def stop(gh, repo, number, issue, sha, text):
     """One comment for the SHA, on the issue, or on the pull request when it closes no issue."""
     target = ("issue", str(issue)) if issue is not None else ("pr", str(number))
-    comments = gh("api", f"repos/{repo}/issues/{target[1]}/comments", "--paginate", "--jq", ".[].body")
+    comments = gh.run("api", f"repos/{repo}/issues/{target[1]}/comments", "--paginate", "--jq", ".[].body")
     marker = MARKER.format(sha=sha)
     if marker not in comments:
-        gh(target[0], "comment", target[1], "-R", repo, "--body-file", "-", input_text=f"{marker}\n{text}")
+        gh.run(target[0], "comment", target[1], "-R", repo, "--body-file", "-", input_text=f"{marker}\n{text}")
     print(f"repair: no merge of #{number} on {sha[:7]}: {text.splitlines()[0]}")
 
 
-def wait_for_judge(repo, sha, deadline, wait):
+def wait_for_judge(gh, repo, sha, deadline, wait):
     while True:
-        state = verdict(repo, sha)
+        state = verdict(gh, repo, sha)
         if state and state[0] == "completed":
             return state[1]
         if time.time() >= deadline:
@@ -376,42 +373,44 @@ def wait_for_judge(repo, sha, deadline, wait):
         time.sleep(wait)
 
 
-def disarm(repo, number):
+def disarm(gh, repo, number):
     """The auto-merge goes off. A failure of the disarm is one line, so the caller's own exit keeps its message."""
     try:
-        gh("pr", "merge", str(number), "-R", repo, "--disable-auto")
-    except SystemExit as error:
+        gh.run("pr", "merge", str(number), "-R", repo, "--disable-auto")
+    except GitHubError as error:
         print(f"repair: the disarm of pull request #{number} failed: {error}")
     else:
         print(f"repair: disarmed the auto-merge of pull request #{number}")
 
 
-def arm_and_wait(repo, number, sha, base, deadline, wait):
+def arm_and_wait(gh, repo, number, sha, base, deadline, wait):
     """Arms the auto-merge and waits for the merge. Any exit before the merge, a timeout, a closed pull request, a
     failed read or a cancel of the job, disarms the auto-merge first, so no armed merge outlives the step. The arm is
     inside the try, so a cancel during the arm command disarms too. A cancel sends SIGINT, which is KeyboardInterrupt,
     then SIGTERM, which the handler turns into an exit."""
     signal.signal(signal.SIGTERM, lambda *_: sys.exit("repair: the job was cancelled"))
     try:
-        gh("pr", "merge", str(number), "-R", repo, "--auto", "--squash", "--delete-branch", "--match-head-commit", sha)
+        gh.run(
+            "pr", "merge", str(number), "-R", repo, "--auto", "--squash", "--delete-branch", "--match-head-commit", sha
+        )
         print(f"repair: armed the auto-merge of pull request #{number} on {sha[:7]}")
-        return wait_for_merge(repo, number, sha, base, deadline, wait)
+        return wait_for_merge(gh, repo, number, sha, base, deadline, wait)
     except BaseException:
-        disarm(repo, number)
+        disarm(gh, repo, number)
         raise
 
 
-def wait_for_merge(repo, number, sha, base, deadline, wait):
+def wait_for_merge(gh, repo, number, sha, base, deadline, wait):
     """The merged pull request, or None once its head moved off the settled SHA or its base off the default branch,
     with the auto-merge disarmed."""
     while True:
-        pr = read_pull_request(repo, number)
+        pr = read_pull_request(gh, repo, number)
         if pr["state"] == "MERGED":
             return pr
         if pr["state"] != "OPEN":
             sys.exit(f"repair: pull request #{number} is {pr['state'].lower()} before the merge")
         if pr["headRefOid"] != sha or pr["baseRefName"] != base:
-            disarm(repo, number)
+            disarm(gh, repo, number)
             print(
                 f"repair: the head or the base of pull request #{number} moved off {sha[:7]} on {base} while the "
                 "auto-merge was armed; no merge"
@@ -425,41 +424,43 @@ def wait_for_merge(repo, number, sha, base, deadline, wait):
         time.sleep(wait)
 
 
-def close_issue(repo, issue, pr):
+def close_issue(gh, repo, issue, pr):
     commit = (pr.get("mergeCommit") or {}).get("oid") or ""
     merger = (pr.get("mergedBy") or {}).get("login") or ""
     text = f"Merged as `{commit}` by pull request #{pr['number']}, merged by `{merger}`."
     if issue is None:
         print(f"repair: {text} The pull request closes no issue.")
         return
-    state = json.loads(gh("issue", "view", str(issue), "-R", repo, "--json", "state"))["state"]
+    state = json.loads(gh.run("issue", "view", str(issue), "-R", repo, "--json", "state"))["state"]
     if state != "OPEN":
         print(f"repair: issue #{issue} is {state.lower()} already. {text}")
         return
-    gh("issue", "close", str(issue), "-R", repo, "--comment", text)
+    gh.run("issue", "close", str(issue), "-R", repo, "--comment", text)
     print(f"repair: closed issue #{issue}. {text}")
 
 
-def start_ci(repo, branch):
+def start_ci(gh, repo, branch):
     """A run of ci on the base branch, before the issue closes, so a failed close leaves no merge commit untested. A
     push by GITHUB_TOKEN starts no run, so the merge commit gets one here."""
-    gh("workflow", "run", "ci.yml", "-R", repo, "--ref", branch)
+    gh.run("workflow", "run", "ci.yml", "-R", repo, "--ref", branch)
     print(f"repair: started ci on {branch}")
 
 
-def delete_branch(repo, branch):
+def delete_branch(gh, repo, branch):
     """The fallback for a repo with delete_branch_on_merge off: the head branch goes when it still exists."""
-    refs = json.loads(gh("api", f"repos/{repo}/git/matching-refs/heads/{branch}"))
+    refs = json.loads(gh.run("api", f"repos/{repo}/git/matching-refs/heads/{branch}"))
     if f"refs/heads/{branch}" not in [ref["ref"] for ref in refs]:
         return
-    gh("api", "--method", "DELETE", f"repos/{repo}/git/refs/heads/{branch}")
+    gh.run("api", "--method", "DELETE", f"repos/{repo}/git/refs/heads/{branch}")
     print(f"repair: deleted the branch {branch}")
 
 
-def main():
+def main(gh=None):
+    """`gh` is the adapter of GH_TOKEN, which a test hands in."""
     if os.environ.get("REPAIR_ENABLED") != "true":
         print("repair: REPAIR_ENABLED is not true; no merge")
         return
+    gh = gh if gh is not None else GitHub.from_env()
     repo = os.environ.get("GITHUB_REPOSITORY") or sys.exit("repair: GITHUB_REPOSITORY is not set")
     number = (
         int(sys.argv[1])
@@ -472,7 +473,7 @@ def main():
         else sys.exit("repair: give the head SHA the Copilot stage settled on")
     )
 
-    pr = read_pull_request(repo, number)
+    pr = read_pull_request(gh, repo, number)
     labels = [item["name"] for item in pr["labels"]]
     if pr["state"] != "OPEN" or LABEL not in labels:
         print(f"repair: pull request #{number} is {pr['state'].lower()} with the labels {labels}; nothing to merge")
@@ -490,9 +491,10 @@ def main():
         )
         return
     issue = traveler.closing_issue(pr["body"])
-    default = default_branch(repo)
+    default = default_branch(gh, repo)
     if pr["baseRefName"] != default:
         stop(
+            gh,
             repo,
             number,
             issue,
@@ -501,10 +503,10 @@ def main():
             f"against the base, so a repair targets `{default}` alone. No merge. The owner reads the pull request.",
         )
         return
-    fields = read_issue(repo, issue) if issue is not None else {"body": "", "labels": []}
+    fields = read_issue(gh, repo, issue) if issue is not None else {"body": "", "labels": []}
     gated = FACTORY_LABEL in labels or FACTORY_LABEL in [item["name"] for item in fields.get("labels") or []]
-    count, paths = changed_files(repo, number)
-    after = read_pull_request(repo, number)
+    count, paths = changed_files(gh, repo, number)
+    after = read_pull_request(gh, repo, number)
     if after["headRefOid"] != sha or after["baseRefName"] != default:
         print(
             f"repair: the head or the base of pull request #{number} moved off {sha[:7]} on {default} while the "
@@ -512,13 +514,14 @@ def main():
         )
         return
     keys = (
-        changed_keys(file_at(repo, FACTORY, after["baseRefOid"]), file_at(repo, FACTORY, sha))
+        changed_keys(file_at(gh, repo, FACTORY, after["baseRefOid"]), file_at(gh, repo, FACTORY, sha))
         if FACTORY in paths
         else []
     )
     touched = refused(guarded(paths), keys)
     if touched or count < after["changedFiles"]:
         stop(
+            gh,
             repo,
             number,
             issue,
@@ -536,8 +539,9 @@ def main():
         )
         return
     ticket = traveler.parse(fields["body"])
-    if issue is not None and red_run_branch(repo, ticket) == pr["headRefName"]:
+    if issue is not None and red_run_branch(gh, repo, ticket) == pr["headRefName"]:
         stop(
+            gh,
             repo,
             number,
             issue,
@@ -550,6 +554,7 @@ def main():
     story_number = ticket.story if ticket else None
     if gated and story_number is None:
         stop(
+            gh,
             repo,
             number,
             issue,
@@ -564,9 +569,10 @@ def main():
 
     wait = int(os.environ.get("REPAIR_POLL_SECONDS", "30"))
     deadline = time.time() + int(os.environ.get("REPAIR_MERGE_TIMEOUT_SECONDS", "1800"))
-    conclusion = wait_for_judge(repo, sha, deadline, wait)
+    conclusion = wait_for_judge(gh, repo, sha, deadline, wait)
     if conclusion != "success":
         stop(
+            gh,
             repo,
             number,
             issue,
@@ -577,15 +583,16 @@ def main():
         return
     if gated:
         left = deadline - time.time()
-        run = dispatch_gate(repo, pr["headRefName"], story_number)
+        run = dispatch_gate(gh, repo, pr["headRefName"], story_number)
         print(f"repair: started the gate run {run['url']} of the story #{story_number}")
         if run["headSha"] != sha:
             print(f"repair: the gate run {run['url']} is on {run['headSha'][:7]}, not the settled {sha[:7]}; no merge")
             return
         gate_deadline = time.time() + int(os.environ.get("REPAIR_GATE_TIMEOUT_SECONDS", "3600"))
-        conclusion = wait_for_gate(repo, run, gate_deadline, wait)
+        conclusion = wait_for_gate(gh, repo, run, gate_deadline, wait)
         if conclusion != "success":
             stop(
+                gh,
                 repo,
                 number,
                 issue,
@@ -596,7 +603,7 @@ def main():
             return
         print(f"repair: the gate run {run['url']} is success")
         deadline = time.time() + left
-    current = read_pull_request(repo, number)
+    current = read_pull_request(gh, repo, number)
     if current["headRefOid"] != sha or current["baseRefName"] != default:
         print(
             f"repair: the head or the base of pull request #{number} moved off {sha[:7]} on {default} while the judge"
@@ -604,11 +611,12 @@ def main():
         )
         return
 
-    merged = arm_and_wait(repo, number, sha, default, deadline, wait)
+    merged = arm_and_wait(gh, repo, number, sha, default, deadline, wait)
     if merged is None:
         return
     if merged["headRefOid"] != sha:
         stop(
+            gh,
             repo,
             number,
             issue,
@@ -617,9 +625,9 @@ def main():
             "The job closes no issue for it. The owner reads the pull request.",
         )
         return
-    start_ci(repo, merged["baseRefName"])
-    close_issue(repo, issue, merged)
-    delete_branch(repo, pr["headRefName"])
+    start_ci(gh, repo, merged["baseRefName"])
+    close_issue(gh, repo, issue, merged)
+    delete_branch(gh, repo, pr["headRefName"])
 
 
 if __name__ == "__main__":

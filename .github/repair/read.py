@@ -30,14 +30,17 @@ Argument: the id of the red run. The number of the filed issue goes to GITHUB_OU
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 import urllib.parse
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "judge"))
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "..", "shared"))
+# The judge's folder serves its session functions alone, until #479 moves them.
+sys.path.insert(0, os.path.join(HERE, "..", "judge"))
 import traveler  # noqa: E402
-from judge import anthropic, env, gh, start_session, wait_idle  # noqa: E402
+from github import GitHub, GitHubError  # noqa: E402
+from judge import anthropic, env, start_session, wait_idle  # noqa: E402
 
 MARKER = "<!-- repair:{sha} -->"
 CLASSES = ("code", "flake", "dependency")
@@ -57,8 +60,8 @@ FACTORY_CONTRACT = f"""{ANSWER}
  "body": "the issue body", "evidence": ["each log line that decides the class"]}}"""
 
 
-def read_run(repo, run_id):
-    return json.loads(gh("api", f"repos/{repo}/actions/runs/{run_id}"))
+def read_run(gh, repo, run_id):
+    return json.loads(gh.run("api", f"repos/{repo}/actions/runs/{run_id}"))
 
 
 def is_factory(run):
@@ -66,31 +69,31 @@ def is_factory(run):
     return os.path.basename((run.get("path") or "").split("@")[0]) == FACTORY_WORKFLOW
 
 
-def read_story(repo, run):
+def read_story(gh, repo, run):
     """The story of a red factory run, from `display_title`, which factory.yml sets to `#<n>`, or None."""
     match = STORY.match((run.get("display_title") or "").strip())
     if match is None:
         return None
-    return json.loads(gh("issue", "view", match.group(1), "-R", repo, "--json", "number,title,labels"))
+    return json.loads(gh.run("issue", "view", match.group(1), "-R", repo, "--json", "number,title,labels"))
 
 
-def failed_log(repo, run):
+def failed_log(gh, repo, run):
     """The failed log of the attempt the reader holds. A failed judge-verdict is a job with 0 steps and no log, so gh
-    prints the log of the other jobs and then exits 1 with `log not found`. judge.gh drops stdout on any nonzero code,
-    so this read runs gh itself and keeps stdout on the code 1, as #392 shows."""
-    args = ["run", "view", str(run["id"]), "-R", repo, "--attempt", str(run["run_attempt"]), "--log-failed"]
-    result = subprocess.run(["gh", *args], capture_output=True, text=True)
-    if result.returncode != 0:
-        if result.returncode != 1 or not result.stdout.strip():
-            sys.exit(f"repair: gh run view {run['id']} failed: {result.stderr.strip()[:500]}")
-        print(f"repair: gh run view {run['id']} exited {result.returncode}: {result.stderr.strip()[:500]}; kept stdout")
-    return result.stdout
+    prints the log of the other jobs and then exits 1 with `log not found`. So the read keeps the standard output of
+    a failed call on the code 1, as #392 shows."""
+    try:
+        return gh.run("run", "view", str(run["id"]), "-R", repo, "--attempt", str(run["run_attempt"]), "--log-failed")
+    except GitHubError as error:
+        if error.returncode != 1 or not error.stdout.strip():
+            sys.exit(f"repair: gh run view {run['id']} failed: {error.stderr.strip()[:500]}")
+        print(f"repair: gh run view {run['id']} exited {error.returncode}: {error.stderr.strip()[:500]}; kept stdout")
+        return error.stdout
 
 
-def run_comments(repo, story, run):
+def run_comments(gh, repo, story, run):
     """The comments on the story from the start of the run to its end. The factory posts with a token that can be the
     owner's, so the time tells its comments apart, not the author."""
-    lines = gh(
+    lines = gh.run(
         "api",
         f"repos/{repo}/issues/{story['number']}/comments",
         "--paginate",
@@ -103,36 +106,36 @@ def run_comments(repo, story, run):
     return "\n\n".join(f"### {c['created_at']}, {c['author']}\n\n{c['body']}" for c in held)
 
 
-def open_pull_request(repo, branch):
+def open_pull_request(gh, repo, branch):
     """The open pull request of a branch, by name, with the head it holds now."""
     pulls = json.loads(
-        gh("pr", "list", "-R", repo, "--head", branch, "--state", "open", "--json", "number,headRefOid,labels")
+        gh.run("pr", "list", "-R", repo, "--head", branch, "--state", "open", "--json", "number,headRefOid,labels")
     )
     return pulls[0] if pulls else None
 
 
-def comments_on(repo, pr, sha):
+def comments_on(gh, repo, pr, sha):
     path = f"repos/{repo}/issues/{pr['number']}/comments" if pr else f"repos/{repo}/commits/{sha}/comments"
-    return gh("api", path, "--paginate", "--jq", ".[].body")
+    return gh.run("api", path, "--paginate", "--jq", ".[].body")
 
 
-def comment(repo, pr, sha, text):
+def comment(gh, repo, pr, sha, text):
     """A run takes no comment, so the comment goes on its pull request, on the story of a factory run, or on its
     commit on main."""
     body = f"{MARKER.format(sha=sha)}\n{text}"
     if pr:
         kind = "issue" if pr.get("story") else "pr"
-        gh(kind, "comment", str(pr["number"]), "-R", repo, "--body-file", "-", input_text=body)
+        gh.run(kind, "comment", str(pr["number"]), "-R", repo, "--body-file", "-", input_text=body)
     else:
-        gh("api", f"repos/{repo}/commits/{sha}/comments", "-f", f"body={body}")
+        gh.run("api", f"repos/{repo}/commits/{sha}/comments", "-f", f"body={body}")
 
 
-def issue_for(repo, sha, factory=False):
+def issue_for(gh, repo, sha, factory=False):
     """The repair issue of the run's kind that holds the SHA, in any state: one with the label factory for a factory
     run, one without it for a ci run, since a fault of the factory and a red ci run on one main head are two faults.
     An open one wins over a closed one, and the oldest closed one over a later one."""
     issues = json.loads(
-        gh(
+        gh.run(
             "issue",
             "list",
             "-R",
@@ -155,20 +158,20 @@ def issue_for(repo, sha, factory=False):
     return next((i for i in held if i["state"] == "OPEN"), min(held, key=lambda i: i["number"], default=None))
 
 
-def already_handled(repo, pr, run):
+def already_handled(gh, repo, pr, run):
     """One repair per SHA. A second red run on the SHA is a comment on its open issue, and for a factory run also a
     comment on its commit that names the issue, as for an open factory repair on another SHA. A closed issue that
     holds the SHA, such as one a rerun of the red run reaches after the fix merged, ends the read and gets no
     comment."""
     sha = run["head_sha"]
     story = pr if pr and pr.get("story") else None
-    issue = issue_for(repo, sha, story is not None)
+    issue = issue_for(gh, repo, sha, story is not None)
     if issue:
         if issue["state"] != "OPEN":
             print(f"repair: issue #{issue['number']} holds {sha[:7]}; closed; nothing to do")
             return True
-        if run["html_url"] not in issue["body"] + comments_on(repo, issue, sha):
-            gh(
+        if run["html_url"] not in issue["body"] + comments_on(gh, repo, issue, sha):
+            gh.run(
                 "issue",
                 "comment",
                 str(issue["number"]),
@@ -178,20 +181,20 @@ def already_handled(repo, pr, run):
                 f"The run {run['html_url']} on `{sha}` is also red.",
             )
             if story is not None:
-                held_comment(repo, run, story["number"], issue["number"], None, None)
+                held_comment(gh, repo, run, story["number"], issue["number"], None, None)
         print(f"repair: issue #{issue['number']} holds {sha[:7]}; nothing to do")
         return True
-    if MARKER.format(sha=sha) in comments_on(repo, pr, sha):
+    if MARKER.format(sha=sha) in comments_on(gh, repo, pr, sha):
         print(f"repair: a marker comment holds {sha[:7]}; nothing to do")
         return True
     return False
 
 
-def held_comment(repo, run, story, held, kind, sid):
+def held_comment(gh, repo, run, story, held, kind, sid):
     """The comment on the red commit of a factory run while the factory repair `held` is open."""
     reader = f", and the reader's class is `{kind}`" if kind else ""
     session = f" Session `{sid}`." if sid else ""
-    gh(
+    gh.run(
         "api",
         f"repos/{repo}/commits/{run['head_sha']}/comments",
         "-f",
@@ -200,7 +203,7 @@ def held_comment(repo, run, story, held, kind, sid):
     )
 
 
-def gate(repo, run, story=None):
+def gate(gh, repo, run, story=None):
     """Whether the run still needs a repair, and the thread that takes its comments: its open pull request, the story
     of a factory run, or None on main."""
     sha, branch = run["head_sha"], run["head_branch"]
@@ -208,24 +211,24 @@ def gate(repo, run, story=None):
     if story is not None:
         pr = {"number": story["number"], "story": True}
     elif branch != "main":
-        pr = open_pull_request(repo, branch)
+        pr = open_pull_request(gh, repo, branch)
         if pr is None or pr["headRefOid"] != sha:
             print(f"repair: {sha[:7]} is not the head of an open pull request of {branch}; nothing to do")
             return False, None
         if any(label["name"] == "repair" for label in pr.get("labels") or []):
             print(f"repair: pull request #{pr['number']} of {branch} is a repair; nothing to do")
             return False, None
-    return not already_handled(repo, pr, run), pr
+    return not already_handled(gh, repo, pr, run), pr
 
 
-def rerun(repo, run, timeout):
+def rerun(gh, repo, run, timeout):
     """Rerun the failed jobs once and wait. The same run id takes a new attempt, and the read of the run keeps
     the old conclusion until then."""
-    gh("run", "rerun", str(run["id"]), "-R", repo, "--failed")
+    gh.run("run", "rerun", str(run["id"]), "-R", repo, "--failed")
     deadline = time.time() + timeout
     while time.time() < deadline:
         time.sleep(15)
-        current = read_run(repo, run["id"])
+        current = read_run(gh, repo, run["id"])
         if current["run_attempt"] > run["run_attempt"] and current["status"] == "completed":
             return current
     sys.exit(f"repair: the rerun of {run['id']} is still running after {timeout} s")
@@ -535,14 +538,14 @@ def summarise(answer, sid):
             summary.write(f"Class `{answer['class']}`, session `{sid}`.\n\n{indented(answer['evidence'])}\n")
 
 
-def factory_story(repo, run):
+def factory_story(gh, repo, run):
     """The story of a red factory run, or None when the run needs no read. A run on a branch other than main tests
     that branch's factory, such as the gate run of a repair branch, and a story with the label repair is the
     builder's own run."""
     if run["head_branch"] != "main":
         print(f"repair: factory run {run['id']} is on {run['head_branch']}, not main; nothing to do")
         return None
-    story = read_story(repo, run)
+    story = read_story(gh, repo, run)
     if story is None:
         print(
             f"repair: factory run {run['id']} names no issue in its title {run.get('display_title')!r}; nothing to do"
@@ -554,10 +557,10 @@ def factory_story(repo, run):
     return story
 
 
-def open_factory_repair(repo):
+def open_factory_repair(gh, repo):
     """The number of an open issue with the labels repair and factory, or None. One factory repair is in flight."""
     issues = json.loads(
-        gh(
+        gh.run(
             "issue",
             "list",
             "-R",
@@ -575,11 +578,11 @@ def open_factory_repair(repo):
     return min((i["number"] for i in issues), default=None)
 
 
-def file_issue(repo, title, body, labels):
+def file_issue(gh, repo, title, body, labels):
     args = ["issue", "create", "-R", repo, "--title", title]
     for name in labels:
         args += ["--label", name]
-    url = gh(*args, "--body-file", "-", input_text=body)
+    url = gh.run(*args, "--body-file", "-", input_text=body)
     if not url.strip():
         sys.exit("repair: gh issue create exited 0 and printed no issue")
     print(f"repair: filed {url.strip()}")
@@ -587,12 +590,13 @@ def file_issue(repo, title, body, labels):
         output.write(f"issue={url.strip().rsplit('/', 1)[-1]}\n")
 
 
-def finish_factory(repo, run, story, pr, answer, sid):
+def finish_factory(gh, repo, run, story, pr, answer, sid):
     """The end of the read of a factory run, by its class."""
     sha = run["head_sha"]
     if answer["class"] == "flake":
-        gh("workflow", "run", FACTORY_WORKFLOW, "-R", repo, "--ref", "main", "-f", f"issue={story['number']}")
+        gh.run("workflow", "run", FACTORY_WORKFLOW, "-R", repo, "--ref", "main", "-f", f"issue={story['number']}")
         comment(
+            gh,
             repo,
             pr,
             sha,
@@ -603,6 +607,7 @@ def finish_factory(repo, run, story, pr, answer, sid):
         return
     if answer["class"] == "code":
         comment(
+            gh,
             repo,
             pr,
             sha,
@@ -611,11 +616,15 @@ def finish_factory(repo, run, story, pr, answer, sid):
             f"{indented(answer['evidence'])}",
         )
         return
-    held = open_factory_repair(repo)
+    held = open_factory_repair(gh, repo)
     if held is not None:
-        held_comment(repo, run, story["number"], held, answer["class"], sid)
+        held_comment(gh, repo, run, story["number"], held, answer["class"], sid)
         comment(
-            repo, pr, sha, f"The factory run {run['html_url']} is red on `{sha}`. The factory repair #{held} is open."
+            gh,
+            repo,
+            pr,
+            sha,
+            f"The factory run {run['html_url']} is red on `{sha}`. The factory repair #{held} is open.",
         )
         print(f"repair: the factory repair #{held} is open; nothing filed")
         return
@@ -626,50 +635,54 @@ def finish_factory(repo, run, story, pr, answer, sid):
     labels = ("repair", "ready", "factory")
     if answer["recipe"] == "cleanup":
         labels += ("cleanup",)
-    file_issue(repo, answer["title"], body, labels)
+    file_issue(gh, repo, answer["title"], body, labels)
 
 
-def main():
+def main(gh=None):
+    """`gh` is the adapter of GH_TOKEN, which a test hands in."""
     repo = env("GITHUB_REPOSITORY")
+    gh = gh if gh is not None else GitHub.from_env()
     run_id = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else sys.exit("repair: give the id of a red run")
     if os.environ.get("GITHUB_EVENT_NAME") == "workflow_run" and os.environ.get("REPAIR_ENABLED") != "true":
         print("repair: REPAIR_ENABLED is not true; nothing to do")
         return
 
-    run = read_run(repo, run_id)
+    run = read_run(gh, repo, run_id)
     sha = run["head_sha"]
     if run["conclusion"] != "failure":
         print(f"repair: run {run_id} is {run['conclusion']}, not failure; nothing to do")
         return
     story = None
     if is_factory(run):
-        story = factory_story(repo, run)
+        story = factory_story(gh, repo, run)
         if story is None:
             return
-    needed, pr = gate(repo, run, story)
+    needed, pr = gate(gh, repo, run, story)
     if not needed:
         return
 
     if story is None and run["run_attempt"] == 1:
-        run = rerun(repo, run, int(os.environ.get("REPAIR_RERUN_TIMEOUT_SECONDS", "3600")))
+        run = rerun(gh, repo, run, int(os.environ.get("REPAIR_RERUN_TIMEOUT_SECONDS", "3600")))
         if run["conclusion"] == "success":
-            comment(repo, pr, sha, f"The run {run['html_url']} went red on `{sha}` and green on its rerun. No repair.")
+            comment(
+                gh, repo, pr, sha, f"The run {run['html_url']} went red on `{sha}` and green on its rerun. No repair."
+            )
             print("repair: the rerun is green")
             return
         if run["conclusion"] != "failure":
             sys.exit(f"repair: the rerun of {run_id} is {run['conclusion']}")
-        needed, pr = gate(repo, run)
+        needed, pr = gate(gh, repo, run)
         if not needed:
             return
 
-    log = failed_log(repo, run)
+    log = failed_log(gh, repo, run)
     if not log.strip():
         sys.exit(f"repair: run {run_id} gives an empty failed log")
     target = f"`{run['head_branch']}`" if pr and story is None else f"`repair/{run_id}`, from `{sha}`"
     if story is None:
         prompt = reader_prompt(repo, run, target, log[-LOG_LIMIT:])
     else:
-        records = factory_records(log[-LOG_LIMIT:], run_comments(repo, story, run))
+        records = factory_records(log[-LOG_LIMIT:], run_comments(gh, repo, story, run))
         prompt = factory_reader_prompt(repo, run, story, records)
     resources = [
         {
@@ -697,15 +710,16 @@ def main():
         answer = read_answer(sid, FACTORY_CLASSES, ("factory", "dependency"), FACTORY_CONTRACT, timeout)
     summarise(answer, sid)
     print(f"repair: class {answer['class']}")
-    needed, pr = gate(repo, run, story)
+    needed, pr = gate(gh, repo, run, story)
     if not needed:
         return
 
     if story is not None:
-        finish_factory(repo, run, story, pr, answer, sid)
+        finish_factory(gh, repo, run, story, pr, answer, sid)
         return
     if answer["class"] == "flake":
         comment(
+            gh,
             repo,
             pr,
             sha,
@@ -717,7 +731,7 @@ def main():
         run=run["html_url"], target=target, sha=sha, session=sid, pull_request=pr["number"] if pr else None
     )
     body = f"{answer['body'].rstrip()}\n\n{traveler.render(ticket)}"
-    file_issue(repo, answer["title"], body, ("repair", "ready"))
+    file_issue(gh, repo, answer["title"], body, ("repair", "ready"))
 
 
 if __name__ == "__main__":

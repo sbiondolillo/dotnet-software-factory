@@ -30,13 +30,12 @@ the factory run as `run` when this job started one, for the Copilot stage.
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "judge"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "shared"))
 import traveler  # noqa: E402
-from judge import gh  # noqa: E402
+from github import GitHub, GitHubError  # noqa: E402
 
 LABEL = "repair"
 FACTORY_LABEL = "factory"
@@ -44,11 +43,11 @@ WORKFLOW = "factory.yml"
 BASE_BRANCH = "repair-base"
 
 
-def read_issue(repo, number):
-    return json.loads(gh("issue", "view", str(number), "-R", repo, "--json", "number,state,body,labels,comments"))
+def read_issue(gh, repo, number):
+    return json.loads(gh.run("issue", "view", str(number), "-R", repo, "--json", "number,state,body,labels,comments"))
 
 
-def opened_pull_request(repo, issue):
+def opened_pull_request(gh, repo, issue):
     """The number of the pull request the factory posted on the issue as `Opened <url>`, or None.
 
     The factory posts under FACTORY_SELF_TOKEN, the owner's identity, so a comment by anyone else is no result.
@@ -61,13 +60,13 @@ def opened_pull_request(repo, issue):
         match = re.search(
             rf"^Opened https://github\.com/{re.escape(repo)}/pull/(\d+)\s*$", comment.get("body") or "", re.M
         )
-        if match and is_factory_pull_request(repo, int(match.group(1)), issue["number"]):
+        if match and is_factory_pull_request(gh, repo, int(match.group(1)), issue["number"]):
             return int(match.group(1))
     return None
 
 
-def is_factory_pull_request(repo, pr, number):
-    fields = json.loads(gh("pr", "view", str(pr), "-R", repo, "--json", "state,headRefName,body"))
+def is_factory_pull_request(gh, repo, pr, number):
+    fields = json.loads(gh.run("pr", "view", str(pr), "-R", repo, "--json", "state,headRefName,body"))
     return (
         fields["state"] == "OPEN"
         and fields["headRefName"].startswith("factory/")
@@ -75,9 +74,9 @@ def is_factory_pull_request(repo, pr, number):
     )
 
 
-def factory_runs(repo):
+def factory_runs(gh, repo):
     runs = json.loads(
-        gh(
+        gh.run(
             "run",
             "list",
             "-R",
@@ -95,10 +94,10 @@ def factory_runs(repo):
     return {run["databaseId"]: run for run in runs}
 
 
-def green_sha(repo):
+def green_sha(gh, repo):
     """The head SHA of the last run of the factory on main that ended success, or None when no run did."""
     runs = json.loads(
-        gh(
+        gh.run(
             "run",
             "list",
             "-R",
@@ -118,74 +117,70 @@ def green_sha(repo):
     return runs[0]["headSha"] if runs else None
 
 
-def ref_env():
-    """The environment of the create and the move: GH_TOKEN is REPAIR_REF_TOKEN when it is set and not empty.
-
-    Else it is the environment of the process, unchanged.
-    """
+def adapters():
+    """The job's adapter, of GH_TOKEN, and the adapter of the read, the create and the move of repair-base/<n>: of
+    REPAIR_REF_TOKEN when it is set and not empty, else the job's own."""
+    job = GitHub.from_env()
     token = os.environ.get("REPAIR_REF_TOKEN")
-    return {**os.environ, "GH_TOKEN": token} if token else dict(os.environ)
+    return job, GitHub(token) if token else job
 
 
-def create_base_branch(repo, branch, sha):
-    """Points the branch at the SHA, and exits with GitHub's error text when a call fails.
+def create_base_branch(app, repo, branch, sha):
+    """Points the branch at the SHA on the adapter `app`, and exits with GitHub's error text when a call fails.
 
-    The calls use REPAIR_REF_TOKEN when it is set: an installation token of the App dsf-builder with workflows
-    write. GITHUB_TOKEN holds no workflows permission, and GitHub refuses it a ref at a commit whose workflow files
-    differ from main (#403). It reads the ref first. A 404 means no branch of that name, so a POST creates it at the
-    SHA. A branch of that name left by an earlier run gets a forced PATCH that moves it to the SHA. Any other error of
-    the read exits.
+    `app` holds REPAIR_REF_TOKEN when it is set: an installation token of the App dsf-builder with workflows write.
+    GITHUB_TOKEN holds no workflows permission, and GitHub refuses it a ref at a commit whose workflow files differ
+    from main (#403). It reads the ref first. A 404 means no branch of that name, so a POST creates it at the SHA. A
+    branch of that name left by an earlier run gets a forced PATCH that moves it to the SHA. Any other error of the
+    read exits.
     """
-    env = ref_env()
-    found = subprocess.run(
-        ["gh", "api", f"repos/{repo}/git/ref/heads/{branch}"], capture_output=True, text=True, env=env
-    )
-    if found.returncode == 0:
+    try:
+        app.run("api", f"repos/{repo}/git/ref/heads/{branch}")
         verb = "moved to"
         call = ["-X", "PATCH", f"repos/{repo}/git/refs/heads/{branch}", "-f", f"sha={sha}", "-F", "force=true"]
-    elif "(HTTP 404)" in found.stderr:
+    except GitHubError as error:
+        if error.status != 404:
+            sys.exit(f"repair: the branch {branch} could not be read: {error.stderr.strip()[:500]}")
         verb = "created at"
         call = ["-X", "POST", f"repos/{repo}/git/refs", "-f", f"ref=refs/heads/{branch}", "-f", f"sha={sha}"]
-    else:
-        sys.exit(f"repair: the branch {branch} could not be read: {found.stderr.strip()[:500]}")
-    sent = subprocess.run(["gh", "api", *call], capture_output=True, text=True, env=env)
-    if sent.returncode != 0:
-        sys.exit(f"repair: the branch {branch} could not be {verb} {sha}: {sent.stderr.strip()[:500]}")
+    try:
+        app.run("api", *call)
+    except GitHubError as error:
+        sys.exit(f"repair: the branch {branch} could not be {verb} {sha}: {error.stderr.strip()[:500]}")
     print(f"repair: the branch {branch} is at the green SHA {sha}")
 
 
-def delete_base_branch(repo, branch):
-    """Deletes the branch with GH_TOKEN. A failure is a log line, so it hides no build error.
+def delete_base_branch(job, repo, branch):
+    """Deletes the branch on the job's adapter. A failure is a log line, so it hides no build error.
 
     The deletion runs after the wait for the factory run, up to REPAIR_BUILD_TIMEOUT_SECONDS later. An installation
     token lives one hour, so by then REPAIR_REF_TOKEN can be expired. GH_TOKEN lives for the job. A deletion adds no
     workflow file, so it needs no workflows permission.
     """
-    deleted = subprocess.run(
-        ["gh", "api", "-X", "DELETE", f"repos/{repo}/git/refs/heads/{branch}"], capture_output=True, text=True
-    )
-    if deleted.returncode == 0:
-        print(f"repair: deleted the branch {branch}")
+    try:
+        job.run("api", "-X", "DELETE", f"repos/{repo}/git/refs/heads/{branch}")
+    except GitHubError as error:
+        print(f"repair: the deletion of the branch {branch} failed: {error.stderr.strip()[:500]}")
     else:
-        print(f"repair: the deletion of the branch {branch} failed: {deleted.stderr.strip()[:500]}")
+        print(f"repair: deleted the branch {branch}")
 
 
-def dispatch(repo, number, timeout, ref=None):
+def dispatch(gh, repo, number, timeout, ref=None):
     """Starts the factory on the issue, and gives back its run once the list holds it.
 
     The run is new since the dispatch, and named `#<issue>` by the run-name of factory.yml, so a run of another issue
     dispatched in the same window is not taken. With a ref, the factory of that ref builds on the head of main, by
     `base=main`. With none, it runs at main.
     """
-    before = factory_runs(repo)
+    before = factory_runs(gh, repo)
     at = ["--ref", ref, "-f", "base=main"] if ref else []
-    gh("workflow", "run", WORKFLOW, "-R", repo, *at, "-f", f"issue={number}", "-f", "copilot=on")
+    gh.run("workflow", "run", WORKFLOW, "-R", repo, *at, "-f", f"issue={number}", "-f", "copilot=on")
     deadline = time.time() + timeout
     while time.time() < deadline:
         time.sleep(10)
         new = [
             run
-            for run_id, run in factory_runs(repo).items()
+            for run_id, run in factory_runs(gh, repo).items()
             if run_id not in before and run["displayTitle"] == f"#{number}"
         ]
         if new:
@@ -193,23 +188,25 @@ def dispatch(repo, number, timeout, ref=None):
     sys.exit(f"repair: the dispatch of {WORKFLOW} for issue #{number} shows no run after {timeout} s")
 
 
-def label(repo, pr):
-    gh("pr", "edit", str(pr), "-R", repo, "--add-label", LABEL)
+def label(gh, repo, pr):
+    gh.run("pr", "edit", str(pr), "-R", repo, "--add-label", LABEL)
     with open(os.environ.get("GITHUB_OUTPUT", os.devnull), "a") as output:
         output.write(f"pr={pr}\n")
     print(f"repair: pull request #{pr} has the label {LABEL}")
 
 
-def wait_for_pull_request(repo, number, run, timeout):
+def wait_for_pull_request(gh, repo, number, run, timeout):
     """The pull request the factory opens, read from the issue's comments while its run is in progress."""
     deadline = time.time() + timeout
     while time.time() < deadline:
-        pr = opened_pull_request(repo, read_issue(repo, number))
+        pr = opened_pull_request(gh, repo, read_issue(gh, repo, number))
         if pr is not None:
             return pr
-        current = json.loads(gh("run", "view", str(run["databaseId"]), "-R", repo, "--json", "status,conclusion,url"))
+        current = json.loads(
+            gh.run("run", "view", str(run["databaseId"]), "-R", repo, "--json", "status,conclusion,url")
+        )
         if current["status"] == "completed":
-            pr = opened_pull_request(repo, read_issue(repo, number))
+            pr = opened_pull_request(gh, repo, read_issue(gh, repo, number))
             if pr is not None:
                 return pr
             sys.exit(
@@ -220,35 +217,39 @@ def wait_for_pull_request(repo, number, run, timeout):
     sys.exit(f"repair: the factory run {run['url']} opened no pull request on issue #{number} within {timeout} s")
 
 
-def build(repo, number, timeout, ref=None):
+def build(gh, repo, number, timeout, ref=None):
     """Dispatches the factory, waits for the pull request it opens, and labels it."""
-    run = dispatch(repo, number, 180, ref)
+    run = dispatch(gh, repo, number, 180, ref)
     print(f"repair: started the factory: {run['url']}")
     with open(os.environ.get("GITHUB_OUTPUT", os.devnull), "a") as output:
         output.write(f"run={run['databaseId']}\n")
-    pr = wait_for_pull_request(repo, number, run, timeout)
-    label(repo, pr)
+    pr = wait_for_pull_request(gh, repo, number, run, timeout)
+    label(gh, repo, pr)
 
 
-def main():
+def main(job=None, app=None):
+    """`job` and `app` are the adapters of adapters(), which a test hands in."""
+    if job is None:
+        job, app = adapters()
+    app = app if app is not None else job
     repo = os.environ.get("GITHUB_REPOSITORY") or sys.exit("repair: GITHUB_REPOSITORY is not set")
     number = (
         int(sys.argv[1])
         if len(sys.argv) > 1 and sys.argv[1].isdigit()
         else sys.exit("repair: give the number of a repair issue")
     )
-    issue = read_issue(repo, number)
+    issue = read_issue(job, repo, number)
     labels = [item["name"] for item in issue.get("labels") or []]
     if issue["state"] != "OPEN" or LABEL not in labels:
         print(f"repair: issue #{number} is {issue['state'].lower()} with the labels {labels}; nothing to build")
         return
-    if (pr := opened_pull_request(repo, issue)) is not None:
+    if (pr := opened_pull_request(job, repo, issue)) is not None:
         print(f"repair: issue #{number} holds pull request #{pr} already")
-        label(repo, pr)
+        label(job, repo, pr)
         return
     ticket = traveler.parse(issue["body"])
     if ticket is not None and (target := ticket.pull_request) is not None:
-        gh(
+        job.run(
             "issue",
             "comment",
             str(number),
@@ -263,11 +264,11 @@ def main():
 
     timeout = int(os.environ.get("REPAIR_BUILD_TIMEOUT_SECONDS", "3600"))
     if FACTORY_LABEL not in labels:
-        build(repo, number, timeout)
+        build(job, repo, number, timeout)
         return
-    sha = green_sha(repo)
+    sha = green_sha(job, repo)
     if sha is None:
-        gh(
+        job.run(
             "issue",
             "comment",
             str(number),
@@ -281,10 +282,10 @@ def main():
         return
     branch = f"{BASE_BRANCH}/{number}"
     try:
-        create_base_branch(repo, branch, sha)
-        build(repo, number, timeout, branch)
+        create_base_branch(app, repo, branch, sha)
+        build(job, repo, number, timeout, branch)
     finally:
-        delete_base_branch(repo, branch)
+        delete_base_branch(job, repo, branch)
 
 
 if __name__ == "__main__":

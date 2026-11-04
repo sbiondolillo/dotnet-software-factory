@@ -11,9 +11,10 @@ Feature: CI workflow
       # the format, and run the build suite. The build suite needs no network.
       # Then `Python` runs `ruff format --check` and `ruff check` on the scripts
       # under .github/, to ruff.toml at the root. `pipx run` pins the version.
-      # Then `Python tests` runs the unit tests under .github/repair/ and
-      # .github/judge/ with unittest, from the standard library, so the step
-      # installs nothing. `-B` writes no __pycache__ into the work tree.
+      # Then `Python tests` runs the unit tests under .github/repair/,
+      # .github/judge/ and .github/shared/ with unittest, from the standard
+      # library, so the step installs nothing. `-B` writes no __pycache__ into
+      # the work tree.
       #
       # `integration` runs tests/Integration against the real GitHub, docker and
       # Claude Code. `dotnet test` never collects it, because its project sets
@@ -73,7 +74,7 @@ Feature: CI workflow
             - name: Python
               run: pipx run --spec ruff==0.16.2 ruff format --check . && pipx run --spec ruff==0.16.2 ruff check .
             - name: Python tests
-              run: python3 -B -m unittest discover -s .github/repair -p 'test_*.py' && python3 -B -m unittest discover -s .github/judge -p 'test_*.py'
+              run: python3 -B -m unittest discover -s .github/repair -p 'test_*.py' && python3 -B -m unittest discover -s .github/judge -p 'test_*.py' && python3 -B -m unittest discover -s .github/shared -p 'test_*.py'
 
         integration:
           needs: build
