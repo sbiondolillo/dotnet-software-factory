@@ -75,7 +75,8 @@ most 3000 files, so a list shorter than `changedFiles` of the pull request is a 
 again after the list, so the list belongs to the settled SHA.
 
 The loop bound: the job merges nothing on a pull request whose head branch is the branch of the red run that
-started the repair. The run is the `Run:` line under `## Run` of the issue, which read.py wrote.
+started the repair. The run is the one that the traveler of the issue names: the block under `## Run`, which read.py
+wrote and traveler.py reads.
 
 A merge by GITHUB_TOKEN closes no issue named by `Closes #n`, and `--delete-branch` deletes nothing on a deferred
 merge, as #361 found. So the job waits for the merge, closes the issue with one comment that names the merge commit,
@@ -87,14 +88,14 @@ no `checks` permission: the repo is public, and #361 bars `checks: write` on thi
 The gate, decided in #399 Q5 and built in #404: a repair of the factory itself merges only after its story runs green
 through the repaired factory. A pull request is a factory repair when it or its issue has the label `factory`. The
 issue has it from read.py, and the pull request has only `repair` from build.py, so the job reads both. After the
-judge approved, the job reads the story from the line `Story: #<n>` of the issue body, which read.py wrote. It
+judge approved, the job reads the story from the traveler of the issue, which read.py wrote and traveler.py reads. It
 dispatches factory.yml at the head branch with `issue=<story>` and `base=main`, so the factory of the repair branch
 builds the story on the head of main, with the sandbox image from `sandbox/` of that branch. The run's name is
 `#<story>`. The job finds the run as build.py does: a new run of the branch with that name, and it must be on the
 settled SHA. The gate is a run and not a check run, since #361 bars `checks: write` on this job. On `success` the
 merge arms. Any other conclusion is one comment on the issue that names the run, and no merge. A factory repair with
-no issue or no story line gets one comment and no merge. A pull request with no `factory` label, a ci repair, gets
-no gate run. The story's own pull request opens as a side effect of a green gate run.
+no issue or no story in its traveler gets one comment and no merge. A pull request with no `factory` label, a ci
+repair, gets no gate run. The story's own pull request opens as a side effect of a green gate run.
 
 The kill switch REPAIR_ENABLED is read first, on every event. Any value other than `true` ends the step with the
 exit code 0 and one line.
@@ -121,6 +122,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "judge"))
+import traveler  # noqa: E402
 from judge import gh  # noqa: E402
 
 LABEL = "repair"
@@ -164,11 +166,6 @@ def read_pull_request(repo, number):
 
 def default_branch(repo):
     return gh("api", f"repos/{repo}", "--jq", ".default_branch").strip()
-
-
-def closing_issue(body):
-    match = re.search(r"^Closes #(\d+)\s*$", body or "", re.M)
-    return int(match.group(1)) if match else None
 
 
 def read_issue(repo, issue):
@@ -285,9 +282,9 @@ def changed_files(repo, number):
     return len(entries), [path for entry in entries for path in entry if path]
 
 
-def red_run_branch(repo, body):
-    """The head branch of the red run named under ## Run of the issue body, or None when the body names no run."""
-    match = re.search(rf"^Run: https://github\.com/{re.escape(repo)}/actions/runs/(\d+)\s*$", body or "", re.M)
+def red_run_branch(repo, ticket):
+    """The head branch of the red run that the traveler names, or None with no traveler or a run of another repo."""
+    match = ticket and re.fullmatch(rf"https://github\.com/{re.escape(repo)}/actions/runs/(\d+)", ticket.run)
     if not match:
         return None
     return json.loads(gh("api", f"repos/{repo}/actions/runs/{match.group(1)}"))["head_branch"]
@@ -299,12 +296,6 @@ def verdict(repo, sha):
     answer = json.loads(gh("api", f"repos/{repo}/commits/{sha}/check-runs?check_name={CHECK}&filter=latest"))
     runs = answer.get("check_runs") or []
     return (runs[0]["status"], runs[0].get("conclusion")) if runs else None
-
-
-def story_of(body):
-    """The number of the story under the line `Story: #<n>` of the issue body, or None."""
-    match = re.search(r"^Story: #(\d+)\s*$", body or "", re.M)
-    return int(match.group(1)) if match else None
 
 
 def gate_runs(repo, branch):
@@ -498,7 +489,7 @@ def main():
             "nothing to merge"
         )
         return
-    issue = closing_issue(pr["body"])
+    issue = traveler.closing_issue(pr["body"])
     default = default_branch(repo)
     if pr["baseRefName"] != default:
         stop(
@@ -544,7 +535,8 @@ def main():
             "No merge. The owner reads the pull request.",
         )
         return
-    if issue is not None and red_run_branch(repo, fields["body"]) == pr["headRefName"]:
+    ticket = traveler.parse(fields["body"])
+    if issue is not None and red_run_branch(repo, ticket) == pr["headRefName"]:
         stop(
             repo,
             number,
@@ -555,14 +547,14 @@ def main():
             "The loop merges no branch of its own red run. The owner reads the pull request.",
         )
         return
-    story_number = story_of(fields["body"])
+    story_number = ticket.story if ticket else None
     if gated and story_number is None:
         stop(
             repo,
             number,
             issue,
             sha,
-            f"Pull request #{number} is a repair of the factory, and its issue names no story in a line `Story: #<n>`. "
+            f"Pull request #{number} is a repair of the factory, and the traveler of its issue names no story. "
             "No gate run, and no merge. The owner reads the issue."
             if issue is not None
             else f"Pull request #{number} is a repair of the factory, and it closes no issue, so it has no story. "

@@ -83,3 +83,8 @@ _Avoid_: session, claude
 **Output**:
 A file that a phase asks the agent for by name, and that the answer carries as text. The agent keeps it fresh: an output in the answer is one that this prompt wrote.
 _Avoid_: artifact, result (the result is the text of the answer)
+
+## Repair
+
+**Traveler**:
+The block under `## Run` of a repair issue. The job that files the issue writes it. The jobs that build and merge the fix read it. It names the red run, the story, the target branch and its pull request, the head SHA and the session id.
