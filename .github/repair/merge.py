@@ -292,8 +292,8 @@ def verdict(gh, repo, sha):
     """The latest check run named judge-verdict on the commit: (status, conclusion), or None when the judge
     posted none."""
     answer = json.loads(gh.run("api", f"repos/{repo}/commits/{sha}/check-runs?check_name={CHECK}&filter=latest"))
-    runs = answer.get("check_runs") or []
-    return (runs[0]["status"], runs[0].get("conclusion")) if runs else None
+    checks = answer.get("check_runs") or []
+    return (checks[0]["status"], checks[0].get("conclusion")) if checks else None
 
 
 def stop(gh, repo, number, issue, sha, text):

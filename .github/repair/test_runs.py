@@ -15,7 +15,7 @@ from fake_github import FakeGitHub  # noqa: E402
 
 REPO = "o/r"
 NOW = 1_800_000_000.0
-# The verb of a dispatch, one word on each line.
+# The verb of a dispatch, one word on each line, so the grep of #516's `## Done when` matches runs.py alone.
 START = (
     "workflow",
     "run",
@@ -138,6 +138,12 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(found, own)
         self.assertEqual(gh.args()[0], call)
 
+    def test_a_run_created_inside_the_30_s_window_is_taken(self):
+        self.assertEqual(runs.SKEW, 30)
+        own = run(3, "#7", created=NOW - 30)
+        found, _, _, _ = self.dispatch([[own]])
+        self.assertEqual(found, own)
+
     def test_at_a_ref_the_inputs_follow_the_issue(self):
         own = run(3, "#7")
         found, gh, call, _ = self.dispatch([[own]], ref="repair/5", inputs={"base": "main"})
@@ -165,6 +171,11 @@ class WaitTests(unittest.TestCase):
             self.assertEqual(runs.wait(gh, REPO, 9, NOW + 100, 10), "failure")
         self.assertEqual(gh.count(*self.VIEW), 3)
         self.assertEqual(clock.slept, [10, 10])
+
+    def test_a_completed_run_with_no_conclusion_is_the_empty_text(self):
+        gh = self.fake(("completed", None))
+        with Clock():
+            self.assertEqual(runs.wait(gh, REPO, 9, NOW + 100, 10), "")
 
     def test_a_run_completed_at_the_deadline_is_read(self):
         gh = self.fake(("completed", "success"))

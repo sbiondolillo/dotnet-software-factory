@@ -246,7 +246,7 @@ ARM = ("pr", "merge", "7", "-R", REPO, "--auto", "--squash", "--delete-branch", 
 DISARM = ("pr", "merge", "7", "-R", REPO, "--disable-auto")
 VERDICT = ("api", f"repos/{REPO}/commits/{SHA}/check-runs?check_name={merge.CHECK}&filter=latest")
 COMMENT = ("issue", "comment", "5", "-R", REPO, "--body-file", "-")
-# The verb of a dispatch, one word on each line.
+# The verb of a dispatch, one word on each line, so the grep of #516's `## Done when` matches runs.py alone.
 START = (
     "workflow",
     "run",
@@ -350,10 +350,12 @@ class BaseTests(unittest.TestCase):
         )
         return f"The fix.\n\n{traveler.render(ticket)}"
 
-    def run_main(self, *bases, paths=("src/x.cs",), issue=None, red_branch="main", gate=("c" * 40,), env=None):
+    def run_main(
+        self, *bases, paths=("src/x.cs",), issue=None, red_branch="main", gate=("c" * 40,), env=None, verdicts=None
+    ):
         """The fake after main() ran. Each read of the pull request gives the next base, and the read after the arm
         gives it merged. `gate` is the head SHA of the gate run, then each status of it in turn, and its
-        conclusion."""
+        conclusion. `verdicts` are the check runs of judge-verdict in turn, a completed success by default."""
         gh = FakeGitHub()
         merged = self.pull_request("main", state="MERGED", mergeCommit={"oid": MERGE_SHA})
         merged["mergedBy"] = {"login": "github-actions"}
@@ -364,7 +366,7 @@ class BaseTests(unittest.TestCase):
         gh.answer(raw(BASE_SHA), FACTORY_TEXT)
         gh.answer(raw(SHA), FACTORY_TEXT)
         gh.answer(("api", f"repos/{REPO}/actions/runs/9"), {"head_branch": red_branch})
-        gh.answer(VERDICT, {"check_runs": [{"status": "completed", "conclusion": "success"}]})
+        gh.answer(VERDICT, *(verdicts or [{"check_runs": [{"status": "completed", "conclusion": "success"}]}]))
         gh.answer(("api", f"repos/{REPO}/issues/5/comments", "--paginate", "--jq", ".[].body"), "")
         gh.answer(COMMENT, "")
         gate_run = {"databaseId": 1, "headSha": gate[0], "displayTitle": "#451", "url": "u", "createdAt": NOW}
@@ -474,6 +476,27 @@ class BaseTests(unittest.TestCase):
         [text] = self.comments(gh)
         self.assertIn("the traveler of its issue names no story", text)
         self.assertEqual(gh.count(*VERDICT), 0)
+
+    # The wait for judge-verdict, through runs.poll: an absent check and one in progress are waited on.
+    ABSENT = {"check_runs": []}
+    RUNNING = {"check_runs": [{"status": "in_progress", "conclusion": None}]}
+    PASSED = {"check_runs": [{"status": "completed", "conclusion": "success"}]}
+
+    def test_an_absent_then_running_check_is_waited_on_and_the_merge_arms(self):
+        gh = self.run_main("main", "main", "main", verdicts=[self.ABSENT, self.RUNNING, self.PASSED])
+        self.assertEqual(gh.count(*VERDICT), 3)
+        self.assertEqual(self.comments(gh), [])
+        self.assertEqual(gh.count(*ARM), 1)
+
+    def test_an_absent_check_at_the_timeout_exits(self):
+        with self.assertRaises(SystemExit) as stop:
+            self.run_main("main", "main", verdicts=[self.ABSENT], env={"REPAIR_MERGE_TIMEOUT_SECONDS": "0"})
+        self.assertEqual(stop.exception.code, f"repair: {merge.CHECK} on {SHA[:7]} is absent after the timeout")
+
+    def test_a_running_check_at_the_timeout_exits(self):
+        with self.assertRaises(SystemExit) as stop:
+            self.run_main("main", "main", verdicts=[self.RUNNING], env={"REPAIR_MERGE_TIMEOUT_SECONDS": "0"})
+        self.assertEqual(stop.exception.code, f"repair: {merge.CHECK} on {SHA[:7]} is in_progress after the timeout")
 
 
 class WaitForMergeTests(unittest.TestCase):

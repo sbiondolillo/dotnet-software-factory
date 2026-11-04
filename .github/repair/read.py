@@ -596,7 +596,7 @@ def finish_factory(gh, repo, run, story, pr, answer, sid):
     """The end of the read of a factory run, by its class."""
     sha = run["head_sha"]
     if answer["class"] == "flake":
-        runs.start(gh, repo, runs.WORKFLOW, "main", {"issue": story["number"]})
+        runs.start(gh, repo, FACTORY_WORKFLOW, "main", {"issue": story["number"]})
         comment(
             gh,
             repo,

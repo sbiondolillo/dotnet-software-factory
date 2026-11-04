@@ -519,7 +519,7 @@ class RerunTests(unittest.TestCase):
         self.assertEqual([call.args for call in sleep.call_args_list], [(read.RERUN_POLL,), (read.RERUN_POLL,)])
 
 
-# The verb of a dispatch, one word on each line.
+# The verb of a dispatch, one word on each line, so the grep of #516's `## Done when` matches runs.py alone.
 START = (
     "workflow",
     "run",

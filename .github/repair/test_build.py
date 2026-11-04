@@ -22,7 +22,7 @@ REF = ("api", f"repos/{REPO}/git/ref/heads/{BRANCH}")
 POST = ("api", "-X", "POST", f"repos/{REPO}/git/refs", "-f", f"ref=refs/heads/{BRANCH}", "-f", f"sha={SHA}")
 PATCH = ("api", "-X", "PATCH", f"repos/{REPO}/git/refs/heads/{BRANCH}", "-f", f"sha={SHA}", "-F", "force=true")
 DELETE = ("api", "-X", "DELETE", f"repos/{REPO}/git/refs/heads/{BRANCH}")
-# The verb of a dispatch, one word on each line.
+# The verb of a dispatch, one word on each line, so the grep of #516's `## Done when` matches runs.py alone.
 START = (
     "workflow",
     "run",
@@ -150,6 +150,22 @@ class BaseBranchTests(unittest.TestCase):
         ):
             build.main(gh)
         self.assertEqual(gh.args()[-2:], [REF, DELETE])
+
+    def test_with_no_green_run_one_comment_and_no_build(self):
+        gh = FakeGitHub()
+        gh.answer(ISSUE_VIEW, issue(labels=("repair", "factory")))
+        gh.answer(GREEN, [])
+        text = (
+            f"No run of `{build.WORKFLOW}` on `main` ended `success`, so the factory has no green ref to build this "
+            "repair at. No build."
+        )
+        gh.answer(("issue", "comment", "7", "-R", REPO, "--body", text), "")
+        with (
+            mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "GITHUB_OUTPUT": os.devnull}),
+            mock.patch.object(build.sys, "argv", ["build.py", "7"]),
+        ):
+            build.main(gh)
+        self.assertEqual(gh.args(), [ISSUE_VIEW, GREEN, ("issue", "comment", "7", "-R", REPO, "--body", text)])
 
     def test_the_branch_is_deleted_when_the_create_fails(self):
         job, app = FakeGitHub("job"), FakeGitHub("app")
