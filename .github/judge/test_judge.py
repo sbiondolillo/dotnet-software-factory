@@ -103,6 +103,22 @@ class ReadAnglesTests(unittest.TestCase):
         self.assertRegex(report["findings"][0]["fault"], r"^not idle after \d+ s$")
 
 
+class ReadSynthesisTests(unittest.TestCase):
+    def read(self, listing, status="idle", deadline=60):
+        session = Session(FakeApi([listing], status=status, sid="sesn_s"), "sesn_s")
+        with mock.patch("builtins.print"):
+            return judge.read_synthesis(session, time.time() + deadline)
+
+    def test_the_text_is_kept_as_it_is(self):
+        self.assertEqual(self.read(turn(idle(), message("### Review {x}"), usage("3"))), ("### Review {x}", "3"))
+
+    def test_a_refused_synthesis_gives_its_text_and_the_review_is_still_posted(self):
+        self.assertEqual(self.read(turn(idle("refusal"), message("the text"))), ("the text", "?"))
+
+    def test_a_synthesis_past_the_deadline_gives_no_text(self):
+        self.assertEqual(self.read(turn(), status="running", deadline=-1), (None, "?"))
+
+
 class AlreadyJudgedTests(unittest.TestCase):
     """The marker of the head SHA and the spec digest, read from every comment of the pull request through api_list."""
 

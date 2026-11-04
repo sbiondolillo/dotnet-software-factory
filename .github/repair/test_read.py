@@ -54,7 +54,7 @@ def factory_answer(body=SOUND, kind="factory", **fields):
     return json.dumps({"class": kind, "title": "t", "body": body, "evidence": ["e"], **fields})
 
 
-def parse_or_error(parse, text):
+def fault_of(parse, text):
     """The Report and None, or None and the fault of the ValueError that the parse function raised."""
     try:
         return parse(text), None
@@ -63,11 +63,11 @@ def parse_or_error(parse, text):
 
 
 def parse_factory(text):
-    return parse_or_error(read.factory_report, text)
+    return fault_of(read.factory_report, text)
 
 
 def parse_ci(text):
-    return parse_or_error(read.ci_report, text)
+    return fault_of(read.ci_report, text)
 
 
 class ParseTests(unittest.TestCase):

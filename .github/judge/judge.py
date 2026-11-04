@@ -162,6 +162,18 @@ def read_angles(started, deadline):
     return reports, costs
 
 
+def read_synthesis(session, deadline):
+    """The review text of the synthesis and its cost. The text is Markdown, so its parse keeps the text as it is and
+    never asks for a correction. The verdict comes from the reports alone, so a synthesis that gives no text, such as
+    one refused or past the deadline, gives its last message, or None, and the review is still posted."""
+    try:
+        answer = session.report(lambda text: text, "", deadline)
+    except SessionError as error:
+        print(f"judge: the synthesis gave no text: {error.reason}")
+        return error.text or None, "?"
+    return answer.value, cost(answer.usage)
+
+
 def render(reports, synthesis, pr, costs, spec):
     verdict = "CHANGES REQUESTED" if any(r["verdict"] == "reject" for r in reports) else "APPROVED"
     lines = [
@@ -294,13 +306,8 @@ def main(gh=None):
             100,
             overrides={"tools": [{"type": "agent_toolset_20260401", "default_config": {"enabled": False}}]},
         )
-        try:
-            # The synthesis is Markdown, so its parse keeps the text as it is and never asks for a correction.
-            answer = session.report(lambda text: text, "", time.time() + 600)
-        except SessionError as error:
-            sys.exit(f"judge: the synthesis {error}")
-        synthesis = answer.value
-        costs.append((session.sid, "synthesis", cost(answer.usage)))
+        synthesis, spent = read_synthesis(session, time.time() + 600)
+        costs.append((session.sid, "synthesis", spent))
 
     verdict, body = render(reports, synthesis, pr, costs, spec)
     gh.run("pr", "comment", str(number), "-R", repo, "--body-file", "-", input_text=body)
