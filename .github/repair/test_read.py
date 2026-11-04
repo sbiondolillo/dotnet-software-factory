@@ -9,6 +9,7 @@ import os
 import unittest
 from unittest import mock
 
+import comments
 import read
 import runs
 import traveler
@@ -426,6 +427,22 @@ REPAIRS = (
     "number,body,state,labels",
 )
 RED = {"id": 9, "head_sha": "abc1234", "html_url": "https://github.com/o/r/actions/runs/9", "run_attempt": 1}
+
+
+def take_comments(gh, number, sha):
+    """The target of comments.py, issue or pull request <number> or the commit <sha>, takes a post, and its list of
+    comments holds each one posted."""
+    path = comments.path("o/r", number, sha)
+    gh.answer_list(path, lambda: [{"body": text} for text in posted(gh, number, sha)])
+    gh.answer(("api", "-X", "POST", path, "--input", "-"), "{}")
+
+
+def posted(gh, number, sha):
+    """The body of each comment that comments.py posted on the target."""
+    post = ("api", "-X", "POST", comments.path("o/r", number, sha), "--input", "-")
+    return [json.loads(text)["body"] for args, text in gh.calls if args == post]
+
+
 ALSO_RED = ("issue", "comment", "4", "-R", "o/r", "--body", f"The run {RED['html_url']} on `abc1234` is also red.")
 
 
@@ -436,11 +453,11 @@ def repair(number, state="OPEN", body="Fix it.\n\nSHA abc1234", labels=("repair"
 class DedupeTests(unittest.TestCase):
     """already_handled: one repair for each red SHA, as #388 fixed."""
 
-    def handled(self, issues, comments="", marker=""):
-        gh = FakeGitHub()
+    def handled(self, issues, comments="", gh=None):
+        gh = gh or FakeGitHub()
         gh.answer(REPAIRS, issues)
         gh.answer(("api", "repos/o/r/issues/4/comments", "--paginate", "--jq", ".[].body"), comments)
-        gh.answer(("api", "repos/o/r/commits/abc1234/comments", "--paginate", "--jq", ".[].body"), marker)
+        take_comments(gh, None, "abc1234")
         gh.answer(ALSO_RED, "")
         return read.already_handled(gh, "o/r", None, RED), gh
 
@@ -475,7 +492,21 @@ class DedupeTests(unittest.TestCase):
         self.assertEqual(gh.count(*ALSO_RED), 0)
 
     def test_a_marker_comment_on_the_commit_ends_the_read(self):
-        self.assertTrue(self.handled([], marker=read.MARKER.format(sha="abc1234"))[0])
+        gh = FakeGitHub()
+        take_comments(gh, None, "abc1234")
+        read.comment(gh, "o/r", None, "abc1234", "No repair.")
+        self.assertTrue(self.handled([], gh=gh)[0])
+
+    def test_a_marker_comment_on_the_pull_request_ends_the_read(self):
+        gh = FakeGitHub()
+        gh.answer(REPAIRS, [])
+        take_comments(gh, 8, "abc1234")
+        read.comment(gh, "o/r", {"number": 8}, "abc1234", "No repair.")
+        self.assertTrue(read.already_handled(gh, "o/r", {"number": 8}, RED))
+        gh = FakeGitHub()
+        gh.answer(REPAIRS, [])
+        take_comments(gh, 8, "abc1234")
+        self.assertFalse(read.already_handled(gh, "o/r", {"number": 8}, RED))
 
     def test_no_issue_and_no_marker_needs_a_repair(self):
         handled, gh = self.handled([repair(4, body="another SHA")])
@@ -531,13 +562,38 @@ class FlakeTests(unittest.TestCase):
         gh = FakeGitHub()
         dispatch = (*START, runs.WORKFLOW, "-R", "o/r", "--ref", "main", "-f", "issue=12")
         gh.answer(dispatch, "")
-        gh.answer(("issue", "comment", "12", "-R", "o/r", "--body-file", "-"), "")
+        take_comments(gh, 12, "abc1234")
         answer = {"class": "flake", "evidence": ["a line"]}
         read.finish_factory(gh, "o/r", RED, {"number": 12}, {"number": 12, "story": True}, answer, "sesn_1")
         self.assertEqual(gh.count(*dispatch), 1)
-        self.assertIn(
-            "the reader's class is `flake`", gh.input_of("issue", "comment", "12", "-R", "o/r", "--body-file", "-")
-        )
+        [text] = posted(gh, 12, "abc1234")
+        self.assertIn("the reader's class is `flake`", text)
+
+
+class CommentTests(unittest.TestCase):
+    """read.comment: one comment for each red SHA, through comments.py."""
+
+    def test_a_comment_goes_on_the_pull_request_once_for_the_sha(self):
+        gh = FakeGitHub()
+        take_comments(gh, 8, "abc1234")
+        for _ in range(2):
+            read.comment(gh, "o/r", {"number": 8}, "abc1234", "No repair.")
+        [text] = posted(gh, 8, "abc1234")
+        self.assertIn("repair:abc1234", text.splitlines()[0])
+        self.assertTrue(text.endswith("\nNo repair."))
+
+    def test_a_comment_on_main_goes_on_the_commit(self):
+        gh = FakeGitHub()
+        take_comments(gh, None, "abc1234")
+        read.comment(gh, "o/r", None, "abc1234", "No repair.")
+        self.assertEqual(len(posted(gh, None, "abc1234")), 1)
+
+    def test_a_marker_of_another_sha_takes_a_comment(self):
+        gh = FakeGitHub()
+        take_comments(gh, 8, "abc1234")
+        read.comment(gh, "o/r", {"number": 8}, "def5678", "No repair.")
+        read.comment(gh, "o/r", {"number": 8}, "abc1234", "No repair.")
+        self.assertEqual(len(posted(gh, 8, "abc1234")), 2)
 
 
 class KillSwitchTests(unittest.TestCase):

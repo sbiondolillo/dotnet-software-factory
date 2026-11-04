@@ -123,6 +123,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "shared"))
+import comments  # noqa: E402
 import runs  # noqa: E402
 import traveler  # noqa: E402
 from github import GitHub, GitHubError  # noqa: E402
@@ -132,7 +133,6 @@ FACTORY_LABEL = "factory"
 WORKFLOW = runs.WORKFLOW
 HEADS = ("repair/", "factory/")
 CHECK = "judge-verdict"
-MARKER = "<!-- repair-merge:{sha} -->"
 FIELDS = "number,state,headRefName,headRefOid,baseRefName,baseRefOid,body,labels,url,mergeCommit,mergedBy,changedFiles"
 # The paths a repair never changes, as #406 and its addendum decided. An entry that ends with a slash holds each path
 # under it. OPEN is the exception to GUARDED. A diff of FACTORY changes no key of KEYS, which holds each key with
@@ -298,11 +298,8 @@ def verdict(gh, repo, sha):
 
 def stop(gh, repo, number, issue, sha, text):
     """One comment for the SHA, on the issue, or on the pull request when it closes no issue."""
-    target = ("issue", str(issue)) if issue is not None else ("pr", str(number))
-    comments = gh.run("api", f"repos/{repo}/issues/{target[1]}/comments", "--paginate", "--jq", ".[].body")
-    marker = MARKER.format(sha=sha)
-    if marker not in comments:
-        gh.run(target[0], "comment", target[1], "-R", repo, "--body-file", "-", input_text=f"{marker}\n{text}")
+    target = issue if issue is not None else number
+    comments.post_once(gh, repo, target, f"<!-- repair-merge:{sha} -->", text)
     print(f"repair: no merge of #{number} on {sha[:7]}: {text.splitlines()[0]}")
 
 

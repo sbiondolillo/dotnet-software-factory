@@ -3,11 +3,13 @@ build job of ci.yml runs them with `python3 -B -m unittest discover -s .github/r
 unittest, which the standard library holds, so the job installs nothing. The tests of the keys read factory.yml of
 the branch."""
 
+import json
 import os
 import signal
 import unittest
 from unittest import mock
 
+import comments
 import merge
 import runs
 import traveler
@@ -245,7 +247,7 @@ PR_VIEW = ("pr", "view", "7", "-R", REPO, "--json", merge.FIELDS)
 ARM = ("pr", "merge", "7", "-R", REPO, "--auto", "--squash", "--delete-branch", "--match-head-commit", SHA)
 DISARM = ("pr", "merge", "7", "-R", REPO, "--disable-auto")
 VERDICT = ("api", f"repos/{REPO}/commits/{SHA}/check-runs?check_name={merge.CHECK}&filter=latest")
-COMMENT = ("issue", "comment", "5", "-R", REPO, "--body-file", "-")
+COMMENT = ("api", "-X", "POST", comments.path(REPO, 5), "--input", "-")
 # The verb of a dispatch, one word on each line, so the grep of #516's `## Done when` matches runs.py alone.
 START = (
     "workflow",
@@ -367,8 +369,7 @@ class BaseTests(unittest.TestCase):
         gh.answer(raw(SHA), FACTORY_TEXT)
         gh.answer(("api", f"repos/{REPO}/actions/runs/9"), {"head_branch": red_branch})
         gh.answer(VERDICT, *(verdicts or [{"check_runs": [{"status": "completed", "conclusion": "success"}]}]))
-        gh.answer(("api", f"repos/{REPO}/issues/5/comments", "--paginate", "--jq", ".[].body"), "")
-        gh.answer(COMMENT, "")
+        self.take_comments(gh)
         gate_run = {"databaseId": 1, "headSha": gate[0], "displayTitle": "#451", "url": "u", "createdAt": NOW}
         gh.answer(GATE_LIST, [], [gate_run])
         gh.answer(GATE, "")
@@ -387,8 +388,24 @@ class BaseTests(unittest.TestCase):
             merge.main(gh)
         return gh
 
-    def comments(self, gh):
-        return [text for args, text in gh.calls if args == COMMENT]
+    @staticmethod
+    def take_comments(gh):
+        """Issue 5 takes the comments of comments.py, and its list holds each one posted."""
+        gh.answer_list(comments.path(REPO, 5), lambda: [{"body": text} for text in BaseTests.comments(gh)])
+        gh.answer(COMMENT, "{}")
+
+    @staticmethod
+    def comments(gh):
+        return [json.loads(text)["body"] for args, text in gh.calls if args == COMMENT]
+
+    def test_a_second_stop_on_the_head_posts_no_second_comment(self):
+        gh = FakeGitHub()
+        self.take_comments(gh)
+        for _ in range(2):
+            merge.stop(gh, REPO, 7, 5, SHA, "No merge.")
+        [text] = self.comments(gh)
+        self.assertIn(f"repair-merge:{SHA}", text.splitlines()[0])
+        self.assertEqual(gh.count("api_list", comments.path(REPO, 5)), 2)
 
     def test_a_pull_request_on_main_arms_the_merge_and_closes_the_issue(self):
         gh = self.run_main("main", "main", "main")
