@@ -3,13 +3,15 @@ build job of ci.yml runs them with `python3 -B -m unittest discover -s .github/r
 unittest, which the standard library holds, so the job installs nothing. The tests of the keys read factory.yml of
 the branch."""
 
-import json
 import os
+import signal
 import unittest
 from unittest import mock
 
 import merge
 import traveler
+from fake_github import Fail, FakeGitHub
+from github import GitHubError
 
 with open(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "workflows", "factory.yml"), encoding="utf-8"
@@ -29,7 +31,12 @@ class GuardedTests(unittest.TestCase):
                 self.assertEqual(merge.guarded([path]), [path])
 
     def test_a_path_under_a_listed_directory_is_refused(self):
-        for path in (".github/judge/judge.py", ".github/repair/merge.py", ".github/repair/new.py"):
+        for path in (
+            ".github/judge/judge.py",
+            ".github/repair/merge.py",
+            ".github/repair/new.py",
+            ".github/shared/github.py",
+        ):
             with self.subTest(path=path):
                 self.assertEqual(merge.guarded([path]), [path])
 
@@ -229,164 +236,225 @@ class FactoryKeyTests(unittest.TestCase):
         self.assertEqual(merge.refused([], []), [])
 
 
+REPO = "o/r"
+SHA = "a" * 40
+BASE_SHA = "b" * 40
+MERGE_SHA = "m" * 40
+PR_VIEW = ("pr", "view", "7", "-R", REPO, "--json", merge.FIELDS)
+ARM = ("pr", "merge", "7", "-R", REPO, "--auto", "--squash", "--delete-branch", "--match-head-commit", SHA)
+DISARM = ("pr", "merge", "7", "-R", REPO, "--disable-auto")
+VERDICT = ("api", f"repos/{REPO}/commits/{SHA}/check-runs?check_name={merge.CHECK}&filter=latest")
+COMMENT = ("issue", "comment", "5", "-R", REPO, "--body-file", "-")
+GATE_LIST = (
+    "run",
+    "list",
+    "-R",
+    REPO,
+    "--workflow",
+    merge.WORKFLOW,
+    "--branch",
+    "repair/5",
+    "--event",
+    "workflow_dispatch",
+    "--limit",
+    "30",
+    "--json",
+    "databaseId,headSha,displayTitle,url",
+)
+GATE = ("workflow", "run", merge.WORKFLOW, "-R", REPO, "--ref", "repair/5", "-f", "issue=451", "-f", "base=main")
+CLOSE = (
+    "issue",
+    "close",
+    "5",
+    "-R",
+    REPO,
+    "--comment",
+    f"Merged as `{MERGE_SHA}` by pull request #7, merged by `github-actions`.",
+)
+
+
+def raw(ref):
+    return ("api", "-H", "Accept: application/vnd.github.raw+json", f"repos/{REPO}/contents/{merge.FACTORY}?ref={ref}")
+
+
 class FileAtTests(unittest.TestCase):
     def test_an_absent_file_is_none(self):
-        with mock.patch.object(merge, "gh", side_effect=SystemExit("judge: gh api failed: gh: Not Found (HTTP 404)")):
-            self.assertIsNone(merge.file_at("o/r", merge.FACTORY, "a" * 40))
+        gh = FakeGitHub()
+        gh.answer(raw(SHA), Fail(status=404))
+        self.assertIsNone(merge.file_at(gh, REPO, merge.FACTORY, SHA))
 
     def test_any_other_failure_ends_the_job(self):
-        with mock.patch.object(merge, "gh", side_effect=SystemExit("judge: gh api failed: HTTP 502")):
-            with self.assertRaises(SystemExit):
-                merge.file_at("o/r", merge.FACTORY, "a" * 40)
+        for status in (None, 502):
+            with self.subTest(status=status):
+                gh = FakeGitHub()
+                gh.answer(raw(SHA), Fail(status=status))
+                with self.assertRaises(GitHubError):
+                    merge.file_at(gh, REPO, merge.FACTORY, SHA)
+
+    def test_a_present_file_is_its_text(self):
+        gh = FakeGitHub()
+        gh.answer(raw(SHA), FACTORY_TEXT)
+        self.assertEqual(merge.file_at(gh, REPO, merge.FACTORY, SHA), FACTORY_TEXT)
 
 
 class ChangedFilesTests(unittest.TestCase):
     def test_a_rename_gives_both_paths(self):
-        output = '["src/moved.py",".github/repair/merge.py"]\n[".github/workflows/factory.yml",null]\n'
-        with mock.patch.object(merge, "gh", return_value=output) as gh:
-            count, paths = merge.changed_files("o/r", 7)
+        gh = FakeGitHub()
+        gh.answer_list(
+            f"repos/{REPO}/pulls/7/files",
+            [
+                {"filename": "src/moved.py", "previous_filename": ".github/repair/merge.py"},
+                {"filename": ".github/workflows/factory.yml"},
+            ],
+        )
+        count, paths = merge.changed_files(gh, REPO, 7)
         self.assertEqual(count, 2)
         self.assertEqual(paths, ["src/moved.py", ".github/repair/merge.py", ".github/workflows/factory.yml"])
         self.assertEqual(merge.guarded(paths), [".github/repair/merge.py"])
-        self.assertIn("--paginate", gh.call_args.args)
 
 
 class BaseTests(unittest.TestCase):
-    """main() with each read of GitHub replaced, so no test calls gh."""
+    """main() over a FakeGitHub that answers every read and write of the step."""
 
-    SHA = "a" * 40
+    def setUp(self):
+        self.addCleanup(signal.signal, signal.SIGTERM, signal.getsignal(signal.SIGTERM))
 
-    def pull_request(self, base):
+    def pull_request(self, base, **fields):
         return {
             "number": 7,
             "state": "OPEN",
             "labels": [{"name": "repair"}],
             "headRefName": "repair/5",
-            "headRefOid": self.SHA,
+            "headRefOid": SHA,
             "baseRefName": base,
-            "baseRefOid": "b" * 40,
+            "baseRefOid": BASE_SHA,
             "body": "Closes #5",
             "changedFiles": 1,
+            **fields,
         }
-
-    paths = ["src/x.cs"]
-
-    issue = {"body": "", "labels": []}
-    red_branch = "main"
-
-    def gh(self, *args):
-        """The run read of red_run_branch, the one call of merge.gh that main() makes with the other reads replaced."""
-        self.assertEqual(args, ("api", "repos/o/r/actions/runs/9"))
-        return json.dumps({"head_branch": self.red_branch})
 
     def traveler_body(self, **fields):
         ticket = traveler.Traveler(
-            run="https://github.com/o/r/actions/runs/9", target="`repair/9`", sha=self.SHA, session="sesn_1", **fields
+            run=f"https://github.com/{REPO}/actions/runs/9", target="`repair/9`", sha=SHA, session="sesn_1", **fields
         )
         return f"The fix.\n\n{traveler.render(ticket)}"
 
-    def run_main(self, *bases):
-        reads = [self.pull_request(base) for base in bases]
-        env = {"REPAIR_ENABLED": "true", "GITHUB_REPOSITORY": "o/r", "REPAIR_POLL_SECONDS": "0"}
+    def run_main(self, *bases, paths=("src/x.cs",), issue=None, red_branch="main"):
+        """The fake after main() ran. Each read of the pull request gives the next base, and the read after the arm
+        gives it merged."""
+        gh = FakeGitHub()
+        merged = self.pull_request("main", state="MERGED", mergeCommit={"oid": MERGE_SHA})
+        merged["mergedBy"] = {"login": "github-actions"}
+        gh.answer(PR_VIEW, *[self.pull_request(base) for base in bases], merged)
+        gh.answer(("api", f"repos/{REPO}", "--jq", ".default_branch"), "main\n")
+        gh.answer(("issue", "view", "5", "-R", REPO, "--json", "body,labels"), issue or {"body": "", "labels": []})
+        gh.answer_list(f"repos/{REPO}/pulls/7/files", [{"filename": path} for path in paths])
+        gh.answer(raw(BASE_SHA), FACTORY_TEXT)
+        gh.answer(raw(SHA), FACTORY_TEXT)
+        gh.answer(("api", f"repos/{REPO}/actions/runs/9"), {"head_branch": red_branch})
+        gh.answer(VERDICT, {"check_runs": [{"status": "completed", "conclusion": "success"}]})
+        gh.answer(("api", f"repos/{REPO}/issues/5/comments", "--paginate", "--jq", ".[].body"), "")
+        gh.answer(COMMENT, "")
+        gh.answer(GATE_LIST, [], [{"databaseId": 1, "headSha": "c" * 40, "displayTitle": "#451", "url": "u"}])
+        gh.answer(GATE, "")
+        gh.answer(ARM, "")
+        gh.answer(("workflow", "run", "ci.yml", "-R", REPO, "--ref", "main"), "")
+        gh.answer(("issue", "view", "5", "-R", REPO, "--json", "state"), {"state": "OPEN"})
+        gh.answer(CLOSE, "")
+        gh.answer(("api", f"repos/{REPO}/git/matching-refs/heads/repair/5"), [])
+        env = {"REPAIR_ENABLED": "true", "GITHUB_REPOSITORY": REPO, "REPAIR_POLL_SECONDS": "0"}
         with (
             mock.patch.dict(os.environ, env),
-            mock.patch.object(merge.sys, "argv", ["merge.py", "7", self.SHA]),
-            mock.patch.object(merge, "read_pull_request", side_effect=reads),
-            mock.patch.object(merge, "default_branch", return_value="main"),
-            mock.patch.object(merge, "file_at", return_value=None),
-            mock.patch.object(merge, "read_issue", return_value=self.issue),
-            mock.patch.object(merge, "changed_files", return_value=(1, self.paths)) as files,
-            mock.patch.object(merge, "gh", side_effect=self.gh),
-            mock.patch.object(merge, "dispatch_gate", return_value={"url": "u", "headSha": "c" * 40}) as gate,
-            mock.patch.object(merge, "wait_for_judge", return_value="success") as judge,
-            mock.patch.object(merge, "arm_and_wait", return_value=None) as arm,
-            mock.patch.object(merge, "stop") as stop,
+            mock.patch.object(merge.sys, "argv", ["merge.py", "7", SHA]),
+            mock.patch.object(merge.time, "sleep"),
         ):
-            merge.main()
-        self.gate = gate
-        return files, judge, arm, stop
+            merge.main(gh)
+        return gh
 
-    def test_a_pull_request_on_main_arms_the_merge(self):
-        files, judge, arm, stop = self.run_main("main", "main", "main")
-        stop.assert_not_called()
-        arm.assert_called_once()
+    def comments(self, gh):
+        return [text for args, text in gh.calls if args == COMMENT]
+
+    def test_a_pull_request_on_main_arms_the_merge_and_closes_the_issue(self):
+        gh = self.run_main("main", "main", "main")
+        self.assertEqual(self.comments(gh), [])
+        self.assertEqual(gh.count(*ARM), 1)
+        self.assertEqual(gh.count(*CLOSE), 1)
 
     def test_a_pull_request_on_another_base_is_refused_with_one_comment(self):
-        files, judge, arm, stop = self.run_main("dev")
-        stop.assert_called_once()
-        self.assertIn("Pull request #7 targets `dev`, not `main`.", stop.call_args.args[4])
-        files.assert_not_called()
-        arm.assert_not_called()
+        gh = self.run_main("dev")
+        [text] = self.comments(gh)
+        self.assertIn("Pull request #7 targets `dev`, not `main`.", text)
+        self.assertEqual(gh.count("api_list", f"repos/{REPO}/pulls/7/files"), 0)
+        self.assertEqual(gh.count(*ARM), 0)
 
     def test_a_retarget_while_the_job_reads_the_files_merges_nothing(self):
-        files, judge, arm, stop = self.run_main("main", "dev")
-        files.assert_called_once()
-        stop.assert_not_called()
-        judge.assert_not_called()
-        arm.assert_not_called()
+        gh = self.run_main("main", "dev")
+        self.assertEqual(gh.count("api_list", f"repos/{REPO}/pulls/7/files"), 1)
+        self.assertEqual(self.comments(gh), [])
+        self.assertEqual(gh.count(*VERDICT), 0)
+        self.assertEqual(gh.count(*ARM), 0)
 
     def test_a_retarget_before_the_arm_merges_nothing(self):
-        files, judge, arm, stop = self.run_main("main", "main", "dev")
-        judge.assert_called_once()
-        stop.assert_not_called()
-        arm.assert_not_called()
+        gh = self.run_main("main", "main", "dev")
+        self.assertEqual(gh.count(*VERDICT), 1)
+        self.assertEqual(self.comments(gh), [])
+        self.assertEqual(gh.count(*ARM), 0)
 
     def test_a_factory_diff_with_no_key_change_arms_the_merge(self):
-        self.paths = [merge.FACTORY]
-        files, judge, arm, stop = self.run_main("main", "main", "main")
-        stop.assert_not_called()
-        arm.assert_called_once()
+        gh = self.run_main("main", "main", "main", paths=[merge.FACTORY])
+        self.assertEqual(self.comments(gh), [])
+        self.assertEqual((gh.count(*raw(BASE_SHA)), gh.count(*raw(SHA))), (1, 1))
+        self.assertEqual(gh.count(*ARM), 1)
 
     def test_a_guarded_path_is_refused_with_one_comment_before_the_judge(self):
-        self.paths = [".github/workflows/judge.yml"]
-        files, judge, arm, stop = self.run_main("main", "main")
-        stop.assert_called_once()
-        self.assertIn("`.github/workflows/judge.yml`", stop.call_args.args[4])
-        judge.assert_not_called()
-        arm.assert_not_called()
+        gh = self.run_main("main", "main", paths=[".github/workflows/judge.yml"])
+        [text] = self.comments(gh)
+        self.assertIn("`.github/workflows/judge.yml`", text)
+        self.assertEqual(gh.count(*VERDICT), 0)
+        self.assertEqual(gh.count(*ARM), 0)
 
     def test_the_branch_of_the_red_run_in_the_traveler_is_refused_with_one_comment(self):
-        self.issue = {"body": self.traveler_body(), "labels": []}
-        self.red_branch = "repair/5"
-        files, judge, arm, stop = self.run_main("main", "main")
-        stop.assert_called_once()
-        self.assertIn("is the branch of the red run", stop.call_args.args[4])
-        judge.assert_not_called()
+        gh = self.run_main("main", "main", issue={"body": self.traveler_body(), "labels": []}, red_branch="repair/5")
+        [text] = self.comments(gh)
+        self.assertIn("is the branch of the red run", text)
+        self.assertEqual(gh.count(*VERDICT), 0)
 
     def test_a_factory_repair_dispatches_the_gate_on_the_story_of_its_traveler(self):
-        self.issue = {"body": self.traveler_body(story=451), "labels": [{"name": "factory"}]}
-        files, judge, arm, stop = self.run_main("main", "main")
-        stop.assert_not_called()
-        self.gate.assert_called_once_with("o/r", "repair/5", 451)
-        arm.assert_not_called()
+        issue = {"body": self.traveler_body(story=451), "labels": [{"name": "factory"}]}
+        gh = self.run_main("main", "main", issue=issue)
+        self.assertEqual(self.comments(gh), [])
+        self.assertEqual(gh.count(*GATE), 1)
+        self.assertEqual(gh.count(*ARM), 0)
 
     def test_a_factory_repair_whose_traveler_names_no_story_is_refused_with_one_comment(self):
-        self.issue = {"body": self.traveler_body(pull_request=3), "labels": [{"name": "factory"}]}
-        files, judge, arm, stop = self.run_main("main", "main")
-        stop.assert_called_once()
-        self.assertIn("the traveler of its issue names no story", stop.call_args.args[4])
-        judge.assert_not_called()
+        issue = {"body": self.traveler_body(pull_request=3), "labels": [{"name": "factory"}]}
+        gh = self.run_main("main", "main", issue=issue)
+        [text] = self.comments(gh)
+        self.assertIn("the traveler of its issue names no story", text)
+        self.assertEqual(gh.count(*VERDICT), 0)
 
 
 class WaitForMergeTests(unittest.TestCase):
-    def wait(self, base, head="a" * 40):
-        pr = {"state": "OPEN", "headRefOid": head, "baseRefName": base}
-        with (
-            mock.patch.object(merge, "read_pull_request", return_value=pr),
-            mock.patch.object(merge, "disarm") as disarm,
-        ):
-            result = merge.wait_for_merge("o/r", 7, "a" * 40, "main", 0, 0)
-        return result, disarm
+    def wait(self, base, head=SHA, disarm=""):
+        gh = FakeGitHub()
+        gh.answer(PR_VIEW, {"state": "OPEN", "headRefOid": head, "baseRefName": base})
+        gh.answer(DISARM, disarm)
+        return merge.wait_for_merge(gh, REPO, 7, SHA, "main", 0, 0), gh
 
     def test_a_retarget_while_armed_disarms(self):
-        result, disarm = self.wait("dev")
+        result, gh = self.wait("dev")
         self.assertIsNone(result)
-        disarm.assert_called_once_with("o/r", 7)
+        self.assertEqual(gh.count(*DISARM), 1)
 
     def test_a_moved_head_while_armed_disarms(self):
-        result, disarm = self.wait("main", head="c" * 40)
+        result, gh = self.wait("main", head="c" * 40)
         self.assertIsNone(result)
-        disarm.assert_called_once_with("o/r", 7)
+        self.assertEqual(gh.count(*DISARM), 1)
+
+    def test_a_failed_disarm_is_a_log_line(self):
+        result, gh = self.wait("dev", disarm=Fail(status=502))
+        self.assertIsNone(result)
+        self.assertEqual(gh.count(*DISARM), 1)
 
     def test_an_unmoved_pull_request_waits_to_the_timeout(self):
         with self.assertRaises(SystemExit):

@@ -4,13 +4,13 @@ branch of judge.py that takes it. The build job of ci.yml runs them with
 of pull request #432, head e828943, trimmed to the fields that bump.py reads."""
 
 import copy
-import json
 import os
 import unittest
 from unittest import mock
 
 import bump
 import judge
+from fake_github import FakeGitHub
 
 FIRST = "327b025692914836179a102b3f03db51a6f10b2b"
 RELOCK = "e828943ed9d3c9cd2a65b2d629c70787c4a3ecf0"
@@ -309,62 +309,53 @@ class PureBumpTests(unittest.TestCase):
         self.assertFails(4)
 
 
-class FakeGh:
-    """gh, answering each `gh api <path>` from a dict of paths to JSON, and recording each call."""
-
-    def __init__(self, answers):
-        self.answers = answers
-        self.calls = []
-
-    def __call__(self, *args, input_text=None):
-        self.calls.append(args)
-        assert args[0] == "api", args
-        path = args[1].split("?")[0]
-        if path.endswith("/check-runs"):
-            return "{}"
-        answer = self.answers[path]
-        if callable(answer):
-            answer = answer()
-        if "--jq" in args:
-            return "\n".join(json.dumps(item) for item in answer)
-        return json.dumps(answer)
-
-    def check_runs(self):
-        return [call for call in self.calls if call[1].endswith("/check-runs")]
-
-
 REPO = "o/r"
+POST = (
+    "api",
+    f"repos/{REPO}/check-runs",
+    "-f",
+    "name=judge-verdict",
+    "-f",
+    f"head_sha={RELOCK}",
+    "-f",
+    "status=completed",
+    "-f",
+    "conclusion=success",
+    "-f",
+    f"output[title]={bump.TITLE}",
+    "-f",
+    f"output[summary]={bump.summary(PACKAGES)}",
+)
 
 
-def answers(pr=PR, heads=None):
-    """The answers of GitHub for #432. `heads` gives the head of each read of the pull request in turn."""
-    heads = iter(heads or [RELOCK, RELOCK])
+def fake(pr=PR, heads=None, files=FILES):
+    """The GitHub of #432. `heads` gives the head of each read of the pull request in turn."""
+    gh = FakeGitHub()
+    gh.answer(("api", f"repos/{REPO}/pulls/432"), *[{**pr, "head": {"sha": head}} for head in heads or [RELOCK]])
+    gh.answer_list(f"repos/{REPO}/pulls/432/commits", COMMITS)
+    gh.answer_list(f"repos/{REPO}/pulls/432/files", files)
+    gh.answer(("api", f"repos/{REPO}/commits/{RELOCK}"), DETAILS[RELOCK])
+    gh.answer(POST, "{}")
+    return gh
 
-    def read_pr():
-        return {**pr, "head": {"sha": next(heads)}}
 
-    return {
-        f"repos/{REPO}/pulls/432": read_pr,
-        f"repos/{REPO}/pulls/432/commits": COMMITS,
-        f"repos/{REPO}/pulls/432/files": FILES,
-        f"repos/{REPO}/commits/{RELOCK}": DETAILS[RELOCK],
-    }
+def check_runs(gh):
+    return [args for args in gh.args() if args[:2] == ("api", f"repos/{REPO}/check-runs")]
 
 
 class AutomaticPathTests(unittest.TestCase):
     def run_main(self, event, author, extra=None):
         pr = {**PR, "user": {"login": author}}
-        gh = FakeGh(answers(pr))
+        gh = fake(pr)
         variables = {"GITHUB_REPOSITORY": REPO, "GITHUB_EVENT_NAME": event, **(extra or {})}
         full = mock.Mock(side_effect=RuntimeError("the full judge"))
         with (
             mock.patch.dict(os.environ, variables, clear=True),
-            mock.patch.object(judge, "gh", gh),
             mock.patch.object(judge, "pull_request", full),
             mock.patch("sys.argv", ["judge.py", "432"]),
         ):
             try:
-                judge.main()
+                judge.main(gh)
             except RuntimeError:
                 pass
         return gh, full
@@ -372,11 +363,7 @@ class AutomaticPathTests(unittest.TestCase):
     def test_a_dependabot_pull_request_event_posts_the_verdict_with_no_judge_variable(self):
         gh, full = self.run_main("pull_request", "dependabot[bot]")
         full.assert_not_called()
-        [post] = gh.check_runs()
-        self.assertIn("conclusion=success", post)
-        self.assertIn(f"head_sha={RELOCK}", post)
-        self.assertIn(f"output[title]={bump.TITLE}", post)
-        self.assertIn(f"output[summary]={bump.summary(PACKAGES)}", post)
+        self.assertEqual(check_runs(gh), [POST])
 
     def test_workflow_dispatch_on_a_dependabot_pull_request_runs_the_full_judge(self):
         judge_variables = {"JUDGE_AGENT_ID": "a", "JUDGE_ENVIRONMENT_ID": "e"}
@@ -388,13 +375,12 @@ class AutomaticPathTests(unittest.TestCase):
         judge_variables = {"JUDGE_AGENT_ID": "a", "JUDGE_ENVIRONMENT_ID": "e"}
         gh, full = self.run_main("pull_request", "sbiondolillo", judge_variables)
         full.assert_called_once()
-        self.assertEqual(gh.check_runs(), [])
+        self.assertEqual(check_runs(gh), [])
 
     def test_a_head_that_moved_while_the_job_read_it_posts_nothing(self):
-        gh = FakeGh(answers(heads=["f" * 40]))
-        with mock.patch.object(judge, "gh", gh):
-            judge.judge_bump(REPO, 432, {**PR})
-        self.assertEqual(gh.check_runs(), [])
+        gh = fake(heads=["f" * 40])
+        judge.judge_bump(gh, REPO, 432, {**PR})
+        self.assertEqual(check_runs(gh), [])
 
     def test_a_dependabot_pull_request_that_is_not_a_pure_bump_posts_nothing(self):
         files = copy.deepcopy(FILES)
@@ -405,10 +391,10 @@ class AutomaticPathTests(unittest.TestCase):
                 '    <PackageVersion Include="Moq" Version="5.0.0" />',
             ),
         )
-        gh = FakeGh({**answers(), f"repos/{REPO}/pulls/432/files": files})
-        with mock.patch.object(judge, "gh", gh), mock.patch("builtins.print") as printed:
-            judge.judge_bump(REPO, 432, {**PR})
-        self.assertEqual(gh.check_runs(), [])
+        gh = fake(files=files)
+        with mock.patch("builtins.print") as printed:
+            judge.judge_bump(gh, REPO, 432, {**PR})
+        self.assertEqual(check_runs(gh), [])
         self.assertTrue(any("failed 4:" in str(call) for call in printed.call_args_list))
 
 

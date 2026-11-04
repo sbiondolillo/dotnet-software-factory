@@ -22,7 +22,6 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 import urllib.error
@@ -30,6 +29,9 @@ import urllib.parse
 import urllib.request
 
 import bump
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "shared"))
+from github import GitHub  # noqa: E402
 
 API = "https://api.anthropic.com"
 BETA = "managed-agents-2026-04-01"
@@ -63,19 +65,12 @@ def anthropic(method, path, body=None):
         sys.exit(f"judge: {method} {path} -> {error.code}: {error.read().decode()[:500]}")
 
 
-def gh(*args, input_text=None):
-    result = subprocess.run(["gh", *args], capture_output=True, text=True, input=input_text)
-    if result.returncode != 0:
-        sys.exit(f"judge: gh {' '.join(args[:3])} failed: {result.stderr.strip()[:500]}")
-    return result.stdout
-
-
-def pull_request(repo, number):
+def pull_request(gh, repo, number):
     fields = "number,headRefOid,baseRefOid,baseRefName,headRefName,body,title,url"
-    return json.loads(gh("pr", "view", str(number), "-R", repo, "--json", fields))
+    return json.loads(gh.run("pr", "view", str(number), "-R", repo, "--json", fields))
 
 
-def spec_for(repo, pr):
+def spec_for(gh, repo, pr):
     """The spec is the body of the issue the pull request closes, or of the issue a line `Part of #<n>` names, or the
     pull request body. A pull request names its issue with `Part of #<n>` when a check after the merge keeps it open.
     Code in the body names no issue, as GitHub reads it, so a quote of a `Closes #<n>` in backticks names none."""
@@ -84,7 +79,7 @@ def spec_for(repo, pr):
         r"^Part of #(\d+)\s*$", body, re.M
     )
     if match:
-        issue = json.loads(gh("issue", "view", match.group(1), "-R", repo, "--json", "number,title,body"))
+        issue = json.loads(gh.run("issue", "view", match.group(1), "-R", repo, "--json", "number,title,body"))
         return f"# {issue['title']} (#{issue['number']})\n\n{issue['body']}", issue["number"]
     return f"# {pr['title']} (pull request #{pr['number']})\n\n{pr['body'] or ''}", None
 
@@ -94,8 +89,8 @@ def spec_digest(spec):
     return hashlib.sha256(spec.encode()).hexdigest()[:12]
 
 
-def already_judged(repo, number, sha, spec):
-    comments = json.loads(gh("api", f"repos/{repo}/issues/{number}/comments", "--paginate"))
+def already_judged(gh, repo, number, sha, spec):
+    comments = gh.api_list(f"repos/{repo}/issues/{number}/comments")
     return any(MARKER.format(sha=sha, spec=spec_digest(spec)) in (c.get("body") or "") for c in comments)
 
 
@@ -243,19 +238,13 @@ def takes_bump_path(event, author):
     return event == "pull_request" and author == bump.DEPENDABOT
 
 
-def api_list(path):
-    """Every item of a paged REST list, one JSON object for each line of the output."""
-    lines = gh("api", f"{path}?per_page=100", "--paginate", "--jq", ".[] | @json").splitlines()
-    return [json.loads(line) for line in lines if line]
-
-
-def judge_bump(repo, number, pr):
+def judge_bump(gh, repo, number, pr):
     """The automatic path for a Dependabot pull request: judge-verdict as success on a pure bump, nothing otherwise."""
     head = pr["head"]["sha"]
-    commits = api_list(f"repos/{repo}/pulls/{number}/commits")
-    details = {c["sha"]: json.loads(gh("api", f"repos/{repo}/commits/{c['sha']}")) for c in commits[1:]}
-    files = api_list(f"repos/{repo}/pulls/{number}/files")
-    after = json.loads(gh("api", f"repos/{repo}/pulls/{number}"))
+    commits = gh.api_list(f"repos/{repo}/pulls/{number}/commits")
+    details = {c["sha"]: json.loads(gh.run("api", f"repos/{repo}/commits/{c['sha']}")) for c in commits[1:]}
+    files = gh.api_list(f"repos/{repo}/pulls/{number}/files")
+    after = json.loads(gh.run("api", f"repos/{repo}/pulls/{number}"))
     if after["head"]["sha"] != head:
         print(f"judge: the head of pull request #{number} moved off {head[:7]} while the job read it; nothing posted")
         return
@@ -265,7 +254,7 @@ def judge_bump(repo, number, pr):
         for line in failed:
             print(f"judge: failed {line}")
         return
-    gh(
+    gh.run(
         "api",
         f"repos/{repo}/check-runs",
         "-f",
@@ -284,14 +273,15 @@ def judge_bump(repo, number, pr):
     print(f"judge: {bump.TITLE}, {len(packages)} packages on {head[:7]}")
 
 
-def main():
+def main(gh=None):
+    gh = gh if gh is not None else GitHub.from_env()
     repo = env("GITHUB_REPOSITORY")
     number = int(sys.argv[1])
     event = os.environ.get("GITHUB_EVENT_NAME")
     if event == "pull_request":
-        rest = json.loads(gh("api", f"repos/{repo}/pulls/{number}"))
+        rest = json.loads(gh.run("api", f"repos/{repo}/pulls/{number}"))
         if takes_bump_path(event, (rest.get("user") or {}).get("login")):
-            judge_bump(repo, number, rest)
+            judge_bump(gh, repo, number, rest)
             return
     agent = env("JUDGE_AGENT_ID")
     environment = env("JUDGE_ENVIRONMENT_ID")
@@ -301,10 +291,10 @@ def main():
     budget = int(os.environ.get("JUDGE_BUDGET_CENTS", "500"))
     timeout = int(os.environ.get("JUDGE_TIMEOUT_SECONDS", "1800"))
 
-    pr = pull_request(repo, number)
+    pr = pull_request(gh, repo, number)
     head, base = pr["headRefOid"], pr["baseRefOid"]
-    spec, issue = spec_for(repo, pr)
-    if already_judged(repo, number, head, spec):
+    spec, issue = spec_for(gh, repo, pr)
+    if already_judged(gh, repo, number, head, spec):
         print(f"judge: {head[:7]} with this spec is already judged; nothing to do")
         return
     print(
@@ -385,9 +375,9 @@ def main():
         costs.append((sid, "synthesis", (usage.get("list_cost") or {}).get("amount", "?")))
 
     verdict, body = render(reports, synthesis, pr, costs, spec)
-    gh("pr", "comment", str(number), "-R", repo, "--body-file", "-", input_text=body)
+    gh.run("pr", "comment", str(number), "-R", repo, "--body-file", "-", input_text=body)
     conclusion = "success" if verdict == "APPROVED" else "failure"
-    gh(
+    gh.run(
         "api",
         f"repos/{repo}/check-runs",
         "-f",

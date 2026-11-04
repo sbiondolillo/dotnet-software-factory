@@ -1,6 +1,8 @@
-"""Unit tests of the parse of the reader's answer and of its one correction turn in read.py, for #407. The build job
-of ci.yml runs them with `python3 -B -m unittest discover -s .github/repair -p 'test_*.py'`. No test calls the API:
-each one replaces read.anthropic and read.wait_idle, and time.sleep where the wait polls."""
+"""Unit tests of read.py: the parse of the reader's answer and its one correction turn, for #407, and the dedupe on the
+red SHA, the rerun and the read of the failed log. The build job of ci.yml runs them with
+`python3 -B -m unittest discover -s .github/repair -p 'test_*.py'`. No test calls the API: each one replaces
+read.anthropic and read.wait_idle, and time.sleep where the wait polls, and hands down a FakeGitHub of .github/shared/
+for GitHub."""
 
 import json
 import os
@@ -9,6 +11,7 @@ from unittest import mock
 
 import read
 import traveler
+from fake_github import Fail, FakeGitHub
 
 SID = "sesn_1"
 FILES = ("code", "dependency")
@@ -22,6 +25,20 @@ CHECK = "## Check\n\n```sh\ngrep -c 'lock: claude' .github/workflows/factory.yml
 SOUND = f"Cleanup. Read the right key.\n\n{SCOPE}{CHECK}"
 RUN = {"id": 1, "head_sha": "abc", "html_url": "https://run"}
 STORY = {"number": 451, "title": "t"}
+OPEN_FACTORY_REPAIRS = (
+    "issue",
+    "list",
+    "-R",
+    "o/r",
+    "--label",
+    "repair",
+    "--label",
+    "factory",
+    "--state",
+    "open",
+    "--json",
+    "number",
+)
 
 
 OLD_TURN = [
@@ -207,16 +224,17 @@ class FactoryPromptTests(unittest.TestCase):
 
 class FinishFactoryTests(unittest.TestCase):
     def filed(self, answer):
-        """The arguments and the body of the one `issue create` of a read, with `gh` replaced."""
-        calls = []
-
-        def gh(*args, input_text=None):
-            calls.append((args, input_text))
-            return "[]" if args[:2] == ("issue", "list") else "https://github.com/o/r/issues/7\n"
-
-        with mock.patch.object(read, "gh", gh), mock.patch.dict(os.environ, {"GITHUB_OUTPUT": os.devnull}):
-            read.finish_factory("o/r", RUN, STORY, None, answer, SID)
-        return next((args, body) for args, body in calls if args[:2] == ("issue", "create"))
+        """The arguments and the body of the one `issue create` of a read."""
+        gh = FakeGitHub()
+        gh.answer(OPEN_FACTORY_REPAIRS, [])
+        for labels in (("repair", "ready", "factory"), ("repair", "ready", "factory", "cleanup")):
+            create = ["issue", "create", "-R", "o/r", "--title", answer["title"]]
+            for name in labels:
+                create += ["--label", name]
+            gh.answer((*create, "--body-file", "-"), "https://github.com/o/r/issues/7\n")
+        with mock.patch.dict(os.environ, {"GITHUB_OUTPUT": os.devnull}):
+            read.finish_factory(gh, "o/r", RUN, STORY, None, answer, SID)
+        return next((args, body) for args, body in gh.calls if args[:2] == ("issue", "create"))
 
     def labels(self, args):
         return [args[i + 1] for i, arg in enumerate(args) if arg == "--label"]
@@ -390,6 +408,126 @@ class PageTests(unittest.TestCase):
         self.assertEqual(api.reads, 1)
         self.assertIsNone(before)
         self.assertEqual(events, [{"id": "e1"}])
+
+
+REPAIRS = (
+    "issue",
+    "list",
+    "-R",
+    "o/r",
+    "--label",
+    "repair",
+    "--state",
+    "all",
+    "--limit",
+    "200",
+    "--json",
+    "number,body,state,labels",
+)
+RED = {"id": 9, "head_sha": "abc1234", "html_url": "https://github.com/o/r/actions/runs/9", "run_attempt": 1}
+ALSO_RED = ("issue", "comment", "4", "-R", "o/r", "--body", f"The run {RED['html_url']} on `abc1234` is also red.")
+
+
+def repair(number, state="OPEN", body="Fix it.\n\nSHA abc1234", labels=("repair",)):
+    return {"number": number, "state": state, "body": body, "labels": [{"name": name} for name in labels]}
+
+
+class DedupeTests(unittest.TestCase):
+    """already_handled: one repair for each red SHA, as #388 fixed."""
+
+    def handled(self, issues, comments="", marker=""):
+        gh = FakeGitHub()
+        gh.answer(REPAIRS, issues)
+        gh.answer(("api", "repos/o/r/issues/4/comments", "--paginate", "--jq", ".[].body"), comments)
+        gh.answer(("api", "repos/o/r/commits/abc1234/comments", "--paginate", "--jq", ".[].body"), marker)
+        gh.answer(ALSO_RED, "")
+        return read.already_handled(gh, "o/r", None, RED), gh
+
+    def test_an_open_issue_that_holds_the_sha_takes_one_comment(self):
+        handled, gh = self.handled([repair(4)])
+        self.assertTrue(handled)
+        self.assertEqual(gh.count(*ALSO_RED), 1)
+
+    def test_an_open_issue_that_names_the_run_already_takes_no_comment(self):
+        handled, gh = self.handled([repair(4)], comments=f"The run {RED['html_url']} on `abc1234` is also red.")
+        self.assertTrue(handled)
+        self.assertEqual(gh.count(*ALSO_RED), 0)
+
+    def test_a_closed_issue_that_holds_the_sha_ends_the_read_with_no_comment(self):
+        handled, gh = self.handled([repair(4, state="CLOSED")])
+        self.assertTrue(handled)
+        self.assertEqual(gh.count(*ALSO_RED), 0)
+
+    def test_an_open_issue_wins_over_a_closed_one(self):
+        handled, gh = self.handled([repair(3, state="CLOSED"), repair(4)])
+        self.assertTrue(handled)
+        self.assertEqual(gh.count(*ALSO_RED), 1)
+
+    def test_the_oldest_closed_issue_wins_over_a_later_one(self):
+        gh = FakeGitHub()
+        gh.answer(REPAIRS, [repair(6, "CLOSED"), repair(4, "CLOSED")])
+        self.assertEqual(read.issue_for(gh, "o/r", "abc1234")["number"], 4)
+
+    def test_a_factory_repair_holds_no_ci_run_of_its_sha(self):
+        handled, gh = self.handled([repair(4, labels=("repair", "factory"))])
+        self.assertFalse(handled)
+        self.assertEqual(gh.count(*ALSO_RED), 0)
+
+    def test_a_marker_comment_on_the_commit_ends_the_read(self):
+        self.assertTrue(self.handled([], marker=read.MARKER.format(sha="abc1234"))[0])
+
+    def test_no_issue_and_no_marker_needs_a_repair(self):
+        handled, gh = self.handled([repair(4, body="another SHA")])
+        self.assertFalse(handled)
+        self.assertEqual(gh.count(*ALSO_RED), 0)
+
+
+class RerunTests(unittest.TestCase):
+    RERUN = ("run", "rerun", "9", "-R", "o/r", "--failed")
+    READ = ("api", "repos/o/r/actions/runs/9")
+
+    def test_the_rerun_gives_the_new_attempt_once_it_completes(self):
+        gh = FakeGitHub()
+        gh.answer(self.RERUN, "")
+        old = {**RED, "status": "completed", "conclusion": "failure"}
+        running = {**RED, "run_attempt": 2, "status": "in_progress"}
+        done = {**RED, "run_attempt": 2, "status": "completed", "conclusion": "success"}
+        gh.answer(self.READ, old, running, done)
+        with mock.patch.object(read.time, "sleep"):
+            self.assertEqual(read.rerun(gh, "o/r", RED, 3600), done)
+        self.assertEqual(gh.count(*self.RERUN), 1)
+        self.assertEqual(gh.count(*self.READ), 3)
+
+    def test_a_rerun_still_running_at_the_timeout_exits(self):
+        gh = FakeGitHub()
+        gh.answer(self.RERUN, "")
+        with self.assertRaises(SystemExit) as stop:
+            read.rerun(gh, "o/r", RED, 0)
+        self.assertIn("still running", stop.exception.code)
+
+
+class FailedLogTests(unittest.TestCase):
+    VIEW = ("run", "view", "9", "-R", "o/r", "--attempt", "1", "--log-failed")
+
+    def log(self, output):
+        gh = FakeGitHub()
+        gh.answer(self.VIEW, output)
+        return read.failed_log(gh, "o/r", RED)
+
+    def test_the_log_of_a_passing_call(self):
+        self.assertEqual(self.log("the log\n"), "the log\n")
+
+    def test_exit_1_with_output_keeps_the_output(self):
+        self.assertEqual(self.log(Fail(stdout="the other jobs\n", stderr="log not found")), "the other jobs\n")
+
+    def test_exit_1_with_no_output_exits(self):
+        with self.assertRaises(SystemExit) as stop:
+            self.log(Fail(stdout=" \n", stderr="log not found"))
+        self.assertIn("log not found", stop.exception.code)
+
+    def test_another_exit_code_exits_with_output_or_none(self):
+        with self.assertRaises(SystemExit):
+            self.log(Fail(stdout="partial\n", stderr="killed", returncode=2))
 
 
 if __name__ == "__main__":
