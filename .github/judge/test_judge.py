@@ -115,6 +115,9 @@ class ReadSynthesisTests(unittest.TestCase):
     def test_a_refused_synthesis_gives_its_text_and_the_review_is_still_posted(self):
         self.assertEqual(self.read(turn(idle("refusal"), message("the text"))), ("the text", "?"))
 
+    def test_an_empty_synthesis_gives_no_text(self):
+        self.assertEqual(self.read(turn(idle(), message(""), usage("1"))), (None, "1"))
+
     def test_a_synthesis_past_the_deadline_gives_no_text(self):
         self.assertEqual(self.read(turn(), status="running", deadline=-1), (None, "?"))
 

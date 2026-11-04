@@ -165,13 +165,14 @@ def read_angles(started, deadline):
 def read_synthesis(session, deadline):
     """The review text of the synthesis and its cost. The text is Markdown, so its parse keeps the text as it is and
     never asks for a correction. The verdict comes from the reports alone, so a synthesis that gives no text, such as
-    one refused or past the deadline, gives its last message, or None, and the review is still posted."""
+    one refused or past the deadline, gives its last message, or None, and the review is still posted. An empty text
+    is None too."""
     try:
         answer = session.report(lambda text: text, "", deadline)
     except SessionError as error:
         print(f"judge: the synthesis gave no text: {error.reason}")
         return error.text or None, "?"
-    return answer.value, cost(answer.usage)
+    return answer.value or None, cost(answer.usage)
 
 
 def render(reports, synthesis, pr, costs, spec):
