@@ -41,7 +41,7 @@ class PostOnceTests(unittest.TestCase):
         self.assertEqual(posted(gh), [])
 
     def test_a_marker_on_a_later_page_skips_the_post(self):
-        # api_list reads every page: the marker is in the 151st comment, past the first page of 100.
+        # api_list pages with --paginate, so has reads each item it gives: here the marker is in the 151st.
         gh = fake(ISSUE, *[f"comment {n}" for n in range(150)], f"{MARKER}\nlate")
         self.assertFalse(comments.post_once(gh, "o/r", 5, MARKER, "The text."))
         self.assertEqual(gh.args(), [("api_list", ISSUE)])
