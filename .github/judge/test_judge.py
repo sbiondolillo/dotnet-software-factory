@@ -1,44 +1,26 @@
-"""Unit tests of the read of a review session's last events in judge.py, for #470. The build job of ci.yml runs them
-with `python3 -B -m unittest discover -s .github/judge -p 'test_*.py'`. No test calls the API: each one replaces
-judge.anthropic with a fake listing of the events of one session, or hands down a FakeGitHub of .github/shared/. Also
-the dedupe of already_judged."""
+"""Unit tests of judge.py: the parse of a reviewer's Report, the read of each angle, for #518, and the dedupe of
+already_judged. The build job of ci.yml runs them with
+`python3 -B -m unittest discover -s .github/judge -p 'test_*.py'`. No test calls the API: a session is the FakeApi of
+.github/shared/fake_anthropic.py, and GitHub is a FakeGitHub. The read of a session's last events moved to
+.github/shared/test_sessions.py."""
 
+import time
 import unittest
-import urllib.parse
 from unittest import mock
 
 import judge
+from fake_anthropic import FakeApi
 from fake_github import FakeGitHub
+from sessions import Session
 
-SID = "sesn_1"
-
-
-class FakeEvents:
-    """The events listing of one session, oldest first in `events`. A GET honors `order`, `limit` and `page` as the
-    API does: a page holds `limit` events, and `next_page` names the next page, or is None on the last one."""
-
-    def __init__(self, events):
-        self.events = events
-        self.paths = []
-
-    def __call__(self, method, path, body=None):
-        assert method == "GET", method
-        self.paths.append(path)
-        url = urllib.parse.urlparse(path)
-        assert url.path == f"/v1/sessions/{SID}/events", url.path
-        query = urllib.parse.parse_qs(url.query)
-        events = self.events[::-1] if query.get("order") == ["desc"] else self.events
-        limit = int(query.get("limit", ["20"])[0])
-        start = int(query.get("page", ["0"])[0])
-        end = start + limit
-        return {"data": events[start:end], "next_page": str(end) if end < len(events) else None}
+ACCEPT = '{"angle": "x", "verdict": "accept", "findings": [], "clean": ["the diff"]}'
 
 
 def message(text):
     return {"type": "agent.message", "content": [{"type": "text", "text": text}]}
 
 
-def idle(stop):
+def idle(stop="end_turn"):
     return {"type": "session.status_idle", "stop_details": {"type": stop}}
 
 
@@ -46,46 +28,98 @@ def usage(amount):
     return {"type": "session.usage", "usage": {"list_cost": {"amount": amount}}}
 
 
-def tools(count):
-    return [{"type": "agent.tool_use"} for _ in range(count)]
+def turn(*events):
+    """The listing of one turn, newest first, that ends at the session's first user.message."""
+    return list(events) + [{"type": "user.message", "id": "m1"}]
 
 
-class FinalMessageTests(unittest.TestCase):
-    def read(self, events):
-        api = FakeEvents(events)
-        with mock.patch.object(judge, "anthropic", api):
-            return judge.final_message(SID), api
+class ParseReportTests(unittest.TestCase):
+    def test_a_report_with_a_verdict_parses_with_the_angle_of_the_session(self):
+        report = judge.parse_report("Conformance", 'Done.\n{"angle": "other", "verdict": "reject"}')
+        self.assertEqual(report, {"angle": "Conformance", "verdict": "reject", "findings": [], "clean": []})
 
-    def test_the_final_message_after_event_200_is_the_one_read(self):
-        events = [message("old"), idle("end_turn"), usage("1")] + tools(240) + [message("new"), idle("refusal")]
-        events += [usage("9")]
-        (text, stop, spent), _ = self.read(events)
-        self.assertEqual(text, "new")
-        self.assertEqual(stop, {"type": "refusal"})
-        self.assertEqual(spent, {"list_cost": {"amount": "9"}})
+    def test_a_fault_raises_value_error(self):
+        for text, fault in (
+            ("no object", "JSONDecodeError: "),
+            ('{"verdict": "maybe"}', "the verdict 'maybe' is not one of accept, reject"),
+            ("[1]", "the Report is a JSON list, not an object"),
+        ):
+            with self.subTest(text=text):
+                with self.assertRaises(ValueError) as raised:
+                    judge.parse_report("Conformance", text)
+                self.assertIn(fault, str(raised.exception))
 
-    def test_the_read_follows_next_page_to_the_newest_usage(self):
-        events = [usage("4")] + tools(150) + [message("report"), idle("end_turn")]
-        (text, stop, spent), api = self.read(events)
-        self.assertEqual((text, stop, spent), ("report", {"type": "end_turn"}, {"list_cost": {"amount": "4"}}))
-        self.assertEqual(len(api.paths), 2)
-        self.assertIn("order=desc", api.paths[0])
-        self.assertIn("page=100", api.paths[1])
+    def test_the_shape_is_the_one_in_the_prompt(self):
+        shape = judge.REPORT.format(angle="Conformance")
+        self.assertIn('{"angle": "Conformance", "verdict": "accept" or "reject",', shape)
+        self.assertIn(shape, judge.reviewer_prompt("Conformance", "o/r", "h", "b", "the spec"))
 
-    def test_the_read_stops_once_it_has_all_three(self):
-        events = tools(300) + [message("report"), usage("2"), idle("end_turn")]
-        _, api = self.read(events)
-        self.assertEqual(len(api.paths), 1)
 
-    def test_the_last_text_of_the_final_message_is_the_report(self):
-        final = {"type": "agent.message", "content": [{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]}
-        (text, _, _), _ = self.read([final, idle("end_turn")])
-        self.assertEqual(text, "b")
+class ReadAnglesTests(unittest.TestCase):
+    def sessions(self, **listings):
+        """One session for each angle, over the listings of its turns, oldest turn first."""
+        return {
+            angle: Session(
+                FakeApi(turns if isinstance(turns, tuple) else [turns], sid=f"sesn_{angle}"), f"sesn_{angle}"
+            )
+            for angle, turns in listings.items()
+        }
 
-    def test_an_empty_session_reads_nothing(self):
-        (result, api) = self.read([])
-        self.assertEqual(result, ("", None, {}))
-        self.assertEqual(len(api.paths), 1)
+    def read(self, started):
+        with mock.patch("sessions.time.sleep"), mock.patch("builtins.print"):
+            return judge.read_angles(started, time.time() + 60)
+
+    def test_a_session_error_on_one_angle_rejects_that_angle_and_the_others_are_read(self):
+        started = self.sessions(
+            Conformance=turn(idle("refusal"), message("I will not")),
+            Regressions=turn(idle(), message(ACCEPT), usage("12")),
+        )
+        reports, costs = self.read(started)
+        refused, accepted = reports
+        self.assertEqual(refused["angle"], "Conformance")
+        self.assertEqual(refused["verdict"], "reject")
+        [finding] = refused["findings"]
+        self.assertEqual(finding["fault"], "refused")
+        self.assertEqual(finding["evidence"], "I will not")
+        self.assertEqual(accepted["angle"], "Regressions")
+        self.assertEqual(accepted["verdict"], "accept")
+        self.assertEqual(costs, [("sesn_Conformance", "Conformance", "?"), ("sesn_Regressions", "Regressions", "12")])
+
+    def test_a_second_bad_message_rejects_with_the_faults_of_both(self):
+        first = turn(idle(), message("not json"))
+        second = [idle(), message('{"verdict": "maybe"}'), {"type": "user.message", "id": "m2"}] + first
+        started = self.sessions(Conformance=(first, second))
+        [report], _ = self.read(started)
+        fault = report["findings"][0]["fault"]
+        self.assertTrue(fault.startswith("the parser says: first JSONDecodeError"), fault)
+        self.assertIn("then the verdict 'maybe'", fault)
+        self.assertEqual(len(started["Conformance"].api.posts), 1)
+
+    def test_a_deadline_that_passes_rejects_the_angle(self):
+        started = self.sessions(Conformance=turn(idle(), message(ACCEPT)))
+        started["Conformance"].api.status = "running"
+        with mock.patch("builtins.print"):
+            [report], _ = judge.read_angles(started, time.time() - 1)
+        self.assertRegex(report["findings"][0]["fault"], r"^not idle after \d+ s$")
+
+
+class ReadSynthesisTests(unittest.TestCase):
+    def read(self, listing, status="idle", deadline=60):
+        session = Session(FakeApi([listing], status=status, sid="sesn_s"), "sesn_s")
+        with mock.patch("builtins.print"):
+            return judge.read_synthesis(session, time.time() + deadline)
+
+    def test_the_text_is_kept_as_it_is(self):
+        self.assertEqual(self.read(turn(idle(), message("### Review {x}"), usage("3"))), ("### Review {x}", "3"))
+
+    def test_a_refused_synthesis_gives_its_text_and_the_review_is_still_posted(self):
+        self.assertEqual(self.read(turn(idle("refusal"), message("the text"))), ("the text", "?"))
+
+    def test_an_empty_synthesis_gives_no_text(self):
+        self.assertEqual(self.read(turn(idle(), message(""), usage("1"))), (None, "1"))
+
+    def test_a_synthesis_past_the_deadline_gives_no_text(self):
+        self.assertEqual(self.read(turn(), status="running", deadline=-1), (None, "?"))
 
 
 class AlreadyJudgedTests(unittest.TestCase):

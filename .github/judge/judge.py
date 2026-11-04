@@ -4,7 +4,9 @@
 The workflow job is the orchestrator. It holds the Anthropic API key and the GitHub token, starts one
 session per angle with a read-only repository token, computes the verdict in code, starts one synthesis
 session only when an angle rejects, and posts the review and a check run with its own token. The sessions
-hold the read-only token and nothing else.
+hold the read-only token and nothing else. Each session is a Session of sessions.py in .github/shared/, over the one
+adapter of anthropic.py there. A reviewer's Report that fails the parse gets one correction turn, and a session that
+gives no Report is a reject of its angle, with the reason as the fault.
 
 Environment: JUDGE_ANTHROPIC_API_KEY, JUDGE_GITHUB_RO_TOKEN, GITHUB_TOKEN, GITHUB_REPOSITORY,
 JUDGE_AGENT_ID, JUDGE_ENVIRONMENT_ID, JUDGE_ANGLES (comma-separated, default "Conformance,Regressions and style"),
@@ -24,17 +26,15 @@ import os
 import re
 import sys
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 
 import bump
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "shared"))
+import sessions  # noqa: E402
+from anthropic import Anthropic, AnthropicError  # noqa: E402
 from github import GitHub  # noqa: E402
+from sessions import Session, SessionError  # noqa: E402
 
-API = "https://api.anthropic.com"
-BETA = "managed-agents-2026-04-01"
 MARKER = "<!-- judge:{sha}:{spec} -->"
 
 
@@ -43,26 +43,6 @@ def env(name, default=None):
     if value is None or value == "":
         sys.exit(f"judge: {name} is not set")
     return value
-
-
-def anthropic(method, path, body=None):
-    data = json.dumps(body).encode() if body is not None else None
-    request = urllib.request.Request(
-        API + path,
-        data=data,
-        method=method,
-        headers={
-            "x-api-key": env("JUDGE_ANTHROPIC_API_KEY"),
-            "anthropic-version": "2023-06-01",
-            "anthropic-beta": BETA,
-            "content-type": "application/json",
-        },
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return json.load(response)
-    except urllib.error.HTTPError as error:
-        sys.exit(f"judge: {method} {path} -> {error.code}: {error.read().decode()[:500]}")
 
 
 def pull_request(gh, repo, number):
@@ -94,6 +74,13 @@ def already_judged(gh, repo, number, sha, spec):
     return any(MARKER.format(sha=sha, spec=spec_digest(spec)) in (c.get("body") or "") for c in comments)
 
 
+REPORT = """Your final answer is one JSON object and nothing else, with no prose before or after it and no code fence:
+{{"angle": "{angle}", "verdict": "accept" or "reject",
+ "findings": [{{"file": "...", "line": 0, "fault": "one sentence", "evidence": "the command and its output",
+               "fix": "...", "nitpick": false}}],
+ "clean": ["one line per thing found clean"]}}"""
+
+
 def reviewer_prompt(angle, repo, head, base, spec):
     mount = f"/workspace/{repo.split('/')[1]}"
     return f"""You are one reviewer of a pull request of the repository {repo}, mounted at {mount}.
@@ -108,11 +95,7 @@ Then `<clone>` is the mounted directory, `<SHA>` is {head}, `<base>` is {base}, 
 `git merge-base {base} {head}`. The spec is the text under "## Spec" below; write it to /tmp/spec.md first and treat
 that file as the spec file the angle names. Edit no tracked file, and post nothing.
 
-Your final answer is one JSON object and nothing else, with no prose before or after it and no code fence:
-{{"angle": "{angle}", "verdict": "accept" or "reject",
- "findings": [{{"file": "...", "line": 0, "fault": "one sentence", "evidence": "the command and its output",
-               "fix": "...", "nitpick": false}}],
- "clean": ["one line per thing found clean"]}}
+{REPORT.format(angle=angle)}
 A finding with no evidence is not a finding. A nitpick alone does not make the verdict "reject".
 
 ## Spec
@@ -121,90 +104,75 @@ A finding with no evidence is not a finding. A nitpick alone does not make the v
 """
 
 
-def start_session(agent, environment, title, prompt, metadata, budget_cents, resources=None, overrides=None):
-    body = {
-        "agent": {"type": "agent_with_overrides", "id": agent, **overrides} if overrides else agent,
-        "environment_id": environment,
-        "title": title,
-        "metadata": metadata,
-        "budget": {"type": "limit", "max_list_cost": {"amount": str(budget_cents), "currency": "USD"}},
-        "initial_events": [{"type": "user.message", "content": [{"type": "text", "text": prompt}]}],
+def reject(angle, fault, evidence):
+    """A reject report of an angle with one finding, for a reviewer that gave no Report."""
+    return {
+        "angle": angle,
+        "verdict": "reject",
+        "findings": [
+            {
+                "file": "",
+                "line": 0,
+                "fault": fault,
+                "evidence": evidence,
+                "fix": "rerun the angle",
+                "nitpick": False,
+            }
+        ],
+        "clean": [],
     }
-    if resources:
-        body["resources"] = resources
-    return anthropic("POST", "/v1/sessions", body)["id"]
-
-
-def wait_idle(session_ids, timeout):
-    deadline = time.time() + timeout
-    pending = set(session_ids)
-    while pending and time.time() < deadline:
-        for sid in list(pending):
-            status = anthropic("GET", f"/v1/sessions/{sid}")["status"]
-            if status in ("idle", "terminated", "error"):
-                pending.discard(sid)
-        if pending:
-            time.sleep(15)
-    if pending:
-        sys.exit(f"judge: sessions still running after {timeout} s: {sorted(pending)}")
-
-
-def final_message(sid):
-    """The text of the last agent message, the last stop details and the last usage of a session. A long session fills
-    more than one page, so the read takes the newest events first and follows `next_page` back, as turn_events of
-    .github/repair/read.py does, until it has all three or the pages end."""
-    text, stop, usage = None, None, {}
-    found = set()
-    page = None
-    while True:
-        cursor = "" if page is None else f"&page={urllib.parse.quote(page, safe='')}"
-        answer = anthropic("GET", f"/v1/sessions/{sid}/events?order=desc&limit=100{cursor}")
-        for e in answer.get("data") or []:
-            kind = e.get("type")
-            if kind in found:
-                continue
-            if kind == "agent.message":
-                text = next((c["text"] for c in reversed(e.get("content", [])) if c.get("type") == "text"), None)
-                if text is not None:
-                    found.add(kind)
-            elif kind == "session.status_idle":
-                stop = e.get("stop_details")
-                found.add(kind)
-            elif kind == "session.usage":
-                usage = e.get("usage")
-                found.add(kind)
-        page = answer.get("next_page")
-        if not page or len(found) == 3:
-            return text or "", stop, usage
 
 
 def parse_report(angle, text):
-    """The reviewer's JSON, or a reject that names the parse fault."""
-    candidate = text.strip()
-    match = re.search(r"\{.*\}", candidate, re.S)
+    """The reviewer's Report, or ValueError with the fault."""
     try:
-        report = json.loads(match.group(0) if match else candidate)
-        assert report.get("verdict") in ("accept", "reject")
-        report.setdefault("findings", [])
-        report.setdefault("clean", [])
-        report["angle"] = angle
-        return report
-    except (ValueError, AssertionError):
-        return {
-            "angle": angle,
-            "verdict": "reject",
-            "findings": [
-                {
-                    "file": "",
-                    "line": 0,
-                    "fault": "the reviewer's final message is not the JSON object the contract names",
-                    "evidence": candidate[:800],
-                    "fix": "rerun the angle",
-                    "nitpick": False,
-                }
-            ],
-            "clean": [],
-        }
+        report = sessions.json_object(text)
+    except ValueError as error:
+        raise ValueError(f"{type(error).__name__}: {error}") from error
+    if not isinstance(report, dict):
+        raise ValueError(f"the Report is a JSON {type(report).__name__}, not an object")
+    if report.get("verdict") not in ("accept", "reject"):
+        raise ValueError(f"the verdict {report.get('verdict')!r} is not one of accept, reject")
+    report.setdefault("findings", [])
+    report.setdefault("clean", [])
+    report["angle"] = angle
+    return report
+
+
+def cost(usage):
+    return (usage.get("list_cost") or {}).get("amount", "?")
+
+
+def read_angles(started, deadline):
+    """The report and the cost of each angle, in the order the angles started. A session that gives no Report is a
+    reject of its angle, with the reason as the fault and the last message as the evidence, and the other angles are
+    still read."""
+    reports, costs = [], []
+    for angle, session in started.items():
+        try:
+            answer = session.report(
+                lambda text, angle=angle: parse_report(angle, text), REPORT.format(angle=angle), deadline
+            )
+            reports.append(answer.value)
+            costs.append((session.sid, angle, cost(answer.usage)))
+        except SessionError as error:
+            reports.append(reject(angle, error.reason, error.text[:800]))
+            costs.append((session.sid, angle, "?"))
+        print(f"judge: {angle} -> {reports[-1]['verdict']}, {costs[-1][2]} cents")
+    return reports, costs
+
+
+def read_synthesis(session, deadline):
+    """The review text of the synthesis and its cost. The text is Markdown, so its parse keeps the text as it is and
+    never asks for a correction. The verdict comes from the reports alone, so a synthesis that gives no text, such as
+    one refused or past the deadline, gives its last message, or None, and the review is still posted. An empty text
+    is None too."""
+    try:
+        answer = session.report(lambda text: text, "", deadline)
+    except SessionError as error:
+        print(f"judge: the synthesis gave no text: {error.reason}")
+        return error.text or None, "?"
+    return answer.value or None, cost(answer.usage)
 
 
 def render(reports, synthesis, pr, costs, spec):
@@ -302,17 +270,12 @@ def main(gh=None):
         + (f"issue #{issue}" if issue else "the pull request body")
     )
 
-    resources = [
-        {
-            "type": "github_repository",
-            "url": f"https://github.com/{repo}",
-            "mount_path": f"/workspace/{repo.split('/')[1]}",
-            "authorization_token": env("JUDGE_GITHUB_RO_TOKEN"),
-        }
-    ]
-    sessions = {}
+    api = Anthropic.from_env()
+    resources = [sessions.repository(repo, env("JUDGE_GITHUB_RO_TOKEN"))]
+    started = {}
     for angle in angles:
-        sid = start_session(
+        session = Session.start(
+            api,
             agent,
             environment,
             f"judge {repo}#{number} {angle}",
@@ -321,36 +284,9 @@ def main(gh=None):
             budget,
             resources,
         )
-        sessions[angle] = sid
-        print(f"judge: started {angle}: {sid}")
-    wait_idle(sessions.values(), timeout)
-
-    reports, costs = [], []
-    for angle, sid in sessions.items():
-        text, stop, usage = final_message(sid)
-        cost = (usage.get("list_cost") or {}).get("amount", "?")
-        costs.append((sid, angle, cost))
-        if stop and stop.get("type") == "refusal":
-            reports.append(
-                {
-                    "angle": angle,
-                    "verdict": "reject",
-                    "findings": [
-                        {
-                            "file": "",
-                            "line": 0,
-                            "fault": "the session was refused before any command ran",
-                            "evidence": json.dumps(stop),
-                            "fix": "rerun the angle",
-                            "nitpick": False,
-                        }
-                    ],
-                    "clean": [],
-                }
-            )
-        else:
-            reports.append(parse_report(angle, text))
-        print(f"judge: {angle} -> {reports[-1]['verdict']}, {cost} cents")
+        started[angle] = session
+        print(f"judge: started {angle}: {session.sid}")
+    reports, costs = read_angles(started, time.time() + timeout)
 
     synthesis = None
     if any(r["verdict"] == "reject" for r in reports):
@@ -361,7 +297,8 @@ def main(gh=None):
             "then the clean items in one short list. Plain Markdown, no heading above level 3, no preamble.\n\n"
             + "\n\n".join(json.dumps(r, indent=1) for r in reports)
         )
-        sid = start_session(
+        session = Session.start(
+            api,
             agent,
             environment,
             f"judge {repo}#{number} synthesis",
@@ -370,9 +307,8 @@ def main(gh=None):
             100,
             overrides={"tools": [{"type": "agent_toolset_20260401", "default_config": {"enabled": False}}]},
         )
-        wait_idle([sid], 600)
-        synthesis, _, usage = final_message(sid)
-        costs.append((sid, "synthesis", (usage.get("list_cost") or {}).get("amount", "?")))
+        synthesis, spent = read_synthesis(session, time.time() + 600)
+        costs.append((session.sid, "synthesis", spent))
 
     verdict, body = render(reports, synthesis, pr, costs, spec)
     gh.run("pr", "comment", str(number), "-R", repo, "--body-file", "-", input_text=body)
@@ -397,4 +333,7 @@ def main(gh=None):
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except AnthropicError as error:
+        sys.exit(f"judge: {error}")

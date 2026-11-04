@@ -84,6 +84,10 @@ _Avoid_: session, claude
 A file that a phase asks the agent for by name, and that the answer carries as text. The agent keeps it fresh: an output in the answer is one that this prompt wrote.
 _Avoid_: artifact, result (the result is the text of the answer)
 
+**Report**:
+The JSON object an agent gives as its last message. The caller states its shape as a parse function, which accepts the object or names the fault, and as text for the agent. A message that is not a Report gets one correction turn, which sends the fault and the text and asks for the Report alone.
+_Avoid_: contract, answer (the C# agent's whole reply)
+
 ## Repair
 
 **Traveler**:
