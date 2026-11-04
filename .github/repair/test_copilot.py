@@ -2,6 +2,7 @@
 with `python3 -B -m unittest discover -s .github/repair -p 'test_*.py'`. A FakeGitHub of .github/shared/ stands in for
 the adapter, so no test calls GitHub."""
 
+import json
 import os
 import tempfile
 import unittest
@@ -9,6 +10,9 @@ from unittest import mock
 
 import copilot
 from fake_github import FakeGitHub
+
+# The module under test puts .github/shared/ on the path, so this test also runs on its own.
+comments = copilot.comments
 
 SHA = "a" * 40
 LATER = "c" * 40
@@ -24,20 +28,21 @@ def fake(runs, state="OPEN", labels=("repair",), body="Closes #5", heads=(SHA,))
     pr = {"state": state, "labels": [{"name": n} for n in labels], "body": body}
     gh.answer(PR_VIEW, *[{**pr, "headRefOid": head} for head in heads])
     gh.answer(RUN_VIEW, *[{"status": status, "conclusion": conclusion} for status, conclusion in runs])
-    for kind, number in (("issue", "5"), ("pr", "7")):
-        gh.answer(("api", f"repos/o/r/issues/{number}/comments", "--paginate", "--jq", ".[].body"), comments(gh))
-        gh.answer((kind, "comment", number, "-R", "o/r", "--body-file", "-"), "")
+    for number in ("5", "7"):
+        gh.answer_list(comments.path("o/r", number), lambda number=number: [{"body": b} for b in posted(gh, number)])
+        gh.answer(post(number), "{}")
     return gh
 
 
-def posted(gh):
-    """The body of each comment the step posted."""
-    return [text for args, text in gh.calls if args[1] == "comment"]
+def post(number):
+    """The call of comments.py that posts a comment on issue or pull request <number>."""
+    return ("api", "-X", "POST", comments.path("o/r", number), "--input", "-")
 
 
-def comments(gh):
-    """The comments of a target, as `--jq .[].body` prints them."""
-    return lambda: "\n".join(posted(gh))
+def posted(gh, number=None):
+    """The body of each comment the step posted, on <number> or on any target."""
+    targets = [post(n) for n in ("5", "7")] if number is None else [post(number)]
+    return [json.loads(text)["body"] for args, text in gh.calls if args in targets]
 
 
 class MainTests(unittest.TestCase):
@@ -74,10 +79,10 @@ class MainTests(unittest.TestCase):
         gh = fake([("completed", "failure")])
         self.assertEqual(self.run_main(gh), f"copilot=unsettled\nsha={SHA}\n")
         self.assertEqual(len(posted(gh)), 1)
-        self.assertIn(f"<!-- repair-copilot:{SHA} -->", posted(gh)[0])
+        self.assertIn(f"repair-copilot:{SHA}", posted(gh)[0].splitlines()[0])
         self.assertIn(f"https://github.com/o/r/actions/runs/{RUN}", posted(gh)[0])
         self.assertIn("`failure`", posted(gh)[0])
-        self.assertIn(("issue", "comment", "5", "-R", "o/r", "--body-file", "-"), gh.args())
+        self.assertEqual(len(posted(gh, "5")), 1)
 
         self.assertEqual(self.run_main(gh), f"copilot=unsettled\nsha={SHA}\n")
         self.assertEqual(len(posted(gh)), 1)
@@ -85,7 +90,8 @@ class MainTests(unittest.TestCase):
     def test_a_failed_run_on_a_pull_request_that_closes_no_issue_comments_on_the_pull_request(self):
         gh = fake([("completed", "cancelled")], body="Part of #5")
         self.run_main(gh)
-        self.assertIn(("pr", "comment", "7", "-R", "o/r", "--body-file", "-"), gh.args())
+        self.assertEqual(len(posted(gh, "7")), 1)
+        self.assertEqual(posted(gh, "5"), [])
 
     def test_a_run_in_progress_past_the_timeout_exits_1(self):
         gh = fake([("in_progress", "")])

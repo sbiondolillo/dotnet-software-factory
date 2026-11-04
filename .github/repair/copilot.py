@@ -8,9 +8,9 @@ every check is green, Copilot reviewed the head with no refusal, and no thread i
 question, "did the run pass?", and reads no review and no thread.
 
 - `success`: the step reads the head SHA of the pull request once, and writes `copilot=settled` and `sha=<head>`.
-- Any other conclusion: one comment under the marker `<!-- repair-copilot:<sha> -->`, on the issue the pull
-  request closes, or on the pull request when it closes none. The comment links the run and names its conclusion.
-  The step writes `copilot=unsettled` and `sha=<head>`. The run's log and job summary hold the reason.
+- Any other conclusion: comments.py posts one comment for the head, behind a hidden marker that holds its SHA, on the
+  issue the pull request closes, or on the pull request when it closes none. The comment links the run and names its
+  conclusion. The step writes `copilot=unsettled` and `sha=<head>`. The run's log and job summary hold the reason.
 - No `completed` within the timeout: the step exits 1 with one line.
 
 A pull request that is closed or lacks the label `repair` ends the step with no output, and the run is never read,
@@ -28,12 +28,12 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "shared"))
+import comments  # noqa: E402
 import runs  # noqa: E402
 import traveler  # noqa: E402
 from github import GitHub  # noqa: E402
 
 LABEL = "repair"
-MARKER = "<!-- repair-copilot:{sha} -->"
 FIELDS = "state,labels,body,headRefOid"
 
 
@@ -49,11 +49,8 @@ def output(**values):
 
 def stop(gh, repo, number, issue, sha, text):
     """One comment for the SHA, on the issue, or on the pull request when it closes no issue."""
-    target = ("issue", str(issue)) if issue is not None else ("pr", str(number))
-    comments = gh.run("api", f"repos/{repo}/issues/{target[1]}/comments", "--paginate", "--jq", ".[].body")
-    marker = MARKER.format(sha=sha)
-    if marker not in comments:
-        gh.run(target[0], "comment", target[1], "-R", repo, "--body-file", "-", input_text=f"{marker}\n{text}")
+    target = issue if issue is not None else number
+    comments.post_once(gh, repo, target, f"<!-- repair-copilot:{sha} -->", text)
     print(f"repair: unsettled on {sha[:7]}: {text.splitlines()[0]}")
 
 
