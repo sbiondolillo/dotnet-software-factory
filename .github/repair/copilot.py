@@ -28,6 +28,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "shared"))
+import runs  # noqa: E402
 import traveler  # noqa: E402
 from github import GitHub  # noqa: E402
 
@@ -38,22 +39,6 @@ FIELDS = "state,labels,body,headRefOid"
 
 def read_pull_request(gh, repo, number):
     return json.loads(gh.run("pr", "view", str(number), "-R", repo, "--json", FIELDS))
-
-
-def run_url(repo, run_id):
-    return f"https://github.com/{repo}/actions/runs/{run_id}"
-
-
-def wait_for_run(gh, repo, run_id, deadline, wait):
-    """The conclusion of the run once its status is `completed`. The step exits 1 when the deadline passes first."""
-    while True:
-        run = json.loads(gh.run("run", "view", run_id, "-R", repo, "--json", "status,conclusion"))
-        if run["status"] == "completed":
-            return run["conclusion"]
-        if time.time() >= deadline:
-            sys.exit(f"repair: the factory run {run_url(repo, run_id)} is {run['status']} after the timeout")
-        print(f"repair: the factory run {run_url(repo, run_id)} is {run['status']}; waiting")
-        time.sleep(max(0, min(wait, deadline - time.time())))
 
 
 def output(**values):
@@ -88,11 +73,11 @@ def main(gh=None):
     run_id = os.environ.get("FACTORY_RUN") or sys.exit("repair: FACTORY_RUN is not set; there is no run to wait on")
     wait = int(os.environ.get("REPAIR_POLL_SECONDS", "30"))
     deadline = time.time() + int(os.environ.get("REPAIR_COPILOT_TIMEOUT_SECONDS", "7200"))
-    conclusion = wait_for_run(gh, repo, run_id, deadline, wait)
+    conclusion = runs.wait(gh, repo, run_id, deadline, wait, name="the factory run")
     sha = read_pull_request(gh, repo, number)["headRefOid"]
     if conclusion == "success":
         output(copilot="settled", sha=sha)
-        print(f"repair: the factory run {run_url(repo, run_id)} passed; settled on {sha[:7]}")
+        print(f"repair: the factory run {runs.url(repo, run_id)} passed; settled on {sha[:7]}")
         return
     stop(
         gh,
@@ -100,7 +85,7 @@ def main(gh=None):
         number,
         traveler.closing_issue(pr["body"]),
         sha,
-        f"The factory run {run_url(repo, run_id)} of pull request #{number} ended `{conclusion}` on `{sha}`. "
+        f"The factory run {runs.url(repo, run_id)} of pull request #{number} ended `{conclusion}` on `{sha}`. "
         "The loop stops for this head. The owner reads the run: its log and job summary name the reason.",
     )
     output(copilot="unsettled", sha=sha)

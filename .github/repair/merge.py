@@ -14,10 +14,10 @@ A verdict other than success is one comment on the issue and no merge.
 The path rule, decided in #406 and in its addendum of 2026-11-01: the job merges no repair pull request whose diff
 touches a path of GUARDED. GUARDED holds every path under .github/workflows/ except factory.yml, and .github/judge/,
 .github/repair/, .github/shared/ and .claude/skills/change/JUDGES.md. The refusal is one comment on the issue that
-names each such path. A workflow on pull_request runs from the pull request's own copy. A workflow with `checks:
-write` can post a green judge-verdict, and verdict() reads that check by its name alone. judge.py reads
+names each such path. On pull_request, GitHub runs the pull request's own copy of a workflow. A workflow with
+`checks: write` can post a green judge-verdict, and verdict() reads that check by its name alone. judge.py reads
 .github/judge/ and JUDGES.md as the rules of the judge, and imports .github/shared/. So a repair that adds or edits a
-workflow, or edits those files, judges itself. repair.yml and .github/repair/ run from main, so an edit there acts
+workflow, or edits those files, judges itself. repair.yml and .github/repair/ execute from main, so an edit there acts
 only after a merge, and this rule is in .github/repair/. So a repair that edits the rule is refused by the rule. A
 change to a path of GUARDED stays the owner's direct change. .github/agents/, src/, sandbox/ and the other paths are
 open to a repair. The rule runs before the wait for the
@@ -81,8 +81,8 @@ wrote and traveler.py reads.
 
 A merge by GITHUB_TOKEN closes no issue named by `Closes #n`, and `--delete-branch` deletes nothing on a deferred
 merge, as #361 found. So the job waits for the merge, closes the issue with one comment that names the merge commit,
-and deletes the head branch when `delete_branch_on_merge` left it. A push by GITHUB_TOKEN starts no workflow run, so
-the job then starts `ci` on the base branch with workflow_dispatch, and the merge commit gets its run on `main`. A
+and deletes the head branch when `delete_branch_on_merge` left it. A push by GITHUB_TOKEN starts no run of a
+workflow, so the job then starts `ci` on the base branch by a dispatch, and ci tests the merge commit on `main`. A
 wait that reaches the timeout disarms the auto-merge, so no later head merges unsettled. The job reads check runs with
 no `checks` permission: the repo is public, and #361 bars `checks: write` on this job.
 
@@ -123,12 +123,13 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "shared"))
+import runs  # noqa: E402
 import traveler  # noqa: E402
 from github import GitHub, GitHubError  # noqa: E402
 
 LABEL = "repair"
 FACTORY_LABEL = "factory"
-WORKFLOW = "factory.yml"
+WORKFLOW = runs.WORKFLOW
 HEADS = ("repair/", "factory/")
 CHECK = "judge-verdict"
 MARKER = "<!-- repair-merge:{sha} -->"
@@ -295,63 +296,6 @@ def verdict(gh, repo, sha):
     return (runs[0]["status"], runs[0].get("conclusion")) if runs else None
 
 
-def gate_runs(gh, repo, branch):
-    runs = json.loads(
-        gh.run(
-            "run",
-            "list",
-            "-R",
-            repo,
-            "--workflow",
-            WORKFLOW,
-            "--branch",
-            branch,
-            "--event",
-            "workflow_dispatch",
-            "--limit",
-            "30",
-            "--json",
-            "databaseId,headSha,displayTitle,url",
-        )
-    )
-    return {run["databaseId"]: run for run in runs}
-
-
-def dispatch_gate(gh, repo, branch, number, timeout=180):
-    """Starts factory.yml at the branch on the story, and gives back its run once the list holds it.
-
-    The run is new since the dispatch, on the branch, and named `#<story>` by the run-name of factory.yml.
-    """
-    before = gate_runs(gh, repo, branch)
-    gh.run("workflow", "run", WORKFLOW, "-R", repo, "--ref", branch, "-f", f"issue={number}", "-f", "base=main")
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        time.sleep(10)
-        new = [
-            run
-            for run_id, run in gate_runs(gh, repo, branch).items()
-            if run_id not in before and run["displayTitle"] == f"#{number}"
-        ]
-        if new:
-            return new[0]
-    sys.exit(f"repair: the dispatch of {WORKFLOW} at {branch} for the story #{number} shows no run after {timeout} s")
-
-
-def wait_for_gate(gh, repo, run, deadline, wait):
-    """The conclusion of the gate run once it completed. The job exits when the run is not complete by the deadline."""
-    while True:
-        current = json.loads(gh.run("run", "view", str(run["databaseId"]), "-R", repo, "--json", "status,conclusion"))
-        if current["status"] == "completed":
-            return current["conclusion"]
-        if time.time() >= deadline:
-            sys.exit(
-                f"repair: the gate run {run['url']} is {current['status']} after the timeout; "
-                "it goes on, and no merge arms"
-            )
-        print(f"repair: the gate run {run['url']} is {current['status']}; waiting")
-        time.sleep(wait)
-
-
 def stop(gh, repo, number, issue, sha, text):
     """One comment for the SHA, on the issue, or on the pull request when it closes no issue."""
     target = ("issue", str(issue)) if issue is not None else ("pr", str(number))
@@ -363,14 +307,14 @@ def stop(gh, repo, number, issue, sha, text):
 
 
 def wait_for_judge(gh, repo, sha, deadline, wait):
-    while True:
+    """The conclusion of judge-verdict on the commit once its check run is complete."""
+
+    def judged():
         state = verdict(gh, repo, sha)
-        if state and state[0] == "completed":
-            return state[1]
-        if time.time() >= deadline:
-            sys.exit(f"repair: {CHECK} on {sha[:7]} is {state[0] if state else 'absent'} after the timeout")
-        print(f"repair: {CHECK} on {sha[:7]} is {state[0] if state else 'absent'}; waiting")
-        time.sleep(wait)
+        done = state is not None and state[0] == "completed"
+        return (state[1] or "") if done else None, f"{CHECK} on {sha[:7]} is {state[0] if state else 'absent'}"
+
+    return runs.poll(judged, deadline, wait)
 
 
 def disarm(gh, repo, number):
@@ -442,7 +386,7 @@ def close_issue(gh, repo, issue, pr):
 def start_ci(gh, repo, branch):
     """A run of ci on the base branch, before the issue closes, so a failed close leaves no merge commit untested. A
     push by GITHUB_TOKEN starts no run, so the merge commit gets one here."""
-    gh.run("workflow", "run", "ci.yml", "-R", repo, "--ref", branch)
+    runs.start(gh, repo, "ci.yml", branch)
     print(f"repair: started ci on {branch}")
 
 
@@ -529,9 +473,9 @@ def main(gh=None):
             f"Pull request #{number} changes {', '.join(touched)}. "
             f"A repair changes no workflow file other than `{FACTORY}`, no `on:` or `permissions:` key of it, "
             "no line of it in a form the job cannot read, "
-            "no file of the judge and no file of the repair loop. A workflow on pull_request runs from the pull "
-            "request's own copy and can post the judge's check, so such a repair judges itself, and the files of "
-            "the loop hold this rule. No merge. A change to these files is the owner's direct change."
+            "no file of the judge and no file of the repair loop. A workflow on pull_request "
+            "runs from the pull request's own copy and can post the judge's check, so such a repair judges itself, "
+            "and the files of the loop hold this rule. No merge. A change to these files is the owner's direct change."
             if touched
             else f"The list of the files of pull request #{number} holds {count} of its {after['changedFiles']} "
             "files, so the job cannot read whether it changes a file that the rule of #406 guards. "
@@ -583,13 +527,13 @@ def main(gh=None):
         return
     if gated:
         left = deadline - time.time()
-        run = dispatch_gate(gh, repo, pr["headRefName"], story_number)
+        run = runs.dispatch(gh, repo, story_number, ref=pr["headRefName"], inputs={"base": "main"})
         print(f"repair: started the gate run {run['url']} of the story #{story_number}")
         if run["headSha"] != sha:
             print(f"repair: the gate run {run['url']} is on {run['headSha'][:7]}, not the settled {sha[:7]}; no merge")
             return
         gate_deadline = time.time() + int(os.environ.get("REPAIR_GATE_TIMEOUT_SECONDS", "3600"))
-        conclusion = wait_for_gate(gh, repo, run, gate_deadline, wait)
+        conclusion = runs.wait(gh, repo, run["databaseId"], gate_deadline, wait, name="the gate run")
         if conclusion != "success":
             stop(
                 gh,

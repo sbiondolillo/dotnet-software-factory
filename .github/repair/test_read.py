@@ -10,6 +10,7 @@ import unittest
 from unittest import mock
 
 import read
+import runs
 import traveler
 from fake_github import Fail, FakeGitHub
 
@@ -493,7 +494,7 @@ class RerunTests(unittest.TestCase):
         running = {**RED, "run_attempt": 2, "status": "in_progress"}
         done = {**RED, "run_attempt": 2, "status": "completed", "conclusion": "success"}
         gh.answer(self.READ, old, running, done)
-        with mock.patch.object(read.time, "sleep"):
+        with mock.patch.object(runs.time, "sleep"):
             self.assertEqual(read.rerun(gh, "o/r", RED, 3600), done)
         self.assertEqual(gh.count(*self.RERUN), 1)
         self.assertEqual(gh.count(*self.READ), 3)
@@ -501,9 +502,74 @@ class RerunTests(unittest.TestCase):
     def test_a_rerun_still_running_at_the_timeout_exits(self):
         gh = FakeGitHub()
         gh.answer(self.RERUN, "")
+        gh.answer(self.READ, {**RED, "run_attempt": 2, "status": "in_progress"})
         with self.assertRaises(SystemExit) as stop:
             read.rerun(gh, "o/r", RED, 0)
         self.assertIn("still running", stop.exception.code)
+        self.assertEqual(gh.count(*self.READ), 1)
+
+    def test_a_completed_read_of_the_old_attempt_waits(self):
+        gh = FakeGitHub()
+        gh.answer(self.RERUN, "")
+        old = {**RED, "status": "completed", "conclusion": "failure"}
+        done = {**RED, "run_attempt": 2, "status": "completed", "conclusion": "failure"}
+        gh.answer(self.READ, old, old, done)
+        with mock.patch.object(runs.time, "sleep") as sleep:
+            self.assertEqual(read.rerun(gh, "o/r", RED, 3600), done)
+        self.assertEqual([call.args for call in sleep.call_args_list], [(read.RERUN_POLL,), (read.RERUN_POLL,)])
+
+
+# The verb of a dispatch, one word on each line.
+START = (
+    "workflow",
+    "run",
+)
+
+
+class FlakeTests(unittest.TestCase):
+    def test_a_flake_on_a_factory_run_starts_the_story_at_main_once_more(self):
+        gh = FakeGitHub()
+        dispatch = (*START, runs.WORKFLOW, "-R", "o/r", "--ref", "main", "-f", "issue=12")
+        gh.answer(dispatch, "")
+        gh.answer(("issue", "comment", "12", "-R", "o/r", "--body-file", "-"), "")
+        answer = {"class": "flake", "evidence": ["a line"]}
+        read.finish_factory(gh, "o/r", RED, {"number": 12}, {"number": 12, "story": True}, answer, "sesn_1")
+        self.assertEqual(gh.count(*dispatch), 1)
+        self.assertIn(
+            "the reader's class is `flake`", gh.input_of("issue", "comment", "12", "-R", "o/r", "--body-file", "-")
+        )
+
+
+class KillSwitchTests(unittest.TestCase):
+    """REPAIR_ENABLED binds every event but a run by hand, workflow_dispatch. repair.yml holds one other event; each
+    other name stands for it here."""
+
+    def run_main(self, env):
+        gh = FakeGitHub()
+        gh.answer(("api", "repos/o/r/actions/runs/9"), {**RED, "conclusion": "success"})
+        with (
+            mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": "o/r", **env}, clear=True),
+            mock.patch.object(read.sys, "argv", ["read.py", "9"]),
+        ):
+            read.main(gh)
+        return gh.args()
+
+    def test_with_the_switch_off_an_event_reads_no_run(self):
+        for env in (
+            {"GITHUB_EVENT_NAME": "push"},
+            {"GITHUB_EVENT_NAME": "schedule", "REPAIR_ENABLED": "1"},
+            {},
+        ):
+            with self.subTest(env=env):
+                self.assertEqual(self.run_main(env), [])
+
+    def test_a_run_by_hand_or_the_switch_on_reads_the_run(self):
+        for env in (
+            {"GITHUB_EVENT_NAME": "workflow_dispatch"},
+            {"GITHUB_EVENT_NAME": "push", "REPAIR_ENABLED": "true"},
+        ):
+            with self.subTest(env=env):
+                self.assertEqual(self.run_main(env), [("api", "repos/o/r/actions/runs/9")])
 
 
 class FailedLogTests(unittest.TestCase):

@@ -34,13 +34,15 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "shared"))
+import runs  # noqa: E402
 import traveler  # noqa: E402
 from github import GitHub, GitHubError  # noqa: E402
 
 LABEL = "repair"
 FACTORY_LABEL = "factory"
-WORKFLOW = "factory.yml"
+WORKFLOW = runs.WORKFLOW
 BASE_BRANCH = "repair-base"
+POLL = 30
 
 
 def read_issue(gh, repo, number):
@@ -74,47 +76,10 @@ def is_factory_pull_request(gh, repo, pr, number):
     )
 
 
-def factory_runs(gh, repo):
-    runs = json.loads(
-        gh.run(
-            "run",
-            "list",
-            "-R",
-            repo,
-            "--workflow",
-            WORKFLOW,
-            "--event",
-            "workflow_dispatch",
-            "--limit",
-            "30",
-            "--json",
-            "databaseId,displayTitle,status,conclusion,url",
-        )
-    )
-    return {run["databaseId"]: run for run in runs}
-
-
 def green_sha(gh, repo):
     """The head SHA of the last run of the factory on main that ended success, or None when no run did."""
-    runs = json.loads(
-        gh.run(
-            "run",
-            "list",
-            "-R",
-            repo,
-            "--workflow",
-            WORKFLOW,
-            "--status",
-            "success",
-            "--branch",
-            "main",
-            "--limit",
-            "1",
-            "--json",
-            "headSha",
-        )
-    )
-    return runs[0]["headSha"] if runs else None
+    run = runs.find(gh, repo, branch="main", status="success")
+    return run["headSha"] if run else None
 
 
 def adapters():
@@ -165,29 +130,6 @@ def delete_base_branch(job, repo, branch):
         print(f"repair: deleted the branch {branch}")
 
 
-def dispatch(gh, repo, number, timeout, ref=None):
-    """Starts the factory on the issue, and gives back its run once the list holds it.
-
-    The run is new since the dispatch, and named `#<issue>` by the run-name of factory.yml, so a run of another issue
-    dispatched in the same window is not taken. With a ref, the factory of that ref builds on the head of main, by
-    `base=main`. With none, it runs at main.
-    """
-    before = factory_runs(gh, repo)
-    at = ["--ref", ref, "-f", "base=main"] if ref else []
-    gh.run("workflow", "run", WORKFLOW, "-R", repo, *at, "-f", f"issue={number}", "-f", "copilot=on")
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        time.sleep(10)
-        new = [
-            run
-            for run_id, run in factory_runs(gh, repo).items()
-            if run_id not in before and run["displayTitle"] == f"#{number}"
-        ]
-        if new:
-            return new[0]
-    sys.exit(f"repair: the dispatch of {WORKFLOW} for issue #{number} shows no run after {timeout} s")
-
-
 def label(gh, repo, pr):
     gh.run("pr", "edit", str(pr), "-R", repo, "--add-label", LABEL)
     with open(os.environ.get("GITHUB_OUTPUT", os.devnull), "a") as output:
@@ -197,29 +139,29 @@ def label(gh, repo, pr):
 
 def wait_for_pull_request(gh, repo, number, run, timeout):
     """The pull request the factory opens, read from the issue's comments while its run is in progress."""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
+
+    def opened():
         pr = opened_pull_request(gh, repo, read_issue(gh, repo, number))
         if pr is not None:
-            return pr
-        current = json.loads(
-            gh.run("run", "view", str(run["databaseId"]), "-R", repo, "--json", "status,conclusion,url")
-        )
+            return pr, ""
+        current = runs.read(gh, repo, run["databaseId"])
         if current["status"] == "completed":
             pr = opened_pull_request(gh, repo, read_issue(gh, repo, number))
             if pr is not None:
-                return pr
+                return pr, ""
             sys.exit(
-                f"repair: the factory run {current['url']} ended {current['conclusion']} "
+                f"repair: the factory run {run['url']} ended {current['conclusion']} "
                 f"with no pull request on issue #{number}"
             )
-        time.sleep(30)
-    sys.exit(f"repair: the factory run {run['url']} opened no pull request on issue #{number} within {timeout} s")
+        return None, f"the factory run {run['url']} has opened no pull request on issue #{number}"
+
+    return runs.poll(opened, time.time() + timeout, POLL)
 
 
 def build(gh, repo, number, timeout, ref=None):
     """Dispatches the factory, waits for the pull request it opens, and labels it."""
-    run = dispatch(gh, repo, number, 180, ref)
+    inputs = {"base": "main", "copilot": "on"} if ref else {"copilot": "on"}
+    run = runs.dispatch(gh, repo, number, ref=ref, inputs=inputs)
     print(f"repair: started the factory: {run['url']}")
     with open(os.environ.get("GITHUB_OUTPUT", os.devnull), "a") as output:
         output.write(f"run={run['databaseId']}\n")
