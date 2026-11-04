@@ -9,11 +9,13 @@ import os
 import unittest
 from unittest import mock
 
-import comments
 import read
 import runs
 import traveler
 from fake_github import Fail, FakeGitHub
+
+# The module under test puts .github/shared/ on the path, so this test also runs on its own.
+comments = read.comments
 
 SID = "sesn_1"
 FILES = ("code", "dependency")

@@ -9,12 +9,14 @@ import signal
 import unittest
 from unittest import mock
 
-import comments
 import merge
 import runs
 import traveler
 from fake_github import Fail, FakeGitHub
 from github import GitHubError
+
+# The module under test puts .github/shared/ on the path, so this test also runs on its own.
+comments = merge.comments
 
 with open(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "workflows", "factory.yml"), encoding="utf-8"

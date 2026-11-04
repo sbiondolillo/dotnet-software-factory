@@ -8,9 +8,11 @@ import tempfile
 import unittest
 from unittest import mock
 
-import comments
 import copilot
 from fake_github import FakeGitHub
+
+# The module under test puts .github/shared/ on the path, so this test also runs on its own.
+comments = copilot.comments
 
 SHA = "a" * 40
 LATER = "c" * 40
