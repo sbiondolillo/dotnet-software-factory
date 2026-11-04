@@ -272,7 +272,7 @@ def refused(paths, keys):
 
 def changed_files(gh, repo, number):
     """The files of the diff of the pull request, as (the count of entries, every path). A rename gives both paths.
-    Each line of the output is one entry as a JSON array, so a path that holds a line feed stays one path."""
+    api_list reads each entry as one JSON line, so a path that holds a line feed stays one path."""
     entries = gh.api_list(f"repos/{repo}/pulls/{number}/files")
     return len(entries), [
         path for entry in entries for path in (entry["filename"], entry.get("previous_filename")) if path

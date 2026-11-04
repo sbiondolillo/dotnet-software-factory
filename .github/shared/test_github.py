@@ -45,6 +45,14 @@ class RunTests(unittest.TestCase):
         self.assertEqual(raised.exception.stderr, "gh: Not Found (HTTP 404)\n")
         self.assertIn("gh api repos/o/r/git/ref/heads/x failed: gh: Not Found (HTTP 404)", str(raised.exception))
 
+    def test_any_exit_code_other_than_0_raises_with_that_code(self):
+        for code in (2, 4):
+            with self.subTest(code=code):
+                runner = Runner((code, "partial\n", "killed"))
+                with self.assertRaises(GitHubError) as raised:
+                    GitHub("t", runner).run("run", "view", "9", "--log-failed")
+                self.assertEqual((raised.exception.returncode, raised.exception.stdout), (code, "partial\n"))
+
     def test_a_failure_with_no_status_raises_with_status_none(self):
         runner = Runner((1, "", "could not resolve to a PullRequest"))
         with self.assertRaises(GitHubError) as raised:

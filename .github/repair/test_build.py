@@ -150,6 +150,21 @@ class BaseBranchTests(unittest.TestCase):
         self.assertEqual(job.args()[-1], DELETE)
         self.assertEqual(job.count("pr", "edit", "5", "-R", REPO, "--add-label", build.LABEL), 1)
 
+    def test_with_one_adapter_every_ref_call_runs_on_it(self):
+        gh = FakeGitHub()
+        gh.answer(ISSUE_VIEW, issue(labels=("repair", "factory")))
+        green = ("run", "list", "-R", REPO, "--workflow", build.WORKFLOW, "--status", "success", "--branch", "main")
+        gh.answer((*green, "--limit", "1", "--json", "headSha"), [{"headSha": SHA}])
+        gh.answer(REF, Fail(status=502))
+        gh.answer(DELETE, "")
+        with (
+            mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "GITHUB_OUTPUT": os.devnull}),
+            mock.patch.object(build.sys, "argv", ["build.py", "7"]),
+            self.assertRaises(SystemExit),
+        ):
+            build.main(gh)
+        self.assertEqual(gh.args()[-2:], [REF, DELETE])
+
     def test_the_branch_is_deleted_when_the_create_fails(self):
         job, app = FakeGitHub("job"), FakeGitHub("app")
         job.answer(ISSUE_VIEW, issue(labels=("repair", "factory")))
