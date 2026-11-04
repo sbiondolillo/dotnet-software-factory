@@ -4,16 +4,18 @@ run, over the GitHub adapter of .github/shared/github.py.
 - `start` dispatches a workflow at a ref with its inputs, and gives back nothing. merge.py starts `ci` with it, and
   read.py starts the story once more on a flake.
 - `dispatch` starts factory.yml on an issue and gives back the run it started: the newest run titled `#<n>` by the
-  run-name of factory.yml, created since the dispatch, on the ref of the dispatch. The title check is #469's, so a
-  run of another issue dispatched in the same window is not taken.
+  run-name of factory.yml, created since the dispatch, on the ref of the dispatch, and absent from the list read
+  before the dispatch. The title check is #469's, so a run of another issue dispatched in the same window is not
+  taken.
 - `find` gives the newest run of factory.yml that matches its filters, or None. Each filter left out matches any run.
 - `wait` gives the conclusion of a run once its status is `completed`.
 - `poll` is the one deadline loop that the waits of the repair loop share.
 
 `since` is a time from time.time(). `dispatch` takes it SKEW seconds before the dispatch, since `createdAt` is
 GitHub's clock and second-accurate, and the runner's clock can run ahead of it. An older run titled `#<n>` inside that
-window would be taken, and none exists: the concurrency group of repair.yml holds one job for each issue, and each
-job takes minutes.
+window, such as the red run that started the repair, is in the list read before the dispatch, so `exclude` drops it.
+A run that GitHub lists only after that read and created before the dispatch is the one gap, and it needs two
+dispatches of one title inside one window of SKEW seconds.
 
 `poll` exits the job with `repair: <state> after the timeout` when the deadline passes first, so each wait ends the
 step with one line, as the hand-written loops it replaces did.
@@ -41,25 +43,31 @@ def start(gh, repo, workflow, ref=None, inputs=None):
     gh.run("workflow", "run", workflow, "-R", repo, *at, *fields)
 
 
-def find(gh, repo, number=None, since=None, *, branch=None, status=None, event=None):
+def find(gh, repo, number=None, since=None, *, branch=None, status=None, event=None, exclude=()):
     """The newest run of factory.yml titled `#<number>`, created at `since` or later, on the branch, with the status
-    and of the event, or None. Each filter left out matches any run."""
+    and of the event, with an id outside `exclude`, or None. Each filter left out matches any run."""
+    for run in listed(gh, repo, branch, status, event):
+        if number is not None and run["displayTitle"] != f"#{number}":
+            continue
+        if since is not None and created(run) < since:
+            continue
+        if exclude and run["databaseId"] in exclude:
+            continue
+        return run
+    return None
+
+
+def listed(gh, repo, branch=None, status=None, event=None):
+    """The runs of factory.yml on the branch, with the status and of the event, newest first."""
     flags = [
         arg
         for flag, value in (("--branch", branch), ("--status", status), ("--event", event))
         if value
         for arg in (flag, value)
     ]
-    runs = json.loads(
+    return json.loads(
         gh.run("run", "list", "-R", repo, "--workflow", WORKFLOW, *flags, "--limit", LIMIT, "--json", FIELDS)
     )
-    for run in runs:
-        if number is not None and run["displayTitle"] != f"#{number}":
-            continue
-        if since is not None and created(run) < since:
-            continue
-        return run
-    return None
 
 
 def created(run):
@@ -71,11 +79,12 @@ def dispatch(gh, repo, number, *, ref=None, inputs=None, timeout=180, every=10):
     """Starts factory.yml on issue <number> at the ref, with `issue=<number>` and then each input, and gives back the
     run it started once the list holds it. The job exits when no such run shows within the timeout."""
     since = time.time() - SKEW
+    before = {run["databaseId"] for run in listed(gh, repo, ref, event="workflow_dispatch")}
     start(gh, repo, WORKFLOW, ref, {"issue": number, **(inputs or {})})
     where = f" at {ref}" if ref else ""
     return poll(
         lambda: (
-            find(gh, repo, number, since, branch=ref, event="workflow_dispatch"),
+            find(gh, repo, number, since, branch=ref, event="workflow_dispatch", exclude=before),
             f"the dispatch of {WORKFLOW}{where} for #{number} shows no run",
         ),
         time.time() + timeout,

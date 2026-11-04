@@ -192,7 +192,7 @@ class DispatchTests(unittest.TestCase):
     def build(self, issues, states):
         gh = FakeGitHub()
         own = {"databaseId": 3, "displayTitle": "#7", "url": "https://example/3", "createdAt": NOW}
-        gh.answer(listing("--event", "workflow_dispatch"), [own])
+        gh.answer(listing("--event", "workflow_dispatch"), [], [own])
         gh.answer((*START, build.WORKFLOW, "-R", REPO, "-f", "issue=7", "-f", "copilot=on"), "")
         gh.answer(ISSUE_VIEW, *issues)
         gh.answer(self.VIEW, *[{"status": status, "conclusion": conclusion} for status, conclusion in states])

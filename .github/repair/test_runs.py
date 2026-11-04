@@ -136,17 +136,24 @@ class DispatchTests(unittest.TestCase):
         own = run(3, "#7")
         found, gh, call, _ = self.dispatch([[old], [other, old], [own, other, old]])
         self.assertEqual(found, own)
-        self.assertEqual(gh.args()[0], call)
+        self.assertEqual(gh.args()[:2], [listing("--event", "workflow_dispatch"), call])
+
+    def test_a_run_of_its_title_listed_before_the_dispatch_is_not_taken_inside_the_window(self):
+        red = run(1, "#7", created=NOW - 5)
+        own = run(3, "#7")
+        found, _, _, clock = self.dispatch([[red], [red], [own, red]])
+        self.assertEqual(found, own)
+        self.assertEqual(clock.slept, [10])
 
     def test_a_run_created_inside_the_30_s_window_is_taken(self):
         self.assertEqual(runs.SKEW, 30)
         own = run(3, "#7", created=NOW - 30)
-        found, _, _, _ = self.dispatch([[own]])
+        found, _, _, _ = self.dispatch([[], [own]])
         self.assertEqual(found, own)
 
     def test_at_a_ref_the_inputs_follow_the_issue(self):
         own = run(3, "#7")
-        found, gh, call, _ = self.dispatch([[own]], ref="repair/5", inputs={"base": "main"})
+        found, gh, call, _ = self.dispatch([[], [own]], ref="repair/5", inputs={"base": "main"})
         self.assertEqual(found, own)
         self.assertEqual(call[-6:], ("--ref", "repair/5", "-f", "issue=7", "-f", "base=main"))
         self.assertEqual(gh.count(*call), 1)
