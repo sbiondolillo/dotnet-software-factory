@@ -81,8 +81,17 @@ def last_text(events):
 
 
 def last_stop(events):
-    """The stop details of the newest idle among events newest first, or None."""
-    return next((e.get("stop_details") for e in events if e.get("type") == "session.status_idle"), None)
+    """The stop of the newest idle among events newest first, or None. The API names it `stop_reason` or
+    `stop_details`, and StopReason of src/Core/ManagedAgentsAgent.cs reads both, in that order."""
+    idle = next((e for e in events if e.get("type") == "session.status_idle"), None)
+    if idle is None:
+        return None
+    return next((idle[name] for name in ("stop_reason", "stop_details") if isinstance(idle.get(name), dict)), None)
+
+
+def nap(deadline, poll):
+    """Sleep `poll` seconds, or less when the deadline comes first, so no read waits past the deadline."""
+    time.sleep(max(0, min(poll, deadline - time.time())))
 
 
 class Session:
@@ -143,7 +152,7 @@ class Session:
                 return status
             if time.time() >= deadline:
                 raise SessionError(self.sid, f"not idle after {int(time.time() - self.started)} s")
-            time.sleep(poll)
+            nap(deadline, poll)
 
     def correction_turn(self, before, deadline, poll):
         """The events and the rest of the turn of a user.message posted to an idle session. `before` is the id of the
@@ -163,7 +172,7 @@ class Session:
                 raise SessionError(
                     self.sid, f"the correction turn is not idle after {int(time.time() - self.started)} s"
                 )
-            time.sleep(poll)
+            nap(deadline, poll)
 
     def checked(self, events):
         """The last agent message of a turn. A turn that stopped on a refusal raises SessionError."""

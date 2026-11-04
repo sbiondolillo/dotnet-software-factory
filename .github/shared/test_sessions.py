@@ -151,6 +151,19 @@ class StopTests(unittest.TestCase):
         self.assertEqual((read.error.sid, read.error.reason, read.error.text), (SID, "refused", "no"))
         self.assertEqual(read.api.posts, [])
 
+    def test_a_refusal_named_by_stop_reason_raises_too(self):
+        refused = {"type": "session.status_idle", "stop_reason": {"type": "refusal"}}
+        read = Read([[refused, message(GOOD), {"type": "user.message", "id": "m1"}]])
+        self.assertEqual(read.error.reason, "refused")
+
+    def test_no_wait_sleeps_past_the_deadline(self):
+        api = FakeApi([[message(GOOD)]], status="running")
+        with mock.patch.object(sessions.time, "sleep") as sleep:
+            with self.assertRaises(SessionError):
+                Session(api, SID).report(parse_json, SHAPE, time.time() + 0.05, poll=15)
+        self.assertTrue(sleep.call_args_list)
+        self.assertTrue(all(call.args[0] <= 0.05 for call in sleep.call_args_list), sleep.call_args_list)
+
     def test_a_deadline_that_passes_raises_with_the_time_in_the_reason(self):
         read = Read([[]], status="running", deadline=time.time() - 1)
         self.assertRegex(read.error.reason, r"^not idle after \d+ s$")

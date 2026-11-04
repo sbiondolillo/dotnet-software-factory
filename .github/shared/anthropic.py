@@ -89,7 +89,7 @@ class Anthropic:
         for attempt in range(1, ATTEMPTS + 1):
             try:
                 with self.sender(self.request(method, path, body), timeout=TIMEOUT) as response:
-                    status, text = getattr(response, "status", 200), response.read().decode()
+                    status, text = getattr(response, "status", 200), response.read().decode(errors="replace")
             except urllib.error.HTTPError as error:
                 answer = error.read().decode(errors="replace")
                 if attempt >= ATTEMPTS or not again(method, error.code):
