@@ -8,6 +8,7 @@ import unittest
 from unittest import mock
 
 import read
+import traveler
 
 SID = "sesn_1"
 FILES = ("code", "dependency")
@@ -238,6 +239,14 @@ class FinishFactoryTests(unittest.TestCase):
                 read.check_cleanup_body(filed)
                 self.assertIn("## Run", filed)
                 self.assertEqual([line for line in read.section(filed, "## Scope") if line.strip()], scope)
+
+    def test_the_filed_body_ends_with_a_traveler_that_names_the_story(self):
+        _, filed = self.filed({"class": "dependency", "recipe": "none", "title": "t", "body": "b", "evidence": []})
+        expected = traveler.Traveler(
+            run=RUN["html_url"], target="a new branch from the head of `main`", sha="abc", session=SID, story=451
+        )
+        self.assertEqual(traveler.parse(filed), expected)
+        self.assertTrue(filed.endswith(traveler.render(expected)))
 
     def test_the_run_section_closes_no_fence(self):
         _, filed = self.filed(

@@ -16,8 +16,8 @@ lands on the head of main, and deletes the branch when the step ends, passed or 
 first. It creates a missing branch at the SHA, and moves a branch of that name left by an earlier run to the SHA.
 With no green run, the job comments on the issue and builds nothing.
 
-Every repair lands on the head of main, so an issue whose target is a pull request branch gets a comment and no
-build.
+Every repair lands on the head of main, so an issue whose traveler targets a pull request branch gets a comment and
+no build. The traveler is the block under `## Run` of the issue, which read.py wrote and traveler.py reads.
 The Managed Agents builder, #370, builds at the red SHA.
 
 Environment: GH_TOKEN, GITHUB_REPOSITORY, REPAIR_BUILD_TIMEOUT_SECONDS (default 3600), and REPAIR_REF_TOKEN, the
@@ -35,6 +35,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "judge"))
+import traveler  # noqa: E402
 from judge import gh  # noqa: E402
 
 LABEL = "repair"
@@ -45,12 +46,6 @@ BASE_BRANCH = "repair-base"
 
 def read_issue(repo, number):
     return json.loads(gh("issue", "view", str(number), "-R", repo, "--json", "number,state,body,labels,comments"))
-
-
-def target_pull_request(body):
-    """The pull request number of the issue's target branch under ## Run, or None for a branch from main."""
-    match = re.search(r"^Target branch: .*\(pull request #(\d+)\)", body or "", re.M)
-    return int(match.group(1)) if match else None
 
 
 def opened_pull_request(repo, issue):
@@ -76,7 +71,7 @@ def is_factory_pull_request(repo, pr, number):
     return (
         fields["state"] == "OPEN"
         and fields["headRefName"].startswith("factory/")
-        and re.search(rf"^Closes #{number}\s*$", fields["body"] or "", re.M) is not None
+        and traveler.closing_issue(fields["body"]) == number
     )
 
 
@@ -251,7 +246,8 @@ def main():
         print(f"repair: issue #{number} holds pull request #{pr} already")
         label(repo, pr)
         return
-    if (target := target_pull_request(issue["body"])) is not None:
+    ticket = traveler.parse(issue["body"])
+    if ticket is not None and (target := ticket.pull_request) is not None:
         gh(
             "issue",
             "comment",

@@ -1,7 +1,7 @@
 """Unit tests of build.py: the token of the create, the move and the deletion of repair-base/<n>, decided in #403,
-and the run that the dispatch gives back, from #469. The build job of ci.yml runs them with
-`python3 -B -m unittest discover -s .github/repair -p 'test_*.py'`. No test calls GitHub: each one replaces
-subprocess.run or gh."""
+the run that the dispatch gives back, from #469, and the read of the traveler of the issue, from #513. The build job
+of ci.yml runs them with `python3 -B -m unittest discover -s .github/repair -p 'test_*.py'`. No test calls GitHub:
+each one replaces subprocess.run or gh."""
 
 import json
 import os
@@ -10,6 +10,7 @@ import unittest
 from unittest import mock
 
 import build
+import traveler
 
 REPO = "owner/repo"
 BRANCH = "repair-base/1"
@@ -91,6 +92,48 @@ class DispatchTests(unittest.TestCase):
         with mock.patch.object(build, "gh", side_effect=gh), mock.patch.object(build.time, "sleep"):
             run = build.dispatch(REPO, 7, 180)
         self.assertEqual(run, own)
+
+
+class TravelerTests(unittest.TestCase):
+    def issue(self, **fields):
+        ticket = traveler.Traveler(
+            run="https://github.com/o/r/actions/runs/9", target="`fix/x`", sha=SHA, session="sesn_1", **fields
+        )
+        return {
+            "number": 7,
+            "state": "OPEN",
+            "labels": [{"name": "repair"}],
+            "comments": [],
+            "body": traveler.render(ticket),
+        }
+
+    def run_main(self, issue):
+        with (
+            mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "GITHUB_OUTPUT": os.devnull}),
+            mock.patch.object(build.sys, "argv", ["build.py", "7"]),
+            mock.patch.object(build, "read_issue", return_value=issue),
+            mock.patch.object(build, "gh", return_value="") as gh,
+            mock.patch.object(build, "build") as built,
+        ):
+            build.main()
+        return gh, built
+
+    def test_an_issue_whose_traveler_targets_a_pull_request_gets_one_comment_and_no_build(self):
+        gh, built = self.run_main(self.issue(pull_request=3))
+        built.assert_not_called()
+        gh.assert_called_once()
+        self.assertIn("the fault is on the branch of pull request #3", gh.call_args.args[-1])
+
+    def test_an_issue_whose_traveler_targets_main_is_built(self):
+        gh, built = self.run_main(self.issue())
+        gh.assert_not_called()
+        built.assert_called_once_with(REPO, 7, 3600)
+
+    def test_a_factory_pull_request_closes_its_issue_alone_on_a_line(self):
+        for body, expected in (("The fix.\n\nCloses #7\n", True), ("Closes #8\n", False), ("See Closes #7.", False)):
+            fields = {"state": "OPEN", "headRefName": "factory/1", "body": body}
+            with self.subTest(body=body), mock.patch.object(build, "gh", return_value=json.dumps(fields)):
+                self.assertIs(build.is_factory_pull_request(REPO, 5, 7), expected)
 
 
 if __name__ == "__main__":

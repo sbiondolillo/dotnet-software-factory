@@ -24,11 +24,11 @@ Argument: the number of the repair pull request. The result goes to GITHUB_OUTPU
 
 import json
 import os
-import re
 import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "judge"))
+import traveler  # noqa: E402
 from judge import gh  # noqa: E402
 
 LABEL = "repair"
@@ -38,11 +38,6 @@ FIELDS = "state,labels,body,headRefOid"
 
 def read_pull_request(repo, number):
     return json.loads(gh("pr", "view", str(number), "-R", repo, "--json", FIELDS))
-
-
-def closing_issue(body):
-    match = re.search(r"^Closes #(\d+)\s*$", body or "", re.M)
-    return int(match.group(1)) if match else None
 
 
 def run_url(repo, run_id):
@@ -101,7 +96,7 @@ def main():
     stop(
         repo,
         number,
-        closing_issue(pr["body"]),
+        traveler.closing_issue(pr["body"]),
         sha,
         f"The factory run {run_url(repo, run_id)} of pull request #{number} ended `{conclusion}` on `{sha}`. "
         "The loop stops for this head. The owner reads the run: its log and job summary name the reason.",

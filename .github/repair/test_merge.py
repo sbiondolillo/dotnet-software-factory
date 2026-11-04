@@ -3,11 +3,13 @@ build job of ci.yml runs them with `python3 -B -m unittest discover -s .github/r
 unittest, which the standard library holds, so the job installs nothing. The tests of the keys read factory.yml of
 the branch."""
 
+import json
 import os
 import unittest
 from unittest import mock
 
 import merge
+import traveler
 
 with open(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "workflows", "factory.yml"), encoding="utf-8"
@@ -269,6 +271,20 @@ class BaseTests(unittest.TestCase):
 
     paths = ["src/x.cs"]
 
+    issue = {"body": "", "labels": []}
+    red_branch = "main"
+
+    def gh(self, *args):
+        """The run read of red_run_branch, the one call of merge.gh that main() makes with the other reads replaced."""
+        self.assertEqual(args, ("api", "repos/o/r/actions/runs/9"))
+        return json.dumps({"head_branch": self.red_branch})
+
+    def traveler_body(self, **fields):
+        ticket = traveler.Traveler(
+            run="https://github.com/o/r/actions/runs/9", target="`repair/9`", sha=self.SHA, session="sesn_1", **fields
+        )
+        return f"The fix.\n\n{traveler.render(ticket)}"
+
     def run_main(self, *bases):
         reads = [self.pull_request(base) for base in bases]
         env = {"REPAIR_ENABLED": "true", "GITHUB_REPOSITORY": "o/r", "REPAIR_POLL_SECONDS": "0"}
@@ -278,14 +294,16 @@ class BaseTests(unittest.TestCase):
             mock.patch.object(merge, "read_pull_request", side_effect=reads),
             mock.patch.object(merge, "default_branch", return_value="main"),
             mock.patch.object(merge, "file_at", return_value=None),
-            mock.patch.object(merge, "read_issue", return_value={"body": "", "labels": []}),
+            mock.patch.object(merge, "read_issue", return_value=self.issue),
             mock.patch.object(merge, "changed_files", return_value=(1, self.paths)) as files,
-            mock.patch.object(merge, "red_run_branch", return_value=None),
+            mock.patch.object(merge, "gh", side_effect=self.gh),
+            mock.patch.object(merge, "dispatch_gate", return_value={"url": "u", "headSha": "c" * 40}) as gate,
             mock.patch.object(merge, "wait_for_judge", return_value="success") as judge,
             mock.patch.object(merge, "arm_and_wait", return_value=None) as arm,
             mock.patch.object(merge, "stop") as stop,
         ):
             merge.main()
+        self.gate = gate
         return files, judge, arm, stop
 
     def test_a_pull_request_on_main_arms_the_merge(self):
@@ -326,6 +344,28 @@ class BaseTests(unittest.TestCase):
         self.assertIn("`.github/workflows/judge.yml`", stop.call_args.args[4])
         judge.assert_not_called()
         arm.assert_not_called()
+
+    def test_the_branch_of_the_red_run_in_the_traveler_is_refused_with_one_comment(self):
+        self.issue = {"body": self.traveler_body(), "labels": []}
+        self.red_branch = "repair/5"
+        files, judge, arm, stop = self.run_main("main", "main")
+        stop.assert_called_once()
+        self.assertIn("is the branch of the red run", stop.call_args.args[4])
+        judge.assert_not_called()
+
+    def test_a_factory_repair_dispatches_the_gate_on_the_story_of_its_traveler(self):
+        self.issue = {"body": self.traveler_body(story=451), "labels": [{"name": "factory"}]}
+        files, judge, arm, stop = self.run_main("main", "main")
+        stop.assert_not_called()
+        self.gate.assert_called_once_with("o/r", "repair/5", 451)
+        arm.assert_not_called()
+
+    def test_a_factory_repair_whose_traveler_names_no_story_is_refused_with_one_comment(self):
+        self.issue = {"body": self.traveler_body(pull_request=3), "labels": [{"name": "factory"}]}
+        files, judge, arm, stop = self.run_main("main", "main")
+        stop.assert_called_once()
+        self.assertIn("the traveler of its issue names no story", stop.call_args.args[4])
+        judge.assert_not_called()
 
 
 class WaitForMergeTests(unittest.TestCase):

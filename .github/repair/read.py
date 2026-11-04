@@ -10,11 +10,14 @@ files nothing. Its story is the issue that `display_title`, `#<n>`, names, and a
 the read, so a failing builder files no repair of itself. The run gets no rerun. The reader reads the failed log,
 the comments the run posted on the story, and its class set gains factory. The job summary is no record: GitHub
 serves it on no API, and the log holds its facts.
-`factory`, and `dependency` on a factory run, file one issue with repair, ready and factory and a line `Story: #<n>`,
-unless an open issue with repair and factory exists, and then the red commit gets a comment that names it. The issue
-also takes the label cleanup when the field `recipe` of the answer is `cleanup`, so the build skips the plan phase.
+`factory`, and `dependency` on a factory run, file one issue with repair, ready and factory and a traveler that
+names the story, unless an open issue with repair and factory exists, and then the red commit gets a comment that
+names it. The issue also takes the label cleanup when the field `recipe` of the answer is `cleanup`, so the build
+skips the plan phase.
 `code` is a comment on the story, and `flake` dispatches the story once more. Both comments carry the marker of the
 SHA, so a second red run of the story on that SHA ends the read.
+The body of each filed issue ends with its traveler, the block under `## Run`, which traveler.py renders. build.py
+and merge.py read it back with traveler.py.
 The answer can fail the parse. Then the job sends one correction turn to the same session, with the parser error,
 and a second failure ends the read.
 
@@ -33,6 +36,7 @@ import time
 import urllib.parse
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "judge"))
+import traveler  # noqa: E402
 from judge import anthropic, env, gh, start_session, wait_idle  # noqa: E402
 
 MARKER = "<!-- repair:{sha} -->"
@@ -615,10 +619,10 @@ def finish_factory(repo, run, story, pr, answer, sid):
         )
         print(f"repair: the factory repair #{held} is open; nothing filed")
         return
-    body = (
-        f"{answer['body'].rstrip()}\n\n## Run\n\nTarget branch: a new branch from the head of `main`\n\n"
-        f"Head SHA: `{sha}`\n\nRun: {run['html_url']}\n\nStory: #{story['number']}\n\nSession: `{sid}`\n"
+    ticket = traveler.Traveler(
+        run=run["html_url"], target="a new branch from the head of `main`", sha=sha, session=sid, story=story["number"]
     )
+    body = f"{answer['body'].rstrip()}\n\n{traveler.render(ticket)}"
     labels = ("repair", "ready", "factory")
     if answer["recipe"] == "cleanup":
         labels += ("cleanup",)
@@ -709,11 +713,10 @@ def main():
             f"Session `{sid}`.\n\n{indented(answer['evidence'])}",
         )
         return
-    pull_request = f" (pull request #{pr['number']})" if pr else ""
-    body = (
-        f"{answer['body'].rstrip()}\n\n## Run\n\nTarget branch: {target}{pull_request}\n\n"
-        f"Head SHA: `{sha}`\n\nRun: {run['html_url']}\n\nSession: `{sid}`\n"
+    ticket = traveler.Traveler(
+        run=run["html_url"], target=target, sha=sha, session=sid, pull_request=pr["number"] if pr else None
     )
+    body = f"{answer['body'].rstrip()}\n\n{traveler.render(ticket)}"
     file_issue(repo, answer["title"], body, ("repair", "ready"))
 
 
