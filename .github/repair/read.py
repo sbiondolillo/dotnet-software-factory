@@ -38,6 +38,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "shared"))
 # The judge's folder serves its session functions alone, until #479 moves them.
 sys.path.insert(0, os.path.join(HERE, "..", "judge"))
+import runs  # noqa: E402
 import traveler  # noqa: E402
 from github import GitHub, GitHubError  # noqa: E402
 from judge import anthropic, env, start_session, wait_idle  # noqa: E402
@@ -48,7 +49,8 @@ FACTORY_CLASSES = CLASSES + ("factory",)
 RECIPES = ("cleanup", "none")
 LOG_LIMIT = 100000
 RECORD_LIMIT = 50000
-FACTORY_WORKFLOW = "factory.yml"
+FACTORY_WORKFLOW = runs.WORKFLOW
+RERUN_POLL = 15
 STORY = re.compile(r"^#(\d+)$")
 HEADING = re.compile(r"#{1,6}\s")
 ANSWER = "Your final answer is one JSON object and nothing else, with no prose before or after it and no code fence:"
@@ -225,13 +227,13 @@ def rerun(gh, repo, run, timeout):
     """Rerun the failed jobs once and wait. The same run id takes a new attempt, and the read of the run keeps
     the old conclusion until then."""
     gh.run("run", "rerun", str(run["id"]), "-R", repo, "--failed")
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        time.sleep(15)
+
+    def rerun_done():
         current = read_run(gh, repo, run["id"])
-        if current["run_attempt"] > run["run_attempt"] and current["status"] == "completed":
-            return current
-    sys.exit(f"repair: the rerun of {run['id']} is still running after {timeout} s")
+        done = current["run_attempt"] > run["run_attempt"] and current["status"] == "completed"
+        return current if done else None, f"the rerun of {run['id']} is still running"
+
+    return runs.poll(rerun_done, time.time() + timeout, RERUN_POLL)
 
 
 def reader_prompt(repo, run, target, log):
@@ -594,7 +596,7 @@ def finish_factory(gh, repo, run, story, pr, answer, sid):
     """The end of the read of a factory run, by its class."""
     sha = run["head_sha"]
     if answer["class"] == "flake":
-        gh.run("workflow", "run", FACTORY_WORKFLOW, "-R", repo, "--ref", "main", "-f", f"issue={story['number']}")
+        runs.start(gh, repo, FACTORY_WORKFLOW, "main", {"issue": story["number"]})
         comment(
             gh,
             repo,
@@ -643,7 +645,7 @@ def main(gh=None):
     repo = env("GITHUB_REPOSITORY")
     gh = gh if gh is not None else GitHub.from_env()
     run_id = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else sys.exit("repair: give the id of a red run")
-    if os.environ.get("GITHUB_EVENT_NAME") == "workflow_run" and os.environ.get("REPAIR_ENABLED") != "true":
+    if os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch" and os.environ.get("REPAIR_ENABLED") != "true":
         print("repair: REPAIR_ENABLED is not true; nothing to do")
         return
 

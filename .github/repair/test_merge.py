@@ -9,6 +9,7 @@ import unittest
 from unittest import mock
 
 import merge
+import runs
 import traveler
 from fake_github import Fail, FakeGitHub
 from github import GitHubError
@@ -245,6 +246,12 @@ ARM = ("pr", "merge", "7", "-R", REPO, "--auto", "--squash", "--delete-branch", 
 DISARM = ("pr", "merge", "7", "-R", REPO, "--disable-auto")
 VERDICT = ("api", f"repos/{REPO}/commits/{SHA}/check-runs?check_name={merge.CHECK}&filter=latest")
 COMMENT = ("issue", "comment", "5", "-R", REPO, "--body-file", "-")
+# The verb of a dispatch, one word on each line, so the grep of #516's `## Done when` matches runs.py alone.
+START = (
+    "workflow",
+    "run",
+)
+FIELDS = runs.FIELDS
 GATE_LIST = (
     "run",
     "list",
@@ -259,9 +266,13 @@ GATE_LIST = (
     "--limit",
     "30",
     "--json",
-    "databaseId,headSha,displayTitle,url",
+    FIELDS,
 )
-GATE = ("workflow", "run", merge.WORKFLOW, "-R", REPO, "--ref", "repair/5", "-f", "issue=451", "-f", "base=main")
+GATE = (*START, merge.WORKFLOW, "-R", REPO, "--ref", "repair/5", "-f", "issue=451", "-f", "base=main")
+GATE_VIEW = ("run", "view", "1", "-R", REPO, "--json", "status,conclusion")
+CI = (*START, "ci.yml", "-R", REPO, "--ref", "main")
+# A `createdAt` far in the future, so it is after the `since` of each dispatch.
+NOW = "2100-01-01T00:00:00Z"
 CLOSE = (
     "issue",
     "close",
@@ -339,9 +350,12 @@ class BaseTests(unittest.TestCase):
         )
         return f"The fix.\n\n{traveler.render(ticket)}"
 
-    def run_main(self, *bases, paths=("src/x.cs",), issue=None, red_branch="main"):
+    def run_main(
+        self, *bases, paths=("src/x.cs",), issue=None, red_branch="main", gate=("c" * 40,), env=None, verdicts=None
+    ):
         """The fake after main() ran. Each read of the pull request gives the next base, and the read after the arm
-        gives it merged."""
+        gives it merged. `gate` is the head SHA of the gate run, then each status of it in turn, and its
+        conclusion. `verdicts` are the check runs of judge-verdict in turn, a completed success by default."""
         gh = FakeGitHub()
         merged = self.pull_request("main", state="MERGED", mergeCommit={"oid": MERGE_SHA})
         merged["mergedBy"] = {"login": "github-actions"}
@@ -352,21 +366,23 @@ class BaseTests(unittest.TestCase):
         gh.answer(raw(BASE_SHA), FACTORY_TEXT)
         gh.answer(raw(SHA), FACTORY_TEXT)
         gh.answer(("api", f"repos/{REPO}/actions/runs/9"), {"head_branch": red_branch})
-        gh.answer(VERDICT, {"check_runs": [{"status": "completed", "conclusion": "success"}]})
+        gh.answer(VERDICT, *(verdicts or [{"check_runs": [{"status": "completed", "conclusion": "success"}]}]))
         gh.answer(("api", f"repos/{REPO}/issues/5/comments", "--paginate", "--jq", ".[].body"), "")
         gh.answer(COMMENT, "")
-        gh.answer(GATE_LIST, [], [{"databaseId": 1, "headSha": "c" * 40, "displayTitle": "#451", "url": "u"}])
+        gate_run = {"databaseId": 1, "headSha": gate[0], "displayTitle": "#451", "url": "u", "createdAt": NOW}
+        gh.answer(GATE_LIST, [], [gate_run])
         gh.answer(GATE, "")
+        gh.answer(GATE_VIEW, *[{"status": status, "conclusion": conclusion} for status, conclusion in gate[1:]])
         gh.answer(ARM, "")
-        gh.answer(("workflow", "run", "ci.yml", "-R", REPO, "--ref", "main"), "")
+        gh.answer(CI, "")
         gh.answer(("issue", "view", "5", "-R", REPO, "--json", "state"), {"state": "OPEN"})
         gh.answer(CLOSE, "")
         gh.answer(("api", f"repos/{REPO}/git/matching-refs/heads/repair/5"), [])
-        env = {"REPAIR_ENABLED": "true", "GITHUB_REPOSITORY": REPO, "REPAIR_POLL_SECONDS": "0"}
+        env = {"REPAIR_ENABLED": "true", "GITHUB_REPOSITORY": REPO, "REPAIR_POLL_SECONDS": "0", **(env or {})}
         with (
             mock.patch.dict(os.environ, env),
             mock.patch.object(merge.sys, "argv", ["merge.py", "7", SHA]),
-            mock.patch.object(merge.time, "sleep"),
+            mock.patch.object(runs.time, "sleep"),
         ):
             merge.main(gh)
         return gh
@@ -419,12 +435,40 @@ class BaseTests(unittest.TestCase):
         self.assertIn("is the branch of the red run", text)
         self.assertEqual(gh.count(*VERDICT), 0)
 
-    def test_a_factory_repair_dispatches_the_gate_on_the_story_of_its_traveler(self):
+    def factory_repair(self, *bases, gate, env=None):
         issue = {"body": self.traveler_body(story=451), "labels": [{"name": "factory"}]}
-        gh = self.run_main("main", "main", issue=issue)
+        return self.run_main(*bases, issue=issue, gate=gate, env=env)
+
+    def test_a_factory_repair_dispatches_the_gate_on_the_story_of_its_traveler(self):
+        gh = self.factory_repair("main", "main", gate=("c" * 40,))
         self.assertEqual(self.comments(gh), [])
         self.assertEqual(gh.count(*GATE), 1)
+        self.assertEqual(gh.count(*GATE_VIEW), 0)
         self.assertEqual(gh.count(*ARM), 0)
+
+    def test_a_green_gate_run_on_the_settled_head_arms_the_merge(self):
+        gh = self.factory_repair("main", "main", "main", gate=(SHA, ("queued", ""), ("completed", "success")))
+        self.assertEqual(self.comments(gh), [])
+        self.assertEqual(gh.count(*GATE), 1)
+        self.assertEqual(gh.count(*GATE_VIEW), 2)
+        self.assertEqual(gh.count(*ARM), 1)
+        self.assertEqual(gh.count(*CI), 1)
+        self.assertEqual(gh.count(*CLOSE), 1)
+
+    def test_a_red_gate_run_is_one_comment_and_no_merge(self):
+        gh = self.factory_repair("main", "main", gate=(SHA, ("completed", "failure")))
+        [text] = self.comments(gh)
+        self.assertIn("The gate run u of the story #451", text)
+        self.assertIn("is `failure`", text)
+        self.assertEqual(gh.count(*ARM), 0)
+
+    def test_a_gate_run_in_progress_at_the_timeout_exits_and_arms_no_merge(self):
+        with self.assertRaises(SystemExit) as stop:
+            self.factory_repair(
+                "main", "main", gate=(SHA, ("in_progress", "")), env={"REPAIR_GATE_TIMEOUT_SECONDS": "0"}
+            )
+        self.assertIn("the gate run", stop.exception.code)
+        self.assertIn("after the timeout", stop.exception.code)
 
     def test_a_factory_repair_whose_traveler_names_no_story_is_refused_with_one_comment(self):
         issue = {"body": self.traveler_body(pull_request=3), "labels": [{"name": "factory"}]}
@@ -432,6 +476,27 @@ class BaseTests(unittest.TestCase):
         [text] = self.comments(gh)
         self.assertIn("the traveler of its issue names no story", text)
         self.assertEqual(gh.count(*VERDICT), 0)
+
+    # The wait for judge-verdict, through runs.poll: an absent check and one in progress are waited on.
+    ABSENT = {"check_runs": []}
+    RUNNING = {"check_runs": [{"status": "in_progress", "conclusion": None}]}
+    PASSED = {"check_runs": [{"status": "completed", "conclusion": "success"}]}
+
+    def test_an_absent_then_running_check_is_waited_on_and_the_merge_arms(self):
+        gh = self.run_main("main", "main", "main", verdicts=[self.ABSENT, self.RUNNING, self.PASSED])
+        self.assertEqual(gh.count(*VERDICT), 3)
+        self.assertEqual(self.comments(gh), [])
+        self.assertEqual(gh.count(*ARM), 1)
+
+    def test_an_absent_check_at_the_timeout_exits(self):
+        with self.assertRaises(SystemExit) as stop:
+            self.run_main("main", "main", verdicts=[self.ABSENT], env={"REPAIR_MERGE_TIMEOUT_SECONDS": "0"})
+        self.assertEqual(stop.exception.code, f"repair: {merge.CHECK} on {SHA[:7]} is absent after the timeout")
+
+    def test_a_running_check_at_the_timeout_exits(self):
+        with self.assertRaises(SystemExit) as stop:
+            self.run_main("main", "main", verdicts=[self.RUNNING], env={"REPAIR_MERGE_TIMEOUT_SECONDS": "0"})
+        self.assertEqual(stop.exception.code, f"repair: {merge.CHECK} on {SHA[:7]} is in_progress after the timeout")
 
 
 class WaitForMergeTests(unittest.TestCase):

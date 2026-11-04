@@ -91,7 +91,10 @@ class MainTests(unittest.TestCase):
         gh = fake([("in_progress", "")])
         with self.assertRaises(SystemExit) as stop:
             self.run_main(gh, {"REPAIR_COPILOT_TIMEOUT_SECONDS": "0"})
-        self.assertIsInstance(stop.exception.code, str)
+        self.assertEqual(
+            stop.exception.code,
+            f"repair: the factory run https://github.com/o/r/actions/runs/{RUN} is in_progress after the timeout",
+        )
         self.assertEqual(posted(gh), [])
 
     def test_a_closed_or_unlabeled_pull_request_writes_nothing_and_reads_no_run(self):

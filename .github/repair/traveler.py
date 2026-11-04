@@ -1,5 +1,5 @@
 """The traveler of a repair issue: the block under `## Run` that read.py writes at the end of the issue body, and that
-build.py and merge.py read back in later workflow runs. This module writes it and reads it, and knows only text: it
+build.py and merge.py read back in later jobs. This module writes it and reads it, and knows only text: it
 calls GitHub never. GLOSSARY.md defines the term.
 
 The block has two forms. A factory repair has a line `Story: #<n>`. A plain repair whose red run is on the branch of
