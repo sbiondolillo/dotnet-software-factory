@@ -120,4 +120,4 @@ Feature: The plan phase writes the scenarios and the plan, and the scenarios are
   Scenario: The first prompt asks the plan to name an integration test for each canned answer
     Given the agent on the first run writes the sound feature file and the plan
     When I run the plan phase
-    Then the first prompt holds "For each canned answer that a scenario depends on, name in the plan one test under tests/Integration/ that gets the same answer from the real service."
+    Then the first prompt holds "A test double that gives the exit code and output of a process that the code starts, such as git or docker, also gives a canned answer." and "For each canned answer that a scenario depends on, name in the plan one test under tests/Integration/ that gets the same answer from the real service."

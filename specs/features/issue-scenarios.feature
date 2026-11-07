@@ -139,4 +139,4 @@ Feature: The factory pins the scenarios of an issue as the owner wrote them
   Scenario: The first prompt of an issue with scenarios asks the plan to name an integration test for each canned answer
     Given an issue with ## Scenarios
     When the plan phase runs
-    Then the first prompt holds "For each canned answer that a scenario depends on, name in the plan one test under tests/Integration/ that gets the same answer from the real service."
+    Then the first prompt holds "A test double that gives the exit code and output of a process that the code starts, such as git or docker, also gives a canned answer." and "For each canned answer that a scenario depends on, name in the plan one test under tests/Integration/ that gets the same answer from the real service."

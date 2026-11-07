@@ -38,7 +38,8 @@ public static class RecipeRules
     private const string PlanPath = ".factory/plan.md";
 
     private const string CannedAnswerText =
-        "The build suite answers each call to a service with a canned answer from a stub HttpMessageHandler. ";
+        "The build suite answers each call to a service with a canned answer from a stub HttpMessageHandler. "
+        + "A test double that gives the exit code and output of a process that the code starts, such as git or docker, also gives a canned answer. ";
 
     private const string IntegrationText =
         CannedAnswerText
