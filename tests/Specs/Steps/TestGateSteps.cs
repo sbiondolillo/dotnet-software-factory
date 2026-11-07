@@ -19,9 +19,6 @@ public sealed class TestGateSteps : IDisposable
     [Given("a work tree with {string} pinned")]
     public void GivenAWorkTree(string path) => Assert.True(File.Exists(Path.Combine(_harness.WorkTree.FullName, path)));
 
-    [Given("the sandbox answers every docker command from a mock")]
-    public void GivenMock() => _started = false;
-
     [Given("a passing run")]
     public static void GivenPassing()
     {

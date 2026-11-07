@@ -21,14 +21,15 @@ public sealed class GitSteps(ExceptionState exceptionState, WorkTreeState workTr
     private string[]? _trackedFiles;
     private string? _remoteHead = "unread";
 
-    [Given("a caller has a Git built over a mock of CommandRunner that records every CommandSpec it runs")]
-    public void GivenACallerHasAGitBuiltOverAMockOfCommandRunner()
+    [Given("a caller has a Git")]
+    public void GivenACallerHasAGit()
     {
         _mock = new Mock<CommandRunner>(MockBehavior.Strict);
         _mock.Setup(mock => mock.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
-            .Returns((CommandSpec spec, CancellationToken _) =>
+            .Returns((CommandSpec spec, CancellationToken token) =>
             {
                 _recorded.Add(spec);
+                _recordedTokens.Add(token);
                 string operation = spec.Arguments.Count > 0 ? spec.Arguments[0] : "";
                 if (_throwOnSubcommand.ContainsKey(operation))
                 {
@@ -43,19 +44,6 @@ public sealed class GitSteps(ExceptionState exceptionState, WorkTreeState workTr
         _git = new Git(_mock.Object);
     }
 
-    [Given("a caller has a Git built over a mock of CommandRunner that records the cancellation token each call receives")]
-    public void GivenACallerHasAGitBuiltOverAMockOfCommandRunnerThatRecordsTheCancellationToken()
-    {
-        _mock = new Mock<CommandRunner>(MockBehavior.Strict);
-        _mock.Setup(mock => mock.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
-            .Returns((CommandSpec spec, CancellationToken token) =>
-            {
-                _recordedTokens.Add(token);
-                return Task.FromResult(new CommandResult { ExitCode = 0 });
-            });
-        _git = new Git(_mock.Object);
-    }
-
     [Given("the caller has one cancellation token named {string}")]
     public void GivenTheCallerHasOneCancellationTokenNamed(string name)
     {
@@ -63,8 +51,8 @@ public sealed class GitSteps(ExceptionState exceptionState, WorkTreeState workTr
         _tokens[name] = cts.Token;
     }
 
-    [Given("the mock CommandRunner throws OperationCanceledException when Git runs {string}")]
-    public void GivenTheMockCommandRunnerThrowsOperationCanceledExceptionWhenGitRuns(string subcommand)
+    [Given("the {string} command that Git runs is cancelled")]
+    public void GivenTheCommandThatGitRunsIsCancelled(string subcommand)
         => _throwOnSubcommand[subcommand] = subcommand;
 
     [Given("git answers the head read with exit code {int} and the standard output {string}")]
@@ -269,8 +257,8 @@ public sealed class GitSteps(ExceptionState exceptionState, WorkTreeState workTr
         Assert.Empty(_trackedFiles);
     }
 
-    [Then("every CommandSpec the mock CommandRunner recorded has the program {string}")]
-    public void ThenEveryCommandSpecRecordedHasTheProgram(string program)
+    [Then("every command Git ran has the program {string}")]
+    public void ThenEveryCommandGitRanHasTheProgram(string program)
     {
         Assert.NotEmpty(_recorded);
         Assert.All(_recorded, spec => Assert.Equal(program, spec.Command));
@@ -363,11 +351,11 @@ public sealed class GitSteps(ExceptionState exceptionState, WorkTreeState workTr
     public void ThenGitThrowsAGitCommandExceptionWhoseMessageHolds(string text)
         => ThenGitThrowsAGitCommandExceptionWhoseMessageContains(text);
 
-    [Then("the mock CommandRunner recorded no CommandSpec")]
-    public void ThenTheMockCommandRunnerRecordedNoCommandSpec() => Assert.Empty(_recorded);
+    [Then("Git ran no command")]
+    public void ThenGitRanNoCommand() => Assert.Empty(_recorded);
 
-    [Then("every call the mock CommandRunner recorded received the cancellation token named {string}")]
-    public void ThenEveryCallTheMockCommandRunnerRecordedReceivedTheCancellationTokenNamed(string tokenName)
+    [Then("every command Git ran received the cancellation token named {string}")]
+    public void ThenEveryCommandGitRanReceivedTheCancellationTokenNamed(string tokenName)
     {
         Assert.NotEmpty(_recordedTokens);
         CancellationToken expected = _tokens[tokenName];
@@ -378,8 +366,8 @@ public sealed class GitSteps(ExceptionState exceptionState, WorkTreeState workTr
     public void ThenGitThrowsAnOperationCanceledException()
         => Assert.IsAssignableFrom<OperationCanceledException>(exceptionState.Exception);
 
-    [Then("the mock CommandRunner recorded no {string} command")]
-    public void ThenTheMockCommandRunnerRecordedNoCommand(string subcommand)
+    [Then("Git ran no {string} command")]
+    public void ThenGitRanNoSubcommand(string subcommand)
         => Assert.DoesNotContain(_recorded, spec => spec.Arguments.Count > 0 && spec.Arguments[0] == subcommand);
 
     private async Task RunAsync(Func<Task> action)

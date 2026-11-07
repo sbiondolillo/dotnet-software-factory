@@ -86,7 +86,7 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
             pair => pair.argument == flag && pair.index + 1 < arguments.Count && arguments[pair.index + 1] == value);
     }
 
-    [Given("a Sandbox built over a mock of CommandRunner")]
+    [Given("a Sandbox")]
     public void GivenASandbox() => File.WriteAllText(Path.Combine(_directory.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
 
     [Given("the root directory holds a global.json whose sdk.version is {string}")]

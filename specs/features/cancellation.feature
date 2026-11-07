@@ -19,7 +19,7 @@ Feature: A caller cancels any command the library runs
     Then RunAsync throws an OperationCanceledException
 
   Scenario: One cancellation token passed to a clone, checkout, commit, push, head read and changed-files read reaches every command
-    Given a caller has a Git built over a mock of CommandRunner that records the cancellation token each call receives
+    Given a caller has a Git
     And the caller has one cancellation token named "token-A"
     When Git clones "https://github.com/sbiondolillo/factory-scratch.git" with the token "token-4" into "/tmp/factory-clone-cancel-4" using the cancellation token "token-A"
     And Git checks out the new branch "feature-cancel-4" in "/tmp/factory-clone-cancel-4" using the cancellation token "token-A"
@@ -27,11 +27,11 @@ Feature: A caller cancels any command the library runs
     And Git pushes the branch "feature-cancel-4" from "/tmp/factory-clone-cancel-4" with the token "token-4" using the cancellation token "token-A"
     And Git reads the head SHA in "/tmp/factory-clone-cancel-4" using the cancellation token "token-A"
     And Git lists the files changed since "main" in "/tmp/factory-clone-cancel-4" using the cancellation token "token-A"
-    Then every call the mock CommandRunner recorded received the cancellation token named "token-A"
+    Then every command Git ran received the cancellation token named "token-A"
 
   Scenario: A cancelled add stops the commit before Git runs the commit command
-    Given a caller has a Git built over a mock of CommandRunner that records every CommandSpec it runs
-    And the mock CommandRunner throws OperationCanceledException when Git runs "add"
+    Given a caller has a Git
+    And the "add" command that Git runs is cancelled
     When Git commits all changes in "/tmp/factory-clone-cancel-5" with the message "Update README" and the author name "Ada Lovelace" and the author email "ada@example.com"
     Then Git throws an OperationCanceledException
-    And the mock CommandRunner recorded no "commit" command
+    And Git ran no "commit" command

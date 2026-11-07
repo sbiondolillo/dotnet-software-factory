@@ -92,7 +92,7 @@ public sealed class ClaudeCodeAgentSteps(ExceptionState exceptionState) : IDispo
         }
     }
 
-    [Given("a ClaudeCodeAgent built over a Sandbox over a mock CommandRunner")]
+    [Given("a ClaudeCodeAgent over a Sandbox")]
     public async Task GivenAnAgent() => await AgentAsync();
 
     [Given("docker exec exits with the code {int} and writes to standard output {string}")]
