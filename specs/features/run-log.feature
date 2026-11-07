@@ -67,3 +67,15 @@ Feature: The log of a run shows each call to claude and each gate command with i
     Given the issue has the label "refactor" and a "## Check" and the check exits with the code 1
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
     Then standard error holds the line "command: check exited 1"
+
+  Scenario: Each dotnet command of the gates of a feedback round has a line with its exit code
+    Given every dotnet command in the container exits with the code 0
+    When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10"
+    Then standard error holds these command lines in this order
+      | line                                                                                        |
+      | command: dotnet format --no-restore exited 0                                                |
+      | command: dotnet restore --locked-mode exited 0                                              |
+      | command: dotnet build --no-restore exited 0                                                 |
+      | command: dotnet format --verify-no-changes --no-restore exited 0                            |
+      | command: dotnet test --no-restore --logger trx --results-directory <any> exited 0           |
+      | command: dotnet run --no-restore --project tests/Integration exited 0                       |

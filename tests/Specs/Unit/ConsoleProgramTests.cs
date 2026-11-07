@@ -295,13 +295,15 @@ public sealed class ConsoleProgramTests : IDisposable
     }
 
     [Fact]
-    public async Task TheFeedbackVerbWritesNoAgentAndNoCommandLines()
+    public async Task TheFeedbackVerbWritesAnAgentLineForEachPromptAndACommandLineForEachGateCommand()
     {
         _h.Threads = "always";
         _h.RedBuilds.Add(1);
         await StartAsync($"feedback {Repo} --pr 10 --timeout 0");
-        Assert.NotEmpty(_h.Prompts);
-        Assert.DoesNotContain(ConsoleHarness.Lines(_h.Error), l => l.StartsWith("agent: ", StringComparison.Ordinal) || l.StartsWith("command: ", StringComparison.Ordinal));
+        List<string> lines = [.. ConsoleHarness.Lines(_h.Error)];
+        Assert.Contains("agent: build start", lines);
+        Assert.Contains("agent: review start", lines);
+        Assert.Contains(lines, l => l.StartsWith("command: dotnet test --no-restore", StringComparison.Ordinal) && l.EndsWith(" exited 1", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -340,6 +342,7 @@ public sealed class ConsoleProgramTests : IDisposable
     [Fact]
     public async Task AFeedbackWithNoThreadClonesNothingAndExits0()
     {
+        _h.Threads = "none";
         Assert.Equal(0, await StartAsync($"feedback {Repo} --pr 10"));
         Assert.Empty(_h.CloneDirectories);
         Assert.Contains("checks: green, unresolved threads: 0", ConsoleHarness.Lines(_h.Out));
