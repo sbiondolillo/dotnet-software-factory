@@ -7,7 +7,7 @@ namespace Core;
 public sealed class LintGate(Sandbox sandbox, Git git, TextWriter? log = null)
 {
     /// <summary>The name of the lint in the job summary and the progress lines.</summary>
-    public const string Name = "lint";
+    internal const string Name = "lint";
 
     /// <summary>Formats <paramref name="workTree"/> and commits any change; returns true when a commit was made.</summary>
     public async Task<bool> RunAsync(
