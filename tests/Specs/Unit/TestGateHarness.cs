@@ -47,6 +47,9 @@ internal sealed class TestGateHarness : IDisposable
     /// <summary>The tests the test command writes to a TRX file, or null when it writes none.</summary>
     public List<(string Class, string Method, string Outcome, string? Message)>? Trx { get; set; } = [PassingFeatureTest, PassingUnitTest];
 
+    /// <summary>True when the test command writes a file that is no TRX, so the read of it throws.</summary>
+    public bool BrokenTrx { get; set; }
+
     public List<SeenCommand> Seen { get; } = [];
 
     public int DockerCommands { get; private set; }
@@ -128,7 +131,7 @@ internal sealed class TestGateHarness : IDisposable
             int at = arguments.IndexOf("--results-directory");
             string directory = Path.Combine(WorkTree.FullName, arguments[at + 1]["/work/".Length..]);
             Directory.CreateDirectory(directory);
-            File.WriteAllText(Path.Combine(directory, "this-run.trx"), Steps.TrxBuilder.Build(Trx));
+            File.WriteAllText(Path.Combine(directory, "this-run.trx"), BrokenTrx ? "not a TRX file" : Steps.TrxBuilder.Build(Trx));
         }
 
         return Answers[subcommand];

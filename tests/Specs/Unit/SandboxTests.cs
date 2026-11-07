@@ -147,6 +147,93 @@ public sealed class SandboxTests : IDisposable
     }
 
     [Fact]
+    public async Task ACopyOfTheHeadIsAddedBeforeTheWorkAndRemovedAfterIt()
+    {
+        await using Sandbox sandbox = await StartAsync(Runner(), TestContext.Current.CancellationToken);
+
+        string copy = await sandbox.InCopyOfHeadAsync("api", (path, _) => Task.FromResult(path), TestContext.Current.CancellationToken);
+
+        List<CommandSpec> execs = [.. _recorded.Where(s => s.Arguments[0] is "exec")];
+        Assert.StartsWith("/tmp/api-", copy, StringComparison.Ordinal);
+        Assert.Equal(["exec", Id, "git", "worktree", "add", "--detach", copy, "HEAD"], execs[0].Arguments);
+        Assert.Equal(["exec", Id, "git", "worktree", "remove", "--force", copy], execs[^1].Arguments);
+        Assert.Equal(2, execs.Count);
+    }
+
+    [Fact]
+    public async Task TheWorkRunsInTheCopyAndItsCommandComesBetweenTheAddAndTheRemove()
+    {
+        await using Sandbox sandbox = await StartAsync(Runner(), TestContext.Current.CancellationToken);
+
+        await sandbox.InCopyOfHeadAsync("check", (path, token) => sandbox.RunAsync("sh", ["-c", "true"], [], path, token), TestContext.Current.CancellationToken);
+
+        List<CommandSpec> execs = [.. _recorded.Where(s => s.Arguments[0] is "exec")];
+        Assert.Equal(3, execs.Count);
+        string copy = execs[0].Arguments[^2];
+        Assert.Equal(["exec", "--workdir", copy, Id, "sh", "-c", "true"], execs[1].Arguments);
+        Assert.Equal(["exec", Id, "git", "worktree", "remove", "--force", copy], execs[2].Arguments);
+    }
+
+    [Fact]
+    public async Task TheCopyIsRemovedWhenTheWorkThrowsAndTheThrowReachesTheCaller()
+    {
+        await using Sandbox sandbox = await StartAsync(Runner(), TestContext.Current.CancellationToken);
+
+        InvalidOperationException thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => sandbox.InCopyOfHeadAsync<int>("check", (_, _) => throw new InvalidOperationException("the work broke"), TestContext.Current.CancellationToken));
+
+        Assert.Equal("the work broke", thrown.Message);
+        Assert.Equal(["exec", Id, "git", "worktree", "remove", "--force"], _recorded[^1].Arguments.Take(6));
+    }
+
+    [Fact]
+    public async Task TheRemovalOfTheCopyTakesNoCancellationTokenSoItRunsAfterACancel()
+    {
+        using var cts = new CancellationTokenSource();
+        await using Sandbox sandbox = await StartAsync(Runner(), cts.Token);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => sandbox.InCopyOfHeadAsync<int>(
+            "check",
+            async (_, token) =>
+            {
+                await cts.CancelAsync();
+                token.ThrowIfCancellationRequested();
+                return 0;
+            },
+            cts.Token));
+
+        Assert.Equal(cts.Token, _tokens[^2]);
+        Assert.Equal(["exec", Id, "git", "worktree", "remove", "--force"], _recorded[^1].Arguments.Take(6));
+        Assert.False(_tokens[^1].CanBeCanceled);
+    }
+
+    [Fact]
+    public async Task AnAddThatFailsThrowsWithItsStandardErrorAndRunsNoWork()
+    {
+        var mock = new Mock<CommandRunner>(MockBehavior.Strict);
+        mock.Setup(runner => runner.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
+            .Returns((CommandSpec spec, CancellationToken _) =>
+            {
+                _recorded.Add(spec);
+                return Task.FromResult(spec.Arguments switch
+                {
+                    ["run", ..] => new CommandResult { StandardOutput = Id + "\n" },
+                    ["exec", .., "git", "worktree", "add", "--detach", _, "HEAD"] => new CommandResult { ExitCode = 128, StandardError = "fatal: not a git repository" },
+                    _ => new CommandResult(),
+                });
+            });
+        await using Sandbox sandbox = await StartAsync(mock.Object, TestContext.Current.CancellationToken);
+        bool ran = false;
+
+        SandboxException exception = await Assert.ThrowsAsync<SandboxException>(
+            () => sandbox.InCopyOfHeadAsync("api", (_, _) => { ran = true; return Task.FromResult(0); }, TestContext.Current.CancellationToken));
+
+        Assert.Contains("fatal: not a git repository", exception.Message, StringComparison.Ordinal);
+        Assert.False(ran);
+        Assert.DoesNotContain(_recorded, s => s.Arguments.Contains("remove"));
+    }
+
+    [Fact]
     public async Task ACancelledTokenReachesStartAndExec()
     {
         using var cts = new CancellationTokenSource();

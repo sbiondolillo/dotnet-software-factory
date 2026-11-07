@@ -11,8 +11,8 @@ public sealed class CheckGate(Sandbox sandbox, string command, TextWriter? log =
     /// <summary>Gives <c>green</c> when the command exits with the code 0, and <c>red</c> with its code and both outputs otherwise.</summary>
     public async Task<GateOutcome> RunAsync(CancellationToken cancellationToken = default)
     {
-        CommandResult result = await CleanupGate.RunCheckAsync(sandbox, command, null, cancellationToken, log).ConfigureAwait(false);
-        return result.ExitCode is 0 ? new GateOutcome("green", []) : new GateOutcome("red", [CleanupGate.CheckRedo(result)]);
+        CommandResult result = await RunCheckAsync(sandbox, command, log, cancellationToken).ConfigureAwait(false);
+        return result.ExitCode is 0 ? new GateOutcome("green", []) : new GateOutcome("red", [Redo(result)]);
     }
 
     /// <summary>Runs the check before the first phase of <paramref name="recipe"/>, writes <c>check: start</c> and then
@@ -27,7 +27,8 @@ public sealed class CheckGate(Sandbox sandbox, string command, TextWriter? log =
         TextWriter? log = null,
         CancellationToken cancellationToken = default)
     {
-        CommandResult result = await CleanupGate.RunCheckAsync(sandbox, command, progress, cancellationToken, log).ConfigureAwait(false);
+        await ProgressLine.WriteAsync(progress, "check: start").ConfigureAwait(false);
+        CommandResult result = await RunCheckAsync(sandbox, command, log, cancellationToken).ConfigureAwait(false);
         await ProgressLine.WriteAsync(progress, result.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
         PreCheckWords words = RecipeRules.PreCheck(recipe);
         if (result.ExitCode is 0)
@@ -44,4 +45,22 @@ public sealed class CheckGate(Sandbox sandbox, string command, TextWriter? log =
 
         return null;
     }
+
+    /// <summary>Runs <paramref name="command"/> under <c>sh -c</c> in a copy of the head commit, and logs its exit code. The log
+    /// line names the check and not the command, whose text comes from the issue.</summary>
+    private static Task<CommandResult> RunCheckAsync(Sandbox sandbox, string command, TextWriter? log, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(sandbox);
+        return sandbox.InCopyOfHeadAsync("check", async (copy, token) =>
+        {
+            CommandResult ran = await sandbox.RunAsync("sh", ["-c", command], [], copy, token).ConfigureAwait(false);
+            await ProgressLine.WriteAsync(log, string.Create(CultureInfo.InvariantCulture, $"command: check exited {ran.ExitCode}")).ConfigureAwait(false);
+            return ran;
+        }, cancellationToken);
+    }
+
+    private static string Redo(CommandResult result) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"The check command exited with the code {result.ExitCode}\nstandard output: {result.StandardOutput}\nstandard error: {result.StandardError}");
 }

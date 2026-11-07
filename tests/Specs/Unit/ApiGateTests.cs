@@ -47,6 +47,8 @@ public sealed class ApiGateTests
         GateOutcome outcome = await GateSandbox.RunAsync(gate, Ct);
         Assert.Equal("same", outcome.Result);
         Assert.Empty(outcome.RedoTexts);
+        IReadOnlyList<string> add = Assert.Single(box.Seen, words => words is ["git", "worktree", "add", ..]);
+        Assert.StartsWith("/tmp/api-", add[4], StringComparison.Ordinal);
     }
 
     [Fact]

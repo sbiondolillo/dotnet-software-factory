@@ -52,7 +52,7 @@ public sealed class Sandbox : IAsyncDisposable
         StartAsync(runner, tag, rootDirectory, workTree, [], GateReadOnlyPaths, needsRestore: true, cancellationToken);
 
     /// <summary>A path for a scratch directory named <paramref name="name"/>, outside the work tree, as a command sees it.</summary>
-    internal static string ScratchPath(string name) => $"/tmp/{name}";
+    private static string ScratchPath(string name) => $"/tmp/{name}";
 
     /// <summary>Runs <paramref name="program"/> in the work tree, holding each variable of <paramref name="names"/> by name.</summary>
     public Task<CommandResult> RunAsync(
@@ -89,6 +89,34 @@ public sealed class Sandbox : IAsyncDisposable
         return _runner.RunAsync(
             new CommandSpec { Command = "docker", Arguments = dockerArguments },
             cancellationToken);
+    }
+
+    /// <summary>Adds a detached work tree of the head commit under <c>/tmp</c> in the container, named from
+    /// <paramref name="prefix"/>, runs <paramref name="work"/> with its path, and removes it after, also after a throw. An add
+    /// that exits with a code other than 0 throws <see cref="SandboxException"/> with its standard error, and the work does not
+    /// run.</summary>
+    public async Task<T> InCopyOfHeadAsync<T>(
+        string prefix,
+        Func<string, CancellationToken, Task<T>> work,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        string copy = ScratchPath($"{prefix}-{Guid.NewGuid():N}");
+        CommandResult add = await RunAsync("git", ["worktree", "add", "--detach", copy, "HEAD"], [], cancellationToken).ConfigureAwait(false);
+        if (add.ExitCode is not 0)
+        {
+            throw new SandboxException(add.StandardError);
+        }
+
+        try
+        {
+            return await work(copy, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            // The removal runs after a cancel, so no copy stays in the container.
+            await RunAsync("git", ["worktree", "remove", "--force", copy], [], CancellationToken.None).ConfigureAwait(false);
+        }
     }
 
     /// <summary>Removes the container.</summary>

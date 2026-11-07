@@ -292,6 +292,29 @@ public sealed class TestGateTests : IDisposable
     }
 
     [Fact]
+    public async Task TheResultsDirectoryOfTheBaselineAndOfTheGateIsRemovedFromTheWorkTree()
+    {
+        await _harness.StartAsync(TestContext.Current.CancellationToken);
+        TestGate gate = await TestGate.CreateAsync(
+            _harness.Sandbox!, _harness.WorkTree.FullName, _harness.Pin, [], ["README.md"], cancellationToken: TestContext.Current.CancellationToken);
+        await _harness.RunAsync(gate, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, _harness.Seen.Count(c => c.Subcommand is "test"));
+        Assert.Empty(_harness.WorkTree.EnumerateDirectories(".test-*"));
+    }
+
+    [Fact]
+    public async Task AReadOfTheTrxFileThatThrowsStillRemovesTheResultsDirectory()
+    {
+        _harness.BrokenTrx = true;
+
+        await Assert.ThrowsAsync<TestReportException>(() => RunAsync());
+
+        Assert.Single(_harness.Seen, c => c.Subcommand is "test");
+        Assert.Empty(_harness.WorkTree.EnumerateDirectories(".test-*"));
+    }
+
+    [Fact]
     public async Task TheFactoryWithAScopeReadsTheBaselineFromTheTestsOfTheBase()
     {
         await _harness.StartAsync(TestContext.Current.CancellationToken);

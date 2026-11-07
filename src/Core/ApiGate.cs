@@ -38,20 +38,14 @@ public sealed class ApiGate(Sandbox sandbox, IReadOnlyList<string> baseLines, Te
     }
 
     /// <summary>Builds a detached copy of the head commit and runs the printer over its src/.</summary>
-    public static async Task<ApiListing> ListAsync(Sandbox sandbox, TextWriter? log, CancellationToken cancellationToken = default)
+    public static Task<ApiListing> ListAsync(Sandbox sandbox, TextWriter? log, CancellationToken cancellationToken = default)
     {
-        string copy = Sandbox.ScratchPath($"api-{Guid.NewGuid():N}");
-        CommandResult add = await sandbox.RunAsync("git", ["worktree", "add", "--detach", copy, "HEAD"], [], cancellationToken).ConfigureAwait(false);
-        if (add.ExitCode is not 0)
-        {
-            throw new SandboxException(add.StandardError);
-        }
-
-        try
+        ArgumentNullException.ThrowIfNull(sandbox);
+        return sandbox.InCopyOfHeadAsync("api", async (copy, token) =>
         {
             foreach (string[] arguments in new string[][] { ["restore", "--locked-mode"], ["build", "--no-restore"] })
             {
-                CommandResult result = await RunDotnetAsync(sandbox, arguments, copy, log, cancellationToken).ConfigureAwait(false);
+                CommandResult result = await RunDotnetAsync(sandbox, arguments, copy, log, token).ConfigureAwait(false);
                 if (result.ExitCode is not 0)
                 {
                     return new ApiListing(null, string.Create(
@@ -60,7 +54,7 @@ public sealed class ApiGate(Sandbox sandbox, IReadOnlyList<string> baseLines, Te
                 }
             }
 
-            CommandResult printed = await RunDotnetAsync(sandbox, [Printer, "src"], copy, log, cancellationToken).ConfigureAwait(false);
+            CommandResult printed = await RunDotnetAsync(sandbox, [Printer, "src"], copy, log, token).ConfigureAwait(false);
             if (printed.ExitCode is not 0)
             {
                 return new ApiListing(null, string.Create(
@@ -69,11 +63,7 @@ public sealed class ApiGate(Sandbox sandbox, IReadOnlyList<string> baseLines, Te
             }
 
             return new ApiListing([.. printed.StandardOutput.Split('\n').Where(line => line.Length > 0)], null);
-        }
-        finally
-        {
-            await sandbox.RunAsync("git", ["worktree", "remove", "--force", copy], [], CancellationToken.None).ConfigureAwait(false);
-        }
+        }, cancellationToken);
     }
 
     /// <summary>One text for each line of <paramref name="before"/> that <paramref name="after"/> lacks, then one for each line that is new.</summary>

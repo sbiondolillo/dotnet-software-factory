@@ -48,7 +48,7 @@ public sealed class TestGate(
         }
 
         IReadOnlySet<string> passed = await ReadPassedTestsAsync(sandbox, workTree, log, cancellationToken).ConfigureAwait(false);
-        return new TestGate(sandbox, workTree, pin, secretNames, path => CleanupGate.PinExempt(scope, path), passed, log, skipIntegration);
+        return new TestGate(sandbox, workTree, pin, secretNames, path => PinExempt(scope, path), passed, log, skipIntegration);
     }
 
     /// <summary>Gives <c>failed</c> with one Redo text for each fact that failed the gate, or <c>passed</c>, with one Redo text
@@ -62,7 +62,7 @@ public sealed class TestGate(
             return new GateOutcome("failed", result.Evidence);
         }
 
-        return new GateOutcome("passed", basePassed is null ? [] : CleanupGate.LostTests(basePassed, result));
+        return new GateOutcome("passed", basePassed is null ? [] : LostTests(basePassed, result));
     }
 
     private async Task<TestGateResult> JudgeAsync(CancellationToken cancellationToken)
@@ -93,63 +93,38 @@ public sealed class TestGate(
             }
         }
 
-        string resultsName = ".test-gate-" + Guid.NewGuid().ToString("N");
-        string hostResults = Path.Combine(workTree, resultsName);
+        (CommandResult test, IReadOnlyList<ReportedTest> tests) = await RunTestsAsync(sandbox, workTree, ".test-gate-", log, cancellationToken).ConfigureAwait(false);
         List<string> evidence = [];
-        List<ReportedTest> tests = [];
-        try
+        if (test.ExitCode is not 0)
         {
-            CommandResult test = await RunDotnetAsync(
-                ["test", "--no-restore", "--logger", "trx", "--results-directory", $"{Sandbox.WorkDirectory}/{resultsName}"],
-                [],
-                cancellationToken).ConfigureAwait(false);
-            if (test.ExitCode is not 0)
-            {
-                evidence.Add(Describe("test", test));
-            }
-
-            if (Directory.Exists(hostResults))
-            {
-                foreach (string file in Directory.EnumerateFiles(hostResults, "*.trx").Order(StringComparer.Ordinal))
-                {
-                    tests.AddRange(TestReport.Read(file));
-                }
-            }
-
-            if (test.ExitCode is not 0 && tests.Count is 0)
+            evidence.Add(Describe("test", test));
+            if (tests.Count is 0)
             {
                 return new TestGateResult(false, evidence, tests);
             }
+        }
 
-            foreach (ReportedTest reported in tests)
+        foreach (ReportedTest reported in tests)
+        {
+            if (reported.Outcome is TestOutcome.Failed)
             {
-                if (reported.Outcome is TestOutcome.Failed)
-                {
-                    evidence.Add($"failed test: {reported.ClassName}.{reported.Method}: {reported.Message}");
-                }
-                else if (reported.Outcome is TestOutcome.Skipped)
-                {
-                    evidence.Add($"skipped test: {reported.ClassName}.{reported.Method}");
-                }
+                evidence.Add($"failed test: {reported.ClassName}.{reported.Method}: {reported.Message}");
             }
-
-            foreach ((string path, IReadOnlyList<string> titles) in FeatureFiles.ReadScenarioTitlesFromDirectory(Path.Combine(workTree, "specs", "features")))
+            else if (reported.Outcome is TestOutcome.Skipped)
             {
-                foreach (string title in titles)
-                {
-                    string name = FeatureFiles.ComputeTestName(title);
-                    if (!tests.Any(reported => reported.Method == name))
-                    {
-                        evidence.Add($"no test: specs/features/{path}, scenario \"{title}\", test {name}");
-                    }
-                }
+                evidence.Add($"skipped test: {reported.ClassName}.{reported.Method}");
             }
         }
-        finally
+
+        foreach ((string path, IReadOnlyList<string> titles) in FeatureFiles.ReadScenarioTitlesFromDirectory(Path.Combine(workTree, "specs", "features")))
         {
-            if (Directory.Exists(hostResults))
+            foreach (string title in titles)
             {
-                Directory.Delete(hostResults, recursive: true);
+                string name = FeatureFiles.ComputeTestName(title);
+                if (!tests.Any(reported => reported.Method == name))
+                {
+                    evidence.Add($"no test: specs/features/{path}, scenario \"{title}\", test {name}");
+                }
             }
         }
 
@@ -175,27 +150,40 @@ public sealed class TestGate(
     private static async Task<IReadOnlySet<string>> ReadPassedTestsAsync(Sandbox sandbox, string workTree, TextWriter? log, CancellationToken cancellationToken)
     {
         await RunDotnetAsync(sandbox, log, ["restore", "--locked-mode"], [], cancellationToken).ConfigureAwait(false);
-        string resultsName = ".test-base-" + Guid.NewGuid().ToString("N");
+        (_, IReadOnlyList<ReportedTest> tests) = await RunTestsAsync(sandbox, workTree, ".test-base-", log, cancellationToken).ConfigureAwait(false);
+        return tests.Where(test => test.Outcome is TestOutcome.Passed).Select(test => $"{test.ClassName}.{test.Method}").ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>Runs the tests with a TRX logger into a results directory of its own under the work tree, named from
+    /// <paramref name="prefix"/>, reads each TRX file in it in the order of the names, and removes the directory, also after a
+    /// throw. A run that writes no TRX file gives an empty list.</summary>
+    private static async Task<(CommandResult Run, IReadOnlyList<ReportedTest> Tests)> RunTestsAsync(
+        Sandbox sandbox,
+        string workTree,
+        string prefix,
+        TextWriter? log,
+        CancellationToken cancellationToken)
+    {
+        string resultsName = prefix + Guid.NewGuid().ToString("N");
         string hostResults = Path.Combine(workTree, resultsName);
-        HashSet<string> passed = new(StringComparer.Ordinal);
         try
         {
-            await RunDotnetAsync(
+            CommandResult run = await RunDotnetAsync(
                 sandbox,
                 log,
                 ["test", "--no-restore", "--logger", "trx", "--results-directory", $"{Sandbox.WorkDirectory}/{resultsName}"],
                 [],
                 cancellationToken).ConfigureAwait(false);
+            List<ReportedTest> tests = [];
             if (Directory.Exists(hostResults))
             {
                 foreach (string file in Directory.EnumerateFiles(hostResults, "*.trx").Order(StringComparer.Ordinal))
                 {
-                    foreach (ReportedTest test in TestReport.Read(file).Where(test => test.Outcome is TestOutcome.Passed))
-                    {
-                        passed.Add($"{test.ClassName}.{test.Method}");
-                    }
+                    tests.AddRange(TestReport.Read(file));
                 }
             }
+
+            return (run, tests);
         }
         finally
         {
@@ -204,8 +192,15 @@ public sealed class TestGate(
                 Directory.Delete(hostResults, recursive: true);
             }
         }
+    }
 
-        return passed;
+    private static bool PinExempt(IReadOnlyList<string> scope, string path) =>
+        CleanupBody.InScope(scope, path) && !path.StartsWith("specs/features/", StringComparison.Ordinal);
+
+    private static IReadOnlyList<string> LostTests(IReadOnlySet<string> basePassed, TestGateResult gate)
+    {
+        HashSet<string> nowPassed = [.. (gate.Tests ?? []).Where(test => test.Outcome is TestOutcome.Passed).Select(test => $"{test.ClassName}.{test.Method}")];
+        return [.. basePassed.Where(name => !nowPassed.Contains(name)).Order(StringComparer.Ordinal).Select(name => $"lost test: {name}")];
     }
 
     private Task<CommandResult> RunDotnetAsync(string[] arguments, IReadOnlyList<string> names, CancellationToken cancellationToken) =>
