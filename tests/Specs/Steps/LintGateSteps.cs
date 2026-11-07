@@ -29,7 +29,6 @@ public sealed class LintGateSteps(ExceptionState exceptionState) : IDisposable
     [Given("a LintGate over a Sandbox and a Git")]
     public async Task GivenALintGate()
     {
-        File.WriteAllText(Path.Combine(_directory.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
         var mock = new Mock<CommandRunner>(MockBehavior.Strict);
         mock.Setup(runner => runner.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec spec, CancellationToken _) =>

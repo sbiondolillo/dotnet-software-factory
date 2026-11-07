@@ -87,7 +87,9 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
     }
 
     [Given("a Sandbox")]
-    public void GivenASandbox() => File.WriteAllText(Path.Combine(_directory.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
+    public static void GivenASandbox()
+    {
+    }
 
     [Given("the root directory holds a global.json whose sdk.version is {string}")]
     public void GivenGlobalJson(string version) =>

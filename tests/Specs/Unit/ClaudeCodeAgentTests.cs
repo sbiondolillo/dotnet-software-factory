@@ -41,7 +41,6 @@ public sealed class ClaudeCodeAgentTests : IDisposable
                     _ => new CommandResult(),
                 });
             });
-        File.WriteAllText(Path.Combine(_directory.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
         Sandbox sandbox = await Sandbox.StartAsync(
             mock.Object, "t:1", _directory.FullName, _tree.FullName, TestContext.Current.CancellationToken);
         return new ClaudeCodeAgent(sandbox, _tree.FullName);

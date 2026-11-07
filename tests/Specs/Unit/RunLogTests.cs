@@ -10,9 +10,6 @@ public sealed class RunLogTests : IDisposable
     private readonly List<CommandSpec> _recorded = [];
     private readonly StringWriter _log = new();
 
-    public RunLogTests() =>
-        File.WriteAllText(Path.Combine(_directory.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
-
     public void Dispose() => _directory.Delete(recursive: true);
 
     private string[] Lines => [.. ConsoleHarness.Lines(_log)];

@@ -13,11 +13,8 @@ internal sealed class GateSandbox : IAsyncDisposable
     private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("factory-gate-root-");
     private Sandbox? _sandbox;
 
-    public GateSandbox()
-    {
-        File.WriteAllText(Path.Combine(_root.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
+    public GateSandbox() =>
         WorkTree = Directory.CreateTempSubdirectory("factory-gate-tree-");
-    }
 
     public DirectoryInfo WorkTree { get; }
 

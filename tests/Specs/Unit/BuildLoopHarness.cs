@@ -22,7 +22,6 @@ public sealed class BuildLoopHarness : IAsyncDisposable
 
     public BuildLoopHarness()
     {
-        File.WriteAllText(Path.Combine(_root.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
         Progress = new CancellingWriter(Source);
         Summary = new JobSummary(Progress);
     }

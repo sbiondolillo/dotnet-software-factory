@@ -10,9 +10,6 @@ public sealed class AgentBackendTests : IDisposable
     private readonly DirectoryInfo _tree = Directory.CreateTempSubdirectory("factory-backend-tree-");
     private readonly RefusingHandler _handler = new();
 
-    public AgentBackendTests() =>
-        File.WriteAllText(Path.Combine(_root.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
-
     public void Dispose()
     {
         _handler.Dispose();
