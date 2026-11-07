@@ -21,7 +21,6 @@ public sealed class ManagedBackendHarness : IDisposable
 
     public ManagedBackendHarness()
     {
-        File.WriteAllText(Path.Combine(_root.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
         Api = new ManagedRunFake { OnMessage = (_, _) => Play() };
         Builder = new FakeAgent(_clone.FullName);
         Reviewer = new FakeAgent(_clone.FullName);

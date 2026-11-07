@@ -52,7 +52,6 @@ public sealed class RunHarness : IDisposable
 
     public RunHarness()
     {
-        File.WriteAllText(Path.Combine(_root.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
         SummaryPath = Path.Combine(_files.FullName, "summary.md");
         Builder = new FakeAgent(_clone.FullName) { OnRequest = Seen };
         Reviewer = new FakeAgent(_clone.FullName) { OnRequest = Seen };

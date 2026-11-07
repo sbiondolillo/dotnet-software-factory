@@ -10,9 +10,6 @@ public sealed class LintGateTests : IDisposable
     private readonly List<CommandSpec> _recorded = [];
     private readonly List<CancellationToken> _tokens = [];
 
-    public LintGateTests() =>
-        File.WriteAllText(Path.Combine(_directory.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
-
     public void Dispose() => _directory.Delete(recursive: true);
 
     private async Task<LintGate> GateAsync(

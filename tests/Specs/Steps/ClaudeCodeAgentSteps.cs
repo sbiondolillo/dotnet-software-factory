@@ -65,7 +65,6 @@ public sealed class ClaudeCodeAgentSteps(ExceptionState exceptionState) : IDispo
                         _ => new CommandResult(),
                     });
                 });
-            File.WriteAllText(Path.Combine(_directory.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
             Sandbox sandbox = await Sandbox.StartAsync(
                 mock.Object, "factory-sandbox:test", _directory.FullName, _tree.FullName, TestContext.Current.CancellationToken);
             _agent = new ClaudeCodeAgent(sandbox, _tree.FullName, _log, _time, (elapsed, answer) => _reported.Add((elapsed, answer)));

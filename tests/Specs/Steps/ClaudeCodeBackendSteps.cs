@@ -26,9 +26,6 @@ public sealed class ClaudeCodeBackendSteps : IDisposable
     private AgentBackend? _backend;
     private int _started;
 
-    public ClaudeCodeBackendSteps() =>
-        File.WriteAllText(Path.Combine(_root.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
-
     private AgentBackend Backend => _backend ?? throw new InvalidOperationException("The backend has not started.");
 
     public void Dispose()

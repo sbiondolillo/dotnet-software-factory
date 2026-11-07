@@ -26,7 +26,6 @@ internal sealed class TestGateHarness : IDisposable
     public TestGateHarness(string feature = Feature, string featurePath = "specs/features/checkout.feature")
     {
         WorkTree = Directory.CreateTempSubdirectory("factory-testgate-tree-");
-        File.WriteAllText(Path.Combine(_root.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
         Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(WorkTree.FullName, featurePath))!);
         File.WriteAllText(Path.Combine(WorkTree.FullName, featurePath), feature);
         File.WriteAllText(Path.Combine(WorkTree.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
