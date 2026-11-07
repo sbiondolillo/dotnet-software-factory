@@ -5,7 +5,7 @@ Feature: A sandbox container starts, runs commands on the work tree, and is remo
     And the root directory holds a global.json whose sdk.version is "10.0.100"
     And docker image inspect exits with the code 1
     When a caller starts a sandbox with the image tag "factory-sandbox:test" and the work tree "/tmp/factory-work-tree"
-    Then the runner ran a docker build whose arguments hold "--tag" and then "factory-sandbox:test"
+    Then the Sandbox ran a docker build whose arguments hold "--tag" and then "factory-sandbox:test"
     And the docker build ran before the docker run
 
   Scenario: The container runs as the user id and group id of the caller
@@ -39,7 +39,7 @@ Feature: A sandbox container starts, runs commands on the work tree, and is remo
     And docker run prints a container id of 64 hexadecimal digits and a line feed
     And a caller has started a sandbox
     When a caller runs "dotnet" with the argument "--version" and an empty list of names
-    Then the runner ran a CommandSpec whose program is "docker" and whose first argument is "exec"
+    Then the Sandbox ran a CommandSpec whose program is "docker" and whose first argument is "exec"
     And the last three arguments are the container id with no line feed, "dotnet" and "--version", in that order
 
   Scenario: Each name in the list is passed to docker exec before the container id
@@ -67,7 +67,7 @@ Feature: A sandbox container starts, runs commands on the work tree, and is remo
     Given a Sandbox
     And a caller has started a sandbox
     When a caller disposes the sandbox
-    Then the runner ran a CommandSpec whose program is "docker" and whose arguments are "rm", "--force" and the container id, in that order
+    Then the Sandbox ran a CommandSpec whose program is "docker" and whose arguments are "rm", "--force" and the container id, in that order
 
   Scenario: The git directory of the work tree is mounted read-only
     Given a Sandbox
@@ -140,7 +140,7 @@ Feature: A sandbox container starts, runs commands on the work tree, and is remo
     And a work tree in a new directory that holds a symlink "<link>"
     When a caller starts a sandbox for the gates with the image tag "factory-sandbox:test" over that work tree
     Then the start throws a SandboxException whose message holds "<link>"
-    And the runner ran no docker run
+    And the Sandbox ran no docker run
 
     Examples:
       | link     |

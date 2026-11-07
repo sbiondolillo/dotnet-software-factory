@@ -46,7 +46,7 @@ Feature: ClaudeCodeAgent runs one prompt in the sandbox and reads the outputs th
     When a caller runs a prompt of 131072 characters, each one the letter "a", with the model "claude-haiku-4-5-20251001" and the turn limit 1
     Then the run throws ClaudeCodeException
     And the exception message holds "131071"
-    And the runner runs no docker exec
+    And ClaudeCodeAgent ran no docker exec
 
   Scenario: A named output that the prompt writes comes back as its text
     Given a ClaudeCodeAgent over a Sandbox
