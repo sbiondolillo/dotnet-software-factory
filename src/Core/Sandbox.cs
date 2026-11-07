@@ -91,6 +91,34 @@ public sealed class Sandbox : IAsyncDisposable
             cancellationToken);
     }
 
+    /// <summary>Adds a detached work tree of the head commit under <c>/tmp</c> in the container, named from
+    /// <paramref name="prefix"/>, runs <paramref name="work"/> with its path, and removes it after, also after a throw. An add
+    /// that exits with a code other than 0 throws <see cref="SandboxException"/> with its standard error, and the work does not
+    /// run.</summary>
+    public async Task<T> InCopyOfHeadAsync<T>(
+        string prefix,
+        Func<string, CancellationToken, Task<T>> work,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        string copy = ScratchPath($"{prefix}-{Guid.NewGuid():N}");
+        CommandResult add = await RunAsync("git", ["worktree", "add", "--detach", copy, "HEAD"], [], cancellationToken).ConfigureAwait(false);
+        if (add.ExitCode is not 0)
+        {
+            throw new SandboxException(add.StandardError);
+        }
+
+        try
+        {
+            return await work(copy, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            // The removal runs after a cancel, so no copy stays in the container.
+            await RunAsync("git", ["worktree", "remove", "--force", copy], [], CancellationToken.None).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>Removes the container.</summary>
     public async ValueTask DisposeAsync() =>
         await _runner.RunAsync(

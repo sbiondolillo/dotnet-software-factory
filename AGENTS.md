@@ -185,6 +185,9 @@ reach a message, a comment or a session keeps to a read-only path and refuses a 
   `git add`, `git commit` and each write to a hook or to `.git/config` fail with
   `Read-only file system`. `Sandbox` creates `.git/worktrees` before `docker run`, which
   makes a missing source owned by root.
+- A copy of the head commit is `Sandbox.InCopyOfHeadAsync`. It adds a detached work tree
+  under `/tmp` in the container, runs the work with its path, and removes it after, also
+  after a throw. The API gate and the check run in such a copy.
 
 ## Claude Code
 
