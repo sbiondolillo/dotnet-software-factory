@@ -139,6 +139,9 @@ public sealed class PlanPhaseSteps(IssueState issue) : IDisposable
     [Then("the first prompt holds {string}, {string}, {string} and {string}")]
     public void ThenFirstHolds(string a, string b, string c, string d) => AssertHolds(Prompts[0], a, b, c, d);
 
+    [Then("the first prompt holds {string} and {string}")]
+    public void ThenFirstHoldsTwo(string a, string b) => AssertHolds(Prompts[0], a, b);
+
     [Then("the first prompt holds {string}")]
     public void ThenFirstHoldsOne(string a) => AssertHolds(Prompts[0], a);
 

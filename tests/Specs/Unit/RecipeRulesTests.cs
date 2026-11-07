@@ -233,6 +233,7 @@ public sealed class RecipeRulesTests
             Assert.StartsWith("1. Read every feature file under specs/features/", steps, StringComparison.Ordinal);
             Assert.Contains("and judge whether the tests cover what each scenario names. ", steps, StringComparison.Ordinal);
             Assert.Contains("The build suite answers each call to a service with a canned answer from a stub HttpMessageHandler. ", steps, StringComparison.Ordinal);
+            Assert.Contains("A test double that gives the exit code and output of a process that the code starts, such as git or docker, also gives a canned answer. ", steps, StringComparison.Ordinal);
             Assert.Contains("Block an edit to the text of an existing scenario or to the body of an existing test method", steps, StringComparison.Ordinal);
             Assert.EndsWith("New steps, state of a step class moved into a shared class, and new helpers pass.\n", steps, StringComparison.Ordinal);
         }
