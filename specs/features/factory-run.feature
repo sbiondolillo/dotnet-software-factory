@@ -164,3 +164,7 @@ Feature: Factory run
   Scenario: Every dotnet command of the run goes through docker exec in the container of the backend
     When a caller starts a run
     Then every dotnet command of the run goes through docker exec
+
+  Scenario: The run hands the backend the session branch of the run, the head of the clone and the title of the issue
+    When a caller starts a run
+    Then the run hands the backend the session branch "factory/a1b2c3d4-session", the base commit "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c" and the title "Add a checkout total"

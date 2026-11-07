@@ -150,6 +150,10 @@ Feature: A feedback run answers every unresolved review thread
     Then the backend collects onto "factory/a1b2c3d4" before git pushes "factory/a1b2c3d4"
     And git pushes the head branch "factory/a1b2c3d4" once, before FeedbackRun adds the first reply
 
+  Scenario: The feedback run hands the backend the session branch of the head branch, the head commit and its title
+    When a caller starts a feedback run
+    Then the run hands the backend the session branch "factory/a1b2c3d4-session", the base commit "c7d1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293" and the title "Answer the review threads of pull request #10"
+
   Scenario: A stop of the session branch posts its text on the pull request and resolves no thread
     Given the builder stops the run on the first build with the text "The session committed files under .factory/, which only the factory writes: .factory/threads.json. The run stops."
     When a caller starts a feedback run

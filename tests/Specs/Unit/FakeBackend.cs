@@ -6,7 +6,8 @@ namespace Specs.Unit;
 /// The one test double of <see cref="AgentBackend"/>, for a test whose unit is the run. Its builder and its reviewer are two
 /// <see cref="FakeAgent"/>s, so a run test scripts the agents by phase and starts no <c>claude</c>. Its sandbox of the gates is a
 /// real <see cref="Core.Sandbox"/> over the harness's mock runner. Its <see cref="Sessions"/> list is the one a test gives, empty by
-/// default, and its collect step does nothing. Each answer goes to the run's <see cref="BackendStart.OnAnswer"/> with the time it
+/// default, and its collect step does nothing. It hands each <see cref="BackendStart"/> it gets to its caller, so a run test reads the session
+/// branch, the base commit and the title the run hands the backend. Each answer goes to the run's <see cref="BackendStart.OnAnswer"/> with the time it
 /// took on the run's clock. What an adapter does below the seam, such as a progress line or a git command, it does not do: a test
 /// of an adapter drives that adapter alone.
 /// </summary>
@@ -37,8 +38,9 @@ public sealed class FakeBackend : AgentBackend
     public override IReadOnlyList<SessionCost> Sessions => _sessions;
 
     /// <summary>The start of a backend whose agents are <paramref name="builder"/> and <paramref name="reviewer"/>, over a sandbox
-    /// that <paramref name="runner"/> starts over the clone. <paramref name="onStep"/> gets <c>collect</c> and the branch at each
-    /// collect step, and <c>end</c> at the disposal, so a run test reads their order against the run's own commands.</summary>
+    /// that <paramref name="runner"/> starts over the clone. <paramref name="onStart"/> gets the <see cref="BackendStart"/> of the
+    /// run. <paramref name="onStep"/> gets <c>collect</c> and the branch at each collect step, so a run test reads its order against
+    /// the run's own commands.</summary>
     public static StartBackend Starter(
         CommandRunner runner,
         string imageTag,
@@ -47,10 +49,12 @@ public sealed class FakeBackend : AgentBackend
         FakeAgent reviewer,
         IReadOnlyList<SessionCost>? sessions = null,
         TimeProvider? time = null,
-        Action<string>? onStep = null) =>
+        Action<string>? onStep = null,
+        Action<BackendStart>? onStart = null) =>
         async (start, cancellationToken) =>
         {
             ArgumentNullException.ThrowIfNull(start);
+            onStart?.Invoke(start);
             Sandbox sandbox = await Sandbox.StartAsync(runner, imageTag, rootDirectory, start.Directory, cancellationToken);
             TimeProvider clock = time ?? TimeProvider.System;
             return new FakeBackend(
@@ -64,12 +68,8 @@ public sealed class FakeBackend : AgentBackend
         return Task.CompletedTask;
     }
 
-    /// <summary>Tells <c>onStep</c>, and removes the sandbox.</summary>
-    public override ValueTask DisposeAsync()
-    {
-        _onStep?.Invoke("end");
-        return Sandbox.DisposeAsync();
-    }
+    /// <summary>Removes the sandbox.</summary>
+    public override ValueTask DisposeAsync() => Sandbox.DisposeAsync();
 
     /// <summary>The builder or the reviewer of the backend: the fake, timed on the run's clock, with each answer reported.</summary>
     private sealed class Role(FakeAgent fake, Action<TimeSpan, AgentAnswer>? onAnswer, TimeProvider clock) : Agent

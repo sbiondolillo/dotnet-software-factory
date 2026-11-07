@@ -7,7 +7,7 @@ namespace Specs.Unit;
 
 /// <summary>
 /// A <see cref="ManagedBackend"/> alone, as a run drives it through the seam: its start, the prompts of its builder and its reviewer,
-/// its collect step and its end. Below it, a mock <see cref="CommandRunner"/> answers git and docker, and <see cref="ManagedRunFake"/>
+/// its collect step and its end. It starts through <see cref="AgentBackend.Pick"/>, as the program starts it. Below it, a mock <see cref="CommandRunner"/> answers git and docker, and <see cref="ManagedRunFake"/>
 /// answers the Managed Agents API and the token routes of the GitHub App. The two <see cref="FakeAgent"/>s play the agents of the
 /// sessions: the request that a test sends is pending on its fake while the adapter carries it to the fake API.
 /// </summary>
@@ -36,9 +36,9 @@ public sealed class ManagedBackendHarness : IDisposable
     /// <summary>The agent of the reviewer's session.</summary>
     public FakeAgent Reviewer { get; }
 
-    public string BaseCommit { get; set; } = "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c";
+    private const string BaseCommit = "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c";
 
-    public string Title { get; set; } = "Add a checkout total";
+    private const string Title = "Add a checkout total";
 
     /// <summary>True when git reports a change in the work tree.</summary>
     public bool WorkTreeChanged { get; set; }
@@ -71,9 +71,9 @@ public sealed class ManagedBackendHarness : IDisposable
         var mock = new Mock<CommandRunner>(MockBehavior.Strict);
         mock.Setup(r => r.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec spec, CancellationToken _) => Task.FromResult(Answer(spec)));
-        StartBackend start = ManagedBackend.Starter(
+        StartBackend start = AgentBackend.Pick(new BackendOptions(
             mock.Object, "factory-sandbox:test", _root.FullName, ManagedRunFake.Settings(), "sbiondolillo", "factory-scratch", "token",
-            "Factory", "factory@example.com", new Handler(this), (_, _) => Task.CompletedTask, progress: Progress);
+            "Factory", "factory@example.com", new Handler(this), (_, _) => Task.CompletedTask, Progress: Progress));
         var git = new Git(mock.Object);
         _backend = await start(
             new BackendStart(git, _clone.FullName, BaseCommit, SessionBranch, Title, (elapsed, answer) => Reported.Add((elapsed, answer))),

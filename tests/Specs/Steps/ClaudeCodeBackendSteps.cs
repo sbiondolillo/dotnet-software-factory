@@ -8,7 +8,8 @@ using Xunit;
 namespace Specs.Steps;
 
 /// <summary>A <see cref="ClaudeCodeBackend"/> alone, as a run drives it through the seam, over a mock runner that answers
-/// <c>docker</c> and each <c>claude</c> command with one JSON answer.</summary>
+/// <c>docker</c> and each <c>claude</c> command with one JSON answer. It starts through <see cref="AgentBackend.Pick"/>, as the
+/// program starts it.</summary>
 [Binding]
 public sealed class ClaudeCodeBackendSteps : IDisposable
 {
@@ -18,6 +19,7 @@ public sealed class ClaudeCodeBackendSteps : IDisposable
     private readonly List<string> _progressAtCommand = [];
     private readonly List<(TimeSpan Elapsed, AgentAnswer Answer)> _reported = [];
     private readonly StringWriter _progress = new();
+    private readonly StringWriter _log = new();
     private string _answer = """{"is_error":false,"num_turns":1,"total_cost_usd":0,"result":"done"}""";
     private AgentBackend? _backend;
     private int _started;
@@ -30,6 +32,7 @@ public sealed class ClaudeCodeBackendSteps : IDisposable
     public void Dispose()
     {
         _progress.Dispose();
+        _log.Dispose();
         _root.Delete(recursive: true);
         _clone.Delete(recursive: true);
     }
@@ -49,7 +52,9 @@ public sealed class ClaudeCodeBackendSteps : IDisposable
         var mock = new Mock<CommandRunner>(MockBehavior.Strict);
         mock.Setup(r => r.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec spec, CancellationToken _) => Task.FromResult(Answer(spec)));
-        StartBackend start = ClaudeCodeBackend.Starter(mock.Object, "factory-sandbox:test", _root.FullName, progress: _progress);
+        StartBackend start = AgentBackend.Pick(new BackendOptions(
+            mock.Object, "factory-sandbox:test", _root.FullName, null, "sbiondolillo", "factory-scratch", "token", "Factory", "factory@example.com",
+            Log: _log, Progress: _progress));
         _backend = await start(
             new BackendStart(new Git(mock.Object), _clone.FullName, "base", "factory/a1b2c3d4-session", "Title", (elapsed, answer) => _reported.Add((elapsed, answer))),
             TestContext.Current.CancellationToken);
@@ -102,6 +107,9 @@ public sealed class ClaudeCodeBackendSteps : IDisposable
         Assert.Equal(count, _reported.Count);
         Assert.All(_reported, r => Assert.Equal((turns, cost), (r.Answer.NumTurns, r.Answer.CostUsd)));
     }
+
+    [Then("the log of the Claude Code backend holds the line {string}")]
+    public void ThenLog(string line) => Assert.Contains(line, _log.ToString().Split(Environment.NewLine));
 
     [Then("the Claude Code backend ran no command after its start")]
     public void ThenNoCommand() => Assert.Equal(_started, _commands.Count);

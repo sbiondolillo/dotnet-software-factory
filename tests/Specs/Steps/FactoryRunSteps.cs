@@ -319,7 +319,16 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     public void ThenDotnetInContainer()
     {
         Assert.DoesNotContain(Commands, c => c.Command is "dotnet");
-        Assert.Contains(Commands, c => c.Command is "docker" && c.Arguments[0] is "exec" && c.Arguments.Contains("dotnet"));
+        List<CommandSpec> dotnet = [.. Commands.Where(c => c.Command is "docker" && c.Arguments[0] is "exec" && c.Arguments.Contains("dotnet"))];
+        Assert.NotEmpty(dotnet);
+        Assert.All(dotnet, c => Assert.Equal(GateSandbox.ContainerId, c.Arguments[c.Arguments.ToList().IndexOf("dotnet") - 1]));
+    }
+
+    [Then("the run hands the backend the session branch {string}, the base commit {string} and the title {string}")]
+    public void ThenStarted(string branch, string baseCommit, string title)
+    {
+        BackendStart start = Assert.IsType<BackendStart>(_h.Started);
+        Assert.Equal((branch, baseCommit, title), (start.ScratchBranch, start.BaseCommit, start.Title));
     }
 
     [Then("the run runs no command in the container")]

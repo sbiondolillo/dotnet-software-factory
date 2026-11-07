@@ -253,6 +253,9 @@ public sealed class RunHarness : IDisposable
     /// <summary>The sessions the fake backend gives the job summary.</summary>
     public List<SessionCost> Sessions { get; } = [];
 
+    /// <summary>What the run handed the fake backend at its start, or null before the start.</summary>
+    public BackendStart? Started { get; private set; }
+
     // What the run did.
 
     public string CloneDirectory => _clone.FullName;
@@ -277,7 +280,7 @@ public sealed class RunHarness : IDisposable
     public List<CommandSpec> Commands { get; } = [];
 
     /// <summary>Each git command, as its words, each command in the container, as <c>exec</c> and its words, each prompt, as
-    /// <c>prompt</c> and its phase, and each step of the backend, as <c>collect</c> and the branch or as <c>end</c>, in order.</summary>
+    /// <c>prompt</c> and its phase, and each collect step of the backend, as <c>collect</c> and the branch, in order.</summary>
     public List<string> Timeline { get; } = [];
 
     /// <summary>The order in which pushes, comments, prompts, test commands, replies, resolves and container removals happened.</summary>
@@ -420,7 +423,7 @@ public sealed class RunHarness : IDisposable
         mock.Setup(r => r.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec spec, CancellationToken _) => Task.FromResult(Answer(spec)));
         var client = new GitHubClient(new HttpClient(new Handler(this)), Token, TimeSpan.Zero);
-        StartBackend backend = FakeBackend.Starter(mock.Object, "factory-sandbox:test", _root.FullName, Builder, Reviewer, Sessions, Clock, Timeline.Add);
+        StartBackend backend = FakeBackend.Starter(mock.Object, "factory-sandbox:test", _root.FullName, Builder, Reviewer, Sessions, Clock, Timeline.Add, start => Started = start);
         return (mock, client, backend);
     }
 

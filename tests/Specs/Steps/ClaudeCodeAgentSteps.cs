@@ -60,7 +60,7 @@ public sealed class ClaudeCodeAgentSteps(ExceptionState exceptionState) : IDispo
                     _recorded.Add(spec);
                     return Task.FromResult(spec.Arguments[0] switch
                     {
-                        "run" => new CommandResult { StandardOutput = "0123456789abcdef\n" },
+                        "run" => new CommandResult { StandardOutput = GateSandbox.ContainerId + "\n" },
                         "exec" => Exec(),
                         _ => new CommandResult(),
                     });
@@ -166,7 +166,7 @@ public sealed class ClaudeCodeAgentSteps(ExceptionState exceptionState) : IDispo
     public void ThenArguments(string program, string p, string prompt, string modelFlag, string model, string turnsFlag, string turns)
     {
         List<string> args = ExecArguments();
-        Assert.Equal("0123456789abcdef", args[1]);
+        Assert.Equal(GateSandbox.ContainerId, args[1]);
         Assert.Equal([program, p, prompt, modelFlag, model, turnsFlag, turns], args.Skip(2).Take(7));
     }
 

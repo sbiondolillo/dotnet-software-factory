@@ -84,9 +84,6 @@ public sealed class ConsoleHarness : IDisposable
     /// <summary>Each request of either agent, in order.</summary>
     public List<AgentRequest> AgentRequests { get; } = [];
 
-    /// <summary>The sessions that the fake backend of each run gives the job summary and the pull request body.</summary>
-    public List<SessionCost> Sessions { get; } = [];
-
     /// <summary>The number of build prompts so far, over every run of the program.</summary>
     public int Builds => Builder.Of(Phase.Build).Count();
 
@@ -248,7 +245,7 @@ public sealed class ConsoleHarness : IDisposable
     private StartBackend Backend(BackendOptions options)
     {
         BackendOptions.Add(options);
-        return FakeBackend.Starter(options.Runner, options.ImageTag, options.RootDirectory, Builder, Reviewer, Sessions, options.Time);
+        return FakeBackend.Starter(options.Runner, options.ImageTag, options.RootDirectory, Builder, Reviewer, time: options.Time);
     }
 
     private void Seen(AgentRequest request)

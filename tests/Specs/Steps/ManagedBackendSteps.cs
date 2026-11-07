@@ -167,6 +167,13 @@ public sealed class ManagedBackendSteps : IDisposable
     public void ThenBudget(string role, int cents) =>
         Assert.Equal(cents.ToString(CultureInfo.InvariantCulture), Assert.Single(_h.Api.Sessions, s => s.Role == role).BudgetCents);
 
+    [Then("each session mounts the repository {string}")]
+    public void ThenRepository(string url)
+    {
+        Assert.NotEmpty(_h.Api.Sessions);
+        Assert.All(_h.Api.Sessions, s => Assert.Equal(url, s.RepositoryUrl));
+    }
+
     [Then("the last two git commands check out {string} and pull the session branch into it")]
     public void ThenCollected(string branch)
     {

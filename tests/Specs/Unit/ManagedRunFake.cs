@@ -22,6 +22,9 @@ public sealed class FakeSession(string id, string model)
     /// <summary>The amount of the budget of the session, in cents as the body writes it.</summary>
     public string BudgetCents { get; init; } = "";
 
+    /// <summary>The URL of the GitHub repository that the session mounts.</summary>
+    public string RepositoryUrl { get; init; } = "";
+
     public List<JsonObject> Events { get; } = [];
 
     public int Cents { get; set; }
@@ -192,6 +195,7 @@ public sealed class ManagedRunFake
         {
             Role = body["metadata"]?["role"]?.GetValue<string>() ?? "",
             BudgetCents = body["budget"]?["max_list_cost"]?["amount"]?.GetValue<string>() ?? "",
+            RepositoryUrl = body["resources"]?.AsArray().FirstOrDefault(r => r?["type"]?.GetValue<string>() is "github_repository")?["url"]?.GetValue<string>() ?? "",
         };
         Sessions.Add(session);
         string answer = SessionJson(session, "running");

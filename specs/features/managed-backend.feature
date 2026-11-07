@@ -77,6 +77,12 @@ Feature: ManagedBackend runs the builder and the reviewer as two sessions over a
     Then the session of the builder starts with a budget of 1500 cents
     And the session of the reviewer starts with a budget of 300 cents
 
+  Scenario: Each session mounts the repository of the run
+    When the backend starts
+    And the builder answers a plan prompt
+    And the reviewer answers a review prompt
+    Then each session mounts the repository "https://github.com/sbiondolillo/factory-scratch"
+
   Scenario: The collect step checks out the branch and pulls the session branch into it
     When the backend starts
     And the builder answers a build prompt

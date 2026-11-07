@@ -18,6 +18,7 @@ Feature: ClaudeCodeBackend runs the builder and the reviewer as one agent in one
     And its reviewer answers a review prompt
     Then each prompt ran claude through docker exec in the container of the gates
     And the Claude Code backend reported 2 answers, each of 7 turns and the cost 0.4213 dollars
+    And the log of the Claude Code backend holds the line "agent: plan start"
 
   Scenario: The collect step runs no command
     When the Claude Code backend starts
