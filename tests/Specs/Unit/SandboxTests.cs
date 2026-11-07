@@ -153,7 +153,7 @@ public sealed class SandboxTests : IDisposable
 
         string copy = await sandbox.InCopyOfHeadAsync("api", (path, _) => Task.FromResult(path), TestContext.Current.CancellationToken);
 
-        List<CommandSpec> execs = [.. _recorded.Where(s => s.Arguments[0] == "exec")];
+        List<CommandSpec> execs = [.. _recorded.Where(s => s.Arguments[0] is "exec")];
         Assert.StartsWith("/tmp/api-", copy, StringComparison.Ordinal);
         Assert.Equal(["exec", Id, "git", "worktree", "add", "--detach", copy, "HEAD"], execs[0].Arguments);
         Assert.Equal(["exec", Id, "git", "worktree", "remove", "--force", copy], execs[^1].Arguments);
@@ -167,7 +167,7 @@ public sealed class SandboxTests : IDisposable
 
         await sandbox.InCopyOfHeadAsync("check", (path, token) => sandbox.RunAsync("sh", ["-c", "true"], [], path, token), TestContext.Current.CancellationToken);
 
-        List<CommandSpec> execs = [.. _recorded.Where(s => s.Arguments[0] == "exec")];
+        List<CommandSpec> execs = [.. _recorded.Where(s => s.Arguments[0] is "exec")];
         Assert.Equal(3, execs.Count);
         string copy = execs[0].Arguments[^2];
         Assert.Equal(["exec", "--workdir", copy, Id, "sh", "-c", "true"], execs[1].Arguments);
@@ -184,6 +184,27 @@ public sealed class SandboxTests : IDisposable
 
         Assert.Equal("the work broke", thrown.Message);
         Assert.Equal(["exec", Id, "git", "worktree", "remove", "--force"], _recorded[^1].Arguments.Take(6));
+    }
+
+    [Fact]
+    public async Task TheRemovalOfTheCopyTakesNoCancellationTokenSoItRunsAfterACancel()
+    {
+        using var cts = new CancellationTokenSource();
+        await using Sandbox sandbox = await StartAsync(Runner(), cts.Token);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => sandbox.InCopyOfHeadAsync<int>(
+            "check",
+            async (_, token) =>
+            {
+                await cts.CancelAsync();
+                token.ThrowIfCancellationRequested();
+                return 0;
+            },
+            cts.Token));
+
+        Assert.Equal(cts.Token, _tokens[^2]);
+        Assert.Equal(["exec", Id, "git", "worktree", "remove", "--force"], _recorded[^1].Arguments.Take(6));
+        Assert.False(_tokens[^1].CanBeCanceled);
     }
 
     [Fact]

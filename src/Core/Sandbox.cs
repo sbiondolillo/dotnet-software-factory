@@ -52,7 +52,7 @@ public sealed class Sandbox : IAsyncDisposable
         StartAsync(runner, tag, rootDirectory, workTree, [], GateReadOnlyPaths, needsRestore: true, cancellationToken);
 
     /// <summary>A path for a scratch directory named <paramref name="name"/>, outside the work tree, as a command sees it.</summary>
-    internal static string ScratchPath(string name) => $"/tmp/{name}";
+    private static string ScratchPath(string name) => $"/tmp/{name}";
 
     /// <summary>Runs <paramref name="program"/> in the work tree, holding each variable of <paramref name="names"/> by name.</summary>
     public Task<CommandResult> RunAsync(
