@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 using Core;
-using Moq;
 using Reqnroll;
 using Xunit;
 
@@ -15,15 +14,12 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState, ConsoleSta
 
     private readonly CommandRunner _runner = new();
     private readonly Dictionary<string, string> _extraEnvironment = [];
-    private Mock<CommandRunner>? _mock;
 
     private string? _command;
     private string[] _arguments = [];
     private string? _workingDirectory;
     private TimeSpan? _timeout;
     private CommandResult? _result;
-    private CommandResult? _mockResult;
-    private string? _mockedCommand;
     private Task<CommandResult>? _leftRunningTask;
 
     [Given(@"^the command is (""[^""]*""|'[^']*')$")]
@@ -55,14 +51,6 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState, ConsoleSta
 
     [Given("the timeout is {int} seconds")]
     public void GivenTheTimeoutIs(int seconds) => _timeout = TimeSpan.FromSeconds(seconds);
-
-    [Given("a caller receives a mock of CommandRunner")]
-    public void GivenACallerReceivesAMockOfCommandRunner() => _mock = new Mock<CommandRunner>(MockBehavior.Strict);
-
-    [Given("the mock returns a CommandResult with exit code {int} and standard output {string}")]
-    public void GivenTheMockReturns(int exitCode, string standardOutput)
-        => _mock!.Setup(mock => mock.RunAsync(It.IsAny<CommandSpec>()))
-            .ReturnsAsync(new CommandResult { ExitCode = exitCode, StandardOutput = standardOutput });
 
     [When("I run the command")]
     public async Task WhenIRunTheCommand()
@@ -147,13 +135,6 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState, ConsoleSta
         Timeout = _timeout,
     };
 
-    [When("the caller asks the mock to run {string}")]
-    public async Task WhenTheCallerAsksTheMockToRun(string command)
-    {
-        _mockedCommand = command;
-        _mockResult = await _mock!.Object.RunAsync(new CommandSpec { Command = command });
-    }
-
     [Then("the exit code is {int}")]
     public void ThenTheExitCodeIs(int expected)
     {
@@ -216,23 +197,6 @@ public sealed class CommandRunnerSteps(ExceptionState exceptionState, ConsoleSta
 
     [Then("the {string} program is no longer running")]
     public static Task ThenTheProgramIsNoLongerRunning(string program) => ProcessScan.AssertGoneAsync(program.Split(' '));
-
-    [Then("no program was started")]
-    public Task ThenNoProgramWasStarted() => ProcessScan.AssertGoneAsync((_mockedCommand ?? string.Empty).Split(' '));
-
-    [Then("the caller sees the exit code {int}")]
-    public void ThenTheCallerSeesTheExitCode(int expected)
-    {
-        Assert.NotNull(_mockResult);
-        Assert.Equal(expected, _mockResult.ExitCode);
-    }
-
-    [Then("the caller sees the standard output {string}")]
-    public void ThenTheCallerSeesTheStandardOutput(string expected)
-    {
-        Assert.NotNull(_mockResult);
-        Assert.Equal(expected, _mockResult.StandardOutput);
-    }
 
     private string StandardOutput()
     {

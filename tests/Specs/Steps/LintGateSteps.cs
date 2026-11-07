@@ -26,7 +26,7 @@ public sealed class LintGateSteps(ExceptionState exceptionState) : IDisposable
         _directory.Delete(recursive: true);
     }
 
-    [Given("a LintGate built over a Sandbox and a Git over a mock CommandRunner")]
+    [Given("a LintGate over a Sandbox and a Git")]
     public async Task GivenALintGate()
     {
         File.WriteAllText(Path.Combine(_directory.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
@@ -50,7 +50,7 @@ public sealed class LintGateSteps(ExceptionState exceptionState) : IDisposable
         _recorded.Clear();
     }
 
-    [Given("a Git built over a mock CommandRunner")]
+    [Given("a Git")]
     public void GivenAGit()
     {
         var mock = new Mock<CommandRunner>(MockBehavior.Strict);

@@ -92,7 +92,7 @@ public sealed class ClaudeCodeAgentSteps(ExceptionState exceptionState) : IDispo
         }
     }
 
-    [Given("a ClaudeCodeAgent built over a Sandbox over a mock CommandRunner")]
+    [Given("a ClaudeCodeAgent over a Sandbox")]
     public async Task GivenAnAgent() => await AgentAsync();
 
     [Given("docker exec exits with the code {int} and writes to standard output {string}")]
@@ -211,7 +211,7 @@ public sealed class ClaudeCodeAgentSteps(ExceptionState exceptionState) : IDispo
     [Then("the exception message holds {string}")]
     public void ThenMessage(string text) => Assert.Contains(text, exceptionState.Exception!.Message, StringComparison.Ordinal);
 
-    [Then("the runner runs no docker exec")]
+    [Then("ClaudeCodeAgent ran no docker exec")]
     public void ThenNoExec() => Assert.DoesNotContain(_recorded, spec => spec.Arguments[0] == "exec");
 
     [Then("the result holds the output {string} with the text {string}")]

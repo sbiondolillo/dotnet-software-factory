@@ -2,7 +2,6 @@ Feature: Test gate
 
   Background:
     Given a work tree with "specs/features/checkout.feature" pinned
-    And the sandbox answers every docker command from a mock
 
   Scenario: A passing run passes the gate
     Given a passing run

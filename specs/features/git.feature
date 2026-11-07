@@ -1,7 +1,7 @@
 Feature: Git
 
   Background:
-    Given a caller has a Git built over a mock of CommandRunner that records every CommandSpec it runs
+    Given a caller has a Git
 
   Scenario: Every git operation runs as a git CommandSpec, and every operation after the clone shares its working directory
     When Git clones "https://github.com/sbiondolillo/factory-scratch.git" with the token "token-1" into "/tmp/factory-clone-1"
@@ -10,7 +10,7 @@ Feature: Git
     And Git pushes the branch "feature-1" from "/tmp/factory-clone-1" with the token "token-1"
     And Git reads the head SHA in "/tmp/factory-clone-1"
     And Git lists the files changed since "main" in "/tmp/factory-clone-1"
-    Then every CommandSpec the mock CommandRunner recorded has the program "git"
+    Then every command Git ran has the program "git"
     And each of these CommandSpecs has the working directory "/tmp/factory-clone-1":
       | operation           |
       | checkout            |
@@ -84,19 +84,19 @@ Feature: Git
     Given a work tree in a new directory that holds a directory "sub/.git"
     When Git reads the head SHA in that work tree
     Then Git throws a GitCommandException whose message holds "sub/.git"
-    And the mock CommandRunner recorded no CommandSpec
+    And Git ran no command
 
   Scenario: A nested git file stops a git command before it runs
     Given a work tree in a new directory that holds a file "lib/.git"
     When Git reads the diff since "main" in that work tree
     Then Git throws a GitCommandException whose message holds "lib/.git"
-    And the mock CommandRunner recorded no CommandSpec
+    And Git ran no command
 
   Scenario: A nested git symlink stops a git command before it runs
     Given a work tree in a new directory that holds a symlink "vendor/.git"
     When Git pushes the branch "feature-1" from that work tree with the token "token-1"
     Then Git throws a GitCommandException whose message holds "vendor/.git"
-    And the mock CommandRunner recorded no CommandSpec
+    And Git ran no command
 
   Scenario: The clone appends .factory/ to the exclude file of the clone after the lines it holds
     Given a work tree in a new directory that holds a file ".git/info/exclude" with the lines:

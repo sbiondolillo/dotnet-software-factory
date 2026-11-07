@@ -100,11 +100,3 @@ Feature: CommandRunner
     When I run the command
     Then RunAsync throws an exception
     And the exception message contains "factory-missing-program-xyz"
-
-  Scenario: A caller tested against a Moq mock of the runner gets the canned result and starts no program
-    Given a caller receives a mock of CommandRunner
-    And the mock returns a CommandResult with exit code 7 and standard output "canned output"
-    When the caller asks the mock to run "ls"
-    Then the caller sees the exit code 7
-    And the caller sees the standard output "canned output"
-    And no program was started

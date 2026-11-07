@@ -86,7 +86,7 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
             pair => pair.argument == flag && pair.index + 1 < arguments.Count && arguments[pair.index + 1] == value);
     }
 
-    [Given("a Sandbox built over a mock of CommandRunner")]
+    [Given("a Sandbox")]
     public void GivenASandbox() => File.WriteAllText(Path.Combine(_directory.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
 
     [Given("the root directory holds a global.json whose sdk.version is {string}")]
@@ -161,7 +161,7 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
     [When("a caller disposes the sandbox")]
     public async Task WhenDisposes() => await _sandbox!.DisposeAsync();
 
-    [Then("the runner ran a docker build whose arguments hold {string} and then {string}")]
+    [Then("the Sandbox ran a docker build whose arguments hold {string} and then {string}")]
     public void ThenBuild(string flag, string value)
     {
         CommandSpec build = Docker("build");
@@ -220,7 +220,7 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
         Assert.Contains(text, exception.Message, StringComparison.Ordinal);
     }
 
-    [Then("the runner ran no docker run")]
+    [Then("the Sandbox ran no docker run")]
     public void ThenNoDockerRun() => Assert.DoesNotContain(_recorded, spec => spec.Arguments[0] is "run");
 
     [Then("no argument of the docker run ends with {string}")]
@@ -259,7 +259,7 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
         Assert.Contains(_run.StandardError, exceptionState.Exception.Message, StringComparison.Ordinal);
     }
 
-    [Then("the runner ran a CommandSpec whose program is {string} and whose first argument is {string}")]
+    [Then("the Sandbox ran a CommandSpec whose program is {string} and whose first argument is {string}")]
     public void ThenFirstArgument(string program, string first)
     {
         CommandSpec spec = _recorded[^1];
@@ -303,7 +303,7 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
         Assert.Equal(error, _result.StandardError);
     }
 
-    [Then("the runner ran a CommandSpec whose program is {string} and whose arguments are {string}, {string} and the container id, in that order")]
+    [Then("the Sandbox ran a CommandSpec whose program is {string} and whose arguments are {string}, {string} and the container id, in that order")]
     public void ThenRemoved(string program, string first, string second)
     {
         CommandSpec spec = _recorded[^1];
