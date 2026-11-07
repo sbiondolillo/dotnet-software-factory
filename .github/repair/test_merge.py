@@ -41,6 +41,8 @@ class GuardedTests(unittest.TestCase):
             ".github/repair/merge.py",
             ".github/repair/new.py",
             ".github/shared/github.py",
+            ".github/skills/code-review/SKILL.md",
+            ".github/skills/new/SKILL.md",
         ):
             with self.subTest(path=path):
                 self.assertEqual(merge.guarded([path]), [path])
@@ -63,6 +65,7 @@ class GuardedTests(unittest.TestCase):
             ".github/agents/builder.md",
             "sandbox/Dockerfile",
             ".github/judgement/x.py",
+            ".github/skillset/x.md",
             ".claude/skills/change/SKILL.md",
             "docs/.github/repair/merge.py",
         ):

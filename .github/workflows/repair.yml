@@ -47,8 +47,8 @@
 # branch is the branch of the red run that started the repair.
 # The step merges nothing on a pull request whose diff touches a file under
 # .github/workflows/ other than factory.yml, or .github/judge/,
-# .github/repair/, .github/shared/ or .claude/skills/change/JUDGES.md, as #406
-# decided. It also merges nothing on a diff of factory.yml that changes the
+# .github/repair/, .github/shared/, .github/skills/ or
+# .claude/skills/change/JUDGES.md, as #406 and #545 decided. It also merges nothing on a diff of factory.yml that changes the
 # block of its top-level on: key or of a permissions: key at any depth, or
 # whose added or removed lines hold the token permissions, on as a key at
 # column 0, a flow collection, a quoted scalar, an anchor, an alias, a tag or
@@ -62,8 +62,9 @@
 # branch, and it reads the base again before the arm. It posts one comment on
 # the issue that names each such file, key and base, before the wait for the
 # judge. A workflow on pull_request runs from the pull request's own copy and
-# can post judge-verdict, and judge.py reads .github/judge/ and JUDGES.md and
-# imports .github/shared/, so such a repair judges itself. This file and
+# can post judge-verdict, judge.py reads .github/judge/ and JUDGES.md and
+# imports .github/shared/, and Copilot reads .github/skills/ from the head
+# branch, so such a repair judges itself. This file and
 # .github/repair/ hold the rule. A change to them stays the owner's direct
 # change.
 # A repair of the factory, a pull request with the label factory or whose

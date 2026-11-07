@@ -13,11 +13,12 @@ A verdict other than success is one comment on the issue and no merge.
 
 The path rule, decided in #406 and in its addendum of 2026-11-01: the job merges no repair pull request whose diff
 touches a path of GUARDED. GUARDED holds every path under .github/workflows/ except factory.yml, and .github/judge/,
-.github/repair/, .github/shared/ and .claude/skills/change/JUDGES.md. The refusal is one comment on the issue that
-names each such path. On pull_request, GitHub runs the pull request's own copy of a workflow. A workflow with
-`checks: write` can post a green judge-verdict, and verdict() reads that check by its name alone. judge.py reads
-.github/judge/ and JUDGES.md as the rules of the judge, and imports .github/shared/. So a repair that adds or edits a
-workflow, or edits those files, judges itself. repair.yml and .github/repair/ execute from main, so an edit there acts
+.github/repair/, .github/shared/, .github/skills/ and .claude/skills/change/JUDGES.md. The refusal is one comment on
+the issue that names each such path. On pull_request, GitHub runs the pull request's own copy of a workflow. A workflow
+with `checks: write` can post a green judge-verdict, and verdict() reads that check by its name alone. judge.py reads
+.github/judge/ and JUDGES.md as the rules of the judge, and imports .github/shared/. Copilot code review reads the
+skills under .github/skills/ from the head branch, as #545 found. So a repair that adds or edits a workflow, or edits
+those files, judges itself. repair.yml and .github/repair/ execute from main, so an edit there acts
 only after a merge, and this rule is in .github/repair/. So a repair that edits the rule is refused by the rule. A
 change to a path of GUARDED stays the owner's direct change. .github/agents/, src/, sandbox/ and the other paths are
 open to a repair. The rule runs before the wait for the
@@ -142,6 +143,7 @@ GUARDED = (
     ".github/judge/",
     ".github/repair/",
     ".github/shared/",
+    ".github/skills/",
     ".claude/skills/change/JUDGES.md",
 )
 FACTORY = ".github/workflows/factory.yml"
