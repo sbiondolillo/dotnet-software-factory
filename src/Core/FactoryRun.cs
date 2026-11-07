@@ -74,8 +74,8 @@ public sealed class FactoryRun(
     private Task Say(string line) => ProgressLine.WriteAsync(progress, line);
 
     /// <summary>Runs the check of the issue before the first phase, and gives the text of the comment that stops the run, or null.</summary>
-    private Task<string?> PreCheckAsync(Sandbox sandbox, string check, Recipe recipe, CancellationToken cancellationToken) =>
-        CheckGate.PreCheckAsync(sandbox, check, recipe, progress, log, cancellationToken);
+    private Task<string?> PreCheckAsync(Sandbox sandbox, string check, PreCheckWords words, CancellationToken cancellationToken) =>
+        CheckGate.PreCheckAsync(sandbox, check, words, progress, log, cancellationToken);
 
     private DeliveryFacts Facts(string baseCommit, TestGate gate, RecipeChoice choice, int redos, decimal spend, long started, IReadOnlyList<SessionCost> sessions) => new(
         baseCommit,
@@ -108,6 +108,7 @@ public sealed class FactoryRun(
     /// </summary>
     private sealed class FactoryKind(FactoryRun owner, FactoryRunRequest request, GitHubIssue issue, RecipeChoice choice, long started) : IRunKind<PullRequest>
     {
+        private readonly RecipeSequence _sequence = RecipeRules.Sequence(choice, RunKind.Factory);
         private Git? _git;
         private string _baseCommit = "";
         private IssueScenariosResult? _scenarios;
@@ -146,7 +147,7 @@ public sealed class FactoryRun(
                 return null;
             }
 
-            if (choice.Recipe is Recipe.Behavior && IssueScenarios.Holds(issue.Body))
+            if (_sequence.Plan is { Input: PlanInput.IssueScenarios } && IssueScenarios.Holds(issue.Body))
             {
                 _scenarios = IssueScenarios.Apply(issue.Body, request.Directory);
                 if (_scenarios.Faults.Count > 0)
@@ -165,27 +166,31 @@ public sealed class FactoryRun(
         {
             ArgumentNullException.ThrowIfNull(backend);
             ArgumentNullException.ThrowIfNull(summary);
-            if (choice.Check is string check && await owner.PreCheckAsync(backend.Sandbox, check, choice.Recipe, cancellationToken).ConfigureAwait(false) is string stop)
+            if (_sequence.PreCheck is PreCheckWords words)
             {
-                return new PinOrStop(null, stop);
+                string check = choice.Check ?? throw new InvalidOperationException("A sequence with a check before the first phase comes from a choice with a check.");
+                if (await owner.PreCheckAsync(backend.Sandbox, check, words, cancellationToken).ConfigureAwait(false) is string stop)
+                {
+                    return new PinOrStop(null, stop);
+                }
             }
 
-            if (choice.Recipe is not (Recipe.Behavior or Recipe.Refactor))
+            if (_sequence.Plan is not PlanStep step)
             {
-                return new PinOrStop(RecipeRules.TakePin(choice.Recipe, request.Directory), null);
+                return new PinOrStop(RecipeRules.TakePin(_sequence.Pin, request.Directory), null);
             }
 
             await owner.Say("plan: start").ConfigureAwait(false);
-            PlanPhaseResult plan = await new PlanPhase(backend.Builder, RecipeRules.PlanText(choice.Recipe, _scenarios))
+            PlanPhaseResult plan = await new PlanPhase(backend.Builder, RecipeRules.PlanText(choice.Recipe, step, _scenarios))
                 .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, request.Directory, cancellationToken).ConfigureAwait(false);
-            if (!plan.Passed || (choice.Recipe is Recipe.Behavior && plan.Pin is null))
+            if (!plan.Passed || (_sequence.Pin is PinSource.Plan && plan.Pin is null))
             {
                 await summary.AddRowAsync(Phase.Plan.Text(), null, "failed", cancellationToken).ConfigureAwait(false);
                 return new PinOrStop(null, CommentText.Fit("The plan phase failed:", plan.Failures));
             }
 
             await summary.AddRowAsync(Phase.Plan.Text(), null, "passed", cancellationToken).ConfigureAwait(false);
-            return new PinOrStop(plan.Pin is Pin planned && choice.Recipe is Recipe.Behavior ? planned : RecipeRules.TakePin(choice.Recipe, request.Directory), null);
+            return new PinOrStop(plan.Pin is Pin planned && _sequence.Pin is PinSource.Plan ? planned : RecipeRules.TakePin(_sequence.Pin, request.Directory), null);
         }
 
         public IBuild Build(Agent builder) => new FactoryBuild(

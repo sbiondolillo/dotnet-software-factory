@@ -38,6 +38,16 @@ public sealed class RefactorRunTests
     }
 
     [Fact]
+    public async Task ARefactorAppliesNoScenarioOfItsBodyAndPlansFromTheText()
+    {
+        using RunHarness h = Make("## Scenarios\n\nThe scenarios follow.\n");
+        await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        Assert.False(h.Declined);
+        AgentRequest plan = Assert.Single(h.AgentRequests, r => r.Phase is Phase.Plan);
+        Assert.StartsWith("Plan the work of the refactor issue below.", plan.Prompt.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ACheckThatPassesBeforeThePlanGetsACommentAndTheCopyIsRemoved()
     {
         using RunHarness h = Make();

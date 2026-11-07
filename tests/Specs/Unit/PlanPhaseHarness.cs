@@ -21,7 +21,7 @@ public sealed class PlanPhaseHarness : IDisposable
         Agent = new FakeAgent(_work.FullName);
     }
 
-    public PlanText Text { get; set; } = RecipeRules.PlanText(Recipe.Behavior);
+    public PlanText Text { get; set; } = RecipeRules.PlanText(Recipe.Behavior, new PlanStep("Plan the work of the issue below.", PlanInput.IssueScenarios));
 
     public string WorkTree => _work.FullName;
 
