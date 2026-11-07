@@ -8,15 +8,17 @@ public sealed class PullRequestWatchTests
 {
     private static readonly (string, string, string?)[] Done = [("build", "completed", "success")];
 
-    private static (PullRequestWatch Sut, WatchHandler Handler) Make()
+    /// <summary>Builds the watch on a <see cref="FakeTime"/>: each wait moves the clock and returns at once, so no test waits on the real clock.</summary>
+    private static (PullRequestWatch Sut, WatchHandler Handler) Make(Func<TimeSpan, CancellationToken, Task>? delay = null)
     {
+        var time = new FakeTime();
         var handler = new WatchHandler
         {
             CheckRunsBody = WatchHandler.RunsJson(Done),
             ReviewsBody = WatchHandler.ReviewsJson([("me", "COMMENTED", new WatchHandler().Sha)]),
         };
         var client = new GitHubClient(new HttpClient(handler), "t", TimeSpan.Zero);
-        return (new PullRequestWatch(new PullRequests(client), new ReviewThreads(client)), handler);
+        return (new PullRequestWatch(new PullRequests(client), new ReviewThreads(client), delay ?? time.WaitAsync, time), handler);
     }
 
     private static Task<PullRequestWatchResult> Watch(PullRequestWatch sut, TimeSpan timeout, TimeSpan? wait = null, CancellationToken token = default) =>
@@ -150,15 +152,20 @@ public sealed class PullRequestWatchTests
         handler.CheckRunsBody = WatchHandler.RunsJson([]);
         PullRequestWatchResult result = await Watch(sut, TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(20), TestContext.Current.CancellationToken);
         Assert.False(result.IsGreen);
-        Assert.True(handler.CheckRunReads > 1);
+        // The reads are at 0, 20, 40, 60, 80 and 100 ms on the fake clock. The read at 100 ms meets the timeout.
+        Assert.Equal(6, handler.CheckRunReads);
     }
 
     [Fact]
     public async Task CancellingDuringTheWaitThrowsAndPollsNoMore()
     {
-        (PullRequestWatch sut, WatchHandler handler) = Make();
+        using var source = new CancellationTokenSource();
+        (PullRequestWatch sut, WatchHandler handler) = Make(async (_, token) =>
+        {
+            await source.CancelAsync();
+            token.ThrowIfCancellationRequested();
+        });
         handler.CheckRunsBody = WatchHandler.RunsJson([]);
-        using var source = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Watch(sut, TimeSpan.FromHours(1), TimeSpan.FromHours(1), source.Token));
         Assert.Equal(1, handler.CheckRunReads);
     }
