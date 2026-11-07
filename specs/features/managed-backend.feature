@@ -109,9 +109,11 @@ Feature: ManagedBackend runs the builder and the reviewer as two sessions over a
     And the reviewer answers a review prompt
     Then the sessions of the backend are "sesn_01" of the builder at 412 cents and "sesn_02" of the reviewer at 37 cents
 
-  Scenario: The backend reports each answer to the run with its cost
+  Scenario: The backend reports each answer to the run with its cost and its time, and logs each prompt
     Given the session answers cost 112 cents for the plan, 300 cents for a build and 37 cents for a review
+    And each answer of a session takes 30 seconds
     When the backend starts
     And the builder answers a plan prompt
     And the reviewer answers a review prompt
-    Then the backend reported 2 answers, of the costs 1.12 and 0.37 dollars
+    Then the backend reported 2 answers, of the costs 1.12 and 0.37 dollars, each after 30 seconds
+    And the log of the managed backend holds the line "agent: plan start"

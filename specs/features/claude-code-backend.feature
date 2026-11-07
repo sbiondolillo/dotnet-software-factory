@@ -12,12 +12,12 @@ Feature: ClaudeCodeBackend runs the builder and the reviewer as one agent in one
     Then the docker run of the Claude Code backend holds "--env" and then "ANTHROPIC_API_KEY", and "--env" and then "ANTHROPIC_BASE_URL"
 
   Scenario: The builder and the reviewer run claude in the container of the gates and report each answer to the run
-    Given claude answers each prompt of the Claude Code backend with 7 turns and the cost 0.4213
+    Given claude answers each prompt of the Claude Code backend after 12 seconds with 7 turns and the cost 0.4213
     When the Claude Code backend starts
     And its builder answers a plan prompt
     And its reviewer answers a review prompt
     Then each prompt ran claude through docker exec in the container of the gates
-    And the Claude Code backend reported 2 answers, each of 7 turns and the cost 0.4213 dollars
+    And the Claude Code backend reported 2 answers, each of 7 turns, the cost 0.4213 dollars and 12 seconds
     And the log of the Claude Code backend holds the line "agent: plan start"
 
   Scenario: The collect step runs no command

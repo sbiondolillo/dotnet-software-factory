@@ -52,6 +52,9 @@ public sealed class ManagedBackendSteps : IDisposable
     [Given("the pull after the build brings a commit that tracks the file {string}")]
     public void GivenTrackedOnPull(string path) => _h.Builder.Act(Phase.Build, _ => _h.Api.TrackOnNextPull(path));
 
+    [Given("each answer of a session takes {int} seconds")]
+    public void GivenSeconds(int seconds) => _h.AnswerSeconds = seconds;
+
     [Given("the session answers cost {int} cents for the plan, {int} cents for a build and {int} cents for a review")]
     public void GivenCosts(int plan, int build, int review)
     {
@@ -199,12 +202,16 @@ public sealed class ManagedBackendSteps : IDisposable
     public void ThenSessions(string builder, int builderCents, string reviewer, int reviewerCents) =>
         Assert.Equal([new SessionCost(builder, "builder", builderCents), new SessionCost(reviewer, "reviewer", reviewerCents)], _h.Backend.Sessions);
 
-    [Then("the backend reported {int} answers, of the costs {decimal} and {decimal} dollars")]
-    public void ThenReported(int count, decimal first, decimal second)
+    [Then("the backend reported {int} answers, of the costs {decimal} and {decimal} dollars, each after {int} seconds")]
+    public void ThenReported(int count, decimal first, decimal second, int seconds)
     {
         Assert.Equal(count, _h.Reported.Count);
         Assert.Equal([first, second], _h.Reported.Select(r => r.Answer.CostUsd));
+        Assert.All(_h.Reported, r => Assert.Equal(TimeSpan.FromSeconds(seconds), r.Elapsed));
     }
+
+    [Then("the log of the managed backend holds the line {string}")]
+    public void ThenLog(string line) => Assert.Contains(line, _h.Log.ToString().Split(Environment.NewLine));
 
     private async Task PromptAsync(Phase phase)
     {

@@ -20,6 +20,8 @@ public sealed class ClaudeCodeBackendSteps : IDisposable
     private readonly List<(TimeSpan Elapsed, AgentAnswer Answer)> _reported = [];
     private readonly StringWriter _progress = new();
     private readonly StringWriter _log = new();
+    private readonly StepClock _clock = new();
+    private int _seconds;
     private string _answer = """{"is_error":false,"num_turns":1,"total_cost_usd":0,"result":"done"}""";
     private AgentBackend? _backend;
     private int _started;
@@ -42,9 +44,12 @@ public sealed class ClaudeCodeBackendSteps : IDisposable
     {
     }
 
-    [Given("claude answers each prompt of the Claude Code backend with {int} turns and the cost {decimal}")]
-    public void GivenAnswer(int turns, decimal cost) =>
+    [Given("claude answers each prompt of the Claude Code backend after {int} seconds with {int} turns and the cost {decimal}")]
+    public void GivenAnswer(int seconds, int turns, decimal cost)
+    {
+        _seconds = seconds;
         _answer = JsonSerializer.Serialize(new { is_error = false, num_turns = turns, total_cost_usd = cost, result = "done" });
+    }
 
     [When("the Claude Code backend starts")]
     public async Task WhenStarts()
@@ -54,7 +59,7 @@ public sealed class ClaudeCodeBackendSteps : IDisposable
             .Returns((CommandSpec spec, CancellationToken _) => Task.FromResult(Answer(spec)));
         StartBackend start = AgentBackend.Pick(new BackendOptions(
             mock.Object, "factory-sandbox:test", _root.FullName, null, "sbiondolillo", "factory-scratch", "token", "Factory", "factory@example.com",
-            Log: _log, Progress: _progress));
+            Log: _log, Time: _clock, Progress: _progress));
         _backend = await start(
             new BackendStart(new Git(mock.Object), _clone.FullName, "base", "factory/a1b2c3d4-session", "Title", (elapsed, answer) => _reported.Add((elapsed, answer))),
             TestContext.Current.CancellationToken);
@@ -101,11 +106,11 @@ public sealed class ClaudeCodeBackendSteps : IDisposable
         Assert.Same(Backend.Builder, Backend.Reviewer);
     }
 
-    [Then("the Claude Code backend reported {int} answers, each of {int} turns and the cost {decimal} dollars")]
-    public void ThenReported(int count, int turns, decimal cost)
+    [Then("the Claude Code backend reported {int} answers, each of {int} turns, the cost {decimal} dollars and {int} seconds")]
+    public void ThenReported(int count, int turns, decimal cost, int seconds)
     {
         Assert.Equal(count, _reported.Count);
-        Assert.All(_reported, r => Assert.Equal((turns, cost), (r.Answer.NumTurns, r.Answer.CostUsd)));
+        Assert.All(_reported, r => Assert.Equal((turns, cost, TimeSpan.FromSeconds(seconds)), (r.Answer.NumTurns, r.Answer.CostUsd, r.Elapsed)));
     }
 
     [Then("the log of the Claude Code backend holds the line {string}")]
@@ -121,6 +126,12 @@ public sealed class ClaudeCodeBackendSteps : IDisposable
     private static AgentRequest Request(Phase phase) =>
         new(FakeAgent.Whole($"The {phase.Text()} prompt."), "claude-sonnet-5-5", 10, phase, []);
 
+    private CommandResult Claude()
+    {
+        _clock.Advance(_seconds);
+        return new CommandResult { StandardOutput = _answer + "\n" };
+    }
+
     private CommandResult Answer(CommandSpec spec)
     {
         _commands.Add(spec);
@@ -128,7 +139,7 @@ public sealed class ClaudeCodeBackendSteps : IDisposable
         return spec.Arguments[0] switch
         {
             "run" => new CommandResult { StandardOutput = GateSandbox.ContainerId + "\n" },
-            "exec" when spec.Arguments.Contains("claude") => new CommandResult { StandardOutput = _answer + "\n" },
+            "exec" when spec.Arguments.Contains("claude") => Claude(),
             _ => new CommandResult(),
         };
     }

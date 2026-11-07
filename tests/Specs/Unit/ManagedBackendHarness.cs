@@ -54,6 +54,15 @@ public sealed class ManagedBackendHarness : IDisposable
     /// <summary>What the backend wrote to its progress writer.</summary>
     public StringWriter Progress { get; } = new();
 
+    /// <summary>What the backend wrote to its log.</summary>
+    public StringWriter Log { get; } = new();
+
+    /// <summary>The clock of the backend. It moves by <see cref="AnswerSeconds"/> at each answer of a session.</summary>
+    public StepClock Clock { get; } = new();
+
+    /// <summary>The seconds each answer of a session takes on <see cref="Clock"/>.</summary>
+    public double AnswerSeconds { get; set; }
+
     /// <summary>What the progress writer held when the <c>docker run</c> started, or null before it.</summary>
     public string? ProgressAtDockerRun { get; private set; }
 
@@ -73,7 +82,7 @@ public sealed class ManagedBackendHarness : IDisposable
             .Returns((CommandSpec spec, CancellationToken _) => Task.FromResult(Answer(spec)));
         StartBackend start = AgentBackend.Pick(new BackendOptions(
             mock.Object, "factory-sandbox:test", _root.FullName, ManagedRunFake.Settings(), "sbiondolillo", "factory-scratch", "token",
-            "Factory", "factory@example.com", new Handler(this), (_, _) => Task.CompletedTask, Progress: Progress));
+            "Factory", "factory@example.com", new Handler(this), (_, _) => Task.CompletedTask, Log, Clock, Progress));
         var git = new Git(mock.Object);
         _backend = await start(
             new BackendStart(git, _clone.FullName, BaseCommit, SessionBranch, Title, (elapsed, answer) => Reported.Add((elapsed, answer))),
@@ -102,6 +111,7 @@ public sealed class ManagedBackendHarness : IDisposable
     {
         _backend?.DisposeAsync().AsTask().GetAwaiter().GetResult();
         Progress.Dispose();
+        Log.Dispose();
         _clone.Delete(recursive: true);
         _root.Delete(recursive: true);
     }
@@ -110,6 +120,7 @@ public sealed class ManagedBackendHarness : IDisposable
     /// files of the session, and a push of a commit for a build unless the build called <see cref="ManagedRunFake.HoldHead"/>.</summary>
     private ManagedTurn Play()
     {
+        Clock.Advance(AnswerSeconds);
         FakeAgent agent = Builder.Pending is not null ? Builder : Reviewer;
         Phase phase = agent.Pending!.Phase;
         AgentAnswer answer = agent.Play();
