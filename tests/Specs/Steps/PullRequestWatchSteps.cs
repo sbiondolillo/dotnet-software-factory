@@ -10,6 +10,7 @@ public sealed class PullRequestWatchSteps(ExceptionState exceptionState, Console
 {
     private const string QuotaRefusal = "Copilot was unable to review this pull request because the user who requested the review has reached their quota limit.";
     private readonly WatchHandler _handler = new();
+    private readonly FakeTime _time = new();
     private string _owner = "";
     private string _repo = "";
     private int _number;
@@ -18,7 +19,6 @@ public sealed class PullRequestWatchSteps(ExceptionState exceptionState, Console
     private TimeSpan _timeout = TimeSpan.FromHours(1);
     private PullRequests? _pullRequests;
     private PullRequestWatch? _watch;
-    private readonly FakeTime _time = new();
     private CancellationTokenSource? _source;
     private TimeSpan? _cancelAt;
     private string? _sha;
