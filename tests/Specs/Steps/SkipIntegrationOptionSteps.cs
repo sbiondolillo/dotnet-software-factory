@@ -15,7 +15,7 @@ public sealed class SkipIntegrationOptionSteps(ConsoleProgramSteps console)
         foreach (CommandSpec spec in console.Harness.Commands.Where(c => c.Command is "docker" && c.Arguments[0] is "exec"))
         {
             List<string> arguments = [.. spec.Arguments];
-            int id = arguments.IndexOf(ConsoleHarness.ContainerId);
+            int id = arguments.IndexOf(GateSandbox.ContainerId);
             commands.Add(string.Join(' ', arguments[(id + 1)..]));
         }
 

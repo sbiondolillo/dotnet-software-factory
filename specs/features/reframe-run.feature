@@ -119,6 +119,16 @@ Feature: A reframe run keeps every test and every public type and member
     And FactoryRun runs no build prompt
     And FactoryRun gives back a result with no pull request and 0 Redos
 
+  Scenario: A reframe run reports that the public API of the base commit could not be listed and delivers nothing
+    Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
+    And the check command exits with the code 1 before the build
+    And the API printer exits with the code 1 before the build and writes the standard error "Could not execute because the specified command or file was not found."
+    When a caller starts a run
+    Then FactoryRun posts one comment on the issue that holds "The public API of the base commit could not be listed, so there is no build:" and the standard error of the API printer
+    And FactoryRun runs no build prompt
+    And FactoryRun gives back a result with no pull request and 0 Redos
+    And git pushes no branch "factory/a1b2c3d4"
+
   Scenario: An API printer that finds no assembly before the build gets a comment
     Given the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
     And the check command exits with the code 1 before the build
@@ -279,7 +289,6 @@ Feature: A reframe run keeps every test and every public type and member
     Then standard output holds exactly these lines in this order
       | line |
       | clone: start |
-      | sandbox: start |
       | check: start |
       | check: red |
       | api: start |

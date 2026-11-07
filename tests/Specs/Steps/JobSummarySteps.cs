@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Core;
 using Reqnroll;
 using Specs.Unit;
@@ -8,7 +9,7 @@ namespace Specs.Steps;
 [Binding]
 public sealed class JobSummarySteps : IDisposable
 {
-    private readonly JobSummaryHarness _h = new();
+    private readonly RunHarness _h = new();
     private FactoryRunResult? _result;
     private readonly JobSummary _summary = new();
     private string _rendered = "";
@@ -44,7 +45,7 @@ public sealed class JobSummarySteps : IDisposable
         _h.Labels.Add(label);
         if (label is "cleanup")
         {
-            _h.Body = JobSummaryHarness.CleanupBody;
+            _h.Body = RunHarness.CleanupBody;
         }
     }
 
@@ -53,7 +54,7 @@ public sealed class JobSummarySteps : IDisposable
     {
         Assert.Equal("## Check", heading);
         _h.Labels.Add(label);
-        _h.Body = JobSummaryHarness.CleanupBody;
+        _h.Body = RunHarness.CleanupBody;
     }
 
     [Given("the issue has the label {string} and no {string}")]
@@ -70,51 +71,34 @@ public sealed class JobSummarySteps : IDisposable
     [Given("the {word} plan answer has {int} turns and the cost {string}, {int} seconds after its prompt")]
     public void GivenNthPlan(string which, int turns, string cost, int seconds) => SetPlan(Index(which) - 1, turns, cost, seconds);
 
-    private void SetPlan(int index, int turns, string cost, int seconds)
-    {
-        while (_h.PlanAnswers.Count <= index)
-        {
-            _h.PlanAnswers.Add(new SummaryAnswer(1, "0", 0));
-        }
+    private void SetPlan(int index, int turns, string cost, int seconds) => _h.Timed(Phase.Plan, index + 1, turns, cost, seconds);
 
-        _h.PlanAnswers[index] = _h.PlanAnswers[index] with { Turns = turns, Cost = cost, Seconds = seconds };
-    }
-
+    /// <summary>The first plan prompt writes no plan, so the plan gate fails and a second prompt follows.</summary>
     [Given("the plan phase sends two prompts")]
-    public void GivenTwoPrompts()
-    {
-        _h.FirstPlanWritesNothing = true;
-        while (_h.PlanAnswers.Count < 2)
-        {
-            _h.PlanAnswers.Add(new SummaryAnswer(1, "0", 0));
-        }
-    }
+    public void GivenTwoPrompts() => _h.Builder.Stage(Phase.Plan, "plan.md", null, 1);
 
     [Given("the plan phase fails after one prompt with {int} turns and the cost {string}, {int} seconds after the prompt")]
     public void GivenPlanFails(int turns, string cost, int seconds) =>
-        _h.PlanAnswers.Add(new SummaryAnswer(turns, cost, seconds, IsError: true, Text: "the plan went wrong"));
+        _h.Timed(Phase.Plan, 1, turns, cost, seconds, isError: true, text: "the plan went wrong");
 
     [Given("the {word} build answer has {int} turns and the cost {string}, {int} seconds after its prompt")]
-    public void GivenBuild(string which, int turns, string cost, int seconds) =>
-        _h.BuildAnswers[Index(which)] = new SummaryAnswer(turns, cost, seconds);
+    public void GivenBuild(string which, int turns, string cost, int seconds) => _h.Timed(Phase.Build, Index(which), turns, cost, seconds);
 
     [Given("the {word} build answer comes {int} seconds after its prompt")]
-    public void GivenBuildComes(string which, int seconds) =>
-        _h.BuildAnswers[Index(which)] = new SummaryAnswer(1, "0", seconds);
+    public void GivenBuildComes(string which, int seconds) => _h.Timed(Phase.Build, Index(which), 1, "0", seconds);
 
     [Given("the lint gate after the {word} build takes {int} seconds")]
     public void GivenLint(string which, int seconds) => _h.LintSeconds[Index(which)] = seconds;
 
     [Given("the review answer has {int} turns and the cost {string}, {int} seconds after its prompt")]
-    public void GivenReview(int turns, string cost, int seconds) =>
-        _h.ReviewAnswers[1] = new SummaryAnswer(turns, cost, seconds);
+    public void GivenReview(int turns, string cost, int seconds) => _h.Timed(Phase.Review, 1, turns, cost, seconds);
 
     [Given("the {word} test gate takes {int} seconds and is red with the Redo texts {string} and {string}")]
     public void GivenRed(string which, int seconds, string first, string second)
     {
         Assert.Equal("dotnet test exited with the code 1", first);
         _h.TestSeconds[Index(which)] = seconds;
-        _h.RedBuilds[Index(which)] = (first, second);
+        _h.RedTexts[Index(which)] = second;
     }
 
     [Given("the {word} test gate takes {int} seconds and is green")]
@@ -124,19 +108,20 @@ public sealed class JobSummarySteps : IDisposable
     public void GivenTwoLines(string first, string second)
     {
         Assert.Equal("dotnet test exited with the code 1", first);
-        _h.RedBuilds[1] = (first, second);
+        _h.RedTexts[1] = second;
     }
 
     [Given("the first review blocks the first build with the item {string}")]
-    public void GivenBlocks(string item) => _h.BlockedBuilds[1] = item;
+    public void GivenBlocks(string item) =>
+        _h.Reviewer.Stage(Phase.Review, "review.json", JsonSerializer.Serialize(new { approved = false, blocking = new[] { item } }), 1);
 
     [Given("the check exits with the code {int} after the first build")]
-    public void GivenCheck(int code) => _h.CheckCodes[1] = code;
+    public void GivenCheck(int code) => _h.CheckResults[1] = (code, "", "");
 
     [When("the run delivers with {int} Redo(s)")]
     public async Task WhenDelivers(int redos)
     {
-        _result = await _h.RunAsync().ConfigureAwait(false);
+        _result = await _h.RunFactoryAsync().ConfigureAwait(false);
         Assert.NotNull(_result.PullRequest);
         Assert.Equal(redos, _result.Redos);
     }
@@ -168,7 +153,7 @@ public sealed class JobSummarySteps : IDisposable
     [When("the run ends")]
     public async Task WhenEnds()
     {
-        _result = await _h.RunAsync().ConfigureAwait(false);
+        _result = await _h.RunFactoryAsync().ConfigureAwait(false);
         Assert.Null(_result.PullRequest);
     }
 

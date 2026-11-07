@@ -1,6 +1,7 @@
 using System.Text;
 using Core;
 using Reqnroll;
+using Specs.Unit;
 using Xunit;
 
 namespace Specs.Steps;
@@ -8,37 +9,28 @@ namespace Specs.Steps;
 [Binding]
 public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState promptState) : IDisposable
 {
-    private readonly Specs.Unit.FactoryRunHarness _h = new();
+    private readonly RunHarness _h = new();
     private FactoryRunResult? _result;
     private Exception? _exception;
 
-    /// <summary>The harness whose gate, review and standard output settings the shared steps of this class fill.</summary>
-    public Specs.Unit.FactoryRunHarness Harness => _h;
+    /// <summary>The harness of the run, which the step classes of a factory run and of a feedback run share.</summary>
+    public RunHarness Harness => _h;
 
-    /// <summary>The commands of another run, so a feature of that run shares the git steps of this class.</summary>
+    /// <summary>The commands of the console program, so a scenario of the program shares the git steps of this class.</summary>
     public List<CommandSpec>? OtherCommands { get; set; }
-
-    /// <summary>The git commands and session requests of another run, in order, so a feature of that run shares the steps of the managed path.</summary>
-    public List<string>? OtherTimeline { get; set; }
-
-    /// <summary>The prompts of another run, so a feature of that run shares the prompt steps of this class.</summary>
-    public List<Specs.Unit.SeenPrompt>? OtherPrompts { get; set; }
-
-    /// <summary>Reads the job summary of another run, so a feature of that run shares the summary steps of the cleanup run.</summary>
-    public Func<string>? OtherSummary { get; set; }
 
     public void Dispose() => _h.Dispose();
 
     private List<CommandSpec> Commands => OtherCommands ?? _h.Commands;
 
-    private List<string> Timeline => OtherTimeline ?? _h.Timeline;
+    private List<string> Timeline => _h.Timeline;
 
     /// <summary>The result of the run, for a step class of another feature of the same run.</summary>
     public FactoryRunResult LastResult => Result;
 
     private FactoryRunResult Result => _result ?? throw new InvalidOperationException("the run gave no result");
 
-    private IEnumerable<Specs.Unit.SeenPrompt> Builds => _h.Prompts.Where(p => p.Kind is "build");
+    private IEnumerable<AgentRequest> Builds => _h.Builder.Of(Phase.Build);
 
     [Given("the repo {string} of the owner {string}, the issue {int} and the token {string}")]
     public void GivenRepo(string repo, string owner, int issue, string token)
@@ -88,10 +80,13 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     [Given("git reports a change in the work tree after each build")]
     public void GivenChange() => _h.ChangeAfterBuild = true;
 
+    /// <summary>The builder writes both on the plan prompt by default, so the step sets nothing.</summary>
     [Given("the agent writes the feature file and the plan on the plan prompt")]
-    public void GivenAgentWrites() => _h.AgentWritesPlan = true;
+    public static void GivenAgentWrites()
+    {
+    }
 
-    /// <summary>The harness answers each build prompt with the error flag clear, so the step sets nothing.</summary>
+    /// <summary>The fake agents answer each prompt with the error flag clear by default, so the step sets nothing.</summary>
     [Given("claude answers each prompt with the error flag clear")]
     public static void GivenFlagClear()
     {
@@ -100,7 +95,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     [Given("each dotnet command exits with the code 0 and the TRX file holds one passed test")]
     public void GivenDotnet() => _h.RedBuilds.Clear();
 
-    /// <summary>The harness approves every review, so the step sets nothing.</summary>
+    /// <summary>The reviewer approves every review by default, so the step sets nothing.</summary>
     [Given("the agent approves on the review prompt")]
     public static void GivenApproves()
     {
@@ -113,7 +108,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     public void GivenNoPlan(string path)
     {
         Assert.Equal(".factory/plan.md", path);
-        _h.AgentWritesPlan = false;
+        _h.Builder.Clear(Phase.Plan);
     }
 
     [Given("the run's list of secret names is {string} and {string}")]
@@ -137,18 +132,11 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     [Given("the test command writes the letter {string} {int} times to its standard output")]
     public void GivenStdout(string letter, int count) => _h.TestStdout = string.Concat(Enumerable.Repeat(letter, count));
 
-    [Given("the run uses Managed Agents sessions")]
-    public void GivenManaged() => _h.UseManaged();
+    [Given("the builder stops the run on the first build with the text {string}")]
+    public void GivenStop(string text) => _h.Builder.Throw(Phase.Build, new SessionBranchException(text), 1);
 
-    [Given("the session pushes no commit on the first build")]
-    public void GivenNoPush() => _h.NoPushBuilds.Add(1);
-
-    [Given("the session branch tracks the file {string}")]
-    public void GivenTracked(string path) => _h.Managed!.TrackedFactoryFiles.Add(path);
-
-    [Given("the issue holds a block under ## Scenarios for {string}")]
-    public void GivenScenariosBlock(string path) =>
-        _h.Body += $"\n\n## Scenarios\n\n```gherkin\n# {path}\nFeature: Checkout total\n\n  Scenario: An empty cart totals zero\n    Given an empty cart\n```\n";
+    [Given("the first build answer carries the fault {string}")]
+    public void GivenFault(string fault) => _h.Builder.Answer(Phase.Build, FakeAgent.Done() with { Faults = [fault] }, 1);
 
     [Given("the caller gives the base commit {string}")]
     public void GivenBase(string commit) => _h.BaseCommit = commit;
@@ -161,8 +149,8 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
         _h.PullStatus = answer.Status;
         try
         {
-            _result = await _h.RunAsync(TestContext.Current.CancellationToken);
-            promptState.Text = _h.Prompts.FirstOrDefault(p => p.Kind is "review")?.Text;
+            _result = await _h.RunFactoryAsync(TestContext.Current.CancellationToken);
+            promptState.Text = _h.Reviewer.Of(Phase.Review).FirstOrDefault()?.Prompt.Text;
         }
         catch (Exception ex) when (ex is GitHubRequestException or ClaudeCodeException)
         {
@@ -181,17 +169,17 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     [Then("FactoryRun runs one prompt with the model {string} and the turn limit {int} that holds {string} and {string}")]
     public void ThenPromptHolds(string model, int turns, string first, string second)
     {
-        Specs.Unit.SeenPrompt prompt = Assert.Single(_h.Prompts, p => p.Model == model);
-        Assert.Equal(turns.ToString(System.Globalization.CultureInfo.InvariantCulture), prompt.Turns);
-        Assert.Contains(first, prompt.Text, StringComparison.Ordinal);
-        Assert.Contains(second, prompt.Text, StringComparison.Ordinal);
+        AgentRequest prompt = Assert.Single(_h.AgentRequests, r => r.Model == model);
+        Assert.Equal(turns, prompt.MaxTurns);
+        Assert.Contains(first, prompt.Prompt.Text, StringComparison.Ordinal);
+        Assert.Contains(second, prompt.Prompt.Text, StringComparison.Ordinal);
     }
 
     [Then("FactoryRun runs one prompt with the model {string} and the turn limit {int}")]
     public void ThenPrompt(string model, int turns)
     {
-        Specs.Unit.SeenPrompt prompt = Assert.Single(_h.Prompts, p => p.Model == model);
-        Assert.Equal(turns.ToString(System.Globalization.CultureInfo.InvariantCulture), prompt.Turns);
+        AgentRequest prompt = Assert.Single(_h.AgentRequests, r => r.Model == model);
+        Assert.Equal(turns, prompt.MaxTurns);
     }
 
     [Then("FactoryRun posts one comment on the issue that holds {string}")]
@@ -209,7 +197,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     public void ThenNoContainer()
     {
         Assert.DoesNotContain(_h.Commands, c => c.Command is "docker");
-        Assert.Empty(_h.Prompts);
+        Assert.Empty(_h.AgentRequests);
     }
 
     [Then("FactoryRun gives back a result with no pull request and {int} Redo(s)")]
@@ -241,7 +229,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     [Then("FactoryRun opens a pull request on {string} from the branch {string} into {string} with the title {string}")]
     public void ThenOpens(string slug, string head, string baseBranch, string title)
     {
-        Specs.Unit.SeenRequest open = Assert.Single(_h.Requests, r => r.Method is "POST" && r.Uri.EndsWith("/pulls", StringComparison.Ordinal));
+        SeenRequest open = Assert.Single(_h.Requests, r => r.Method is "POST" && r.Uri.EndsWith("/pulls", StringComparison.Ordinal));
         Assert.EndsWith($"/repos/{slug}/pulls", open.Uri, StringComparison.Ordinal);
         using var json = System.Text.Json.JsonDocument.Parse(open.Content!);
         Assert.Equal(head, json.RootElement.GetProperty("head").GetString());
@@ -271,20 +259,13 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
         Assert.Equal(redos, Result.Redos);
     }
 
-    [Then("FactoryRun gives back a result with the pull request of the number {int} and {int} Redo(s)")]
-    public void ThenPullNumber(int number, int redos)
-    {
-        Assert.Equal(number, Result.PullRequest?.Number);
-        Assert.Equal(redos, Result.Redos);
-    }
-
     [Then("docker gives the names {string} and {string} to the command {string}")]
     public void ThenNames(string first, string second, string command)
     {
         foreach (CommandSpec spec in Commands.Where(c => c.Command is "docker" && c.Arguments[0] is "exec"))
         {
             List<string> arguments = [.. spec.Arguments];
-            int id = arguments.IndexOf(Specs.Unit.FactoryRunHarness.ContainerId);
+            int id = arguments.IndexOf(GateSandbox.ContainerId);
             string line = string.Join(' ', arguments[(id + 1)..]);
             List<string> names = [.. arguments[..id].Where(a => a is not ("exec" or "--env"))];
             if (line == command)
@@ -301,7 +282,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     }
 
     [Then("FactoryRun runs a second build prompt that holds {string}")]
-    public void ThenSecondBuild(string text) => Assert.Contains(text, Builds.ElementAt(1).Text, StringComparison.Ordinal);
+    public void ThenSecondBuild(string text) => Assert.Contains(text, Builds.ElementAt(1).Prompt.Text, StringComparison.Ordinal);
 
     [Then("git pushes no branch")]
     public void ThenNoPush() => Assert.DoesNotContain(Commands, c => c.Command is "git" && c.Arguments[0] is "push");
@@ -325,7 +306,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
 
     [Then("FactoryRun removes the container after the delivery")]
     public void ThenRemoved() =>
-        Assert.Equal(["push", "comment", "rm"], _h.Events);
+        Assert.Equal(["push", "comment", "rm"], _h.Events.Where(e => e is "push" or "comment" or "rm"));
 
     [Then("FactoryRun throws GitHubRequestException and removes the container")]
     public void ThenThrows()
@@ -334,107 +315,49 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
         Assert.Contains("rm", _h.Events);
     }
 
-    private int FirstPush(string branch)
-    {
-        int push = Commands.FindIndex(c => c.Command is "git" && c.Arguments is ["push", "origin", var name] && name == branch);
-        Assert.True(push >= 0, $"no push of {branch}");
-        return push;
-    }
-
-    [Then("the docker run of the run holds neither {string} nor {string}")]
-    public void ThenDockerRunLacks(string first, string second)
-    {
-        CommandSpec run = Assert.Single(Commands, c => c.Command is "docker" && c.Arguments[0] is "run");
-        Assert.DoesNotContain(run.Arguments, argument => argument.Contains(first, StringComparison.Ordinal));
-        Assert.DoesNotContain(run.Arguments, argument => argument.Contains(second, StringComparison.Ordinal));
-    }
-
-    [Then("the docker run of the run mounts the clone at \\/work and names the image {string}")]
-    public void ThenDockerRunMountsTheClone(string image)
-    {
-        CommandSpec run = Assert.Single(Commands, c => c.Command is "docker" && c.Arguments[0] is "run");
-        CommandSpec clone = Assert.Single(Commands, c => c.Command is "git" && c.Arguments[0] is "clone");
-        Assert.Contains($"{clone.Arguments[2]}:/work", run.Arguments);
-        Assert.Contains(image, run.Arguments);
-    }
-
-    [Then("the arguments of the docker run of the run hold {string} and then {string}, and {string} and then {string}")]
-    public void ThenDockerRunHolds(string firstFlag, string firstValue, string secondFlag, string secondValue)
-    {
-        CommandSpec run = Assert.Single(Commands, c => c.Command is "docker" && c.Arguments[0] is "run");
-        List<string> arguments = [.. run.Arguments];
-        foreach ((string flag, string value) in new[] { (firstFlag, firstValue), (secondFlag, secondValue) })
-        {
-            int index = arguments.IndexOf(value);
-            Assert.True(index > 0 && arguments[index - 1] == flag, $"docker run: {string.Join(' ', arguments)}");
-        }
-    }
-
     [Then("every dotnet command of the run goes through docker exec")]
     public void ThenDotnetInContainer()
     {
         Assert.DoesNotContain(Commands, c => c.Command is "dotnet");
-        Assert.Contains(Commands, c => c.Command is "docker" && c.Arguments[0] is "exec" && c.Arguments.Contains("dotnet"));
+        List<CommandSpec> dotnet = [.. Commands.Where(c => c.Command is "docker" && c.Arguments[0] is "exec" && c.Arguments.Contains("dotnet"))];
+        Assert.NotEmpty(dotnet);
+        Assert.All(dotnet, c => Assert.Equal(GateSandbox.ContainerId, c.Arguments[c.Arguments.ToList().IndexOf("dotnet") - 1]));
     }
 
-    [Then("the API printer runs through docker exec")]
-    public void ThenPrinterInContainer() =>
-        Assert.Contains(Commands, c => c.Command is "docker" && c.Arguments[0] is "exec" && c.Arguments.Contains("/opt/api-printer/ApiPrinter.dll"));
-
-    [Then("the run removes the container")]
-    public void ThenContainerRemoved() => Assert.Contains("rm", _h.Events);
-
-    [Then("git pushes the session branch {string} before the first session starts")]
-    public void ThenSessionBranchFirst(string branch)
+    [Given("the backend has the sessions {string} of the builder at {int} cents and {string} of the reviewer at {int} cents")]
+    public void GivenSessions(string builder, int builderCents, string reviewer, int reviewerCents)
     {
-        int push = Timeline.IndexOf($"git push origin {branch}");
-        int start = Timeline.IndexOf("POST /v1/sessions");
-        Assert.True(push >= 0, $"no push of {branch}: {string.Join(" | ", Timeline)}");
-        Assert.True(start > push, $"the first session started before the push of {branch}");
+        _h.Sessions.Add(new SessionCost(builder, "builder", builderCents));
+        _h.Sessions.Add(new SessionCost(reviewer, "reviewer", reviewerCents));
     }
 
-    [Then("git commits the work tree with the message {string} before the first push of {string}")]
-    public void ThenCommitsBeforePush(string message, string branch)
+    [Then("the job summary of the run ends with the lines")]
+    public void ThenSummaryEnds(string lines) =>
+        Assert.EndsWith(lines.Replace("\r\n", "\n", StringComparison.Ordinal) + "\n", _h.Summary, StringComparison.Ordinal);
+
+    [Then("the body of the pull request of the run ends with the line {string}")]
+    public void ThenBodyEnds(string line) =>
+        Assert.Equal(line, Assert.IsType<string>(_h.OpenedBody).TrimEnd('\n').Split('\n')[^1]);
+
+    [Then("the run hands the backend the session branch {string}, the base commit {string} and the title {string}")]
+    public void ThenStarted(string branch, string baseCommit, string title)
     {
-        int push = FirstPush(branch);
-        int commit = Commands.FindIndex(c => c.Command is "git" && c.Arguments is ["commit", "-m", var text] && text == message);
-        Assert.InRange(commit, 0, push - 1);
+        BackendStart start = Assert.IsType<BackendStart>(_h.Started);
+        Assert.Equal((branch, baseCommit, title), (start.ScratchBranch, start.BaseCommit, start.Title));
     }
 
-    [Then("git runs no commit before the first push of {string}")]
-    public void ThenNoCommitBeforePush(string branch) =>
-        Assert.DoesNotContain(Commands.Take(FirstPush(branch)), c => c.Command is "git" && c.Arguments[0] is "commit");
+    [Then("the run runs no command in the container")]
+    public void ThenNoExec() => Assert.DoesNotContain(_h.Commands, c => c.Command is "docker" && c.Arguments[0] is "exec");
 
-    [Then("git pulls the branch {string} {int} times")]
-    public void ThenPulls(string branch, int count) =>
-        Assert.Equal(count, Commands.Count(c => c.Command is "git" && c.Arguments[0] is "pull" && c.Arguments[^1] == branch));
-
-    [Then("git deletes the branch {string} on origin after the push of {string}")]
-    public void ThenDeletedAfter(string branch, string pushed)
+    [Then("the backend collects onto {string} before git pushes {string}")]
+    public void ThenCollectsBeforePush(string branch, string pushed)
     {
+        int collect = Timeline.IndexOf($"collect {branch}");
         int push = Timeline.IndexOf($"git push origin {pushed}");
-        int delete = Timeline.FindIndex(line => IsDelete(line, branch));
-        Assert.True(push >= 0, $"no push of {pushed}: {string.Join(" | ", Timeline)}");
-        Assert.True(delete > push, $"git commands: {string.Join(" | ", Timeline)}");
+        Assert.True(collect >= 0 && push > collect, $"steps: {string.Join(" | ", Timeline)}");
     }
-
-    [Then("git deletes the branch {string} on origin as its last git command")]
-    public void ThenDeletedLast(string branch) =>
-        Assert.True(IsDelete(Timeline.Last(line => line.StartsWith("git ", StringComparison.Ordinal)), branch), $"git commands: {string.Join(" | ", Timeline)}");
 
     [Then("git pushes no branch {string}")]
     public void ThenNoPushOf(string branch) =>
         Assert.DoesNotContain(Commands, c => c.Command is "git" && c.Arguments is ["push", "origin", var name] && name == branch);
-
-    [Then("git checks out {string}, pulls {string} into it and pushes {string}, in this order")]
-    public void ThenMoves(string branch, string session, string pushed)
-    {
-        int checkout = Timeline.LastIndexOf($"git checkout {branch}");
-        int pull = Timeline.FindIndex(Math.Max(checkout, 0), line => line.StartsWith("git pull", StringComparison.Ordinal) && line.EndsWith(" " + session, StringComparison.Ordinal));
-        int push = Timeline.FindIndex(Math.Max(pull, 0), line => line == $"git push origin {pushed}");
-        Assert.True(checkout >= 0 && pull > checkout && push > pull, $"git commands: {string.Join(" | ", Timeline)}");
-    }
-
-    private static bool IsDelete(string line, string branch) =>
-        line.StartsWith("git push", StringComparison.Ordinal) && line.Contains("--delete", StringComparison.Ordinal) && line.EndsWith(" " + branch, StringComparison.Ordinal);
 }

@@ -10,7 +10,6 @@ internal sealed record SeenCommand(string Subcommand, IReadOnlyList<string> Argu
 /// <see cref="CommandRunner"/> and the canned answer of each dotnet command.</summary>
 internal sealed class TestGateHarness : IDisposable
 {
-    public const string ContainerId = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     public const string Feature = PlanPhaseHarness.SoundFeature;
 
     public static readonly (string Class, string Method, string Outcome, string? Message) PassingFeatureTest =
@@ -108,7 +107,7 @@ internal sealed class TestGateHarness : IDisposable
         DockerCommands++;
         if (spec.Arguments[0] is "run")
         {
-            return new CommandResult { StandardOutput = ContainerId + "\n" };
+            return new CommandResult { StandardOutput = GateSandbox.ContainerId + "\n" };
         }
 
         if (spec.Arguments[0] is not "exec")
@@ -117,7 +116,7 @@ internal sealed class TestGateHarness : IDisposable
         }
 
         List<string> arguments = [.. spec.Arguments];
-        int idIndex = arguments.IndexOf(ContainerId);
+        int idIndex = arguments.IndexOf(GateSandbox.ContainerId);
         List<string> names = [];
         for (int i = 1; i < idIndex; i += 2)
         {

@@ -12,8 +12,6 @@ namespace Specs.Unit;
 /// </summary>
 public sealed class BuildLoopHarness : IAsyncDisposable
 {
-    private const string ContainerId = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-
     private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("build-loop-root-");
     private readonly DirectoryInfo _work = Directory.CreateTempSubdirectory("build-loop-work-");
     private readonly Dictionary<GateName, int> _gateCalls = [];
@@ -166,7 +164,7 @@ public sealed class BuildLoopHarness : IAsyncDisposable
 
         if (spec.Arguments[0] is "run")
         {
-            return new CommandResult { StandardOutput = ContainerId + "\n" };
+            return new CommandResult { StandardOutput = GateSandbox.ContainerId + "\n" };
         }
 
         if (spec.Arguments[0] is "exec" && spec.Arguments.Contains("format"))

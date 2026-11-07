@@ -145,57 +145,33 @@ Feature: A feedback run answers every unresolved review thread
     Then FeedbackRun throws GitHubGraphQLException
     And FeedbackRun removes the container
 
-  @managed
-  Scenario: A managed feedback run moves the head branch to the session's work and pushes it once before the first reply
-    Given the run uses Managed Agents sessions
+  Scenario: The feedback run collects the work of the agents onto the head branch before it pushes it
     When a caller starts a feedback run
-    Then git checks out "factory/a1b2c3d4", pulls "factory/a1b2c3d4-session" into it and pushes "factory/a1b2c3d4", in this order
+    Then the backend collects onto "factory/a1b2c3d4" before git pushes "factory/a1b2c3d4"
     And git pushes the head branch "factory/a1b2c3d4" once, before FeedbackRun adds the first reply
 
-  @managed
-  Scenario: A managed feedback run deletes the session branch after the last reply
-    Given the run uses Managed Agents sessions
+  Scenario: The feedback run hands the backend the session branch of the head branch, the head commit and its title
     When a caller starts a feedback run
-    Then git deletes the branch "factory/a1b2c3d4-session" on origin as its last git command
+    Then the run hands the backend the session branch "factory/a1b2c3d4-session", the base commit "c7d1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293" and the title "Answer the review threads of pull request #10"
 
-  @managed
-  Scenario: A managed feedback run with a spent budget pushes no head branch
-    Given the run uses Managed Agents sessions
-    And the test gate is red after each of four builds
+  Scenario: The job summary of a feedback run ends with the sessions of the backend
+    Given the backend has the sessions "sesn_01" of the builder at 300 cents and "sesn_02" of the reviewer at 37 cents
     When a caller starts a feedback run
-    Then git pushes no branch "factory/a1b2c3d4"
-    And git deletes the branch "factory/a1b2c3d4-session" on origin as its last git command
-    And FeedbackRun adds no reply
+    Then the job summary of the run ends with the lines
+      """
+      ### Sessions
 
-  @managed
-  Scenario: A session commit of a file under .factory/ stops a managed feedback run with a comment on the pull request before any thread is resolved
-    Given the run uses Managed Agents sessions
-    And the session branch tracks the file ".factory/threads.json"
+      - sesn_01, builder, $3.00
+      - sesn_02, reviewer, $0.37
+      """
+
+  Scenario: A stop of the session branch posts its text on the pull request and resolves no thread
+    Given the builder stops the run on the first build with the text "The session committed files under .factory/, which only the factory writes: .factory/threads.json. The run stops."
     When a caller starts a feedback run
     Then FeedbackRun posts one comment on the pull request 10 that holds "The session committed files under .factory/, which only the factory writes: .factory/threads.json. The run stops."
     And FeedbackRun gives back a result with 0 threads resolved, 2 threads unresolved and 0 Redos
     And FeedbackRun adds no reply
     And FeedbackRun resolves no thread
-
-  @managed
-  Scenario: A managed feedback run runs the gates in a container with no key and builds on the session branch of the head branch
-    Given the run uses Managed Agents sessions
-    When a caller starts a feedback run
-    Then the docker run of the run holds neither "ANTHROPIC_API_KEY" nor "ANTHROPIC_BASE_URL"
-    And the docker run of the run mounts the clone at /work and names the image "factory-sandbox:test"
-    And every dotnet command of the run goes through docker exec
-    And git pushes the session branch "factory/a1b2c3d4-session" before the first session starts
-    And FeedbackRun gives back a result with 2 threads resolved, 0 threads unresolved and 0 Redos
-    And FeedbackRun removes the container
-
-  @managed
-  Scenario: A file under .factory/ on the head branch stops a managed feedback run before the first session starts
-    Given the run uses Managed Agents sessions
-    And the session branch tracks the file ".factory/leak.txt"
-    When a caller starts a feedback run
-    Then FeedbackRun posts one comment on the pull request 10 that holds "The session committed files under .factory/, which only the factory writes: .factory/leak.txt. The run stops."
-    And FeedbackRun gives back a result with 0 threads resolved, 2 threads unresolved and 0 Redos
-    And the run starts no session
 
   Scenario: A disputed thread gets its reply and is resolved
     Given on a build prompt the agent writes the report that marks A fixed and B disputed

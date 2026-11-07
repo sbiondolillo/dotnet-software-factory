@@ -9,7 +9,6 @@ Feature: The console program writes one line to standard output as each step of 
     Then standard output holds exactly these lines in this order
       | line                                                |
       | clone: start                                        |
-      | sandbox: start                                      |
       | plan: start                                         |
       | plan: passed                                        |
       | build: start                                        |
@@ -24,10 +23,6 @@ Feature: The console program writes one line to standard output as each step of 
       | https://github.com/sbiondolillo/factory-scratch/pull/10 |
       | watch: start                                        |
       | checks: green, unresolved threads: 0                |
-
-  Scenario: sandbox line before docker image inspect
-    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
-    Then when docker gets the command "image inspect" standard output already holds the line "sandbox: start"
 
   Scenario: plan line before the plan prompt
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
@@ -73,7 +68,6 @@ Feature: The console program writes one line to standard output as each step of 
       | line                                 |
       | feedback: start                      |
       | clone: start                         |
-      | sandbox: start                       |
       | build: start                         |
       | build: passed                        |
       | lint: start                          |

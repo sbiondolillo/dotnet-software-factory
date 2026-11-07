@@ -8,9 +8,9 @@ public sealed class FeedbackCleanupScopeTests
     private const string CheckBody = "## Scope\nREADME.md\n\n## Check\n\n```sh\ngrep -q Feedback README.md\n```\n";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static FeedbackRunHarness Cleanup(string body = CheckBody)
+    private static RunHarness Cleanup(string body = CheckBody)
     {
-        var h = new FeedbackRunHarness { PullBody = "Closes #11", IssueBody = body };
+        var h = new RunHarness { PullBody = "Closes #11", Body = body };
         h.Labels.Add("cleanup");
         return h;
     }
@@ -18,7 +18,7 @@ public sealed class FeedbackCleanupScopeTests
     private static bool RunsCheck(CommandSpec spec)
     {
         List<string> arguments = [.. spec.Arguments];
-        int id = arguments.IndexOf(FeedbackRunHarness.ContainerId);
+        int id = arguments.IndexOf(GateSandbox.ContainerId);
         return id >= 0 && arguments.Skip(id + 1).Take(2).SequenceEqual(["sh", "-c"]);
     }
 
@@ -37,55 +37,55 @@ public sealed class FeedbackCleanupScopeTests
     [Fact]
     public async Task AnIssueWithoutTheLabelRunsNoCheckAndAppliesNoScope()
     {
-        using FeedbackRunHarness h = Cleanup();
+        using RunHarness h = Cleanup();
         h.Labels.Clear();
         h.Labels.Add("bug");
         h.FirstBuildChanges.Add("src/Core/Greeter.cs");
-        await h.RunAsync(Ct);
+        await h.RunFeedbackAsync(Ct);
         Assert.DoesNotContain(h.Commands, RunsCheck);
-        Assert.Equal(2, h.Prompts.Count);
-        Assert.Contains(h.Prompts, p => p.Kind is "review");
+        Assert.Equal(2, h.AgentRequests.Count);
+        Assert.NotEmpty(h.Reviewer.Of(Phase.Review));
     }
 
     [Fact]
     public async Task AFailedIssueReadSurfacesAndStartsNoBuild()
     {
-        using FeedbackRunHarness h = Cleanup();
+        using RunHarness h = Cleanup();
         h.IssueStatus = 404;
-        await Assert.ThrowsAsync<GitHubRequestException>(() => h.RunAsync(Ct));
-        Assert.Empty(h.Prompts);
+        await Assert.ThrowsAsync<GitHubRequestException>(() => h.RunFeedbackAsync(Ct));
+        Assert.Empty(h.AgentRequests);
     }
 
     [Fact]
     public async Task AChangeOutsideTheScopeGivesARedoAndNoTestGate()
     {
-        using FeedbackRunHarness h = Cleanup();
+        using RunHarness h = Cleanup();
         h.FirstBuildChanges.Add("src/Core/Greeter.cs");
-        await h.RunAsync(Ct);
-        Assert.Contains("outside the scope: src/Core/Greeter.cs", h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
-        string[] lines = h.Out.ToString().Split('\n');
+        await h.RunFeedbackAsync(Ct);
+        Assert.Contains("outside the scope: src/Core/Greeter.cs", h.Builder.Of(Phase.Build).ElementAt(1).Prompt.Text, StringComparison.Ordinal);
+        string[] lines = h.Progress.ToString().Split('\n');
         Assert.Equal(["scope: start", "scope: out of scope"], lines.Where(l => l.StartsWith("scope:", StringComparison.Ordinal)).Take(2));
-        Assert.Equal("test: start", h.Out.ToString().Split('\n').First(l => l.StartsWith("test:", StringComparison.Ordinal)));
-        Assert.Equal(1, h.Out.ToString().Split('\n').Count(l => l is "test: start"));
+        Assert.Equal("test: start", h.Progress.ToString().Split('\n').First(l => l.StartsWith("test:", StringComparison.Ordinal)));
+        Assert.Equal(1, h.Progress.ToString().Split('\n').Count(l => l is "test: start"));
     }
 
     [Fact]
     public async Task AChangeToThePinnedFeaturesGivesAPinRedo()
     {
-        using FeedbackRunHarness h = Cleanup();
+        using RunHarness h = Cleanup();
         h.FirstBuildChanges.Add("specs/features/a.feature");
-        await h.RunAsync(Ct);
-        Assert.Contains("pin: specs/features/a.feature", h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
+        await h.RunFeedbackAsync(Ct);
+        Assert.Contains("pin: specs/features/a.feature", h.Builder.Of(Phase.Build).ElementAt(1).Prompt.Text, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task AChangeToASettingsFileTheScopeNamesPassesTheTestGate()
     {
-        using FeedbackRunHarness h = Cleanup("## Scope\n.editorconfig\n\n## Check\n\n```sh\ntrue\n```\n");
+        using RunHarness h = Cleanup("## Scope\n.editorconfig\n\n## Check\n\n```sh\ntrue\n```\n");
         h.FirstBuildChanges.Add(".editorconfig");
-        h.FirstBuildWrites.Add(".editorconfig");
-        FeedbackRunResult result = await h.RunAsync(Ct);
-        string[] lines = h.Out.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        h.BuildWrites(1, ".editorconfig");
+        FeedbackRunResult result = await h.RunFeedbackAsync(Ct);
+        string[] lines = h.Progress.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Contains("test: passed", lines);
         Assert.DoesNotContain("test: failed", lines);
         Assert.Equal(new FeedbackRunResult(2, 0, 0), result);
@@ -94,34 +94,34 @@ public sealed class FeedbackCleanupScopeTests
     [Fact]
     public async Task ALostTestGivesARedoAndNoCheck()
     {
-        using FeedbackRunHarness h = Cleanup();
+        using RunHarness h = Cleanup();
         h.BaseOnlyTests.Add(("Specs.Unit.GreeterTests", "Greets"));
         h.CheckResults[1] = (1, "", "");
-        await h.RunAsync(Ct);
-        Assert.Contains("lost test: Specs.Unit.GreeterTests.Greets", h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
-        Assert.DoesNotContain("check: red", h.Out.ToString().Split('\n').Take(Array.IndexOf(h.Out.ToString().Split('\n'), "redo: 1")));
+        await h.RunFeedbackAsync(Ct);
+        Assert.Contains("lost test: Specs.Unit.GreeterTests.Greets", h.Builder.Of(Phase.Build).ElementAt(1).Prompt.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("check: red", h.Progress.ToString().Split('\n').Take(Array.IndexOf(h.Progress.ToString().Split('\n'), "redo: 1")));
     }
 
     [Fact]
     public async Task AFailingCheckGivesARedoAndNoReview()
     {
-        using FeedbackRunHarness h = Cleanup();
+        using RunHarness h = Cleanup();
         h.CheckResults[1] = (1, "out", "err");
-        await h.RunAsync(Ct);
-        Assert.Contains("The check command exited with the code 1", h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);
-        Assert.Contains("check: red", h.Out.ToString(), StringComparison.Ordinal);
-        Assert.Equal("build", h.Prompts[1].Kind);
+        await h.RunFeedbackAsync(Ct);
+        Assert.Contains("The check command exited with the code 1", h.Builder.Of(Phase.Build).ElementAt(1).Prompt.Text, StringComparison.Ordinal);
+        Assert.Contains("check: red", h.Progress.ToString(), StringComparison.Ordinal);
+        Assert.Equal(Phase.Build, h.AgentRequests[1].Phase);
     }
 
     [Fact]
     public async Task ABodyWithNoCheckBlockDeclinesTheRoundWithTheDeclineText()
     {
-        using FeedbackRunHarness h = Cleanup("## Scope\nREADME.md\n");
-        FeedbackRunResult result = await h.RunAsync(Ct);
+        using RunHarness h = Cleanup("## Scope\nREADME.md\n");
+        FeedbackRunResult result = await h.RunFeedbackAsync(Ct);
         Assert.Equal(RecipeRules.Parse(["cleanup"], "## Scope\nREADME.md\n").Declined, Assert.Single(h.CommentBodies));
         Assert.Equal(new FeedbackRunResult(0, 2, 0), result);
         Assert.True(h.Declined);
-        Assert.Empty(h.Prompts);
+        Assert.Empty(h.AgentRequests);
         Assert.DoesNotContain(h.Commands, c => c.Command is "git" && c.Arguments[0] is "clone");
     }
 }

@@ -58,106 +58,22 @@ Feature: The option --agent runs the agent phases as Claude Code in a sandbox or
     Then docker runs a command
     And the exit code is 0
 
-  @managed
-  Scenario: A managed run pushes the session branch before the plan prompt and deletes it after the delivery
+  Scenario: run with the managed agent hands the backend of the run the settings of the sessions
     Given the environment holds the variables of the managed agent
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --agent managed"
-    Then git pushes the session branch, the name of the delivery branch with "-session" after it, before the first session starts
-    And git deletes the session branch on origin after the push of the delivery branch
-
-  @managed
-  Scenario: The pull request body of a managed run sums the sessions and names each one
-    Given the environment holds the variables of the managed agent
-    And a session answer costs 112 cents for the plan, 300 cents for a build and 37 cents for a review
-    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --agent managed"
-    Then the body of the pull request holds a line that starts with "Total: $4.49 in "
-    And the body of the pull request ends with the line "Sessions: sesn_01 (builder, $4.12), sesn_02 (reviewer, $0.37)"
-
-  @managed
-  Scenario: The job summary of a managed run lists each session
-    Given the environment holds the variables of the managed agent
-    And the environment variable GITHUB_STEP_SUMMARY of the program names an empty file
-    And a session answer costs 112 cents for the plan, 300 cents for a build and 37 cents for a review
-    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --agent managed"
-    Then the job summary of the program ends with the lines
-      """
-      ### Sessions
-
-      - sesn_01, builder, $4.12
-      - sesn_02, reviewer, $0.37
-      """
-
-  @managed
-  Scenario: The job summary of a managed feedback run lists its sessions
-    Given the environment holds the variables of the managed agent
-    And the environment variable GITHUB_STEP_SUMMARY of the program names an empty file
-    And a session answer costs 0 cents for the plan, 300 cents for a build and 37 cents for a review
-    And GitHub answers each read of the review threads with the thread A until the resolve of the thread A, and with no thread after it
-    When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10 --agent managed"
-    Then the job summary of the program starts with the line "## Feedback run" and holds no other line that starts with "## "
-    And the job summary of the program ends with the lines
-      """
-      ### Sessions
-
-      - sesn_01, builder, $3.00
-      - sesn_02, reviewer, $0.37
-      """
-
-  @managed
-  Scenario: A managed run starts a container with no key and writes the line of the sessions in place of the sandbox
-    Given the environment holds the variables of the managed agent
-    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --agent managed"
-    Then the docker run of the program holds neither "ANTHROPIC_API_KEY" nor "ANTHROPIC_BASE_URL"
-    And standard output holds exactly these lines in this order
-      | line                                                    |
-      | clone: start                                            |
-      | sessions: start                                         |
-      | plan: start                                             |
-      | plan: passed                                            |
-      | build: start                                            |
-      | build: passed                                           |
-      | lint: start                                             |
-      | lint: passed                                            |
-      | test: start                                             |
-      | test: passed                                            |
-      | review: start                                           |
-      | review: approved                                        |
-      | deliver: start                                          |
-      | https://github.com/sbiondolillo/factory-scratch/pull/10 |
-      | watch: start                                            |
-      | checks: green, unresolved threads: 0                    |
+    Then the backend of each run gets the settings of the sessions with the agent "agent_011dsfbuilder" and the environment "env_011dsfbuilder"
     And the exit code is 0
 
-  @managed
-  Scenario: A managed feedback run starts a container with no key and writes the line of the sessions in place of the sandbox
+  Scenario: feedback with the managed agent hands the backend of the round the settings of the sessions
     Given the environment holds the variables of the managed agent
     And GitHub answers each read of the review threads with the thread A until the resolve of the thread A, and with no thread after it
     When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10 --agent managed"
-    Then the docker run of the program holds neither "ANTHROPIC_API_KEY" nor "ANTHROPIC_BASE_URL"
-    And standard output holds exactly these lines in this order
-      | line                                 |
-      | feedback: start                      |
-      | clone: start                         |
-      | sessions: start                      |
-      | build: start                         |
-      | build: passed                        |
-      | lint: start                          |
-      | lint: passed                         |
-      | test: start                          |
-      | test: passed                         |
-      | review: start                        |
-      | review: approved                     |
-      | watch: start                         |
-      | checks: green, unresolved threads: 0 |
+    Then the backend of each run gets the settings of the sessions with the agent "agent_011dsfbuilder" and the environment "env_011dsfbuilder"
 
-  @managed
-  Scenario: A managed run restores the work tree in the container before the lint gate formats it
-    Given the environment holds the variables of the managed agent
-    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --agent managed"
-    Then the container runs "dotnet restore --locked-mode" before "dotnet format --no-restore"
+  Scenario: run with the default agent hands the backend no settings of the sessions
+    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
+    Then the backend of each run gets no settings of the sessions
 
-  @managed
-  Scenario: A managed run writes the line of the sessions before it starts the container
-    Given the environment holds the variables of the managed agent
-    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --agent managed"
-    Then standard output held the line "sessions: start" when the docker run started
+  Scenario: The program hands the backend its standard output for the progress lines and its standard error for the log
+    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
+    Then the backend of each run writes its progress lines to standard output and its log to standard error

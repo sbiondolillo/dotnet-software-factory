@@ -7,7 +7,8 @@ namespace Specs.Unit;
 /// gets the answer of <see cref="Answer"/> for the words after the container id, and every other command the code 0.</summary>
 internal sealed class GateSandbox : IAsyncDisposable
 {
-    private const string ContainerId = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    /// <summary>The id that a mock runner gives on <c>docker run</c>, in every test of a sandbox, a gate or a run.</summary>
+    public const string ContainerId = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("factory-gate-root-");
     private Sandbox? _sandbox;

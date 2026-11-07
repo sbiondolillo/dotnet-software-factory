@@ -18,7 +18,7 @@ public sealed class FeedbackBuildTests : IDisposable
     private static ReviewThread Thread(string id) => new(id, false, "src/Core/Checkout.cs", 1, []);
 
     private static string Report(params (string Id, string Status, string Reply)[] items) =>
-        FeedbackRunHarness.Items(items);
+        RunHarness.Items(items);
 
     private static FeedbackBuild Build(FakeAgent agent) => new(
         new BuildPhase(agent, RecipeRules.BuildText(Recipe.Behavior, RunKind.Feedback)),

@@ -1,3 +1,4 @@
+using Core;
 using Reqnroll;
 using Xunit;
 
@@ -20,5 +21,5 @@ public sealed class CopilotReviewOptionSteps(ConsoleProgramSteps console)
         Assert.Contains(text, Assert.Single(Specs.Unit.ConsoleHarness.Lines(console.Harness.Error)), StringComparison.Ordinal);
 
     [Then("claude gets the review prompt")]
-    public void ThenReviewPrompt() => Assert.Contains(console.Harness.Prompts, p => p.Kind is "review");
+    public void ThenReviewPrompt() => Assert.NotEmpty(console.Harness.Reviewer.Of(Phase.Review));
 }

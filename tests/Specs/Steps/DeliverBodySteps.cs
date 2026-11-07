@@ -1,3 +1,4 @@
+using Core;
 using Reqnroll;
 using Specs.Unit;
 using Xunit;
@@ -45,18 +46,18 @@ public sealed class DeliverBodySteps(DeliverBodyState state)
     }
 
     [Given("the plan answer has the cost {string} and comes {double} seconds after its prompt")]
-    public void GivenPlan(string cost, double seconds) => state.Harness.PlanAnswers.Add(new SummaryAnswer(1, cost, seconds));
+    public void GivenPlan(string cost, double seconds) => state.Harness.Timed(Phase.Plan, 1, 1, cost, seconds);
 
     [Given("the {word} build answer has the cost {string} and comes {double} seconds after its prompt")]
-    public void GivenBuild(string which, string cost, double seconds) => state.Harness.BuildAnswers[Index(which)] = new SummaryAnswer(1, cost, seconds);
+    public void GivenBuild(string which, string cost, double seconds) => state.Harness.Timed(Phase.Build, Index(which), 1, cost, seconds);
 
     [Given("the review answer has the cost {string} and comes {double} seconds after its prompt")]
-    public void GivenReview(string cost, double seconds) => state.Harness.ReviewAnswers[1] = new SummaryAnswer(1, cost, seconds);
+    public void GivenReview(string cost, double seconds) => state.Harness.Timed(Phase.Review, 1, 1, cost, seconds);
 
     [Given("the first test gate is red and takes {int} seconds")]
     public void GivenRedGate(int seconds)
     {
-        state.Harness.RedBuilds[1] = ("failed", "Assert.Equal() Failure: Values differ");
+        state.Harness.RedTexts[1] = "Assert.Equal() Failure: Values differ";
         state.Harness.TestSeconds[1] = seconds;
     }
 
@@ -67,25 +68,51 @@ public sealed class DeliverBodySteps(DeliverBodyState state)
     public void GivenTests(int count) => state.Harness.ExtraPassedTests = count - 1;
 
     [Given("at the base commit the file {string} holds the scenarios {string}")]
-    public void GivenBaseOne(string path, string first) => state.Harness.BaseFiles[path] = Text(first, null, null);
+    public void GivenBaseOne(string path, string first) => Base(path, Text(first, null, null));
 
     [Given("at the base commit the file {string} holds the scenarios {string} and {string}")]
-    public void GivenBaseTwo(string path, string first, string second) => state.Harness.BaseFiles[path] = Text(first, second, null);
+    public void GivenBaseTwo(string path, string first, string second) => Base(path, Text(first, second, null));
 
     [Given("in the work tree the file {string} holds the scenarios {string}")]
-    public void GivenWorkOne(string path, string first) => state.Harness.WorkFiles[path] = Text(first, null, null);
+    public void GivenWorkOne(string path, string first) => Work(path, Text(first, null, null));
 
     [Given("in the work tree the file {string} holds the scenarios {string} and {string}")]
-    public void GivenWorkTwo(string path, string first, string second) => state.Harness.WorkFiles[path] = Text(first, second, null);
+    public void GivenWorkTwo(string path, string first, string second) => Work(path, Text(first, second, null));
 
     [Given("in the work tree the file {string} holds the scenarios {string} and {string}, with other steps in {string}")]
-    public void GivenWorkChanged(string path, string first, string second, string changed) => state.Harness.WorkFiles[path] = Text(first, second, changed);
+    public void GivenWorkChanged(string path, string first, string second, string changed) => Work(path, Text(first, second, changed));
 
     [Given("the base commit holds no file {string}")]
     public void GivenBaseLacks(string path) => Assert.False(state.Harness.BaseFiles.ContainsKey(path));
 
     [Given("the work tree holds no file {string}")]
-    public void GivenWorkLacks(string path) => state.Harness.WorkFiles[path] = null;
+    public void GivenWorkLacks(string path) => Work(path, null);
+
+    /// <summary>The file at the base commit, which git shows and names as changed.</summary>
+    private void Base(string path, string text)
+    {
+        state.Harness.BaseFiles[path] = text;
+        state.Harness.ChangedPaths.Add(path);
+    }
+
+    /// <summary>The file as the work tree holds it when the review starts: each review prompt writes it, or removes it for a
+    /// null <paramref name="text"/>, and git names it as changed.</summary>
+    private void Work(string path, string? text)
+    {
+        RunHarness h = state.Harness;
+        h.ChangedPaths.Add(path);
+        h.Reviewer.Act(Phase.Review, tree =>
+        {
+            if (text is not null)
+            {
+                h.Write(path, text);
+            }
+            else if (File.Exists(Path.Combine(tree, path)))
+            {
+                h.Remove(path);
+            }
+        });
+    }
 
     /// <summary>The step "the issue {int} has the label {string}" binds in CleanupRunSteps, which hands a label of this run's issue here.</summary>
     public static void AddLabel(DeliverBodyState state, string label)
@@ -93,7 +120,7 @@ public sealed class DeliverBodySteps(DeliverBodyState state)
         state.Harness.Labels.Add(label);
         if (label is "cleanup")
         {
-            state.Harness.Body = JobSummaryHarness.CleanupBody;
+            state.Harness.Body = RunHarness.CleanupBody;
         }
     }
 
@@ -103,7 +130,7 @@ public sealed class DeliverBodySteps(DeliverBodyState state)
         _ = issue;
         Assert.Equal("## Check", heading);
         AddLabel(state, label);
-        state.Harness.Body = JobSummaryHarness.CleanupBody;
+        state.Harness.Body = RunHarness.CleanupBody;
     }
 
     [Given("the issue {int} has the label {string} and no {string} section")]

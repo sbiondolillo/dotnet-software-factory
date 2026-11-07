@@ -1,3 +1,4 @@
+using Core;
 using Reqnroll;
 using Specs.Unit;
 using Xunit;
@@ -7,13 +8,13 @@ namespace Specs.Steps;
 [Binding]
 public sealed class FeedbackCleanupScopeSteps(FactoryRunSteps factory, FeedbackRunSteps feedback)
 {
-    private FeedbackRunHarness H => feedback.Harness;
+    private RunHarness H => feedback.Harness;
 
-    private IEnumerable<string> StdoutLines => H.Out.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+    private IEnumerable<string> StdoutLines => H.Progress.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
     private IEnumerable<string[]> ShellCommands() =>
         H.Commands.Where(c => c.Command is "docker" && c.Arguments[0] is "exec")
-            .Select(c => c.Arguments.SkipWhile(a => a != FeedbackRunHarness.ContainerId).Skip(1).ToArray())
+            .Select(c => c.Arguments.SkipWhile(a => a != GateSandbox.ContainerId).Skip(1).ToArray())
             .Where(a => a is ["sh", "-c", ..]);
 
     [Given("GitHub answers the read of the pull request with the body {string}")]
@@ -64,7 +65,7 @@ public sealed class FeedbackCleanupScopeSteps(FactoryRunSteps factory, FeedbackR
     [Then("the next build prompt holds a Redo text that holds {string} and the name {string}")]
     public void ThenRedoName(string text, string name)
     {
-        string prompt = H.BuildPrompts.ElementAt(1).Text;
+        string prompt = H.Builder.Of(Phase.Build).ElementAt(1).Prompt.Text;
         Assert.Contains(text, prompt, StringComparison.Ordinal);
         Assert.Contains(name, prompt, StringComparison.Ordinal);
     }
@@ -90,7 +91,7 @@ public sealed class FeedbackCleanupScopeSteps(FactoryRunSteps factory, FeedbackR
     }
 
     [Then("the feedback run starts the review")]
-    public void ThenReview() => Assert.Contains(H.Prompts, p => p.Kind is "review");
+    public void ThenReview() => Assert.NotEmpty(H.Reviewer.Of(Phase.Review));
 
     [Then("standard output holds the lines in this order")]
     public void ThenOrder(Table table)

@@ -107,12 +107,27 @@ public sealed class DeliverTests
         Assert.EndsWith("\n\nFactory version: 1.0.0+abc\nTotal: $0 in 0 s", body, StringComparison.Ordinal);
     }
 
-    private static async Task<string> RunBodyAsync(Action<JobSummaryHarness> setup)
+    private static async Task<string> RunBodyAsync(Action<RunHarness> setup)
     {
-        using var harness = new JobSummaryHarness();
+        using var harness = new RunHarness();
         setup(harness);
-        await harness.RunAsync(TestContext.Current.CancellationToken);
-        return harness.PullBody!;
+        await harness.RunFactoryAsync(TestContext.Current.CancellationToken);
+        return harness.OpenedBody!;
+    }
+
+    [Fact]
+    public async Task TheBodySumsTheAnswersAndNamesEachSessionOfTheBackend()
+    {
+        string body = await RunBodyAsync(h =>
+        {
+            h.Timed(Phase.Plan, 1, 1, "1.12", 0);
+            h.Timed(Phase.Build, 1, 1, "3.00", 0);
+            h.Timed(Phase.Review, 1, 1, "0.37", 0);
+            h.Sessions.Add(new SessionCost("sesn_01", "builder", 412));
+            h.Sessions.Add(new SessionCost("sesn_02", "reviewer", 37));
+        });
+        Assert.Contains("\nTotal: $4.49 in 0 s\n", body, StringComparison.Ordinal);
+        Assert.EndsWith("\nSessions: sesn_01 (builder, $4.12), sesn_02 (reviewer, $0.37)", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -120,8 +135,8 @@ public sealed class DeliverTests
     {
         string body = await RunBodyAsync(h =>
         {
-            h.PlanAnswers.Add(new SummaryAnswer(1, "0.5000", 10.9));
-            h.ReviewAnswers[1] = new SummaryAnswer(1, "0.2500", 20.9);
+            h.Timed(Phase.Plan, 1, 1, "0.5000", 10.9);
+            h.Timed(Phase.Review, 1, 1, "0.2500", 20.9);
         });
         Assert.EndsWith("Total: $0.7500 in 31 s", body, StringComparison.Ordinal);
         Assert.DoesNotContain("Factory version", body, StringComparison.Ordinal);

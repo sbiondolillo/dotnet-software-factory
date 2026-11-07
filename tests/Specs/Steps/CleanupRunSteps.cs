@@ -12,9 +12,9 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     private const string DefaultCheck = "grep -q Install README.md";
     private const string DefaultScope = "README.md";
 
-    private FactoryRunHarness H => factory.Harness;
+    private RunHarness H => factory.Harness;
 
-    private string Summary => factory.OtherSummary?.Invoke() ?? H.Summary;
+    private string Summary => H.Summary;
 
     private IEnumerable<(int Index, string[] Before, string[] After)> Execs()
     {
@@ -22,7 +22,7 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
         foreach (CommandSpec spec in H.Commands.Where(c => c.Command is "docker" && c.Arguments[0] is "exec"))
         {
             List<string> arguments = [.. spec.Arguments];
-            int id = arguments.IndexOf(FactoryRunHarness.ContainerId);
+            int id = arguments.IndexOf(GateSandbox.ContainerId);
             yield return (index++, [.. arguments[1..id]], [.. arguments[(id + 1)..]]);
         }
     }
@@ -43,7 +43,7 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
         H.Body = body;
     }
 
-    private SeenPrompt NextBuild() => (factory.OtherPrompts ?? H.Prompts).Where(p => p.Kind is "build").ElementAt(1);
+    private AgentRequest NextBuild() => H.Builder.Of(Phase.Build).ElementAt(1);
 
     [Given("the issue has the label {string}, the title {string} and a body with the scope {string} and the first fenced block under {string} holding the line {string}")]
     public void GivenIssue(string label, string title, string scope, string heading, string line)
@@ -88,10 +88,8 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     public void GivenChanges(string path)
     {
         H.FirstBuildChanges.Add(path);
-        if (Pin.SettingsFileNames.Contains(Path.GetFileName(path)))
-        {
-            H.FirstBuildWrites.Add(path);
-        }
+        H.CloneFiles.Add(path);
+        H.BuildChanges(1, path);
     }
 
     [Given("the check command then exits with the code {int}")]
@@ -164,7 +162,7 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     }
 
     [Then("FactoryRun runs no prompt with the plan model")]
-    public void ThenNoPlan() => Assert.DoesNotContain(H.Prompts, p => p.Model == H.PlanModel);
+    public void ThenNoPlan() => Assert.DoesNotContain(H.AgentRequests, r => r.Model == H.PlanModel);
 
     [Then("FactoryRun starts no container")]
     public void ThenNoContainer() => Assert.DoesNotContain(H.Commands, c => c.Command is "docker");
@@ -173,10 +171,10 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     public void ThenShell(string program, string argument)
     {
         string[] words = program.Split(' ');
-        (int index, _, string[] after) = Check();
+        (_, _, string[] after) = Check();
         Assert.Equal([.. words, argument], after);
-        (int build, _, _) = Execs().First(e => e.After[0] is "claude");
-        Assert.True(index < build);
+        int check = H.Timeline.IndexOf(string.Join(' ', ["exec", .. after]));
+        Assert.True(check >= 0 && check < H.Timeline.IndexOf("prompt build"), string.Join(" | ", H.Timeline));
     }
 
     [Then("the container runs {string} at a path outside {string} and the check command runs in that path on the head commit")]
@@ -210,25 +208,25 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     [Then("FactoryRun runs one prompt with the model {string} and the turn limit {int} that holds the title and the body of the issue")]
     public void ThenBuildPrompt(string model, int turns)
     {
-        SeenPrompt prompt = Assert.Single(H.Prompts, p => p.Model == model);
-        Assert.Equal(turns.ToString(System.Globalization.CultureInfo.InvariantCulture), prompt.Turns);
-        Assert.Contains(H.Title, prompt.Text, StringComparison.Ordinal);
-        Assert.Contains(H.Body, prompt.Text, StringComparison.Ordinal);
+        AgentRequest prompt = Assert.Single(H.AgentRequests, r => r.Model == model);
+        Assert.Equal(turns, prompt.MaxTurns);
+        Assert.Contains(H.Title, prompt.Prompt.Text, StringComparison.Ordinal);
+        Assert.Contains(H.Body, prompt.Prompt.Text, StringComparison.Ordinal);
     }
 
     [Then("the build prompt holds no {string}")]
-    public void ThenBuildNo(string text) => Assert.DoesNotContain(text, Assert.Single(H.Prompts, p => p.Kind is "build").Text, StringComparison.Ordinal);
+    public void ThenBuildNo(string text) => Assert.DoesNotContain(text, Assert.Single(H.Builder.Of(Phase.Build)).Prompt.Text, StringComparison.Ordinal);
 
     [Then("the review prompt holds no {string}")]
-    public void ThenReviewNo(string text) => Assert.DoesNotContain(text, Assert.Single(H.Prompts, p => p.Kind is "review").Text, StringComparison.Ordinal);
+    public void ThenReviewNo(string text) => Assert.DoesNotContain(text, Assert.Single(H.Reviewer.Of(Phase.Review)).Prompt.Text, StringComparison.Ordinal);
 
     [Then("the next build prompt holds a Redo text that holds {string}")]
-    public void ThenRedo(string text) => Assert.Contains(text, NextBuild().Text, StringComparison.Ordinal);
+    public void ThenRedo(string text) => Assert.Contains(text, NextBuild().Prompt.Text, StringComparison.Ordinal);
 
     [Then("the next build prompt holds a Redo text that holds {string}, the standard output and the standard error of the command")]
     public void ThenRedoOutput(string code)
     {
-        string text = NextBuild().Text;
+        string text = NextBuild().Prompt.Text;
         Assert.Contains(code, text, StringComparison.Ordinal);
         Assert.Contains("standard output of the check", text, StringComparison.Ordinal);
         Assert.Contains("standard error of the check", text, StringComparison.Ordinal);
@@ -247,23 +245,23 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     [Then("no review prompt runs before it")]
     public void ThenNoReviewBefore()
     {
-        List<SeenPrompt> prompts = factory.OtherPrompts ?? H.Prompts;
+        List<AgentRequest> prompts = H.AgentRequests;
         int next = prompts.IndexOf(NextBuild());
         Assert.True(next >= 0);
-        Assert.DoesNotContain(prompts.Take(next), p => p.Kind is "review");
+        Assert.DoesNotContain(prompts.Take(next), r => r.Phase is Phase.Review);
     }
 
     [Then("FactoryRun runs the review prompt")]
-    public void ThenReview() => Assert.Single(H.Prompts, p => p.Kind is "review");
+    public void ThenReview() => Assert.Single(H.Reviewer.Of(Phase.Review));
 
     [Then("FactoryRun runs one prompt with the model {string} and the turn limit {int} that holds the title of the issue, the body of the issue and the base commit")]
     public void ThenReviewPrompt(string model, int turns)
     {
-        SeenPrompt prompt = Assert.Single(H.Prompts, p => p.Model == model);
-        Assert.Equal(turns.ToString(System.Globalization.CultureInfo.InvariantCulture), prompt.Turns);
-        Assert.Contains(H.Title, prompt.Text, StringComparison.Ordinal);
-        Assert.Contains(H.Body, prompt.Text, StringComparison.Ordinal);
-        Assert.Contains(H.HeadSha, prompt.Text, StringComparison.Ordinal);
+        AgentRequest prompt = Assert.Single(H.AgentRequests, r => r.Model == model);
+        Assert.Equal(turns, prompt.MaxTurns);
+        Assert.Contains(H.Title, prompt.Prompt.Text, StringComparison.Ordinal);
+        Assert.Contains(H.Body, prompt.Prompt.Text, StringComparison.Ordinal);
+        Assert.Contains(H.HeadSha, prompt.Prompt.Text, StringComparison.Ordinal);
     }
 
     [Then("FactoryRun opens a pull request with the title {string} and gives back a result with that pull request and {int} Redos")]

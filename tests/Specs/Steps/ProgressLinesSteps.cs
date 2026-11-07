@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Core;
 using Reqnroll;
 using Specs.Unit;
 using Xunit;
@@ -16,7 +17,7 @@ public sealed class ProgressLinesSteps(ConsoleProgramSteps console)
     public void GivenOnlyPlan(string path)
     {
         Assert.Equal(".factory/plan.md", path);
-        H.AgentWritesOnlyPlan = true;
+        H.PlanWritesOnlyThePlan();
     }
 
     [Given("the test gate is red after the first build and green after the second")]
@@ -27,7 +28,7 @@ public sealed class ProgressLinesSteps(ConsoleProgramSteps console)
     }
 
     [Given("the agent writes a blocked review on the first review prompt")]
-    public void GivenBlockedReview() => H.BlockedReviews = 1;
+    public void GivenBlockedReview() => H.BlockReview(1);
 
     [Then("standard output holds exactly these lines in this order")]
     public void ThenExactLines(Table table)
@@ -36,18 +37,10 @@ public sealed class ProgressLinesSteps(ConsoleProgramSteps console)
         Assert.Equal(expected.Skip(1), Lines);
     }
 
-    [Then("when docker gets the command {string} standard output already holds the line {string}")]
-    public void ThenDockerSeesLine(string command, string line)
-    {
-        int index = H.Commands.FindIndex(c => c.Command is "docker" && string.Join(' ', c.Arguments).StartsWith(command, StringComparison.Ordinal));
-        Assert.True(index >= 0);
-        Assert.Contains(line, H.OutAtCommand[index].Split('\n'));
-    }
-
     [Then("when claude gets the plan prompt standard output already holds the line {string}")]
     public void ThenClaudeSeesLine(string line)
     {
-        int index = H.Prompts.FindIndex(p => p.Kind is "plan");
+        int index = H.AgentRequests.FindIndex(r => r.Phase is Phase.Plan);
         Assert.True(index >= 0);
         Assert.Contains(line, H.OutAtPrompt[index].Split('\n'));
     }

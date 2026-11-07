@@ -1,3 +1,4 @@
+using Core;
 using Xunit;
 
 namespace Specs.Unit;
@@ -8,9 +9,9 @@ public sealed class FeedbackIssueBodyTests
     private const string IssueBody = "## Scope\nREADME.md\n\n## Check\n\n```sh\ngrep -q Feedback README.md\n```\n";
 
     private const string Threads =
-        "\nThread " + FeedbackRunHarness.ThreadA + "\nPath: src/Core/Checkout.cs\nLine: 14\n"
+        "\nThread " + RunHarness.ThreadA + "\nPath: src/Core/Checkout.cs\nLine: 14\n"
         + "Comment by sbiondolillo:\nThe total ignores the second item of the cart.\n"
-        + "\nThread " + FeedbackRunHarness.ThreadB + "\nPath: tests/Specs/Unit/CheckoutTests.cs\nLine: 9\n"
+        + "\nThread " + RunHarness.ThreadB + "\nPath: tests/Specs/Unit/CheckoutTests.cs\nLine: 9\n"
         + "Comment by ada:\nName the unit of the total.\n";
 
     private const string Report =
@@ -26,32 +27,32 @@ public sealed class FeedbackIssueBodyTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     /// <summary>Runs one approved round and gives the build prompt and the review prompt.</summary>
-    private static async Task<IReadOnlyList<SeenPrompt>> PromptsAsync(string? pullBody, string? label)
+    private static async Task<IReadOnlyList<AgentRequest>> PromptsAsync(string? pullBody, string? label)
     {
-        using var h = new FeedbackRunHarness { PullBody = pullBody, IssueBody = IssueBody };
+        using var h = new RunHarness { PullBody = pullBody, Body = IssueBody };
         if (label is not null)
         {
             h.Labels.Add(label);
         }
 
-        await h.RunAsync(Ct);
-        Assert.Equal(["build", "review"], h.Prompts.Select(p => p.Kind));
-        return h.Prompts;
+        await h.RunFeedbackAsync(Ct);
+        Assert.Equal(["build", "review"], h.AgentRequests.Select(r => r.Phase.Text()));
+        return h.AgentRequests;
     }
 
     /// <summary>The prompt holds the body whole: it follows the label of the body and ends where the prompt goes on.</summary>
-    private static void AssertBody(string expected, IReadOnlyList<SeenPrompt> prompts)
+    private static void AssertBody(string expected, IReadOnlyList<AgentRequest> prompts)
     {
-        foreach (SeenPrompt prompt in prompts)
+        foreach (AgentRequest prompt in prompts)
         {
-            Assert.Contains("Issue body:\n" + expected + "\n\n", prompt.Text, StringComparison.Ordinal);
+            Assert.Contains("Issue body:\n" + expected + "\n\n", prompt.Prompt.Text, StringComparison.Ordinal);
         }
     }
 
     [Fact]
     public async Task ACleanupIssueGivesTheIssueBodyThenTheThreadsThenTheReport()
     {
-        IReadOnlyList<SeenPrompt> prompts = await PromptsAsync("Closes #11", "cleanup");
+        IReadOnlyList<AgentRequest> prompts = await PromptsAsync("Closes #11", "cleanup");
         AssertBody(
             IssueBody
             + "\n## Review threads\n\n"
@@ -69,11 +70,11 @@ public sealed class FeedbackIssueBodyTests
     [InlineData("bug", false)]
     public async Task OnlyACleanupIssueDisputesAThreadOutsideTheScope(string label, bool disputes)
     {
-        IReadOnlyList<SeenPrompt> prompts = await PromptsAsync("Closes #11", label);
-        foreach (SeenPrompt prompt in prompts)
+        IReadOnlyList<AgentRequest> prompts = await PromptsAsync("Closes #11", label);
+        foreach (AgentRequest prompt in prompts)
         {
-            Assert.Equal(disputes, prompt.Text.Contains(DisputeRule.Trim(), StringComparison.Ordinal));
-            Assert.Contains(Report + (disputes ? DisputeRule : "") + "\n\n", prompt.Text, StringComparison.Ordinal);
+            Assert.Equal(disputes, prompt.Prompt.Text.Contains(DisputeRule.Trim(), StringComparison.Ordinal));
+            Assert.Contains(Report + (disputes ? DisputeRule : "") + "\n\n", prompt.Prompt.Text, StringComparison.Ordinal);
         }
     }
 
@@ -82,7 +83,7 @@ public sealed class FeedbackIssueBodyTests
     [InlineData("Answers the review.")]
     public async Task APullRequestWithNoClosingIssueKeepsTheThreadsAlone(string? pullBody)
     {
-        IReadOnlyList<SeenPrompt> prompts = await PromptsAsync(pullBody, "cleanup");
+        IReadOnlyList<AgentRequest> prompts = await PromptsAsync(pullBody, "cleanup");
         AssertBody("Answer each review thread below.\n" + Threads + Report, prompts);
     }
 }

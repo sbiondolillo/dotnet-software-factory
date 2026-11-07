@@ -81,9 +81,9 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
     {
         if (body.InUse)
         {
-            body.Result = await body.Harness.RunAsync();
+            body.Result = await body.Harness.RunFactoryAsync();
             Assert.Equal(body.ExpectedRedos, body.Result.Redos);
-            body.Body = body.Harness.PullBody ?? "";
+            body.Body = body.Harness.OpenedBody ?? "";
             return;
         }
 

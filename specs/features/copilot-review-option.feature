@@ -53,7 +53,6 @@ Feature: The option --copilot-review turns the Copilot code review request on
   Scenario: run with the review off still runs the review prompt
     When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --copilot-review off"
     Then claude gets the review prompt
-    And standard error holds the line "agent: review start"
 
   Scenario: run with no review option requests no review and ends on green checks
     Given GitHub answers each read of the check runs with the check run "build" with the status "completed" and the conclusion "success"
