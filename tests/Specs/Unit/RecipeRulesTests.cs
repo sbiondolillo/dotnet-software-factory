@@ -299,11 +299,11 @@ public sealed class RecipeRulesTests
             { behavior, RunKind.Factory, new(null, new PlanStep("Plan the work of the issue below.", PlanInput.IssueScenarios), PinSource.Plan, [GateName.Test]) },
             { behavior, RunKind.Feedback, new(null, null, PinSource.FeatureFiles, [GateName.Test]) },
             { refactor, RunKind.Factory, new(refactorCheck, new PlanStep("Plan the work of the refactor issue below.", PlanInput.IssueText), PinSource.TestFiles, [GateName.Test, GateName.Check]) },
-            { refactor, RunKind.Feedback, new(refactorCheck, null, PinSource.TestFiles, [GateName.Test, GateName.Check]) },
+            { refactor, RunKind.Feedback, new(null, null, PinSource.TestFiles, [GateName.Test, GateName.Check]) },
             { cleanup, RunKind.Factory, new(cleanupCheck, null, PinSource.FeatureFiles, cleanupGates) },
-            { cleanup, RunKind.Feedback, new(cleanupCheck, null, PinSource.FeatureFiles, cleanupGates) },
+            { cleanup, RunKind.Feedback, new(null, null, PinSource.FeatureFiles, cleanupGates) },
             { reframe, RunKind.Factory, new(reframeCheck, null, PinSource.FeatureFiles, reframeGates) },
-            { reframe, RunKind.Feedback, new(reframeCheck, null, PinSource.FeatureFiles, reframeGates) },
+            { reframe, RunKind.Feedback, new(null, null, PinSource.FeatureFiles, reframeGates) },
             { new RecipeChoice(Recipe.Refactor, [], null), RunKind.Factory, new(null, new PlanStep("Plan the work of the refactor issue below.", PlanInput.IssueText), PinSource.TestFiles, [GateName.Test]) },
             { new RecipeChoice(Recipe.Refactor, [], null), RunKind.Feedback, new(null, null, PinSource.TestFiles, [GateName.Test]) },
         };
@@ -315,13 +315,23 @@ public sealed class RecipeRulesTests
         Assert.Equal(sequence, RecipeRules.Sequence(choice, run));
 
     [Fact]
-    public void TwoSequencesDifferWhenTheirGatesDiffer()
+    public void TwoSequencesDifferWhenAnyStepDiffers()
     {
         var one = new RecipeSequence(null, null, PinSource.FeatureFiles, [GateName.Test, GateName.Check]);
         Assert.Equal(one, new RecipeSequence(null, null, PinSource.FeatureFiles, [GateName.Test, GateName.Check]));
+        Assert.Equal(one.GetHashCode(), new RecipeSequence(null, null, PinSource.FeatureFiles, [GateName.Test, GateName.Check]).GetHashCode());
+        Assert.NotEqual(one, one with { PreCheck = new PreCheckWords("before the build", "clean up") });
+        Assert.NotEqual(one, one with { Plan = new PlanStep("Plan the work of the issue below.", PlanInput.IssueText) });
+        Assert.NotEqual(one, one with { Pin = PinSource.TestFiles });
         Assert.NotEqual(one, new RecipeSequence(null, null, PinSource.FeatureFiles, [GateName.Check, GateName.Test]));
         Assert.NotEqual(one, new RecipeSequence(null, null, PinSource.FeatureFiles, [GateName.Test]));
     }
+
+    [Fact]
+    public void ASequenceNamesItsGatesInItsText() =>
+        Assert.Equal(
+            "RecipeSequence { PreCheck = , Plan = , Pin = FeatureFiles, Gates = [Scope, Test] }",
+            new RecipeSequence(null, null, PinSource.FeatureFiles, [GateName.Scope, GateName.Test]).ToString());
 
     private static PlanStep PlanOf(Recipe recipe) =>
         RecipeRules.Sequence(new RecipeChoice(recipe, [], null), RunKind.Factory).Plan ?? throw new InvalidOperationException("The recipe has no plan phase.");

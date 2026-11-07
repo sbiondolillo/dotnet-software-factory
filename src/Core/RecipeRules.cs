@@ -59,6 +59,10 @@ public sealed record RecipeSequence(
 
     /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(PreCheck, Plan, Pin, Gates.Count);
+
+    /// <summary>Gives each step, and the gates by name in order, so that a failed assertion shows the gates.</summary>
+    public override string ToString() =>
+        $"RecipeSequence {{ PreCheck = {PreCheck}, Plan = {Plan}, Pin = {Pin}, Gates = [{string.Join(", ", Gates)}] }}";
 }
 
 /// <summary>Holds every rule that a recipe picks: the labels and the body it reads, its pin, and the texts of its prompts.</summary>
@@ -131,31 +135,32 @@ public static class RecipeRules
         return new RecipeChoice(Recipe.Behavior, [], null);
     }
 
-    /// <summary>The steps of a run of <paramref name="choice"/> by a run of the kind <paramref name="run"/>, as the recipe picks
-    /// them. A feedback run has no plan phase. The check before the first phase runs only for a choice with a check.</summary>
+    /// <summary>The steps that the recipe of <paramref name="choice"/> picks for a run of the kind <paramref name="run"/>. A feedback
+    /// run has no plan phase and no check before the first phase. A factory run checks before the first phase only for a choice
+    /// with a check.</summary>
     public static RecipeSequence Sequence(RecipeChoice choice, RunKind run)
     {
         ArgumentNullException.ThrowIfNull(choice);
-        bool planned = run is RunKind.Factory;
+        bool factory = run is RunKind.Factory;
         return choice.Recipe switch
         {
             Recipe.Behavior => new(
                 null,
-                planned ? new PlanStep(PlanLead, PlanInput.IssueScenarios) : null,
-                planned ? PinSource.Plan : PinSource.FeatureFiles,
+                factory ? new PlanStep(PlanLead, PlanInput.IssueScenarios) : null,
+                factory ? PinSource.Plan : PinSource.FeatureFiles,
                 [GateName.Test]),
             Recipe.Refactor => new(
-                PreCheck(choice, "before the plan", "refactor"),
-                planned ? new PlanStep(RefactorPlanLead, PlanInput.IssueText) : null,
+                factory ? PreCheck(choice, "before the plan", "refactor") : null,
+                factory ? new PlanStep(RefactorPlanLead, PlanInput.IssueText) : null,
                 PinSource.TestFiles,
                 choice.Check is null ? [GateName.Test] : [GateName.Test, GateName.Check]),
             Recipe.Cleanup => new(
-                PreCheck(choice, "before the build", "clean up"),
+                factory ? PreCheck(choice, "before the build", "clean up") : null,
                 null,
                 PinSource.FeatureFiles,
                 [GateName.Scope, GateName.Test, GateName.Check]),
             Recipe.Reframe => new(
-                PreCheck(choice, "before the build", "reframe"),
+                factory ? PreCheck(choice, "before the build", "reframe") : null,
                 null,
                 PinSource.FeatureFiles,
                 [GateName.Scope, GateName.Test, GateName.Api, GateName.Check]),
