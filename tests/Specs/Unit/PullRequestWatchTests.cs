@@ -21,8 +21,9 @@ public sealed class PullRequestWatchTests
         return (new PullRequestWatch(new PullRequests(client), new ReviewThreads(client), delay ?? time.WaitAsync, time), handler);
     }
 
+    /// <summary>Watches with a wait of 1 s by default. A wait of zero moves the fake clock by nothing, so a watch that misses its timeout would loop forever.</summary>
     private static Task<PullRequestWatchResult> Watch(PullRequestWatch sut, TimeSpan timeout, TimeSpan? wait = null, CancellationToken token = default) =>
-        sut.WatchAsync("o", "r", 1, "me", wait ?? TimeSpan.Zero, timeout, token);
+        sut.WatchAsync("o", "r", 1, "me", wait ?? TimeSpan.FromSeconds(1), timeout, token);
 
     [Fact]
     public async Task APullRequestReadThatFailsThrowsWith404()
