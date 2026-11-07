@@ -70,7 +70,7 @@ public sealed class FactoryRunTests
         h.Builder.Clear(Phase.Plan);
         FactoryRunResult result = await h.RunFactoryAsync(Ct);
         Assert.Contains(".factory/plan.md", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
-        Assert.Empty(h.Builder.Of(Phase.Build));
+        Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Build);
         Assert.Equal(new FactoryRunResult(null, 0), result);
         Assert.Contains("rm", h.Events);
     }
@@ -86,7 +86,7 @@ public sealed class FactoryRunTests
 
         FactoryRunResult result = await h.RunFactoryAsync(Ct);
         Assert.Equal(4, h.Builder.Of(Phase.Build).Count());
-        Assert.Empty(h.Reviewer.Of(Phase.Review));
+        Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Review);
         string body = Assert.Single(h.CommentBodies);
         Assert.Contains(RunHarness.RedText, body, StringComparison.Ordinal);
         Assert.Contains("spent", body, StringComparison.Ordinal);
@@ -211,53 +211,4 @@ public sealed class FactoryRunTests
         CommandSpec only = Assert.Single(withName);
         Assert.Contains("tests/Integration", only.Arguments);
     }
-
-    [Fact]
-    public async Task OnTheManagedPathThePushOfTheSessionBranchComesBeforeEachPrompt()
-    {
-        using var h = new RunHarness();
-        UseManaged(h);
-        h.RedBuilds.Add(1);
-        await h.RunFactoryAsync(Ct);
-
-        string push = $"git push origin factory/{h.RunId}-session";
-        List<string> steps = [.. h.Timeline.Where(line => line == push || IsPrompt(line)).Select(line => line == push ? "push" : "prompt")];
-        Assert.Equal(["push", "prompt", "push", "prompt", "push", "prompt", "push", "prompt"], steps);
-    }
-
-    [Fact]
-    public async Task OnTheManagedPathTheCommitOfTheLintIsPushedBeforeTheReviewPrompt()
-    {
-        using var h = new RunHarness { ChangeAfterBuild = true };
-        UseManaged(h);
-        await h.RunFactoryAsync(Ct);
-
-        int review = h.Timeline.FindLastIndex(IsPrompt);
-        int commit = h.Timeline.FindLastIndex(review, line => line.StartsWith("git commit", StringComparison.Ordinal));
-        int push = h.Timeline.FindLastIndex(review, line => line == $"git push origin factory/{h.RunId}-session");
-        Assert.True(commit >= 0 && push > commit, string.Join(" | ", h.Timeline));
-    }
-
-    [Fact]
-    public async Task OnTheManagedPathOnlyTheBuildPromptReadsTheHeadOfTheSessionBranchAroundIt()
-    {
-        using var h = new RunHarness();
-        UseManaged(h);
-        await h.RunFactoryAsync(Ct);
-
-        List<string> steps = [.. h.Timeline.Where(line => line.StartsWith("git ls-remote", StringComparison.Ordinal) || IsPrompt(line)).Select(line => IsPrompt(line) ? "prompt" : "head")];
-        Assert.Equal(["prompt", "head", "prompt", "head", "prompt"], steps);
-    }
-
-    /// <summary>Puts the run on the managed path with one model for every phase, as the program gives it: a session keeps the model
-    /// of its first prompt.</summary>
-    private static void UseManaged(RunHarness h)
-    {
-        h.UseManaged();
-        h.PlanModel = h.BuildModel = h.ReviewModel = "claude-sonnet-5-5";
-    }
-
-    /// <summary>A prompt starts a session with its first message, or sends a message to a session that runs.</summary>
-    private static bool IsPrompt(string line) =>
-        line is "POST /v1/sessions" || (line.StartsWith("POST /v1/sessions/", StringComparison.Ordinal) && line.EndsWith("/events", StringComparison.Ordinal));
 }

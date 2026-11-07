@@ -44,7 +44,7 @@ public sealed class RefactorRunTests
         h.CheckResults[0] = (0, "", "");
         FactoryRunResult result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.Contains("The check passes before the plan", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
-        Assert.Empty(h.Builder.Of(Phase.Plan));
+        Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Plan);
         Assert.Contains(h.Commands, c => c.Arguments.Contains("remove"));
         Assert.Equal(new FactoryRunResult(null, 0), result);
     }
@@ -60,7 +60,7 @@ public sealed class RefactorRunTests
         string comment = Assert.Single(h.CommentBodies);
         Assert.Contains(code.ToString(CultureInfo.InvariantCulture), comment, StringComparison.Ordinal);
         Assert.Contains("no such command", comment, StringComparison.Ordinal);
-        Assert.Empty(h.Builder.Of(Phase.Plan));
+        Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Plan);
     }
 
     [Theory]
@@ -85,11 +85,18 @@ public sealed class RefactorRunTests
             Directory.CreateDirectory(Path.Combine(directory, "src"));
             File.WriteAllText(Path.Combine(directory, "src/Old.cs"), "old");
         };
-        h.Builder.Act(Phase.Plan, _ => (remove ? (Action)(() => h.Remove("src/Old.cs")) : () => h.Write("src/Old.cs", PlanPhaseHarness.SoundFeature))(), 1);
+        if (remove)
+        {
+            h.Builder.Act(Phase.Plan, _ => h.Remove("src/Old.cs"), 1);
+        }
+        else
+        {
+            h.Builder.Act(Phase.Plan, _ => h.Write("src/Old.cs", PlanPhaseHarness.SoundFeature), 1);
+        }
         FactoryRunResult result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.Contains("src/Old.cs", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.Contains(remove ? "gone" : "changed", h.CommentBodies.Single(), StringComparison.Ordinal);
-        Assert.Empty(h.Builder.Of(Phase.Build));
+        Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Build);
         Assert.Equal(new FactoryRunResult(null, 0), result);
     }
 
@@ -101,7 +108,7 @@ public sealed class RefactorRunTests
         FactoryRunResult result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.Contains(".factory/plan.md", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.Equal(2, h.Builder.Of(Phase.Plan).Count());
-        Assert.Empty(h.Builder.Of(Phase.Build));
+        Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Build);
         Assert.Equal(new FactoryRunResult(null, 0), result);
     }
 
@@ -168,7 +175,7 @@ public sealed class RefactorRunTests
         h.WorktreeAddFails = true;
         SandboxException exception = await Assert.ThrowsAsync<SandboxException>(() => h.RunFactoryAsync(TestContext.Current.CancellationToken));
         Assert.Contains("cannot add the worktree", exception.Message, StringComparison.Ordinal);
-        Assert.Empty(h.Builder.Of(Phase.Plan));
+        Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Plan);
     }
 
     [Theory]
@@ -189,7 +196,7 @@ public sealed class RefactorRunTests
         h.Builder.Answer(Phase.Plan, FakeAgent.Error("plan went wrong"));
         FactoryRunResult result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.Contains("plan went wrong", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
-        Assert.Empty(h.Builder.Of(Phase.Build));
+        Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Build);
         Assert.Null(result.PullRequest);
     }
 }

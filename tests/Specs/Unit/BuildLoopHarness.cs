@@ -12,7 +12,6 @@ namespace Specs.Unit;
 /// </summary>
 public sealed class BuildLoopHarness : IAsyncDisposable
 {
-
     private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("build-loop-root-");
     private readonly DirectoryInfo _work = Directory.CreateTempSubdirectory("build-loop-work-");
     private readonly Dictionary<GateName, int> _gateCalls = [];

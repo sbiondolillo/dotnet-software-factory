@@ -32,8 +32,7 @@ public sealed class StepClock : TimeProvider
 /// <c>specs/features/checkout.feature</c> unless the recipe plans alone; a build prompt writes the report that marks the threads A
 /// and B fixed; a review prompt approves. A test changes a script on <see cref="Builder"/> or <see cref="Reviewer"/>, by phase and
 /// by prompt number. The knobs on the harness drive git, the gates and GitHub. A gate knob counts the builds that ran before it,
-/// so the build 0 is the base commit. <see cref="UseManaged"/> puts the real <see cref="ManagedBackend"/> in place of the fake, with
-/// the two agents behind its sessions.
+/// so the build 0 is the base commit. The unit of these tests is the run: what an adapter does below the seam has its own tests.
 /// </remarks>
 public sealed class RunHarness : IDisposable
 {
@@ -249,10 +248,7 @@ public sealed class RunHarness : IDisposable
 
     public bool LintFails { get; set; }
 
-    // The managed path.
-
-    /// <summary>The fake of the Managed Agents API, or null on the path of the fake backend.</summary>
-    public ManagedRunFake? Managed { get; private set; }
+    // The backend.
 
     /// <summary>The sessions the fake backend gives the job summary.</summary>
     public List<SessionCost> Sessions { get; } = [];
@@ -280,8 +276,8 @@ public sealed class RunHarness : IDisposable
 
     public List<CommandSpec> Commands { get; } = [];
 
-    /// <summary>Each git command, as its words, each command in the container, as <c>exec</c> and its words, each request to the
-    /// fake of the Managed Agents API, as its method and path, and each prompt, as <c>prompt</c> and its phase, in order.</summary>
+    /// <summary>Each git command, as its words, each command in the container, as <c>exec</c> and its words, each prompt, as
+    /// <c>prompt</c> and its phase, and each step of the backend, as <c>collect</c> and the branch or as <c>end</c>, in order.</summary>
     public List<string> Timeline { get; } = [];
 
     /// <summary>The order in which pushes, comments, prompts, test commands, replies, resolves and container removals happened.</summary>
@@ -319,34 +315,17 @@ public sealed class RunHarness : IDisposable
     public static string Items(IEnumerable<(string Id, string Status, string Reply)> items) =>
         JsonSerializer.Serialize(new { threads = items.Select(i => new { id = i.Id, status = i.Status, reply = i.Reply }) });
 
-    /// <summary>Puts the run on the managed path: the real <see cref="ManagedBackend"/>, with the two agents behind its sessions.</summary>
-    public void UseManaged() => Managed = new ManagedRunFake { OnMessage = (_, _) => FakeBackend.PlaySession(Builder, Reviewer, Managed!) };
-
-    /// <summary>Writes a file of the agent into the clone. On the managed path the file waits for the next pull.</summary>
+    /// <summary>Writes a file of the agent into the clone.</summary>
     public void Write(string relative, string text)
     {
-        if (Managed is not null)
-        {
-            Managed.Stage(relative, text);
-            return;
-        }
-
         string full = Path.Combine(_clone.FullName, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
         File.WriteAllText(full, text);
     }
 
-    /// <summary>Removes a file of the clone, as the agent does. On the managed path the removal waits for the next pull.</summary>
-    public void Remove(string relative)
-    {
-        if (Managed is not null)
-        {
-            Managed.Stage(relative, null);
-            return;
-        }
-
+    /// <summary>Removes a file of the clone, as the agent does.</summary>
+    public void Remove(string relative) =>
         File.Delete(Path.Combine(_clone.FullName, relative));
-    }
 
     /// <summary>Appends <paramref name="text"/> to a file of the clone, as the agent does.</summary>
     public void Append(string relative, string text) =>
@@ -370,7 +349,7 @@ public sealed class RunHarness : IDisposable
 
     /// <summary>Scripts the answer of each prompt of <paramref name="phase"/> on the agent of that phase to take
     /// <paramref name="seconds"/> on the run's clock.</summary>
-    public void Takes(Phase phase, double seconds, int? number = null) =>
+    private void Takes(Phase phase, double seconds, int? number = null) =>
         AgentOf(phase).Act(phase, _ => Clock.Advance(seconds), number);
 
     /// <summary>Scripts the prompt <paramref name="number"/> of <paramref name="phase"/> to answer with <paramref name="turns"/>,
@@ -441,14 +420,7 @@ public sealed class RunHarness : IDisposable
         mock.Setup(r => r.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec spec, CancellationToken _) => Task.FromResult(Answer(spec)));
         var client = new GitHubClient(new HttpClient(new Handler(this)), Token, TimeSpan.Zero);
-        StartBackend backend = Managed is null
-            ? FakeBackend.Starter(mock.Object, "factory-sandbox:test", _root.FullName, Builder, Reviewer, Sessions, Clock, Progress)
-            : FakeBackend.Around(
-                AgentBackend.Pick(new BackendOptions(
-                    mock.Object, "factory-sandbox:test", _root.FullName, ManagedRunFake.Settings(), Owner, Repo, Token, AuthorName, AuthorEmail,
-                    new Handler(this), (_, _) => Task.CompletedTask, Log, Progress: Progress)),
-                Builder,
-                Reviewer);
+        StartBackend backend = FakeBackend.Starter(mock.Object, "factory-sandbox:test", _root.FullName, Builder, Reviewer, Sessions, Clock, Timeline.Add);
         return (mock, client, backend);
     }
 
@@ -525,13 +497,6 @@ public sealed class RunHarness : IDisposable
             case "push":
                 Events.Add("push");
                 return PushFailure is null ? new CommandResult() : new CommandResult { ExitCode = 1, StandardError = PushFailure };
-            case "pull":
-                Managed?.Pull(_clone.FullName);
-                return new CommandResult();
-            case "ls-remote" when Managed is not null:
-                return new CommandResult { StandardOutput = Managed.LsRemote(spec.Arguments) };
-            case "ls-files" when Managed is not null:
-                return new CommandResult { StandardOutput = string.Concat(Managed.TrackedFactoryFiles.Select(file => file + "\n")) };
             default:
                 return new CommandResult();
         }
@@ -705,7 +670,7 @@ public sealed class RunHarness : IDisposable
     };
 
     /// <summary>Answers GitHub for both kinds of run: the issue, the list and the opening of the pull requests of a factory run, and
-    /// the pull request and the review threads of a feedback run. The fake of the Managed Agents API answers its own requests.</summary>
+    /// the pull request and the review threads of a feedback run.</summary>
     private (int Status, string Body) Route(string method, string path, string? content)
     {
         if (method is "GET" && path.EndsWith("/pulls", StringComparison.Ordinal))
@@ -771,13 +736,6 @@ public sealed class RunHarness : IDisposable
         {
             string? content = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
             Uri uri = request.RequestUri!;
-            if (harness.Managed is { } managed && ManagedRunFake.Handles(uri))
-            {
-                harness.Timeline.Add($"{request.Method.Method} {uri.AbsolutePath}");
-                (int code, string answer) = managed.Route(request.Method.Method, uri, content);
-                return new HttpResponseMessage((HttpStatusCode)code) { Content = new StringContent(answer, Encoding.UTF8, "application/json") };
-            }
-
             harness.Requests.Add(new SeenRequest(request.Method.Method, uri.AbsoluteUri, content));
             (int status, string body) = harness.Route(request.Method.Method, uri.AbsolutePath, content);
             return new HttpResponseMessage((HttpStatusCode)status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };

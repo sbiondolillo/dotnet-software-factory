@@ -200,7 +200,6 @@ Feature: A refactor run changes the structure of the code and leaves every test 
     Then standard output holds exactly these lines in this order
       | line |
       | clone: start |
-      | sandbox: start |
       | check: start |
       | check: red |
       | plan: start |
@@ -227,7 +226,6 @@ Feature: A refactor run changes the structure of the code and leaves every test 
     Then standard output holds exactly these lines in this order
       | line |
       | clone: start |
-      | sandbox: start |
       | plan: start |
       | plan: passed |
       | build: start |

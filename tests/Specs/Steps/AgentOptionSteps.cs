@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.RegularExpressions;
 using Core;
 using Reqnroll;
 using Specs.Unit;
@@ -8,115 +6,43 @@ using Xunit;
 namespace Specs.Steps;
 
 [Binding]
-public sealed partial class AgentOptionSteps(ConsoleProgramSteps console)
+public sealed class AgentOptionSteps(ConsoleProgramSteps console)
 {
     private ConsoleHarness H => console.Harness;
 
-    private List<string> Pushes => [.. H.Commands.Where(c => c.Command is "git" && c.Arguments[0] is "push").Select(c => string.Join(' ', c.Arguments))];
-
-    private string DeliveryBranch => H.Commands
-        .Where(c => c.Command is "git" && c.Arguments is ["push", "origin", _])
-        .Select(c => c.Arguments[2])
-        .Single(name => DeliveryName().IsMatch(name));
-
-    private string PullBody =>
-        JsonDocument.Parse(Assert.Single(H.Posts("/pulls")).Content!).RootElement.GetProperty("body").GetString() ?? "";
-
-    [GeneratedRegex("^factory/[0-9a-f]{8}$")]
-    private static partial Regex DeliveryName();
-
     [Given("the environment holds the variables of the managed agent")]
-    public void GivenManaged() => H.UseManaged();
-
-    [Given("a session answer costs {int} cents for the plan, {int} cents for a build and {int} cents for a review")]
-    public void GivenCents(int plan, int build, int review)
-    {
-        H.Builder.Answer(Phase.Plan, FakeAgent.Done() with { CostUsd = plan / 100m });
-        H.Builder.Answer(Phase.Build, FakeAgent.Done() with { CostUsd = build / 100m });
-        H.Reviewer.Answer(Phase.Review, FakeAgent.Done() with { CostUsd = review / 100m });
-    }
-
-    [Given("the environment variable GITHUB_STEP_SUMMARY of the program names an empty file")]
-    public void GivenSummary()
-    {
-        string path = Path.Combine(H.Root, "summary.md");
-        File.WriteAllText(path, "");
-        H.Environment["GITHUB_STEP_SUMMARY"] = path;
-    }
+    public void GivenManaged() => H.AddManagedVariables();
 
     [Then("docker runs a command")]
     public void ThenDocker() => Assert.Contains(H.Commands, c => c.Command is "docker");
 
-    [Then("the docker run of the program holds neither {string} nor {string}")]
-    public void ThenDockerRunLacks(string first, string second)
+    [Then("the backend of each run gets the settings of the sessions with the agent {string} and the environment {string}")]
+    public void ThenSettings(string agent, string environment)
     {
-        CommandSpec run = Assert.Single(H.Commands, c => c.Command is "docker" && c.Arguments[0] is "run");
-        Assert.DoesNotContain(run.Arguments, argument => argument.Contains(first, StringComparison.Ordinal));
-        Assert.DoesNotContain(run.Arguments, argument => argument.Contains(second, StringComparison.Ordinal));
+        Assert.NotEmpty(H.BackendOptions);
+        Assert.All(H.BackendOptions, options =>
+        {
+            ManagedAgentsSettings settings = Assert.IsType<ManagedAgentsSettings>(options.Settings);
+            Assert.Equal(agent, settings.AgentId);
+            Assert.Equal(environment, settings.EnvironmentId);
+        });
     }
 
-    [Then("git pushes the session branch, the name of the delivery branch with {string} after it, before the first session starts")]
-    public void ThenSessionBranchFirst(string suffix)
+    [Then("the backend of each run gets no settings of the sessions")]
+    public void ThenNoSettings()
     {
-        string session = DeliveryBranch + suffix;
-        int push = H.Timeline.IndexOf($"git push origin {session}");
-        int start = H.Timeline.FindIndex(line => line is "POST /v1/sessions");
-        Assert.True(push >= 0, $"no push of {session}: {string.Join(" | ", Pushes)}");
-        Assert.True(start >= 0, "no session started");
-        Assert.True(push < start, "the session started before the push of its branch");
+        Assert.NotEmpty(H.BackendOptions);
+        Assert.All(H.BackendOptions, options => Assert.Null(options.Settings));
     }
 
-    [Then("git deletes the session branch on origin after the push of the delivery branch")]
-    public void ThenSessionBranchDeleted()
+    [Then("the backend of each run writes its progress lines to standard output and its log to standard error")]
+    public void ThenWriters()
     {
-        string delivery = DeliveryBranch;
-        string session = delivery + "-session";
-        int deliveryPush = H.Timeline.IndexOf($"git push origin {delivery}");
-        int delete = H.Timeline.FindLastIndex(line => line.StartsWith("git push", StringComparison.Ordinal)
-            && line.Contains("--delete", StringComparison.Ordinal) && line.EndsWith(" " + session, StringComparison.Ordinal));
-        Assert.True(delete > deliveryPush, $"pushes: {string.Join(" | ", Pushes)}");
+        Assert.NotEmpty(H.BackendOptions);
+        Assert.All(H.BackendOptions, options =>
+        {
+            Assert.Same(H.Out, options.Progress);
+            Assert.Same(H.Error, options.Log);
+        });
     }
-
-    [Then("standard output held the line {string} when the docker run started")]
-    public void ThenLineBeforeDockerRun(string line)
-    {
-        int run = H.Commands.FindIndex(c => c.Command is "docker" && c.Arguments[0] is "run");
-        Assert.True(run >= 0, "the program sent no docker run");
-        Assert.Contains(line, H.OutAtCommand[run].Split(Environment.NewLine));
-    }
-
-    [Then("the container runs {string} before {string}")]
-    public void ThenContainerOrder(string first, string second)
-    {
-        List<string> container =
-        [
-            .. H.Commands
-                .Where(c => c.Command is "docker" && c.Arguments[0] is "exec" && c.Arguments.Contains("dotnet"))
-                .Select(c => string.Join(' ', c.Arguments.SkipWhile(argument => argument is not "dotnet"))),
-        ];
-        int a = container.IndexOf(first);
-        int b = container.IndexOf(second);
-        Assert.True(a >= 0 && b > a, $"container commands: {string.Join(" | ", container)}");
-    }
-
-    [Then("the body of the pull request holds a line that starts with {string}")]
-    public void ThenBodyLine(string start) => Assert.Contains(PullBody.Split('\n'), line => line.StartsWith(start, StringComparison.Ordinal));
-
-    [Then("the body of the pull request ends with the line {string}")]
-    public void ThenBodyEnds(string line) => Assert.Equal(line, PullBody.Split('\n')[^1]);
-
-    [Then("the job summary of the program starts with the line {string} and holds no other line that starts with {string}")]
-    public void ThenSummaryStarts(string heading, string prefix)
-    {
-        string[] lines = File.ReadAllLines(H.Environment["GITHUB_STEP_SUMMARY"]);
-        Assert.Equal(heading, lines[0]);
-        Assert.Single(lines, line => line.StartsWith(prefix, StringComparison.Ordinal));
-    }
-
-    [Then("the job summary of the program ends with the lines")]
-    public void ThenSummaryEnds(string expected) =>
-        Assert.EndsWith(
-            expected.Replace("\r\n", "\n", StringComparison.Ordinal) + "\n",
-            File.ReadAllText(H.Environment["GITHUB_STEP_SUMMARY"]),
-            StringComparison.Ordinal);
 }

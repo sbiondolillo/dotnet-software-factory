@@ -52,7 +52,7 @@ public sealed class CleanupRunTests
         h.CheckResults[0] = (0, "", "");
         FactoryRunResult result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.Contains("The check passes before the build", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
-        Assert.Empty(h.Builder.Of(Phase.Build));
+        Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Build);
         Assert.Contains(h.Commands, c => c.Arguments.Contains("remove"));
         Assert.Equal(0, result.Redos);
     }
@@ -68,7 +68,7 @@ public sealed class CleanupRunTests
         string comment = Assert.Single(h.CommentBodies);
         Assert.Contains(code.ToString(System.Globalization.CultureInfo.InvariantCulture), comment, StringComparison.Ordinal);
         Assert.Contains("no such command", comment, StringComparison.Ordinal);
-        Assert.Empty(h.Builder.Of(Phase.Build));
+        Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Build);
     }
 
     [Theory]

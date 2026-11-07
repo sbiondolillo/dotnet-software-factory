@@ -176,7 +176,8 @@ public sealed class FeedbackRunTests
     public async Task ARoundAppendsItsSectionToTheJobSummaryWithTheSessionsAtTheEnd()
     {
         using var h = new RunHarness();
-        h.UseManaged();
+        h.Sessions.Add(new SessionCost("sesn_01", "builder", 300));
+        h.Sessions.Add(new SessionCost("sesn_02", "reviewer", 37));
         File.WriteAllText(h.SummaryPath!, "## Factory run\n");
         Assert.Equal(new FeedbackRunResult(2, 0, 0), await h.RunFeedbackAsync(Ct));
         string summary = h.Summary;
@@ -185,7 +186,7 @@ public sealed class FeedbackRunTests
         Assert.Equal(
             ["build 1", "lint 1", "test 1", "review 1"],
             section.Split('\n').Where(line => line.StartsWith("| ", StringComparison.Ordinal)).Skip(1).Select(line => line.Split('|')[1].Trim()));
-        Assert.Matches(@"\n### Sessions\n\n(- sesn_\d+, \w+, \$\d+\.\d\d\n)+$", section);
+        Assert.EndsWith("\n### Sessions\n\n- sesn_01, builder, $3.00\n- sesn_02, reviewer, $0.37\n", section, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -268,39 +269,4 @@ public sealed class FeedbackRunTests
         Assert.Empty(RepliedIds(h));
         Assert.Contains("rm", h.Events);
     }
-
-    [Fact]
-    public async Task OnTheManagedPathThePushOfTheSessionBranchComesBeforeEachPrompt()
-    {
-        using var h = new RunHarness();
-        h.UseManaged();
-        h.RedBuilds.Add(1);
-        await h.RunFeedbackAsync(Ct);
-
-        List<string> steps = [.. h.Timeline.Where(line => IsSessionPush(line) || IsPrompt(line)).Select(line => IsSessionPush(line) ? "push" : "prompt")];
-        Assert.Equal(["push", "prompt", "push", "prompt", "push", "prompt"], steps);
-    }
-
-    [Fact]
-    public async Task OnTheManagedPathABuildThatPushesNoCommitPutsThatFactInTheNextBuildPrompt()
-    {
-        using var h = new RunHarness();
-        h.UseManaged();
-        h.Builder.Act(Phase.Build, _ => h.Managed!.HoldHead(), 1);
-        h.RedBuilds.Add(1);
-        await h.RunFeedbackAsync(Ct);
-
-        List<AgentRequest> builds = [.. h.Builder.Of(Phase.Build)];
-        Assert.Equal(2, builds.Count);
-        Assert.DoesNotContain(NoCommitText, builds[0].Prompt.Text, StringComparison.Ordinal);
-        Assert.Contains(NoCommitText, builds[1].Prompt.Text, StringComparison.Ordinal);
-    }
-
-    private const string NoCommitText = "The build pushed no commit to the session branch. Commit the work and push it to that branch.";
-
-    private static bool IsSessionPush(string line) => line.StartsWith("git push origin ", StringComparison.Ordinal) && line.EndsWith("-session", StringComparison.Ordinal) && !line.Contains("--delete", StringComparison.Ordinal);
-
-    /// <summary>A prompt starts a session with its first message, or sends a message to a session that runs.</summary>
-    private static bool IsPrompt(string line) =>
-        line is "POST /v1/sessions" || (line.StartsWith("POST /v1/sessions/", StringComparison.Ordinal) && line.EndsWith("/events", StringComparison.Ordinal));
 }

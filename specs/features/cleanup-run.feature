@@ -214,7 +214,6 @@ Feature: A cleanup run fixes a test, a config file or a document
     Then standard output holds exactly these lines in this order
       | line |
       | clone: start |
-      | sandbox: start |
       | check: start |
       | check: red |
       | build: start |

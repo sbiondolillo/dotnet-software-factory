@@ -135,8 +135,11 @@ inspect exits with a code other than 0, then `docker run`. Each command runs as
 test of the sandbox or of a gate, a mock `CommandRunner` under a `Sandbox` answers `run`
 and `exec` by name and every other `docker` command with the code 0, as
 `tests/Specs/Steps/LintGateSteps.cs` does. `Sandbox.StartForGatesAsync` does the same,
-and its `docker run` carries neither Anthropic variable. A test of a run hands the run a
-fake `AgentBackend` through its `StartBackend` delegate, and starts no `claude`.
+and its `docker run` carries neither Anthropic variable. A test whose unit is the run hands
+the run the fake `AgentBackend` of `tests/Specs/Unit/FakeBackend.cs` through its
+`StartBackend` delegate, and starts no `claude`. A test of what an adapter does below the
+seam drives that adapter alone, with a fake at its lower edge, as
+`tests/Specs/Unit/ManagedBackendHarness.cs` does.
 
 The gates of every run run in a `Sandbox`, since they run an agent's code. A Managed
 Agents run starts one with `Sandbox.StartForGatesAsync`, before the first session. No

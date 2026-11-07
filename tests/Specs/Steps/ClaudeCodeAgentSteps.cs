@@ -12,6 +12,11 @@ public sealed class ClaudeCodeAgentSteps(ExceptionState exceptionState) : IDispo
     private readonly DirectoryInfo _directory = Directory.CreateTempSubdirectory("factory-claude-steps-");
     private readonly DirectoryInfo _tree = Directory.CreateTempSubdirectory("factory-claude-steps-tree-");
     private readonly List<CommandSpec> _recorded = [];
+    private readonly StringWriter _log = new();
+    private readonly FakeTime _time = new();
+    private readonly List<(TimeSpan Elapsed, AgentAnswer Answer)> _reported = [];
+    private string? _logAtExec;
+    private double _execSeconds;
     private CommandResult _exec = new();
     private (string Path, string Text)? _write;
     private ClaudeCodeAgent? _agent;
@@ -20,6 +25,7 @@ public sealed class ClaudeCodeAgentSteps(ExceptionState exceptionState) : IDispo
 
     public void Dispose()
     {
+        _log.Dispose();
         _directory.Delete(recursive: true);
         _tree.Delete(recursive: true);
     }
@@ -33,6 +39,8 @@ public sealed class ClaudeCodeAgentSteps(ExceptionState exceptionState) : IDispo
 
     private CommandResult Exec()
     {
+        _logAtExec = _log.ToString();
+        _time.WaitAsync(TimeSpan.FromSeconds(_execSeconds), CancellationToken.None).GetAwaiter().GetResult();
         if (_write is (string path, string text))
         {
             WriteTree(path, text);
@@ -60,7 +68,7 @@ public sealed class ClaudeCodeAgentSteps(ExceptionState exceptionState) : IDispo
             File.WriteAllText(Path.Combine(_directory.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
             Sandbox sandbox = await Sandbox.StartAsync(
                 mock.Object, "factory-sandbox:test", _directory.FullName, _tree.FullName, TestContext.Current.CancellationToken);
-            _agent = new ClaudeCodeAgent(sandbox, _tree.FullName);
+            _agent = new ClaudeCodeAgent(sandbox, _tree.FullName, _log, _time, (elapsed, answer) => _reported.Add((elapsed, answer)));
         }
 
         return _agent;
@@ -68,12 +76,15 @@ public sealed class ClaudeCodeAgentSteps(ExceptionState exceptionState) : IDispo
 
     private List<string> ExecArguments() => [.. _recorded.Single(spec => spec.Arguments[0] == "exec").Arguments];
 
-    private async Task RunAsync(string prompt, string model, int turns, params string[] outputs)
+    private async Task RunAsync(string prompt, string model, int turns, params string[] outputs) =>
+        await RunAsync(prompt, model, turns, Phase.Build, outputs);
+
+    private async Task RunAsync(string prompt, string model, int turns, Phase phase, params string[] outputs)
     {
         ClaudeCodeAgent agent = await AgentAsync();
         try
         {
-            _result = await agent.RunAsync(new AgentRequest(FakeAgent.Whole(prompt), model, turns, Phase.Build, outputs), TestContext.Current.CancellationToken);
+            _result = await agent.RunAsync(new AgentRequest(FakeAgent.Whole(prompt), model, turns, phase, outputs), TestContext.Current.CancellationToken);
         }
         catch (ClaudeCodeException exception)
         {
@@ -95,6 +106,36 @@ public sealed class ClaudeCodeAgentSteps(ExceptionState exceptionState) : IDispo
     {
         _write = (path, text);
         _exec = new CommandResult { ExitCode = code, StandardOutput = output };
+    }
+
+    [Given("docker exec takes {double} seconds and writes to standard output {string}")]
+    public void GivenExecTakes(double seconds, string output)
+    {
+        _execSeconds = seconds;
+        _exec = new CommandResult { StandardOutput = output };
+    }
+
+    [When("a caller runs a {word} prompt")]
+    public Task WhenRunsPhase(string phase) =>
+        RunAsync($"The {phase} prompt.", "claude-sonnet-5-5", 10, Enum.Parse<Phase>(phase, ignoreCase: true));
+
+    [Then("the log held the line {string} when docker exec started")]
+    public void ThenLogBeforeExec(string line)
+    {
+        Assert.NotNull(_logAtExec);
+        Assert.Contains(line, _logAtExec.Split(Environment.NewLine));
+    }
+
+    [Then("the log holds the line {string}")]
+    public void ThenLogHolds(string line) => Assert.Contains(line, _log.ToString().Split(Environment.NewLine));
+
+    [Then("the caller got one answer of {int} turns and the cost {decimal} after {double} seconds")]
+    public void ThenReported(int turns, decimal cost, double seconds)
+    {
+        (TimeSpan elapsed, AgentAnswer answer) = Assert.Single(_reported);
+        Assert.Equal(TimeSpan.FromSeconds(seconds), elapsed);
+        Assert.Equal(turns, answer.NumTurns);
+        Assert.Equal(cost, answer.CostUsd);
     }
 
     [Given("the work tree file {string} holds {string} before the prompt")]

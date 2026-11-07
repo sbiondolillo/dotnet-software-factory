@@ -319,9 +319,6 @@ public sealed class FeedbackRunSteps(FactoryRunSteps shared, BuildPhaseSteps bui
     [Then("FeedbackRun throws GitHubGraphQLException")]
     public void ThenThrows() => Assert.IsType<GitHubGraphQLException>(_exception);
 
-    [Then("the run starts no session")]
-    public void ThenNoSession() => Assert.Empty(H.Managed!.Sessions);
-
     [Then("the job summary of the round is one section {string} with the rows {string}, {string}, {string} and {string}, in this order")]
     public void ThenSummarySection(string heading, string first, string second, string third, string fourth)
     {

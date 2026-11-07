@@ -108,7 +108,7 @@ public sealed class RefactorRunSteps(FactoryRunSteps factory, IObjectContainer c
     }
 
     [Then("FactoryRun runs no plan prompt")]
-    public void ThenNoPlan() => Assert.Empty(H.Builder.Of(Phase.Plan));
+    public void ThenNoPlan() => Assert.DoesNotContain(H.AgentRequests, r => r.Phase is Phase.Plan);
 
     [Then("FactoryRun runs one prompt with the model {string} and the turn limit {int} that holds the title of the issue, the body of the issue and {string}")]
     public void ThenPromptHolds(string model, int turns, string path)

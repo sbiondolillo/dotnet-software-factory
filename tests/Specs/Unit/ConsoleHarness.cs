@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -36,8 +35,8 @@ public sealed record TimedRequest(string Method, string Path, string? Content, T
 /// <remarks>
 /// The agents start with the scripts of an agent that does its work: a plan prompt writes the plan, and the feature file unless
 /// the recipe plans alone; a build prompt writes the report that marks the thread A fixed; a review prompt approves. A test changes
-/// a script on <see cref="Builder"/> or <see cref="Reviewer"/>. <see cref="UseClaudeCode"/> and <see cref="UseManaged"/> put the
-/// real adapter that the program picks in place of the fake, with the two agents behind it.
+/// a script on <see cref="Builder"/> or <see cref="Reviewer"/>. The unit of these tests is the program over the seam: the options
+/// that the program hands the backend are in <see cref="BackendOptions"/>, and what an adapter does has its own tests.
 /// </remarks>
 public sealed class ConsoleHarness : IDisposable
 {
@@ -49,7 +48,6 @@ public sealed class ConsoleHarness : IDisposable
 
     private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("console-root-");
     private string _clone = "";
-    private bool _real;
     private int _headReads;
     private int _checkReads;
     private bool _resolved;
@@ -85,6 +83,9 @@ public sealed class ConsoleHarness : IDisposable
 
     /// <summary>Each request of either agent, in order.</summary>
     public List<AgentRequest> AgentRequests { get; } = [];
+
+    /// <summary>The sessions that the fake backend of each run gives the job summary and the pull request body.</summary>
+    public List<SessionCost> Sessions { get; } = [];
 
     /// <summary>The number of build prompts so far, over every run of the program.</summary>
     public int Builds => Builder.Of(Phase.Build).Count();
@@ -141,9 +142,6 @@ public sealed class ConsoleHarness : IDisposable
 
     public string PullUrl { get; set; } = "https://github.com/sbiondolillo/factory-scratch/pull/10";
 
-    /// <summary>What standard output held when each program of <see cref="Commands"/> ran, by index.</summary>
-    public List<string> OutAtCommand { get; } = [];
-
     /// <summary>What standard output held when each prompt of <see cref="AgentRequests"/> ran, by index.</summary>
     public List<string> OutAtPrompt { get; } = [];
 
@@ -158,36 +156,19 @@ public sealed class ConsoleHarness : IDisposable
     /// <summary>The exit code of a dotnet command in the container, by its program and words joined by one space.</summary>
     public Dictionary<string, int> DotnetExits { get; } = [];
 
-    /// <summary>What standard error held when each prompt of <see cref="AgentRequests"/> ran, by index.</summary>
-    public List<string> ErrorAtPrompt { get; } = [];
-
     public string Root => _root.FullName;
 
-    /// <summary>The fake of the Managed Agents API, or null on the path of Claude Code in a sandbox.</summary>
-    public ManagedRunFake? Managed { get; private set; }
+    /// <summary>The options that the program handed the backend of each run, in order.</summary>
+    public List<BackendOptions> BackendOptions { get; } = [];
 
-    /// <summary>The requests that the fake of the Managed Agents API and of the App tokens got, apart from <see cref="Requests"/>.</summary>
-    public List<TimedRequest> ManagedRequests { get; } = [];
-
-    /// <summary>Each git command, as its words, and each request to the fake of the Managed Agents API, as its method and path, in order.</summary>
-    public List<string> Timeline { get; } = [];
-
-    /// <summary>Puts the run on the managed path: the variables of the sessions in the environment, the fake API, and the real
-    /// <see cref="ManagedBackend"/> that the program picks, with the two agents behind its sessions.</summary>
-    public void UseManaged()
+    /// <summary>Puts the variables of the Managed Agents sessions in the environment, as the option <c>--agent managed</c> needs.</summary>
+    public void AddManagedVariables()
     {
         foreach ((string name, string value) in ManagedRunFake.Environment())
         {
             Environment[name] = value;
         }
-
-        Managed = new ManagedRunFake { OnMessage = (_, _) => FakeBackend.PlaySession(Builder, Reviewer, Managed!) };
-        _real = true;
     }
-
-    /// <summary>Puts the real <see cref="ClaudeCodeBackend"/> that the program picks in place of the fake, with the two agents
-    /// behind its <c>claude</c>, so a test reads what that adapter writes around each prompt.</summary>
-    public void UseClaudeCode() => _real = true;
 
     /// <summary>Scripts the report of each build prompt, which gives the thread A the status <paramref name="status"/>.</summary>
     public void Report(string status) => Builder.Stage(Phase.Build, "threads.json", JsonSerializer.Serialize(new
@@ -205,15 +186,6 @@ public sealed class ConsoleHarness : IDisposable
     /// <summary>Scripts the review prompt <paramref name="number"/> to block the build on the thread A.</summary>
     public void BlockReview(int number) => Reviewer.Stage(
         Phase.Review, "review.json", JsonSerializer.Serialize(new { approved = false, blocking = new[] { ThreadABody } }), number);
-
-    /// <summary>Scripts the prompts of <paramref name="phase"/> to answer with <paramref name="turns"/> and the cost
-    /// <paramref name="cost"/> in dollars as written, after <paramref name="elapsed"/> on the fake clock.</summary>
-    public void Timed(Phase phase, int turns, string cost, TimeSpan elapsed)
-    {
-        FakeAgent agent = phase is Phase.Review ? Reviewer : Builder;
-        agent.Answer(phase, new AgentAnswer("done", turns, decimal.Parse(cost, CultureInfo.InvariantCulture), false, new Dictionary<string, string>(), []));
-        agent.Act(phase, _ => Time.WaitAsync(elapsed, CancellationToken.None).GetAwaiter().GetResult());
-    }
 
     public List<CommandSpec> Commands { get; } = [];
 
@@ -272,26 +244,24 @@ public sealed class ConsoleHarness : IDisposable
         || (IssueBody ?? "").Contains("## Scenarios", StringComparison.Ordinal)
         || (IssueBody ?? "").Contains("## Removed scenarios", StringComparison.Ordinal);
 
-    /// <summary>The backend of each run of the program: the fake, or the real adapter that the program picks with the two agents
-    /// behind it.</summary>
-    private StartBackend Backend(BackendOptions options) => _real
-        ? FakeBackend.Around(AgentBackend.Pick(options), Builder, Reviewer)
-        : FakeBackend.Starter(options.Runner, options.ImageTag, options.RootDirectory, Builder, Reviewer, [], options.Time, options.Progress);
+    /// <summary>The fake backend of each run of the program, over the options that the program hands it.</summary>
+    private StartBackend Backend(BackendOptions options)
+    {
+        BackendOptions.Add(options);
+        return FakeBackend.Starter(options.Runner, options.ImageTag, options.RootDirectory, Builder, Reviewer, Sessions, options.Time);
+    }
 
     private void Seen(AgentRequest request)
     {
         AgentRequests.Add(request);
         OutAtPrompt.Add(Out.ToString());
-        ErrorAtPrompt.Add(Error.ToString());
     }
 
     private CommandResult Answer(CommandSpec spec)
     {
         Commands.Add(spec);
-        OutAtCommand.Add(Out.ToString());
         if (spec.Command is "git")
         {
-            Timeline.Add(string.Join(' ', ["git", .. spec.Arguments]));
             return AnswerGit(spec);
         }
 
@@ -324,13 +294,6 @@ public sealed class ConsoleHarness : IDisposable
             case "push":
                 PushTimes.Add(Time.Now);
                 return new CommandResult();
-            case "pull":
-                Managed?.Pull(_clone);
-                return new CommandResult();
-            case "ls-remote" when Managed is not null:
-                return new CommandResult { StandardOutput = Managed.LsRemote(spec.Arguments) };
-            case "ls-files" when Managed is not null:
-                return new CommandResult { StandardOutput = string.Concat(Managed.TrackedFactoryFiles.Select(path => path + "\n")) };
             default:
                 return new CommandResult();
         }
@@ -356,11 +319,6 @@ public sealed class ConsoleHarness : IDisposable
     {
         List<string> arguments = [.. spec.Arguments];
         int id = arguments.IndexOf(GateSandbox.ContainerId);
-        if (arguments[id + 1] is "claude")
-        {
-            return FakeBackend.PlayClaude(Builder, Reviewer);
-        }
-
         return Program(arguments[(id + 1)..], directory => Path.Combine(_clone, directory["/work/".Length..]));
     }
 
@@ -407,15 +365,9 @@ public sealed class ConsoleHarness : IDisposable
         return new CommandResult { ExitCode = red ? 1 : 0, StandardOutput = red ? FailureText : "" };
     }
 
-    /// <summary>Writes a file of the agent into the clone. On the managed path the file waits for the next pull.</summary>
+    /// <summary>Writes a file of the agent into the clone.</summary>
     private void Write(string relative, string text)
     {
-        if (Managed is not null)
-        {
-            Managed.Stage(relative, text);
-            return;
-        }
-
         string full = Path.Combine(_clone, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
         File.WriteAllText(full, text);
@@ -515,14 +467,6 @@ public sealed class ConsoleHarness : IDisposable
         {
             string? content = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             string path = request.RequestUri!.AbsolutePath;
-            if (harness.Managed is { } managed && ManagedRunFake.Handles(request.RequestUri))
-            {
-                harness.ManagedRequests.Add(new TimedRequest(request.Method.Method, request.RequestUri.PathAndQuery, content, harness.Time.Now));
-                harness.Timeline.Add($"{request.Method.Method} {path}");
-                (int code, string answer) = managed.Route(request.Method.Method, request.RequestUri, content);
-                return new HttpResponseMessage((HttpStatusCode)code) { Content = new StringContent(answer, Encoding.UTF8, "application/json") };
-            }
-
             harness.Requests.Add(new TimedRequest(request.Method.Method, path, content, harness.Time.Now, request.Headers.Authorization?.ToString()));
             (int status, string body) = harness.Route(request.Method.Method, path, content);
             return new HttpResponseMessage((HttpStatusCode)status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };

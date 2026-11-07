@@ -279,7 +279,6 @@ Feature: A reframe run keeps every test and every public type and member
     Then standard output holds exactly these lines in this order
       | line |
       | clone: start |
-      | sandbox: start |
       | check: start |
       | check: red |
       | api: start |

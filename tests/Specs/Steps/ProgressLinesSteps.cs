@@ -37,14 +37,6 @@ public sealed class ProgressLinesSteps(ConsoleProgramSteps console)
         Assert.Equal(expected.Skip(1), Lines);
     }
 
-    [Then("when docker gets the command {string} standard output already holds the line {string}")]
-    public void ThenDockerSeesLine(string command, string line)
-    {
-        int index = H.Commands.FindIndex(c => c.Command is "docker" && string.Join(' ', c.Arguments).StartsWith(command, StringComparison.Ordinal));
-        Assert.True(index >= 0);
-        Assert.Contains(line, H.OutAtCommand[index].Split('\n'));
-    }
-
     [Then("when claude gets the plan prompt standard output already holds the line {string}")]
     public void ThenClaudeSeesLine(string line)
     {

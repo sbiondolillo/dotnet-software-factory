@@ -116,6 +116,21 @@ public sealed class DeliverTests
     }
 
     [Fact]
+    public async Task TheBodySumsTheAnswersAndNamesEachSessionOfTheBackend()
+    {
+        string body = await RunBodyAsync(h =>
+        {
+            h.Timed(Phase.Plan, 1, 1, "1.12", 0);
+            h.Timed(Phase.Build, 1, 1, "3.00", 0);
+            h.Timed(Phase.Review, 1, 1, "0.37", 0);
+            h.Sessions.Add(new SessionCost("sesn_01", "builder", 412));
+            h.Sessions.Add(new SessionCost("sesn_02", "reviewer", 37));
+        });
+        Assert.Contains("\nTotal: $4.49 in 0 s\n", body, StringComparison.Ordinal);
+        Assert.EndsWith("\nSessions: sesn_01 (builder, $4.12), sesn_02 (reviewer, $0.37)", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task APartOfASecondIsDroppedAndTheScaleOfTheCostsStays()
     {
         string body = await RunBodyAsync(h =>

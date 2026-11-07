@@ -52,7 +52,7 @@ public sealed class FeedbackReframeRunTests
         h.ApiFails = true;
         Assert.Equal(new FeedbackRunResult(0, 2, 0), await h.RunFeedbackAsync(Ct));
         Assert.Contains("The public API of the base commit could not be listed", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
-        Assert.Empty(h.Builder.Of(Phase.Build));
+        Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Build);
         Assert.DoesNotContain("push", h.Events);
     }
 }

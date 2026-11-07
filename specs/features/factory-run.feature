@@ -148,109 +148,19 @@ Feature: Factory run
     When a caller starts a run
     Then FactoryRun throws GitHubRequestException and removes the container
 
-  @managed
-  Scenario: A managed run pushes the session branch before the first session starts
-    Given the run uses Managed Agents sessions
-    When a caller starts a run
-    Then git pushes the session branch "factory/a1b2c3d4-session" before the first session starts
-
-  @managed
-  Scenario: A managed run pulls the session branch after the plan prompt and after the build prompt
-    Given the run uses Managed Agents sessions
-    When a caller starts a run
-    Then git pulls the branch "factory/a1b2c3d4-session" 2 times
-
-  @managed
-  Scenario: A managed run pushes the delivery branch from the session's work and then deletes the session branch
-    Given the run uses Managed Agents sessions
-    When a caller starts a run
-    Then git deletes the branch "factory/a1b2c3d4-session" on origin after the push of "factory/a1b2c3d4"
-
-  @managed
-  Scenario: A managed run with a spent budget deletes the session branch and pushes no delivery branch
-    Given the run uses Managed Agents sessions
-    And the test gate is red after each of four builds
-    When a caller starts a run
-    Then git deletes the branch "factory/a1b2c3d4-session" on origin as its last git command
-    And git pushes no branch "factory/a1b2c3d4"
-    And FactoryRun gives back a result with no pull request and 3 Redos
-
-  @managed
-  Scenario: A session commit of a file under .factory/ stops the run with a comment on the issue that names the file
-    Given the run uses Managed Agents sessions
-    And the session branch tracks the file ".factory/plan.md"
-    When a caller starts a run
-    Then FactoryRun posts one comment on the issue that holds "The session committed files under .factory/, which only the factory writes: .factory/plan.md. The run stops." and gives back a result with no pull request and 0 Redos
-    And FactoryRun runs no build prompt
-    And git deletes the branch "factory/a1b2c3d4-session" on origin as its last git command
-
-  @managed
-  Scenario: A session commit of a file under .factory/ on a build stops the run before any gate command
-    Given the run uses Managed Agents sessions
-    And the pull after the first build prompt brings a commit that tracks the file ".factory/x"
+  Scenario: A stop of the session branch posts its text on the issue and delivers nothing
+    Given the builder stops the run on the first build with the text "The session committed files under .factory/, which only the factory writes: .factory/x. The run stops."
     When a caller starts a run
     Then FactoryRun posts one comment on the issue that holds "The session committed files under .factory/, which only the factory writes: .factory/x. The run stops." and gives back a result with no pull request and 0 Redos
     And the run runs no command in the container
+    And git pushes no branch "factory/a1b2c3d4"
 
-  @managed
-  Scenario: A managed run gives the session of the builder its budget and the session of the reviewer the budget of a review
-    Given the run uses Managed Agents sessions
-    When a caller starts a run
-    Then the session of the builder starts with a budget of 1500 cents
-    And the session of the reviewer starts with a budget of 300 cents
-
-  @managed
-  Scenario: A managed run commits the scenarios of the issue before it pushes the session branch
-    Given the run uses Managed Agents sessions
-    And the issue holds a block under ## Scenarios for "specs/features/checkout-total.feature"
-    When a caller starts a run
-    Then git commits the work tree with the message "Add a checkout total: the scenarios of the issue" before the first push of "factory/a1b2c3d4-session"
-
-  @managed
-  Scenario: A managed run with no change in the work tree commits nothing before it pushes the session branch
-    Given the run uses Managed Agents sessions
-    When a caller starts a run
-    Then git runs no commit before the first push of "factory/a1b2c3d4-session"
-
-  @managed
-  Scenario: A build that pushes no commit puts that fact in the next build prompt
-    Given the run uses Managed Agents sessions
-    And the session pushes no commit on the first build
+  Scenario: A fault of a build answer reaches the next build prompt
+    Given the first build answer carries the fault "The build pushed no commit to the session branch."
     And the test gate is red after the first build and passes after the second build
     When a caller starts a run
     Then FactoryRun runs a second build prompt that holds "The build pushed no commit to the session branch."
 
-  @managed
-  Scenario: A managed reframe run reports that the public API of the base commit could not be listed and delivers nothing
-    Given the run uses Managed Agents sessions
-    And the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
-    And the check command exits with the code 1 before the build
-    And the API printer exits with the code 1 before the build and writes the standard error "Could not execute because the specified command or file was not found."
+  Scenario: Every dotnet command of the run goes through docker exec in the container of the backend
     When a caller starts a run
-    Then FactoryRun posts one comment on the issue that holds "The public API of the base commit could not be listed, so there is no build:" and the standard error of the API printer
-    And FactoryRun runs no build prompt
-    And FactoryRun gives back a result with no pull request and 0 Redos
-    And git pushes no branch "factory/a1b2c3d4"
-    And git pushes no branch "factory/a1b2c3d4-session"
-
-  @managed
-  Scenario: A managed run runs the gates in a container with no key and delivers the approved build
-    Given the run uses Managed Agents sessions
-    When a caller starts a run
-    Then the docker run of the run holds neither "ANTHROPIC_API_KEY" nor "ANTHROPIC_BASE_URL"
-    And the docker run of the run mounts the clone at /work and names the image "factory-sandbox:test"
-    And every dotnet command of the run goes through docker exec
-    And FactoryRun gives back a result with the pull request of the number 10 and 0 Redos
-    And the run removes the container
-
-  @managed
-  Scenario: A managed reframe run lists the public API of the base commit in the container
-    Given the run uses Managed Agents sessions
-    And the issue has the label "reframe", the title "Sweep the format of src" and a body with the scope "src/" and the first fenced block under "## Check" holding the line "grep -q Install README.md"
-    And the check command exits with the code 1 before the build
-    When a caller starts a run
-    Then the API printer runs through docker exec
-
-  Scenario: A Claude Code run gives its container the two Anthropic variables
-    When a caller starts a run
-    Then the arguments of the docker run of the run hold "--env" and then "ANTHROPIC_API_KEY", and "--env" and then "ANTHROPIC_BASE_URL"
+    Then every dotnet command of the run goes through docker exec

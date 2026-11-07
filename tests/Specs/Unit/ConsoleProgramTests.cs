@@ -295,15 +295,14 @@ public sealed class ConsoleProgramTests : IDisposable
     }
 
     [Fact]
-    public async Task TheFeedbackVerbWritesAnAgentLineForEachPromptAndACommandLineForEachGateCommand()
+    public async Task TheFeedbackVerbRunsTheBuildAndTheReviewAndWritesACommandLineForEachGateCommand()
     {
-        _h.UseClaudeCode();
         _h.Threads = "always";
         _h.RedBuilds.Add(1);
         await StartAsync($"feedback {Repo} --pr 10 --timeout 0");
         List<string> lines = [.. ConsoleHarness.Lines(_h.Error)];
-        Assert.Contains("agent: build start", lines);
-        Assert.Contains("agent: review start", lines);
+        Assert.NotEmpty(_h.Builder.Of(Phase.Build));
+        Assert.NotEmpty(_h.Reviewer.Of(Phase.Review));
         Assert.Contains(lines, l => l.StartsWith("command: dotnet test --no-restore", StringComparison.Ordinal) && l.EndsWith(" exited 1", StringComparison.Ordinal));
     }
 

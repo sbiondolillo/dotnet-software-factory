@@ -373,7 +373,7 @@ public sealed partial class ConsoleProgramSteps : IDisposable
     }
 
     [Then("claude runs no plan prompt")]
-    public void ThenNoPlan() => Assert.Empty(_h.Builder.Of(Phase.Plan));
+    public void ThenNoPlan() => Assert.DoesNotContain(_h.AgentRequests, r => r.Phase is Phase.Plan);
 
     [Then("the feedback run's build prompt runs with the model {string} and the turn limit {int}, and holds {string} and {string}")]
     public void ThenFeedbackPrompt(string model, int turns, string first, string second)

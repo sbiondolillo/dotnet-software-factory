@@ -73,9 +73,9 @@ public sealed class JobSummarySteps : IDisposable
 
     private void SetPlan(int index, int turns, string cost, int seconds) => _h.Timed(Phase.Plan, index + 1, turns, cost, seconds);
 
-    /// <summary>The first plan prompt writes nothing, so the plan gate fails and a second prompt follows.</summary>
+    /// <summary>The first plan prompt writes no plan, so the plan gate fails and a second prompt follows.</summary>
     [Given("the plan phase sends two prompts")]
-    public void GivenTwoPrompts() => _h.Builder.Clear(Phase.Plan, 1);
+    public void GivenTwoPrompts() => _h.Builder.Stage(Phase.Plan, "plan.md", null, 1);
 
     [Given("the plan phase fails after one prompt with {int} turns and the cost {string}, {int} seconds after the prompt")]
     public void GivenPlanFails(int turns, string cost, int seconds) =>
