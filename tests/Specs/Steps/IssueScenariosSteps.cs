@@ -58,11 +58,11 @@ public sealed class IssueScenariosSteps(FactoryRunSteps factory, PlanPhaseSteps 
     private string _blockText = "";
     private FactoryRunResult? _result;
 
-    private FactoryRunHarness H => factory.Harness;
+    private RunHarness H => factory.Harness;
 
     private FactoryRunResult Result => _result ?? throw new InvalidOperationException("the run gave no result");
 
-    private IEnumerable<SeenPrompt> PlanPrompts => H.Prompts.Where(p => p.Kind is "plan");
+    private IEnumerable<string> PlanPrompts => H.Builder.Of(Phase.Plan).Select(r => r.Prompt.Text);
 
     private static string Block(string path, string text) => $"```gherkin\n# {path}\n{text}```\n";
 
@@ -318,7 +318,7 @@ public sealed class IssueScenariosSteps(FactoryRunSteps factory, PlanPhaseSteps 
                 File.WriteAllText(full, text);
             }
         };
-        plan.OtherPrompts = () => [.. PlanPrompts.Select(p => p.Text)];
+        plan.OtherPrompts = () => [.. PlanPrompts];
 
         // The test gate asks for a passed test for each scenario of a pinned feature file.
         foreach (string name in new[] { "A name gets a greeting", "No name gets the world", "A long name is cut", "A letter holds the greeting", "Each name gets a greeting", "A name gets a farewell" })
@@ -326,20 +326,20 @@ public sealed class IssueScenariosSteps(FactoryRunSteps factory, PlanPhaseSteps 
             H.AfterOnlyTests.Add(("Specs.Features.GreetingFeature", FeatureFiles.ComputeTestName(name)));
         }
 
-        _result = await H.RunAsync(TestContext.Current.CancellationToken);
+        _result = await H.RunFactoryAsync(TestContext.Current.CancellationToken);
     }
 
     [When("the plan agent changes {string} on the first prompt")]
     public Task WhenPlanChanges(string path)
     {
-        H.PlanChanges.Add(path);
+        H.Builder.Act(Phase.Plan, _ => H.Append(path, "\n# changed by the plan\n"), 1);
         return WhenRuns();
     }
 
     [When("the plan agent adds {string} on the first prompt")]
     public Task WhenPlanAdds(string path)
     {
-        H.PlanExtraFiles.Add(path);
+        H.Builder.Act(Phase.Plan, _ => H.Write(path, PlanPhaseHarness.SoundFeature), 1);
         return WhenRuns();
     }
 
@@ -442,7 +442,7 @@ public sealed class IssueScenariosSteps(FactoryRunSteps factory, PlanPhaseSteps 
     }
 
     [Then("the first plan prompt holds {string}")]
-    public void ThenFirstPlanHolds(string text) => Assert.Contains(text, PlanPrompts.First().Text, StringComparison.Ordinal);
+    public void ThenFirstPlanHolds(string text) => Assert.Contains(text, PlanPrompts.First(), StringComparison.Ordinal);
 
     [Then("{string} holds no carriage return")]
     public void ThenNoCarriageReturn(string path)
@@ -457,16 +457,16 @@ public sealed class IssueScenariosSteps(FactoryRunSteps factory, PlanPhaseSteps 
     [Then("the first prompt names each feature file that the issue wrote")]
     public void ThenNamesFiles()
     {
-        string prompt = PlanPrompts.First().Text;
+        string prompt = PlanPrompts.First();
         Assert.Contains(Greeting, prompt, StringComparison.Ordinal);
         Assert.Contains(GreetingName, prompt, StringComparison.Ordinal);
     }
 
     [Then("the first prompt lacks {string}")]
-    public void ThenFirstLacks(string text) => Assert.DoesNotContain(text, PlanPrompts.First().Text, StringComparison.Ordinal);
+    public void ThenFirstLacks(string text) => Assert.DoesNotContain(text, PlanPrompts.First(), StringComparison.Ordinal);
 
     [Then("the second prompt holds {string}")]
-    public void ThenSecondHolds(string text) => Assert.Contains(text, PlanPrompts.ElementAt(1).Text, StringComparison.Ordinal);
+    public void ThenSecondHolds(string text) => Assert.Contains(text, PlanPrompts.ElementAt(1), StringComparison.Ordinal);
 
     [Then("the issue gets a comment that holds {string}")]
     public void ThenComment(string text) => Assert.Contains(text, Assert.Single(H.CommentBodies), StringComparison.Ordinal);
@@ -476,14 +476,14 @@ public sealed class IssueScenariosSteps(FactoryRunSteps factory, PlanPhaseSteps 
         Assert.Equal(line, H.Progress.ToString().Split('\n').Select(l => l.TrimEnd('\r')).Last(l => l.Length > 0));
 
     [Then("the first build prompt holds {string}")]
-    public void ThenFirstBuildHolds(string text) => Assert.Contains(text, H.Prompts.First(p => p.Kind is "build").Text, StringComparison.Ordinal);
+    public void ThenFirstBuildHolds(string text) => Assert.Contains(text, H.Builder.Of(Phase.Build).First().Prompt.Text, StringComparison.Ordinal);
 
     [Then("the run gives back no pull request and {int} Redos")]
     public void ThenNoPull(int redos)
     {
         Assert.Null(Result.PullRequest);
         Assert.Equal(redos, Result.Redos);
-        Assert.Empty(H.Prompts);
+        Assert.Empty(H.AgentRequests);
     }
 
     [Then("the issue gets one comment that holds both faults")]

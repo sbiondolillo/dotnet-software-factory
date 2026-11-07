@@ -9,12 +9,18 @@ namespace Specs.Unit;
 /// <summary>What the fake session answers to one <c>user.message</c>: the answer text, the error flag, the cost and whether the turn pushes.</summary>
 public sealed record ManagedTurn(string Result, bool IsError = false, int Cents = 0, bool Pushes = true);
 
-/// <summary>One session of the fake: its id, its model, its events and its cost so far in cents.</summary>
+/// <summary>One session of the fake: its id, its model, its role, its budget, its events and its cost so far in cents.</summary>
 public sealed class FakeSession(string id, string model)
 {
     public string Id { get; } = id;
 
     public string Model { get; } = model;
+
+    /// <summary>The role in the metadata of the session: <c>builder</c> or <c>reviewer</c>.</summary>
+    public string Role { get; init; } = "";
+
+    /// <summary>The amount of the budget of the session, in cents as the body writes it.</summary>
+    public string BudgetCents { get; init; } = "";
 
     public List<JsonObject> Events { get; } = [];
 
@@ -38,9 +44,11 @@ public sealed class ManagedRunFake
     public const string AppToken = "ghs_fakeinstallationtoken";
 
     private readonly Dictionary<string, string?> _pending = [];
+    private readonly List<string> _trackOnPull = [];
     private readonly List<(string Id, string Session, string Name, string Content, DateTimeOffset Created)> _files = [];
     private int _events;
     private int _heads;
+    private bool _held;
     private FakeSession? _current;
 
     /// <summary>A private key in PEM form that the token mint signs with.</summary>
@@ -77,6 +85,21 @@ public sealed class ManagedRunFake
         || uri.AbsolutePath.StartsWith("/app/installations/", StringComparison.Ordinal)
         || uri.AbsolutePath is "/installation/token";
 
+    /// <summary>Makes the turn that runs now push no commit, so the head of the session branch stays where it is.</summary>
+    public void HoldHead() => _held = true;
+
+    /// <summary>True once after <see cref="HoldHead"/>: the turn that called it pushes nothing.</summary>
+    public bool TakeHold()
+    {
+        bool held = _held;
+        _held = false;
+        return held;
+    }
+
+    /// <summary>Makes the next pull bring a commit that tracks <paramref name="relative"/>, a file under <c>.factory/</c>, so
+    /// <c>git ls-files</c> lists it after that pull.</summary>
+    public void TrackOnNextPull(string relative) => _trackOnPull.Add(relative);
+
     /// <summary>Stages a write of the session to a tracked file, or a removal for null. The next pull applies it.</summary>
     public void Stage(string relative, string? text) => _pending[relative] = text;
 
@@ -109,6 +132,8 @@ public sealed class ManagedRunFake
         }
 
         _pending.Clear();
+        TrackedFactoryFiles.AddRange(_trackOnPull);
+        _trackOnPull.Clear();
     }
 
     /// <summary>The output of <c>git ls-remote</c> for the branch the last argument names: a commit that moves with each push of a session.</summary>
@@ -163,7 +188,11 @@ public sealed class ManagedRunFake
     {
         JsonNode body = JsonNode.Parse(content)!;
         string model = body["agent"]?["model"]?["id"]?.GetValue<string>() ?? body["agent"]?["model"]?.ToString() ?? "";
-        var session = new FakeSession($"sesn_{Sessions.Count + 1:D2}", model);
+        var session = new FakeSession($"sesn_{Sessions.Count + 1:D2}", model)
+        {
+            Role = body["metadata"]?["role"]?.GetValue<string>() ?? "",
+            BudgetCents = body["budget"]?["max_list_cost"]?["amount"]?.GetValue<string>() ?? "",
+        };
         Sessions.Add(session);
         string answer = SessionJson(session, "running");
         foreach (JsonNode? item in body["initial_events"]?.AsArray() ?? [])

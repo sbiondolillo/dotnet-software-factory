@@ -125,7 +125,7 @@ public sealed partial class ConsoleProgramSteps : IDisposable
     public void GivenThreadResolvable() => _h.Threads = "resolvable";
 
     [Given("the agent writes the disputed report")]
-    public void GivenDisputed() => _h.Disputed = true;
+    public void GivenDisputed() => _h.Report("disputed");
 
     [When("the program starts with the arguments {string}")]
     public Task WhenStarts(string arguments) => StartAsync(arguments, 1);
@@ -311,7 +311,7 @@ public sealed partial class ConsoleProgramSteps : IDisposable
         foreach (CommandSpec spec in _h.Commands.Where(c => c.Command is "docker" && c.Arguments[0] is "exec"))
         {
             List<string> arguments = [.. spec.Arguments];
-            int id = arguments.IndexOf(ConsoleHarness.ContainerId);
+            int id = arguments.IndexOf(GateSandbox.ContainerId);
             if (string.Join(' ', arguments[(id + 1)..]) == command)
             {
                 seen.AddRange(arguments[..id].Where(a => a is not ("exec" or "--env")));
@@ -373,16 +373,16 @@ public sealed partial class ConsoleProgramSteps : IDisposable
     }
 
     [Then("claude runs no plan prompt")]
-    public void ThenNoPlan() => Assert.DoesNotContain(_h.Prompts, p => p.Kind is "plan");
+    public void ThenNoPlan() => Assert.Empty(_h.Builder.Of(Phase.Plan));
 
     [Then("the feedback run's build prompt runs with the model {string} and the turn limit {int}, and holds {string} and {string}")]
     public void ThenFeedbackPrompt(string model, int turns, string first, string second)
     {
-        (string Kind, string Model, string Turns, string Text) prompt = Assert.Single(_h.Prompts, p => p.Kind is "build" && p.Text.Contains(".factory/threads.json", StringComparison.Ordinal));
+        AgentRequest prompt = Assert.Single(_h.Builder.Of(Phase.Build), r => r.Outputs.Contains("threads.json"));
         Assert.Equal(model, prompt.Model);
-        Assert.Equal(turns.ToString(System.Globalization.CultureInfo.InvariantCulture), prompt.Turns);
-        Assert.Contains(first, prompt.Text, StringComparison.Ordinal);
-        Assert.Contains(second, prompt.Text, StringComparison.Ordinal);
+        Assert.Equal(turns, prompt.MaxTurns);
+        Assert.Contains(first, prompt.Prompt.Text, StringComparison.Ordinal);
+        Assert.Contains(second, prompt.Prompt.Text, StringComparison.Ordinal);
     }
 
     [Then("the program resolves the thread {string}")]
@@ -449,8 +449,8 @@ public sealed partial class ConsoleProgramSteps : IDisposable
 
     private (string Model, string Turns) Prompt(string kind)
     {
-        (string Kind, string Model, string Turns, string Text) prompt = _h.Prompts.First(p => p.Kind == kind);
-        return (prompt.Model, prompt.Turns);
+        AgentRequest prompt = _h.AgentRequests.First(r => r.Phase.Text() == kind);
+        return (prompt.Model, prompt.MaxTurns.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
     private void CheckedOut(CommandSpec clone, string branch) =>

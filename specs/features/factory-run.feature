@@ -185,6 +185,21 @@ Feature: Factory run
     And git deletes the branch "factory/a1b2c3d4-session" on origin as its last git command
 
   @managed
+  Scenario: A session commit of a file under .factory/ on a build stops the run before any gate command
+    Given the run uses Managed Agents sessions
+    And the pull after the first build prompt brings a commit that tracks the file ".factory/x"
+    When a caller starts a run
+    Then FactoryRun posts one comment on the issue that holds "The session committed files under .factory/, which only the factory writes: .factory/x. The run stops." and gives back a result with no pull request and 0 Redos
+    And the run runs no command in the container
+
+  @managed
+  Scenario: A managed run gives the session of the builder its budget and the session of the reviewer the budget of a review
+    Given the run uses Managed Agents sessions
+    When a caller starts a run
+    Then the session of the builder starts with a budget of 1500 cents
+    And the session of the reviewer starts with a budget of 300 cents
+
+  @managed
   Scenario: A managed run commits the scenarios of the issue before it pushes the session branch
     Given the run uses Managed Agents sessions
     And the issue holds a block under ## Scenarios for "specs/features/checkout-total.feature"

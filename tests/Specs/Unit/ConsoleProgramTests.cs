@@ -203,7 +203,7 @@ public sealed class ConsoleProgramTests : IDisposable
     public async Task ADisputedThreadIsResolvedAndTheSecondWatchReadsNoUnresolvedThread()
     {
         _h.Threads = "resolvable";
-        _h.Disputed = true;
+        _h.Report("disputed");
         Assert.Equal(0, await StartAsync($"run {Repo} --issue 1"));
         Assert.Equal(2, _h.CloneDirectories.Count);
         int reply = _h.Requests.FindIndex(r => r.Path.EndsWith("/graphql", StringComparison.Ordinal)
@@ -297,6 +297,7 @@ public sealed class ConsoleProgramTests : IDisposable
     [Fact]
     public async Task TheFeedbackVerbWritesAnAgentLineForEachPromptAndACommandLineForEachGateCommand()
     {
+        _h.UseClaudeCode();
         _h.Threads = "always";
         _h.RedBuilds.Add(1);
         await StartAsync($"feedback {Repo} --pr 10 --timeout 0");
@@ -353,7 +354,7 @@ public sealed class ConsoleProgramTests : IDisposable
         Assert.Equal(0, await StartAsync($"run {Repo} --issue 1 --pass-env B_KEY --pass-env A_KEY"));
         CommandSpec spec = Assert.Single(_h.Commands, c => c.Arguments.Contains("--project") && c.Arguments.Contains("tests/Integration"));
         List<string> arguments = [.. spec.Arguments];
-        Assert.Equal(["B_KEY", "A_KEY"], arguments[..arguments.IndexOf(ConsoleHarness.ContainerId)].Where(a => a is not ("exec" or "--env")));
+        Assert.Equal(["B_KEY", "A_KEY"], arguments[..arguments.IndexOf(GateSandbox.ContainerId)].Where(a => a is not ("exec" or "--env")));
     }
 
     [Fact]

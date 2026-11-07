@@ -7,7 +7,7 @@ namespace Specs.Unit;
 /// wiring of <see cref="FactoryRun"/> to its summary file, and <c>BuildLoopTests</c> holds the rows and the lines of the loop.</summary>
 public sealed class JobSummaryTests
 {
-    private static string[] Lines(JobSummaryHarness h) => h.Summary.Split('\n');
+    private static string[] Lines(RunHarness h) => h.Summary.Split('\n');
 
     [Fact]
     public async Task ARowWritesItsResultLineWithThePhaseAndNoNumber()
@@ -97,8 +97,10 @@ public sealed class JobSummaryTests
     [InlineData("")]
     public async Task AnUnsetPathWritesNothingAndTheRunBehavesAsBefore(string? path)
     {
-        using var h = new JobSummaryHarness { SummaryPath = path };
-        FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
+        using var h = new RunHarness();
+        File.WriteAllText(Path.Combine(h.FilesDirectory, "summary.md"), "");
+        h.SummaryPath = path;
+        FactoryRunResult result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.NotNull(result.PullRequest);
         Assert.Equal("", Directory.GetFiles(h.FilesDirectory).Select(File.ReadAllText).Single());
     }
@@ -106,20 +108,34 @@ public sealed class JobSummaryTests
     [Fact]
     public async Task AnUnwritablePathKeepsTheResultAndNamesTheFailureOnTheErrorStream()
     {
-        using var h = new JobSummaryHarness();
+        using var h = new RunHarness();
         h.SummaryPath = Path.Combine(h.FilesDirectory, "absent", "summary.md");
-        FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
+        FactoryRunResult result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.NotNull(result.PullRequest);
-        Assert.Contains("summary: cannot write", h.Errors.ToString(), StringComparison.Ordinal);
+        Assert.Contains("summary: cannot write", h.Log.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ARunEndsItsSummaryWithTheSessionsOfItsBackend()
+    {
+        using var h = new RunHarness();
+        h.Sessions.Add(new SessionCost("sesn_01", "builder", 250));
+        h.Sessions.Add(new SessionCost("sesn_02", "reviewer", 40));
+        FactoryRunResult result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        Assert.NotNull(result.PullRequest);
+        Assert.EndsWith(
+            "### Sessions\n\n- sesn_01, builder, $2.50\n- sesn_02, reviewer, $0.40\n",
+            h.Summary,
+            StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task ALabelRefusalBeforeTheCloneWritesNoSummary()
     {
-        using var h = new JobSummaryHarness();
+        using var h = new RunHarness();
         h.Labels.Add("refactor");
         h.Labels.Add("behavior");
-        FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
+        FactoryRunResult result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.Null(result.PullRequest);
         Assert.Equal("", h.Summary);
     }
@@ -127,8 +143,8 @@ public sealed class JobSummaryTests
     [Fact]
     public async Task ARunThatThrowsAfterTheCloneStillWritesTheRowsThatRan()
     {
-        using var h = new JobSummaryHarness { LintFails = true };
-        await Assert.ThrowsAsync<LintGateException>(() => h.RunAsync(TestContext.Current.CancellationToken));
+        using var h = new RunHarness { LintFails = true };
+        await Assert.ThrowsAsync<LintGateException>(() => h.RunFactoryAsync(TestContext.Current.CancellationToken));
         Assert.Equal(["plan", "build 1"], Lines(h).Where(line => line.StartsWith("| ", StringComparison.Ordinal)).Skip(1).Select(line => line.Split('|')[1].Trim()));
     }
 

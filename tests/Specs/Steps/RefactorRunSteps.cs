@@ -1,4 +1,4 @@
-using System.Globalization;
+using Core;
 using Reqnroll;
 using Reqnroll.BoDi;
 using Specs.Unit;
@@ -11,7 +11,7 @@ public sealed class RefactorRunSteps(FactoryRunSteps factory, IObjectContainer c
 {
     private const string CheckError = "sh: 1: cannot run the check";
 
-    private FactoryRunHarness H => factory.Harness;
+    private RunHarness H => factory.Harness;
 
     private IEnumerable<string[]> Execs() =>
         H.Commands
@@ -19,8 +19,10 @@ public sealed class RefactorRunSteps(FactoryRunSteps factory, IObjectContainer c
             .Select(spec =>
             {
                 List<string> arguments = [.. spec.Arguments];
-                return arguments[(arguments.IndexOf(FactoryRunHarness.ContainerId) + 1)..].ToArray();
+                return arguments[(arguments.IndexOf(GateSandbox.ContainerId) + 1)..].ToArray();
             });
+
+    private AgentRequest Only(string model) => Assert.Single(H.AgentRequests, r => r.Model == model);
 
     private static string CheckBody(string line) => $"## Check\n\n```sh\n{line}\n```\n";
 
@@ -39,40 +41,41 @@ public sealed class RefactorRunSteps(FactoryRunSteps factory, IObjectContainer c
     [Given("the check command exits with the code {int} before the plan and writes a standard error")]
     public void GivenBeforeError(int code) => H.CheckResults[0] = (code, "", CheckError);
 
+    /// <summary>The builder of a refactor writes the plan alone by default, so the step sets nothing.</summary>
     [Given("the agent on the plan prompt writes {string} and changes no other file")]
-    public void GivenPlanOnly(string path)
-    {
-        Assert.Equal(".factory/plan.md", path);
-        Assert.True(H.AgentWritesPlan);
-        Assert.Empty(H.PlanExtraFiles);
-    }
+    public static void GivenPlanOnly(string path) => Assert.Equal(".factory/plan.md", path);
 
     [Given("the agent on the first plan prompt writes {string} and the file {string}")]
     public void GivenPlanExtra(string path, string extra)
     {
         Assert.Equal(".factory/plan.md", path);
-        H.PlanExtraFiles.Add(extra);
+        H.Builder.Act(Phase.Plan, _ => H.Write(extra, PlanPhaseHarness.SoundFeature), 1);
     }
 
     [Given("the agent on each plan prompt leaves {string} absent")]
     public void GivenNoPlan(string path)
     {
         Assert.Equal(".factory/plan.md", path);
-        H.AgentWritesPlan = false;
+        H.Builder.Clear(Phase.Plan);
     }
 
     [Given("the build changes only {string} and {string}")]
     public void GivenChangesTwo(string first, string second)
     {
-        H.FirstBuildChanges.Add(first);
-        H.FirstBuildChanges.Add(second);
+        H.FirstBuildChanges.AddRange([first, second]);
+        H.CloneFiles.AddRange([first, second]);
+        H.BuildChanges(1, first, second);
     }
 
     [Given("the build adds only the file {string}")]
-    public void GivenAdds(string path) => H.FirstBuildAdds.Add(path);
+    public void GivenAdds(string path) => H.BuildWrites(1, path);
 
     [Given("the build removes only the file {string}")]
-    public void GivenRemoves(string path) => H.FirstBuildRemoves.Add(path);
+    public void GivenRemoves(string path)
+    {
+        H.CloneFiles.Add(path);
+        H.BuildRemoves(1, path);
+    }
 
     [Given("the issue {int} has the label {string} and a {string} and each step passes")]
     public void GivenConsoleWithCheck(int number, string label, string heading)
@@ -93,43 +96,42 @@ public sealed class RefactorRunSteps(FactoryRunSteps factory, IObjectContainer c
         Assert.DoesNotContain(Execs(), after => string.Join(' ', after.Take(program.Split(' ').Length)) == program);
 
     [Then("FactoryRun runs one prompt with the model {string}")]
-    public void ThenOnePrompt(string model) => Assert.Single(H.Prompts, p => p.Model == model);
+    public void ThenOnePrompt(string model) => Only(model);
 
     [Then("the container runs {string} with the argument {string} before the plan prompt")]
     public void ThenShell(string program, string argument)
     {
-        List<string[]> execs = [.. Execs()];
-        int check = execs.FindIndex(after => after is ["sh", "-c", ..]);
-        Assert.True(check >= 0);
-        Assert.Equal([.. program.Split(' '), argument], execs[check]);
-        Assert.True(check < execs.FindIndex(after => after[0] is "claude"));
+        string[] check = Execs().First(after => after is ["sh", "-c", ..]);
+        Assert.Equal([.. program.Split(' '), argument], check);
+        int at = H.Timeline.IndexOf(string.Join(' ', ["exec", .. check]));
+        Assert.True(at >= 0 && at < H.Timeline.IndexOf("prompt plan"), string.Join(" | ", H.Timeline));
     }
 
     [Then("FactoryRun runs no plan prompt")]
-    public void ThenNoPlan() => Assert.DoesNotContain(H.Prompts, p => p.Kind is "plan");
+    public void ThenNoPlan() => Assert.Empty(H.Builder.Of(Phase.Plan));
 
     [Then("FactoryRun runs one prompt with the model {string} and the turn limit {int} that holds the title of the issue, the body of the issue and {string}")]
     public void ThenPromptHolds(string model, int turns, string path)
     {
-        SeenPrompt prompt = Assert.Single(H.Prompts, p => p.Model == model);
-        Assert.Equal(turns.ToString(CultureInfo.InvariantCulture), prompt.Turns);
-        Assert.Contains(H.Title, prompt.Text, StringComparison.Ordinal);
-        Assert.Contains(H.Body, prompt.Text, StringComparison.Ordinal);
-        Assert.Contains(path, prompt.Text, StringComparison.Ordinal);
+        AgentRequest prompt = Only(model);
+        Assert.Equal(turns, prompt.MaxTurns);
+        Assert.Contains(H.Title, prompt.Prompt.Text, StringComparison.Ordinal);
+        Assert.Contains(H.Body, prompt.Prompt.Text, StringComparison.Ordinal);
+        Assert.Contains(path, prompt.Prompt.Text, StringComparison.Ordinal);
     }
 
     [Then("FactoryRun runs one prompt with the model {string} and the turn limit {int} that holds the title of the issue, the body of the issue, the base commit and {string}")]
     public void ThenReviewHolds(string model, int turns, string path)
     {
         ThenPromptHolds(model, turns, path);
-        Assert.Contains(H.HeadSha, Assert.Single(H.Prompts, p => p.Model == model).Text, StringComparison.Ordinal);
+        Assert.Contains(H.HeadSha, Only(model).Prompt.Text, StringComparison.Ordinal);
     }
 
     [Then("the plan prompt holds no {string}")]
-    public void ThenPlanNo(string text) => Assert.DoesNotContain(text, Assert.Single(H.Prompts, p => p.Kind is "plan").Text, StringComparison.Ordinal);
+    public void ThenPlanNo(string text) => Assert.DoesNotContain(text, Assert.Single(H.Builder.Of(Phase.Plan)).Prompt.Text, StringComparison.Ordinal);
 
     [Then("the second plan prompt holds {string}")]
-    public void ThenSecondPlan(string text) => Assert.Contains(text, H.Prompts.Where(p => p.Kind is "plan").ElementAt(1).Text, StringComparison.Ordinal);
+    public void ThenSecondPlan(string text) => Assert.Contains(text, H.Builder.Of(Phase.Plan).ElementAt(1).Prompt.Text, StringComparison.Ordinal);
 
     private void SetConsoleIssue(int number, string label, string body)
     {

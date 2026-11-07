@@ -1,6 +1,7 @@
 using Core;
 using Moq;
 using Reqnroll;
+using Specs.Unit;
 using Xunit;
 
 namespace Specs.Steps;
@@ -8,7 +9,6 @@ namespace Specs.Steps;
 [Binding]
 public sealed class LintGateSteps(ExceptionState exceptionState) : IDisposable
 {
-    private const string ContainerId = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     private const string WorkTree = "/tmp/factory-lint-work-tree";
     private readonly List<CommandSpec> _recorded = [];
     private readonly DirectoryInfo _directory = Directory.CreateTempSubdirectory("factory-lintgate-steps-");
@@ -38,7 +38,7 @@ public sealed class LintGateSteps(ExceptionState exceptionState) : IDisposable
                 return Task.FromResult(spec.Command == "docker"
                     ? spec.Arguments[0] switch
                     {
-                        "run" => new CommandResult { StandardOutput = ContainerId + "\n" },
+                        "run" => new CommandResult { StandardOutput = GateSandbox.ContainerId + "\n" },
                         "exec" => _format,
                         _ => new CommandResult(),
                     }
@@ -92,7 +92,7 @@ public sealed class LintGateSteps(ExceptionState exceptionState) : IDisposable
     public void ThenRanFormat()
     {
         CommandSpec spec = Assert.Single(_recorded, s => s.Command == "docker");
-        Assert.Equal(["exec", ContainerId, "dotnet", "format", "--no-restore"], spec.Arguments);
+        Assert.Equal(["exec", GateSandbox.ContainerId, "dotnet", "format", "--no-restore"], spec.Arguments);
     }
 
     [Then("LintGate made one commit of every change")]

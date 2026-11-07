@@ -1,4 +1,5 @@
 using System.Globalization;
+using Core;
 using Reqnroll;
 using Specs.Unit;
 using Xunit;
@@ -14,14 +15,19 @@ public sealed class RunLogSteps(ConsoleProgramSteps console)
 
     private static TimeSpan Seconds(string text) => TimeSpan.FromSeconds(double.Parse(text, CultureInfo.InvariantCulture));
 
+    /// <summary>Each scenario of the feature reads what the adapter of Claude Code writes around a prompt, so it runs that adapter.</summary>
+    [BeforeScenario]
+    [Scope(Feature = "The log of a run shows each call to claude and each gate command with its exit code")]
+    public void UseClaudeCode() => H.UseClaudeCode();
+
     [Given("claude answers the plan prompt with {int} turns and the cost {word} after {word} seconds")]
-    public void GivenPlanAnswer(int turns, string cost, string seconds) => H.Answers["plan"] = (turns, cost, Seconds(seconds));
+    public void GivenPlanAnswer(int turns, string cost, string seconds) => H.Timed(Phase.Plan, turns, cost, Seconds(seconds));
 
     [Given("claude answers a build prompt with {int} turns and the cost {word} after {word} seconds")]
-    public void GivenBuildAnswer(int turns, string cost, string seconds) => H.Answers["build"] = (turns, cost, Seconds(seconds));
+    public void GivenBuildAnswer(int turns, string cost, string seconds) => H.Timed(Phase.Build, turns, cost, Seconds(seconds));
 
     [Given("claude answers a review prompt with {int} turns and the cost {word} after {word} seconds")]
-    public void GivenReviewAnswer(int turns, string cost, string seconds) => H.Answers["review"] = (turns, cost, Seconds(seconds));
+    public void GivenReviewAnswer(int turns, string cost, string seconds) => H.Timed(Phase.Review, turns, cost, Seconds(seconds));
 
     [Given("every dotnet command in the container exits with the code {int}")]
     public static void GivenEveryDotnet(int code) => Assert.Equal(0, code);
@@ -74,7 +80,7 @@ public sealed class RunLogSteps(ConsoleProgramSteps console)
 
     private void AlreadyHolds(string kind, string line)
     {
-        int index = H.Prompts.FindIndex(p => p.Kind == kind);
+        int index = H.AgentRequests.FindIndex(r => r.Phase.Text() == kind);
         Assert.True(index >= 0, $"claude got no {kind} prompt");
         Assert.Contains(line, H.ErrorAtPrompt[index].Split('\n'));
     }

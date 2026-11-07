@@ -15,22 +15,22 @@ public sealed class FactoryRunTests
     [InlineData("tests/Integration/")]
     public async Task AnAbsentPathIsNamedInOneCommentAndNoContainerStarts(string path)
     {
-        using var h = new FactoryRunHarness();
+        using var h = new RunHarness();
         h.Lacks.Add(path);
-        FactoryRunResult result = await h.RunAsync(Ct);
+        FactoryRunResult result = await h.RunFactoryAsync(Ct);
         Assert.Contains(path, Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.Equal(new FactoryRunResult(null, 0), result);
         Assert.DoesNotContain(h.Commands, c => c.Command is "docker");
-        Assert.Empty(h.Prompts);
+        Assert.Empty(h.AgentRequests);
     }
 
     [Fact]
     public async Task TwoAbsentPathsGetOneCommentNamingBoth()
     {
-        using var h = new FactoryRunHarness();
+        using var h = new RunHarness();
         h.Lacks.Add("Solution.slnx");
         h.Lacks.Add("tests/Specs/");
-        await h.RunAsync(Ct);
+        await h.RunFactoryAsync(Ct);
         string body = Assert.Single(h.CommentBodies);
         Assert.Contains("Solution.slnx", body, StringComparison.Ordinal);
         Assert.Contains("tests/Specs/", body, StringComparison.Ordinal);
@@ -39,7 +39,7 @@ public sealed class FactoryRunTests
     [Fact]
     public async Task APathOfTheWrongKindCountsAsAbsent()
     {
-        using var h = new FactoryRunHarness();
+        using var h = new RunHarness();
         h.Lacks.Add("Solution.slnx");
         h.Lacks.Add("specs/features/");
         h.AfterClone = directory =>
@@ -48,7 +48,7 @@ public sealed class FactoryRunTests
             Directory.CreateDirectory(Path.Combine(directory, "specs"));
             File.WriteAllText(Path.Combine(directory, "specs", "features"), "");
         };
-        await h.RunAsync(Ct);
+        await h.RunFactoryAsync(Ct);
         string body = Assert.Single(h.CommentBodies);
         Assert.Contains("Solution.slnx", body, StringComparison.Ordinal);
         Assert.Contains("specs/features/", body, StringComparison.Ordinal);
@@ -57,20 +57,20 @@ public sealed class FactoryRunTests
     [Fact]
     public async Task TheLayoutCheckRunsNoCommand()
     {
-        using var h = new FactoryRunHarness();
+        using var h = new RunHarness();
         h.Lacks.Add("Solution.slnx");
-        await h.RunAsync(Ct);
+        await h.RunFactoryAsync(Ct);
         Assert.Equal(["clone", "rev-parse"], h.Commands.Select(c => c.Arguments[0]));
     }
 
     [Fact]
     public async Task AFailedPlanPhaseCommentsRunsNoBuildAndRemovesTheContainer()
     {
-        using var h = new FactoryRunHarness();
-        h.AgentWritesPlan = false;
-        FactoryRunResult result = await h.RunAsync(Ct);
+        using var h = new RunHarness();
+        h.Builder.Clear(Phase.Plan);
+        FactoryRunResult result = await h.RunFactoryAsync(Ct);
         Assert.Contains(".factory/plan.md", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
-        Assert.DoesNotContain(h.Prompts, p => p.Kind is "build");
+        Assert.Empty(h.Builder.Of(Phase.Build));
         Assert.Equal(new FactoryRunResult(null, 0), result);
         Assert.Contains("rm", h.Events);
     }
@@ -78,17 +78,17 @@ public sealed class FactoryRunTests
     [Fact]
     public async Task FourRedGatesEndTheRunWithOneCommentAndNoPush()
     {
-        using var h = new FactoryRunHarness();
+        using var h = new RunHarness();
         foreach (int build in new[] { 1, 2, 3, 4 })
         {
             h.RedBuilds.Add(build);
         }
 
-        FactoryRunResult result = await h.RunAsync(Ct);
-        Assert.Equal(4, h.Prompts.Count(p => p.Kind is "build"));
-        Assert.DoesNotContain(h.Prompts, p => p.Kind is "review");
+        FactoryRunResult result = await h.RunFactoryAsync(Ct);
+        Assert.Equal(4, h.Builder.Of(Phase.Build).Count());
+        Assert.Empty(h.Reviewer.Of(Phase.Review));
         string body = Assert.Single(h.CommentBodies);
-        Assert.Contains(FactoryRunHarness.RedText, body, StringComparison.Ordinal);
+        Assert.Contains(RunHarness.RedText, body, StringComparison.Ordinal);
         Assert.Contains("spent", body, StringComparison.Ordinal);
         Assert.DoesNotContain("push", h.Events);
         Assert.Equal(new FactoryRunResult(null, 3), result);
@@ -97,36 +97,36 @@ public sealed class FactoryRunTests
     [Fact]
     public async Task AnErrorOnThePlainPlanPromptPostsItsTextAndRunsNoBuild()
     {
-        using var h = new FactoryRunHarness();
-        h.PlanIsError = true;
-        FactoryRunResult result = await h.RunAsync(Ct);
+        using var h = new RunHarness();
+        h.Builder.Answer(Phase.Plan, FakeAgent.Error("plan went wrong"));
+        FactoryRunResult result = await h.RunFactoryAsync(Ct);
         Assert.Equal(new FactoryRunResult(null, 0), result);
-        Assert.Equal(["plan"], h.Prompts.Select(p => p.Kind));
+        Assert.Equal(["plan"], h.AgentRequests.Select(r => r.Phase.Text()));
         Assert.Contains("plan went wrong", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task AnErrorOnTheRefactorPlanPromptSendsOnePrompt()
     {
-        using var h = new FactoryRunHarness();
+        using var h = new RunHarness();
         h.Labels.Add("refactor");
-        h.PlanIsError = true;
-        FactoryRunResult result = await h.RunAsync(Ct);
+        h.Builder.Answer(Phase.Plan, FakeAgent.Error("plan went wrong"));
+        FactoryRunResult result = await h.RunFactoryAsync(Ct);
         Assert.Null(result.PullRequest);
-        Assert.Equal(["plan"], h.Prompts.Select(p => p.Kind));
+        Assert.Equal(["plan"], h.AgentRequests.Select(r => r.Phase.Text()));
     }
 
     [Fact]
     public async Task AnOverLimitCommentIsCutByBytesAndKeepsTwoHundredThousandLetters()
     {
-        using var h = new FactoryRunHarness();
+        using var h = new RunHarness();
         foreach (int build in new[] { 1, 2, 3, 4 })
         {
             h.RedBuilds.Add(build);
         }
 
         h.TestStdout = new string('a', 300000);
-        await h.RunAsync(Ct);
+        await h.RunFactoryAsync(Ct);
         string body = Assert.Single(h.CommentBodies);
         Assert.True(Encoding.UTF8.GetByteCount(body) <= 262144);
         Assert.Contains(new string('a', 200000), body, StringComparison.Ordinal);
@@ -136,14 +136,14 @@ public sealed class FactoryRunTests
     [Fact]
     public async Task AMultiByteCommentIsCutOnWholeCharacters()
     {
-        using var h = new FactoryRunHarness();
+        using var h = new RunHarness();
         foreach (int build in new[] { 1, 2, 3, 4 })
         {
             h.RedBuilds.Add(build);
         }
 
         h.TestStdout = new string('é', 200000);
-        await h.RunAsync(Ct);
+        await h.RunFactoryAsync(Ct);
         string body = Assert.Single(h.CommentBodies);
         Assert.True(Encoding.UTF8.GetByteCount(body) <= 262144);
         Assert.DoesNotContain('\uFFFD', body);
@@ -153,14 +153,14 @@ public sealed class FactoryRunTests
     [Fact]
     public async Task ACommentUnderTheLimitIsPostedWhole()
     {
-        using var h = new FactoryRunHarness();
+        using var h = new RunHarness();
         foreach (int build in new[] { 1, 2, 3, 4 })
         {
             h.RedBuilds.Add(build);
         }
 
         h.TestStdout = new string('a', 1000);
-        await h.RunAsync(Ct);
+        await h.RunFactoryAsync(Ct);
         string body = Assert.Single(h.CommentBodies);
         Assert.Contains(new string('a', 1000), body, StringComparison.Ordinal);
         Assert.DoesNotContain("[cut]", body, StringComparison.Ordinal);
@@ -169,44 +169,44 @@ public sealed class FactoryRunTests
     [Fact]
     public async Task ARefusedPullRequestThrowsAndRemovesTheContainer()
     {
-        using var h = new FactoryRunHarness();
+        using var h = new RunHarness();
         h.PullStatus = 422;
-        await Assert.ThrowsAsync<GitHubRequestException>(() => h.RunAsync(Ct));
+        await Assert.ThrowsAsync<GitHubRequestException>(() => h.RunFactoryAsync(Ct));
         Assert.Contains("rm", h.Events);
     }
 
     [Fact]
     public async Task AnExceptionFromTheTestGateStillRemovesTheContainer()
     {
-        using var h = new FactoryRunHarness();
+        using var h = new RunHarness();
         h.TestCommandThrows = true;
-        await Assert.ThrowsAsync<CommandStartException>(() => h.RunAsync(Ct));
+        await Assert.ThrowsAsync<CommandStartException>(() => h.RunFactoryAsync(Ct));
         Assert.Contains("rm", h.Events);
     }
 
     [Fact]
     public async Task AFailedCloneThrowsAndStartsNoContainer()
     {
-        using var h = new FactoryRunHarness();
+        using var h = new RunHarness();
         h.CloneFails = true;
-        await Assert.ThrowsAsync<GitCommandException>(() => h.RunAsync(Ct));
+        await Assert.ThrowsAsync<GitCommandException>(() => h.RunFactoryAsync(Ct));
         Assert.DoesNotContain(h.Commands, c => c.Command is "docker");
     }
 
     [Fact]
     public async Task APassingRunRemovesTheContainerAfterTheDelivery()
     {
-        using var h = new FactoryRunHarness();
-        await h.RunAsync(Ct);
-        Assert.Equal(["push", "comment", "rm"], h.Events);
+        using var h = new RunHarness();
+        await h.RunFactoryAsync(Ct);
+        Assert.Equal(["push", "comment", "rm"], h.Events.Where(e => e is "push" or "comment" or "rm"));
     }
 
     [Fact]
     public async Task TheSecretNamesReachOnlyTheIntegrationCommand()
     {
-        using var h = new FactoryRunHarness();
+        using var h = new RunHarness();
         h.SecretNames = ["WEATHER_API_KEY"];
-        await h.RunAsync(Ct);
+        await h.RunFactoryAsync(Ct);
         List<CommandSpec> withName = [.. h.Commands.Where(c => c.Arguments.Contains("WEATHER_API_KEY"))];
         CommandSpec only = Assert.Single(withName);
         Assert.Contains("tests/Integration", only.Arguments);
@@ -215,10 +215,10 @@ public sealed class FactoryRunTests
     [Fact]
     public async Task OnTheManagedPathThePushOfTheSessionBranchComesBeforeEachPrompt()
     {
-        using var h = new FactoryRunHarness();
-        h.UseManaged();
+        using var h = new RunHarness();
+        UseManaged(h);
         h.RedBuilds.Add(1);
-        await h.RunAsync(Ct);
+        await h.RunFactoryAsync(Ct);
 
         string push = $"git push origin factory/{h.RunId}-session";
         List<string> steps = [.. h.Timeline.Where(line => line == push || IsPrompt(line)).Select(line => line == push ? "push" : "prompt")];
@@ -228,9 +228,9 @@ public sealed class FactoryRunTests
     [Fact]
     public async Task OnTheManagedPathTheCommitOfTheLintIsPushedBeforeTheReviewPrompt()
     {
-        using var h = new FactoryRunHarness { ChangeAfterBuild = true };
-        h.UseManaged();
-        await h.RunAsync(Ct);
+        using var h = new RunHarness { ChangeAfterBuild = true };
+        UseManaged(h);
+        await h.RunFactoryAsync(Ct);
 
         int review = h.Timeline.FindLastIndex(IsPrompt);
         int commit = h.Timeline.FindLastIndex(review, line => line.StartsWith("git commit", StringComparison.Ordinal));
@@ -241,12 +241,20 @@ public sealed class FactoryRunTests
     [Fact]
     public async Task OnTheManagedPathOnlyTheBuildPromptReadsTheHeadOfTheSessionBranchAroundIt()
     {
-        using var h = new FactoryRunHarness();
-        h.UseManaged();
-        await h.RunAsync(Ct);
+        using var h = new RunHarness();
+        UseManaged(h);
+        await h.RunFactoryAsync(Ct);
 
         List<string> steps = [.. h.Timeline.Where(line => line.StartsWith("git ls-remote", StringComparison.Ordinal) || IsPrompt(line)).Select(line => IsPrompt(line) ? "prompt" : "head")];
         Assert.Equal(["prompt", "head", "prompt", "head", "prompt"], steps);
+    }
+
+    /// <summary>Puts the run on the managed path with one model for every phase, as the program gives it: a session keeps the model
+    /// of its first prompt.</summary>
+    private static void UseManaged(RunHarness h)
+    {
+        h.UseManaged();
+        h.PlanModel = h.BuildModel = h.ReviewModel = "claude-sonnet-5-5";
     }
 
     /// <summary>A prompt starts a session with its first message, or sends a message to a session that runs.</summary>

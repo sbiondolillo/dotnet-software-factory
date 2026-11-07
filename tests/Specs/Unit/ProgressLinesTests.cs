@@ -41,11 +41,7 @@ public sealed class ProgressLinesTests
     [Fact]
     public async Task PlanFailureWritesTheLineThenTheBodyAndNoBuildLine()
     {
-        (ConsoleHarness h, List<string> lines) = await StartAsync(Run, x =>
-        {
-            x.AgentWritesPlan = true;
-            x.AgentWritesOnlyPlan = true;
-        });
+        (ConsoleHarness h, List<string> lines) = await StartAsync(Run, x => x.PlanWritesOnlyThePlan());
         using (h)
         {
             Assert.Contains("plan: failed", lines);
@@ -68,7 +64,7 @@ public sealed class ProgressLinesTests
     [Fact]
     public async Task BlockedReviewWritesBlockedRedoBuildTogether()
     {
-        (ConsoleHarness h, List<string> lines) = await StartAsync(Run, x => x.BlockedReviews = 1);
+        (ConsoleHarness h, List<string> lines) = await StartAsync(Run, x => x.BlockReview(1));
         using (h)
         {
             int at = lines.IndexOf("review: blocked");

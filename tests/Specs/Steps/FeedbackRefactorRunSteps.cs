@@ -1,3 +1,4 @@
+using Core;
 using Reqnroll;
 using Specs.Unit;
 using Xunit;
@@ -7,7 +8,7 @@ namespace Specs.Steps;
 [Binding]
 public sealed class FeedbackRefactorRunSteps(FactoryRunSteps factory, FeedbackRunSteps feedback)
 {
-    private FeedbackRunHarness H => feedback.Harness;
+    private RunHarness H => feedback.Harness;
 
     private void SetIssue(int number, string label, string body)
     {
@@ -40,13 +41,18 @@ public sealed class FeedbackRefactorRunSteps(FactoryRunSteps factory, FeedbackRu
     }
 
     [Given("the build changes {string}")]
-    public void GivenChanges(string path) => H.FirstBuildChanges.Add(path);
+    public void GivenChanges(string path)
+    {
+        H.FirstBuildChanges.Add(path);
+        H.CloneFiles.Add(path);
+        H.BuildChanges(1, path);
+    }
 
     [Given("the build adds the file {string}")]
     public void GivenAdds(string path)
     {
         H.FirstBuildChanges.Add(path);
-        H.FirstBuildAdds.Add(path);
+        H.BuildWrites(1, path);
     }
 
     [Given("each dotnet command exits with the code 0")]
@@ -56,5 +62,5 @@ public sealed class FeedbackRefactorRunSteps(FactoryRunSteps factory, FeedbackRu
     public void GivenEachStepPasses() => Assert.Empty(H.RedBuilds);
 
     [Then("the build prompt holds {string}")]
-    public void ThenBuildHolds(string text) => Assert.Contains(text, H.BuildPrompts.First().Text, StringComparison.Ordinal);
+    public void ThenBuildHolds(string text) => Assert.Contains(text, H.Builder.Of(Phase.Build).First().Prompt.Text, StringComparison.Ordinal);
 }

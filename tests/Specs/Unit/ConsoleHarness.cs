@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -28,10 +29,18 @@ public sealed class FakeTime : TimeProvider
 /// <summary>One request GitHub got, with the time on the fake clock.</summary>
 public sealed record TimedRequest(string Method, string Path, string? Content, TimeSpan At, string? Authorization = null);
 
-/// <summary>The console program over a mock <see cref="CommandRunner"/> that answers git, docker and claude, and a stub GitHub.</summary>
+/// <summary>
+/// The console program over a mock <see cref="CommandRunner"/> that answers git and the docker commands of the gates, a stub
+/// GitHub, and a <see cref="FakeBackend"/> whose two <see cref="FakeAgent"/>s answer the prompts of every run of the program.
+/// </summary>
+/// <remarks>
+/// The agents start with the scripts of an agent that does its work: a plan prompt writes the plan, and the feature file unless
+/// the recipe plans alone; a build prompt writes the report that marks the thread A fixed; a review prompt approves. A test changes
+/// a script on <see cref="Builder"/> or <see cref="Reviewer"/>. <see cref="UseClaudeCode"/> and <see cref="UseManaged"/> put the
+/// real adapter that the program picks in place of the fake, with the two agents behind it.
+/// </remarks>
 public sealed class ConsoleHarness : IDisposable
 {
-    public const string ContainerId = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     public const string ThreadA = "PRRT_kwDOUpm1Qc6ofWu5";
     public const string ThreadABody = "The total ignores the second item of the cart.";
     public const string HeadRef = "factory/a1b2c3d4";
@@ -40,8 +49,7 @@ public sealed class ConsoleHarness : IDisposable
 
     private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("console-root-");
     private string _clone = "";
-    private int _builds;
-    private int _reviews;
+    private bool _real;
     private int _headReads;
     private int _checkReads;
     private bool _resolved;
@@ -55,7 +63,31 @@ public sealed class ConsoleHarness : IDisposable
         Environment["ANTHROPIC_API_KEY"] = "secret-key";
         HeadSha = _ => DefaultSha;
         CheckRuns = _ => RunsJson("build", "completed", "success");
+        Builder = new FakeAgent(() => _clone) { OnRequest = Seen };
+        Reviewer = new FakeAgent(() => _clone) { OnRequest = Seen };
+        Builder.Stage(Phase.Plan, "plan.md", PlanPhaseHarness.PlanText);
+        Builder.Act(Phase.Plan, _ =>
+        {
+            if (!PlansAlone)
+            {
+                Write("specs/features/checkout.feature", PlanPhaseHarness.SoundFeature);
+            }
+        });
+        Report("fixed");
+        Reviewer.Stage(Phase.Review, "review.json", RunHarness.Approved);
     }
+
+    /// <summary>The agent of the plan and the build prompts of every run.</summary>
+    public FakeAgent Builder { get; }
+
+    /// <summary>The agent of the review prompts of every run.</summary>
+    public FakeAgent Reviewer { get; }
+
+    /// <summary>Each request of either agent, in order.</summary>
+    public List<AgentRequest> AgentRequests { get; } = [];
+
+    /// <summary>The number of build prompts so far, over every run of the program.</summary>
+    public int Builds => Builder.Of(Phase.Build).Count();
 
     public Dictionary<string, string> Environment { get; } = [];
 
@@ -97,8 +129,6 @@ public sealed class ConsoleHarness : IDisposable
     /// <summary>"none", "always", "until-resolved" (thread A until its resolve, then no thread) or "resolvable" (thread A on each read, with <c>isResolved</c> true after its resolve, as GitHub answers).</summary>
     public string Threads { get; set; } = "none";
 
-    public bool Disputed { get; set; }
-
     /// <summary>The message of a GraphQL error that answers the review request, or null for success.</summary>
     public string? ReviewRequestError { get; set; }
 
@@ -111,18 +141,10 @@ public sealed class ConsoleHarness : IDisposable
 
     public string PullUrl { get; set; } = "https://github.com/sbiondolillo/factory-scratch/pull/10";
 
-    public bool AgentWritesPlan { get; set; } = true;
-
-    /// <summary>True when the agent writes the plan file and no feature file on the plan prompt.</summary>
-    public bool AgentWritesOnlyPlan { get; set; }
-
-    /// <summary>The number of review prompts that get a blocked verdict, from the first.</summary>
-    public int BlockedReviews { get; set; }
-
     /// <summary>What standard output held when each program of <see cref="Commands"/> ran, by index.</summary>
     public List<string> OutAtCommand { get; } = [];
 
-    /// <summary>What standard output held when each prompt of <see cref="Prompts"/> ran, by index.</summary>
+    /// <summary>What standard output held when each prompt of <see cref="AgentRequests"/> ran, by index.</summary>
     public List<string> OutAtPrompt { get; } = [];
 
     public FakeTime Time { get; } = new();
@@ -130,16 +152,13 @@ public sealed class ConsoleHarness : IDisposable
     /// <summary>The exit code of <c>git worktree add</c> in the container.</summary>
     public int WorktreeAddExit { get; set; }
 
-    /// <summary>The answer of claude to a prompt kind: turns, the cost as written, and the seconds the answer takes.</summary>
-    public Dictionary<string, (int Turns, string Cost, TimeSpan Elapsed)> Answers { get; } = [];
-
     /// <summary>The lines the API printer prints after the build of that number (0 is before the first build); a number with no entry prints nothing.</summary>
     public Dictionary<int, string> ApiOutputs { get; } = [];
 
     /// <summary>The exit code of a dotnet command in the container, by its program and words joined by one space.</summary>
     public Dictionary<string, int> DotnetExits { get; } = [];
 
-    /// <summary>What standard error held when each prompt of <see cref="Prompts"/> ran, by index.</summary>
+    /// <summary>What standard error held when each prompt of <see cref="AgentRequests"/> ran, by index.</summary>
     public List<string> ErrorAtPrompt { get; } = [];
 
     public string Root => _root.FullName;
@@ -153,13 +172,8 @@ public sealed class ConsoleHarness : IDisposable
     /// <summary>Each git command, as its words, and each request to the fake of the Managed Agents API, as its method and path, in order.</summary>
     public List<string> Timeline { get; } = [];
 
-    /// <summary>The cost in cents of one answer of a session, by prompt kind.</summary>
-    public Dictionary<string, int> SessionCents { get; } = [];
-
-    /// <summary>The builds, by number, after which the session pushes no commit.</summary>
-    public HashSet<int> NoPushBuilds { get; } = [];
-
-    /// <summary>Puts the run on the managed path: the variables of the sessions in the environment, and the fake API.</summary>
+    /// <summary>Puts the run on the managed path: the variables of the sessions in the environment, the fake API, and the real
+    /// <see cref="ManagedBackend"/> that the program picks, with the two agents behind its sessions.</summary>
     public void UseManaged()
     {
         foreach ((string name, string value) in ManagedRunFake.Environment())
@@ -167,7 +181,38 @@ public sealed class ConsoleHarness : IDisposable
             Environment[name] = value;
         }
 
-        Managed = new ManagedRunFake { OnMessage = SessionMessage };
+        Managed = new ManagedRunFake { OnMessage = (_, _) => FakeBackend.PlaySession(Builder, Reviewer, Managed!) };
+        _real = true;
+    }
+
+    /// <summary>Puts the real <see cref="ClaudeCodeBackend"/> that the program picks in place of the fake, with the two agents
+    /// behind its <c>claude</c>, so a test reads what that adapter writes around each prompt.</summary>
+    public void UseClaudeCode() => _real = true;
+
+    /// <summary>Scripts the report of each build prompt, which gives the thread A the status <paramref name="status"/>.</summary>
+    public void Report(string status) => Builder.Stage(Phase.Build, "threads.json", JsonSerializer.Serialize(new
+    {
+        threads = new[] { new { id = ThreadA, status, reply = "The total now adds every item of the cart." } },
+    }));
+
+    /// <summary>Scripts each plan prompt to write the plan file and no feature file.</summary>
+    public void PlanWritesOnlyThePlan()
+    {
+        Builder.Clear(Phase.Plan);
+        Builder.Stage(Phase.Plan, "plan.md", PlanPhaseHarness.PlanText);
+    }
+
+    /// <summary>Scripts the review prompt <paramref name="number"/> to block the build on the thread A.</summary>
+    public void BlockReview(int number) => Reviewer.Stage(
+        Phase.Review, "review.json", JsonSerializer.Serialize(new { approved = false, blocking = new[] { ThreadABody } }), number);
+
+    /// <summary>Scripts the prompts of <paramref name="phase"/> to answer with <paramref name="turns"/> and the cost
+    /// <paramref name="cost"/> in dollars as written, after <paramref name="elapsed"/> on the fake clock.</summary>
+    public void Timed(Phase phase, int turns, string cost, TimeSpan elapsed)
+    {
+        FakeAgent agent = phase is Phase.Review ? Reviewer : Builder;
+        agent.Answer(phase, new AgentAnswer("done", turns, decimal.Parse(cost, CultureInfo.InvariantCulture), false, new Dictionary<string, string>(), []));
+        agent.Act(phase, _ => Time.WaitAsync(elapsed, CancellationToken.None).GetAwaiter().GetResult());
     }
 
     public List<CommandSpec> Commands { get; } = [];
@@ -177,8 +222,6 @@ public sealed class ConsoleHarness : IDisposable
     public List<TimeSpan> PushTimes { get; } = [];
 
     public List<string> CloneDirectories { get; } = [];
-
-    public List<(string Kind, string Model, string Turns, string Text)> Prompts { get; } = [];
 
     public StringWriter Out { get; } = new();
 
@@ -216,14 +259,31 @@ public sealed class ConsoleHarness : IDisposable
             Root,
             Time.WaitAsync,
             Time,
-            AgentBackend.Pick);
+            Backend);
         return ConsoleProgram.RunAsync(args, host, cancellationToken);
     }
 
     public void Dispose() => _root.Delete(recursive: true);
 
-    private static string Json(string text) =>
-        JsonSerializer.Serialize(new Dictionary<string, object> { ["is_error"] = false, ["result"] = text, ["num_turns"] = 1, ["total_cost_usd"] = 0.0 });
+    /// <summary>True for a recipe whose plan prompt asks for the plan alone: a refactor, or an issue with scenarios or with
+    /// removed scenarios.</summary>
+    private bool PlansAlone =>
+        Labels.Contains("refactor")
+        || (IssueBody ?? "").Contains("## Scenarios", StringComparison.Ordinal)
+        || (IssueBody ?? "").Contains("## Removed scenarios", StringComparison.Ordinal);
+
+    /// <summary>The backend of each run of the program: the fake, or the real adapter that the program picks with the two agents
+    /// behind it.</summary>
+    private StartBackend Backend(BackendOptions options) => _real
+        ? FakeBackend.Around(AgentBackend.Pick(options), Builder, Reviewer)
+        : FakeBackend.Starter(options.Runner, options.ImageTag, options.RootDirectory, Builder, Reviewer, [], options.Time, options.Progress);
+
+    private void Seen(AgentRequest request)
+    {
+        AgentRequests.Add(request);
+        OutAtPrompt.Add(Out.ToString());
+        ErrorAtPrompt.Add(Error.ToString());
+    }
 
     private CommandResult Answer(CommandSpec spec)
     {
@@ -238,7 +298,7 @@ public sealed class ConsoleHarness : IDisposable
         return spec.Arguments[0] switch
         {
             "image" => new CommandResult { ExitCode = InspectExit },
-            "run" => new CommandResult { StandardOutput = ContainerId + "\n" },
+            "run" => new CommandResult { StandardOutput = GateSandbox.ContainerId + "\n" },
             "exec" => Exec(spec),
             _ => new CommandResult(),
         };
@@ -256,7 +316,7 @@ public sealed class ConsoleHarness : IDisposable
             case "rev-parse":
                 return new CommandResult { StandardOutput = DefaultSha + "\n" };
             case "status":
-                return new CommandResult { StandardOutput = _builds is 0 ? "" : " M src/Checkout.cs\n" };
+                return new CommandResult { StandardOutput = Builds is 0 ? "" : " M src/Checkout.cs\n" };
             case "diff" when spec.Arguments.Contains("--name-only"):
                 return new CommandResult();
             case "diff":
@@ -295,10 +355,10 @@ public sealed class ConsoleHarness : IDisposable
     private CommandResult Exec(CommandSpec spec)
     {
         List<string> arguments = [.. spec.Arguments];
-        int id = arguments.IndexOf(ContainerId);
+        int id = arguments.IndexOf(GateSandbox.ContainerId);
         if (arguments[id + 1] is "claude")
         {
-            return Claude(arguments);
+            return FakeBackend.PlayClaude(Builder, Reviewer);
         }
 
         return Program(arguments[(id + 1)..], directory => Path.Combine(_clone, directory["/work/".Length..]));
@@ -309,7 +369,7 @@ public sealed class ConsoleHarness : IDisposable
     {
         if (command[0] is "sh" && command[1] is "-c")
         {
-            (int code, string output, string error) = CheckResults.TryGetValue(_builds, out (int Code, string Out, string Err) given) ? given : _builds is 0 ? (1, "", "check failed") : (0, "", "");
+            (int code, string output, string error) = CheckResults.TryGetValue(Builds, out (int Code, string Out, string Err) given) ? given : Builds is 0 ? (1, "", "check failed") : (0, "", "");
             return new CommandResult { ExitCode = code, StandardOutput = output, StandardError = error };
         }
 
@@ -320,7 +380,7 @@ public sealed class ConsoleHarness : IDisposable
 
         if (command[0] is "dotnet" && command[1] is "/opt/api-printer/ApiPrinter.dll")
         {
-            return new CommandResult { StandardOutput = ApiOutputs.GetValueOrDefault(_builds, "") };
+            return new CommandResult { StandardOutput = ApiOutputs.GetValueOrDefault(Builds, "") };
         }
 
         if (command[0] is "dotnet" && DotnetExits.TryGetValue(string.Join(' ', command), out int exit))
@@ -333,7 +393,7 @@ public sealed class ConsoleHarness : IDisposable
             return new CommandResult();
         }
 
-        bool red = RedBuilds.Contains(_builds);
+        bool red = RedBuilds.Contains(Builds);
         List<(string Class, string Method, string Outcome, string? Message)> tests =
             [("Specs.Features.CheckoutFeature", "TheTotalIsTheSumOfThePrices", "Passed", null)];
         if (red)
@@ -347,85 +407,15 @@ public sealed class ConsoleHarness : IDisposable
         return new CommandResult { ExitCode = red ? 1 : 0, StandardOutput = red ? FailureText : "" };
     }
 
-    private CommandResult Claude(List<string> arguments)
-    {
-        string text = arguments[arguments.IndexOf("-p") + 1];
-        string model = arguments[arguments.IndexOf("--model") + 1];
-        string turns = arguments[arguments.IndexOf("--max-turns") + 1];
-        string kind = text.StartsWith("Plan the work", StringComparison.Ordinal) ? "plan"
-            : text.StartsWith("Review the build", StringComparison.Ordinal) ? "review" : "build";
-        Turn(kind, model, turns, text);
-        if (!Answers.TryGetValue(kind, out (int Turns, string Cost, TimeSpan Elapsed) answer))
-        {
-            return new CommandResult { StandardOutput = Json("done") };
-        }
-
-        Time.WaitAsync(answer.Elapsed, CancellationToken.None).GetAwaiter().GetResult();
-        return new CommandResult
-        {
-            StandardOutput = $"{{\"is_error\":false,\"result\":\"done\",\"num_turns\":{answer.Turns},\"total_cost_usd\":{answer.Cost}}}",
-        };
-    }
-
-    /// <summary>Plays the agent of a session for one message. A preamble may come before the prompt, so the kind is found anywhere in the text.</summary>
-    private ManagedTurn SessionMessage(string text, string model)
-    {
-        string kind = text.Contains("Plan the work", StringComparison.Ordinal) ? "plan"
-            : text.Contains("Review the build", StringComparison.Ordinal) ? "review" : "build";
-        Turn(kind, model, "", text);
-        return new ManagedTurn("done", Cents: SessionCents.GetValueOrDefault(kind), Pushes: kind is "build" && !NoPushBuilds.Contains(_builds));
-    }
-
-    /// <summary>Records one prompt and writes what the agent writes for it.</summary>
-    private void Turn(string kind, string model, string turns, string text)
-    {
-        if (kind is "build")
-        {
-            _builds++;
-        }
-
-        Prompts.Add((kind, model, turns, text));
-        OutAtPrompt.Add(Out.ToString());
-        ErrorAtPrompt.Add(Error.ToString());
-        if (kind is "plan" && AgentWritesPlan)
-        {
-            if (!AgentWritesOnlyPlan && !Labels.Contains("refactor"))
-            {
-                Write("specs/features/checkout.feature", PlanPhaseHarness.SoundFeature);
-            }
-
-            Write(".factory/plan.md", PlanPhaseHarness.PlanText);
-        }
-
-        if (kind is "build" && text.Contains(".factory/threads.json", StringComparison.Ordinal))
-        {
-            Write(".factory/threads.json", JsonSerializer.Serialize(new
-            {
-                threads = new[] { new { id = ThreadA, status = Disputed ? "disputed" : "fixed", reply = "The total now adds every item of the cart." } },
-            }));
-        }
-
-        if (kind is "review")
-        {
-            _reviews++;
-            Write(
-                ".factory/review.json",
-                _reviews <= BlockedReviews
-                    ? JsonSerializer.Serialize(new { approved = false, blocking = new[] { ThreadABody } })
-                    : """{"approved":true,"blocking":[]}""");
-        }
-    }
-
-    /// <summary>Writes a file of the agent. On the managed path a tracked file waits for the pull, and a file under .factory/ is also an output of the session.</summary>
+    /// <summary>Writes a file of the agent into the clone. On the managed path the file waits for the next pull.</summary>
     private void Write(string relative, string text)
     {
-        if (Managed is not null && !relative.StartsWith(".factory/", StringComparison.Ordinal))
+        if (Managed is not null)
         {
             Managed.Stage(relative, text);
             return;
         }
 
-        Managed?.AddOutput(relative, text);
         string full = Path.Combine(_clone, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
         File.WriteAllText(full, text);

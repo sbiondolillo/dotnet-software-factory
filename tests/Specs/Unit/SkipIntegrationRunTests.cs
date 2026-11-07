@@ -16,15 +16,15 @@ public sealed class SkipIntegrationRunTests
     [InlineData("reframe", "## Scope\n.editorconfig\n\n## Check\n\n```sh\ntrue\n```\n", false)]
     public async Task TheTestGateOfALabelledRunRunsTheIntegrationCommandUnlessTheRunSkipsIt(string label, string body, bool skip)
     {
-        using var h = new FactoryRunHarness { Title = "Tidy it", Body = body, SkipIntegration = skip };
+        using var h = new RunHarness { Title = "Tidy it", Body = body, SkipIntegration = skip };
         h.Labels.Add(label);
         if (label is not "refactor")
         {
             h.FirstBuildChanges.Add(".editorconfig");
-            h.FirstBuildWrites.Add(".editorconfig");
+            h.BuildWrites(1, ".editorconfig");
         }
 
-        await h.RunAsync(TestContext.Current.CancellationToken);
+        await h.RunFactoryAsync(TestContext.Current.CancellationToken);
 
         List<string> commands = [.. h.Commands.Where(c => c.Command is "docker" && c.Arguments[0] is "exec").Select(c => string.Join(' ', c.Arguments))];
         Assert.Contains(commands, c => c.Contains(GateTest, StringComparison.Ordinal));

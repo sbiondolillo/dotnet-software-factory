@@ -31,9 +31,9 @@ public sealed partial class AgentOptionSteps(ConsoleProgramSteps console)
     [Given("a session answer costs {int} cents for the plan, {int} cents for a build and {int} cents for a review")]
     public void GivenCents(int plan, int build, int review)
     {
-        H.SessionCents["plan"] = plan;
-        H.SessionCents["build"] = build;
-        H.SessionCents["review"] = review;
+        H.Builder.Answer(Phase.Plan, FakeAgent.Done() with { CostUsd = plan / 100m });
+        H.Builder.Answer(Phase.Build, FakeAgent.Done() with { CostUsd = build / 100m });
+        H.Reviewer.Answer(Phase.Review, FakeAgent.Done() with { CostUsd = review / 100m });
     }
 
     [Given("the environment variable GITHUB_STEP_SUMMARY of the program names an empty file")]

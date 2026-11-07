@@ -13,7 +13,7 @@ public sealed class ReframeRunSteps(FactoryRunSteps factory, IObjectContainer co
     private const string Printer = "/opt/api-printer/ApiPrinter.dll";
     private const string CopyBuildOutput = "error CS1002: ; expected";
 
-    private FactoryRunHarness H => factory.Harness;
+    private RunHarness H => factory.Harness;
 
     /// <summary>Each docker exec of the run: its index, the words before the container id and the words after it.</summary>
     private IEnumerable<(int Index, string[] Before, string[] After)> Execs()
@@ -22,7 +22,7 @@ public sealed class ReframeRunSteps(FactoryRunSteps factory, IObjectContainer co
         foreach (CommandSpec spec in H.Commands.Where(c => c.Command is "docker" && c.Arguments[0] is "exec"))
         {
             List<string> arguments = [.. spec.Arguments];
-            int id = arguments.IndexOf(FactoryRunHarness.ContainerId);
+            int id = arguments.IndexOf(GateSandbox.ContainerId);
             yield return (index++, [.. arguments[1..id]], [.. arguments[(id + 1)..]]);
         }
     }
@@ -36,7 +36,7 @@ public sealed class ReframeRunSteps(FactoryRunSteps factory, IObjectContainer co
         return at < 0 ? null : exec.Before[at + 1];
     }
 
-    private SeenPrompt NextBuild() => H.Prompts.Where(p => p.Kind is "build").ElementAt(1);
+    private string NextBuild() => H.Builder.Of(Phase.Build).ElementAt(1).Prompt.Text;
 
     [Given("the API printer prints the same lines as on the base commit")]
     public void GivenSameApi() => Assert.Null(H.AfterApi);
@@ -75,10 +75,10 @@ public sealed class ReframeRunSteps(FactoryRunSteps factory, IObjectContainer co
     [Then("the container runs {string} with the arguments {string} and {string} before the build prompt")]
     public void ThenPrinterBeforeBuild(string program, string first, string second)
     {
-        (int index, _, string[] after) = FirstPrinter();
+        (_, _, string[] after) = FirstPrinter();
         Assert.Equal([program, first, second], after);
-        (int build, _, _) = Execs().First(e => e.After[0] is "claude");
-        Assert.True(index < build);
+        int printer = H.Timeline.FindIndex(line => line.StartsWith($"exec dotnet {Printer}", StringComparison.Ordinal));
+        Assert.True(printer >= 0 && printer < H.Timeline.IndexOf("prompt build"), string.Join(" | ", H.Timeline));
     }
 
     [Then("the container runs {string} at a path outside {string}, and in that path {string} and then {string} run before the API printer")]
@@ -126,19 +126,19 @@ public sealed class ReframeRunSteps(FactoryRunSteps factory, IObjectContainer co
 
     [Then("the build prompt holds this text")]
     public void ThenBuildText(string docString) =>
-        Assert.Contains(docString.Trim(), Assert.Single(H.Prompts, p => p.Kind is "build").Text, StringComparison.Ordinal);
+        Assert.Contains(docString.Trim(), Assert.Single(H.Builder.Of(Phase.Build)).Prompt.Text, StringComparison.Ordinal);
 
     [Then("the review prompt holds this text")]
     public void ThenReviewText(string docString) =>
-        Assert.Contains(docString.Trim(), Assert.Single(H.Prompts, p => p.Kind is "review").Text, StringComparison.Ordinal);
+        Assert.Contains(docString.Trim(), Assert.Single(H.Reviewer.Of(Phase.Review)).Prompt.Text, StringComparison.Ordinal);
 
     [Then("the next build prompt holds {string}")]
-    public void ThenNextBuildHolds(string text) => Assert.Contains(text, NextBuild().Text, StringComparison.Ordinal);
+    public void ThenNextBuildHolds(string text) => Assert.Contains(text, NextBuild(), StringComparison.Ordinal);
 
     [Then("the next build prompt holds a Redo text with {string} once, in {string}, and no {string}")]
     public void ThenSymbolRedo(string marker, string line, string absent)
     {
-        string text = NextBuild().Text;
+        string text = NextBuild();
         Assert.Contains(line, text, StringComparison.Ordinal);
         Assert.Equal(1, text.Split(marker).Length - 1);
         Assert.DoesNotContain(absent, text, StringComparison.Ordinal);
@@ -147,7 +147,7 @@ public sealed class ReframeRunSteps(FactoryRunSteps factory, IObjectContainer co
     [Then("the next build prompt holds a Redo text that holds {string} and the standard error of the API printer")]
     public void ThenPrinterRedo(string text)
     {
-        string prompt = NextBuild().Text;
+        string prompt = NextBuild();
         Assert.Contains(text, prompt, StringComparison.Ordinal);
         Assert.Contains(H.ApiResults[1].Err, prompt, StringComparison.Ordinal);
     }

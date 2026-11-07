@@ -1,6 +1,7 @@
 using Core;
 using Moq;
 using Reqnroll;
+using Specs.Unit;
 using Xunit;
 
 namespace Specs.Steps;
@@ -8,11 +9,10 @@ namespace Specs.Steps;
 [Binding]
 public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext scenarioContext, WorkTreeState workTree) : IDisposable
 {
-    private const string ContainerId = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     private const string HomeSuffix = ":/tmp/sandbox-home";
     private readonly List<CommandSpec> _recorded = [];
     private readonly DirectoryInfo _directory = Directory.CreateTempSubdirectory("factory-sandbox-steps-");
-    private CommandResult _run = new() { StandardOutput = ContainerId + "\n" };
+    private CommandResult _run = new() { StandardOutput = GateSandbox.ContainerId + "\n" };
     private CommandResult _exec = new();
     private Sandbox? _sandbox;
     private CommandResult? _result;
@@ -97,7 +97,7 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
     public void GivenRunFails() => _run = new CommandResult { ExitCode = 125, StandardError = "docker: no such image" };
 
     [Given("docker run prints a container id of 64 hexadecimal digits and a line feed")]
-    public void GivenRunPrints() => _run = new CommandResult { StandardOutput = ContainerId + "\n" };
+    public void GivenRunPrints() => _run = new CommandResult { StandardOutput = GateSandbox.ContainerId + "\n" };
 
     [Given("a caller has started a sandbox")]
     public async Task GivenStarted() => await StartAsync();
@@ -269,7 +269,7 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
 
     [Then("the last three arguments are the container id with no line feed, {string} and {string}, in that order")]
     public void ThenLastThree(string program, string argument) =>
-        Assert.Equal([ContainerId, program, argument], _recorded[^1].Arguments.TakeLast(3));
+        Assert.Equal([GateSandbox.ContainerId, program, argument], _recorded[^1].Arguments.TakeLast(3));
 
     [Then("the arguments of the docker exec hold {string} and then {string}, and {string} and then {string}")]
     public void ThenExecHolds(string flag1, string value1, string flag2, string value2)
@@ -282,7 +282,7 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
     public void ThenBeforeId()
     {
         IReadOnlyList<string> arguments = Docker("exec").Arguments;
-        int id = arguments.ToList().IndexOf(ContainerId);
+        int id = arguments.ToList().IndexOf(GateSandbox.ContainerId);
         Assert.True(id > arguments.ToList().LastIndexOf("SECOND_SECRET"));
         Assert.True(id > arguments.ToList().LastIndexOf("FIRST_SECRET"));
     }
@@ -308,6 +308,6 @@ public sealed class SandboxSteps(ExceptionState exceptionState, ScenarioContext 
     {
         CommandSpec spec = _recorded[^1];
         Assert.Equal(program, spec.Command);
-        Assert.Equal([first, second, ContainerId], spec.Arguments);
+        Assert.Equal([first, second, GateSandbox.ContainerId], spec.Arguments);
     }
 }
