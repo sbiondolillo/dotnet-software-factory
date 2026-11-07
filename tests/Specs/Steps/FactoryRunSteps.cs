@@ -324,6 +324,21 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
         Assert.All(dotnet, c => Assert.Equal(GateSandbox.ContainerId, c.Arguments[c.Arguments.ToList().IndexOf("dotnet") - 1]));
     }
 
+    [Given("the backend has the sessions {string} of the builder at {int} cents and {string} of the reviewer at {int} cents")]
+    public void GivenSessions(string builder, int builderCents, string reviewer, int reviewerCents)
+    {
+        _h.Sessions.Add(new SessionCost(builder, "builder", builderCents));
+        _h.Sessions.Add(new SessionCost(reviewer, "reviewer", reviewerCents));
+    }
+
+    [Then("the job summary of the run ends with the lines")]
+    public void ThenSummaryEnds(string lines) =>
+        Assert.EndsWith(lines.Replace("\r\n", "\n", StringComparison.Ordinal) + "\n", _h.Summary, StringComparison.Ordinal);
+
+    [Then("the body of the pull request of the run ends with the line {string}")]
+    public void ThenBodyEnds(string line) =>
+        Assert.Equal(line, Assert.IsType<string>(_h.OpenedBody).TrimEnd('\n').Split('\n')[^1]);
+
     [Then("the run hands the backend the session branch {string}, the base commit {string} and the title {string}")]
     public void ThenStarted(string branch, string baseCommit, string title)
     {

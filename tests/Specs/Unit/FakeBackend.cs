@@ -11,31 +11,20 @@ namespace Specs.Unit;
 /// took on the run's clock. What an adapter does below the seam, such as a progress line or a git command, it does not do: a test
 /// of an adapter drives that adapter alone.
 /// </summary>
-public sealed class FakeBackend : AgentBackend
+public sealed class FakeBackend(Sandbox sandbox, Agent builder, Agent reviewer, IReadOnlyList<SessionCost> sessions, Action<string>? onStep)
+    : AgentBackend
 {
-    private readonly IReadOnlyList<SessionCost> _sessions;
-    private readonly Action<string>? _onStep;
-
-    private FakeBackend(Sandbox sandbox, Agent builder, Agent reviewer, IReadOnlyList<SessionCost> sessions, Action<string>? onStep)
-    {
-        Sandbox = sandbox;
-        Builder = builder;
-        Reviewer = reviewer;
-        _sessions = sessions;
-        _onStep = onStep;
-    }
+    /// <inheritdoc/>
+    public override Sandbox Sandbox => sandbox;
 
     /// <inheritdoc/>
-    public override Sandbox Sandbox { get; }
+    public override Agent Builder => builder;
 
     /// <inheritdoc/>
-    public override Agent Builder { get; }
+    public override Agent Reviewer => reviewer;
 
     /// <inheritdoc/>
-    public override Agent Reviewer { get; }
-
-    /// <inheritdoc/>
-    public override IReadOnlyList<SessionCost> Sessions => _sessions;
+    public override IReadOnlyList<SessionCost> Sessions => sessions;
 
     /// <summary>The start of a backend whose agents are <paramref name="builder"/> and <paramref name="reviewer"/>, over a sandbox
     /// that <paramref name="runner"/> starts over the clone. <paramref name="onStart"/> gets the <see cref="BackendStart"/> of the
@@ -64,7 +53,7 @@ public sealed class FakeBackend : AgentBackend
     /// <summary>Does nothing to the clone, and tells <c>onStep</c>.</summary>
     public override Task CollectAsync(string branch, CancellationToken cancellationToken = default)
     {
-        _onStep?.Invoke($"collect {branch}");
+        onStep?.Invoke($"collect {branch}");
         return Task.CompletedTask;
     }
 

@@ -165,6 +165,18 @@ Feature: Factory run
     When a caller starts a run
     Then every dotnet command of the run goes through docker exec
 
+  Scenario: The job summary and the pull request body of a run end with the sessions of the backend
+    Given the backend has the sessions "sesn_01" of the builder at 412 cents and "sesn_02" of the reviewer at 37 cents
+    When a caller starts a run
+    Then the job summary of the run ends with the lines
+      """
+      ### Sessions
+
+      - sesn_01, builder, $4.12
+      - sesn_02, reviewer, $0.37
+      """
+    And the body of the pull request of the run ends with the line "Sessions: sesn_01 (builder, $4.12), sesn_02 (reviewer, $0.37)"
+
   Scenario: The run hands the backend the session branch of the run, the head of the clone and the title of the issue
     When a caller starts a run
     Then the run hands the backend the session branch "factory/a1b2c3d4-session", the base commit "4f2a9c1e8b7d6053a1f2e3d4c5b6a7980f1e2d3c" and the title "Add a checkout total"
