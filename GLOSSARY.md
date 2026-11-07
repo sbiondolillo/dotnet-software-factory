@@ -30,6 +30,10 @@ _Avoid_: migration, upgrade
 One execution of a recipe. A factory run starts from an issue. A feedback run starts from the review threads of the pull request that a factory run opened.
 _Avoid_: session, job
 
+**Run kind**:
+The factory run and the feedback run, the two kinds of run. Each supplies to the one run module what differs: the checkout, the step before the gates, the build and the ending after a pass.
+_Avoid_: recipe (a recipe is the sequence of phases that a label picks), mode
+
 **Phase**:
 One step of a recipe: the plan, the build or the review. A phase takes its inputs from the recipe and never reads the recipe.
 _Avoid_: step, stage

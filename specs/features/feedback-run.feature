@@ -173,7 +173,7 @@ Feature: A feedback run answers every unresolved review thread
     And the session branch tracks the file ".factory/threads.json"
     When a caller starts a feedback run
     Then FeedbackRun posts one comment on the pull request 10 that holds "The session committed files under .factory/, which only the factory writes: .factory/threads.json. The run stops."
-    And FeedbackRun throws SessionBranchException with a message that holds "The session committed files under .factory/, which only the factory writes: .factory/threads.json. The run stops."
+    And FeedbackRun gives back a result with 0 threads resolved, 2 threads unresolved and 0 Redos
     And FeedbackRun adds no reply
     And FeedbackRun resolves no thread
 
@@ -193,7 +193,8 @@ Feature: A feedback run answers every unresolved review thread
     Given the run uses Managed Agents sessions
     And the session branch tracks the file ".factory/leak.txt"
     When a caller starts a feedback run
-    Then FeedbackRun throws SessionBranchException with a message that holds "The session committed files under .factory/, which only the factory writes: .factory/leak.txt. The run stops."
+    Then FeedbackRun posts one comment on the pull request 10 that holds "The session committed files under .factory/, which only the factory writes: .factory/leak.txt. The run stops."
+    And FeedbackRun gives back a result with 0 threads resolved, 2 threads unresolved and 0 Redos
     And the run starts no session
 
   Scenario: A disputed thread gets its reply and is resolved

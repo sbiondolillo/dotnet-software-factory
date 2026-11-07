@@ -190,7 +190,7 @@ public sealed class FeedbackRunTests
         using var h = new FeedbackRunHarness();
         h.SummaryPath = Path.Combine(h.CloneDirectory, "absent", "summary.md");
         Assert.Equal(new FeedbackRunResult(2, 0, 0), await h.RunAsync(Ct));
-        Assert.StartsWith($"summary: cannot write {h.SummaryPath}: ", h.Log.ToString(), StringComparison.Ordinal);
+        Assert.Contains(h.Log.ToString().Split('\n'), line => line.StartsWith($"summary: cannot write {h.SummaryPath}: ", StringComparison.Ordinal));
     }
 
     [Fact]

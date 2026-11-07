@@ -43,9 +43,7 @@ public sealed class FeedbackRun(
     /// <summary>The heading of the section of a round in the job summary.</summary>
     public const string SummaryHeading = "Feedback run";
 
-    private readonly TimeProvider _clock = time ?? TimeProvider.System;
-    private JobSummary _summary = new(progress);
-    private IReadOnlyList<SessionCost> _sessions = [];
+    private readonly Run _run = new(runner, client, progress, log, time, summaryPath, handler, delay);
 
     /// <summary>True when the last <see cref="RunAsync"/> ended on a closing issue that the recipe rules decline, with a
     /// comment on the pull request and no build.</summary>
@@ -55,30 +53,12 @@ public sealed class FeedbackRun(
     /// Builds an answer to each unresolved thread, gates and reviews it, pushes it, and replies to each thread. Then it
     /// resolves each thread that it replied to, fixed or disputed. The reply of a disputed thread states the dispute. A round
     /// that stops on an error or spends its budget posts the comment of the loop on the pull request and pushes nothing. A
-    /// <see cref="SessionBranchException"/> posts its message on the pull request, and the run then throws it.
+    /// <see cref="SessionBranchException"/> posts its message on the pull request and stops the round in the same way.
     /// </summary>
     public async Task<FeedbackRunResult> RunAsync(FeedbackRunRequest request, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(request);
         Declined = false;
-        _summary = new JobSummary(progress);
-        _sessions = [];
-        try
-        {
-            return await RunCoreAsync(request, cancellationToken).ConfigureAwait(false);
-        }
-        catch (SessionBranchException exception)
-        {
-            await PostAsync(request, CommentText.Fit(exception.Message, []), cancellationToken).ConfigureAwait(false);
-            throw;
-        }
-        finally
-        {
-            await WriteSummaryAsync().ConfigureAwait(false);
-        }
-    }
-
-    private async Task<FeedbackRunResult> RunCoreAsync(FeedbackRunRequest request, CancellationToken cancellationToken)
-    {
         var reviewThreads = new ReviewThreads(client);
         IReadOnlyList<ReviewThread> all = await reviewThreads.ReadThreadsAsync(request.Owner, request.Repo, request.PullNumber, cancellationToken).ConfigureAwait(false);
         List<ReviewThread> threads = [.. all.Where(thread => !thread.IsResolved)];
@@ -98,100 +78,20 @@ public sealed class FeedbackRun(
             choice = RecipeRules.Parse(issue.Labels, issue.Body);
             if (choice.Declined is string refusal)
             {
-                await PostAsync(request, CommentText.Fit(refusal, []), cancellationToken).ConfigureAwait(false);
+                await ProgressLine.WriteAsync(progress, refusal).ConfigureAwait(false);
+                await client.PostCommentAsync(request.Owner, request.Repo, request.PullNumber, refusal, cancellationToken).ConfigureAwait(false);
                 Declined = true;
                 return new FeedbackRunResult(0, threads.Count, 0);
             }
         }
 
-        var git = new Git(runner);
-        await Say("clone: start").ConfigureAwait(false);
-        await git.CloneAsync($"https://github.com/{request.Owner}/{request.Repo}.git", request.Token, request.Directory, cancellationToken).ConfigureAwait(false);
-        await git.CheckoutExistingBranchAsync(branch, request.Directory, cancellationToken).ConfigureAwait(false);
-        string baseCommit = await git.ReadHeadShaAsync(request.Directory, cancellationToken).ConfigureAwait(false);
-        Pin pin = RecipeRules.TakePin(choice.Recipe, request.Directory);
-
         string title = $"Answer the review threads of pull request #{request.PullNumber.ToString(CultureInfo.InvariantCulture)}";
-        string body = Describe(threads, issueBody, RecipeRules.ThreadRules(choice.Recipe));
-
-        var setup = new RunAgentsSetup(
-            runner, git, request.Owner, request.Repo, request.Token, request.Directory, request.RootDirectory, request.ImageTag,
-            baseCommit, $"{branch}-session", title, request.AuthorName, request.AuthorEmail, request.Managed, handler,
-            delay, time, progress, OnAnswer: (elapsed, answer) => _summary.Prompt(elapsed, answer.NumTurns, answer.CostUsd));
-        RunAgents agents = await RunAgents.StartAsync(setup, cancellationToken).ConfigureAwait(false);
-        await using (agents.ConfigureAwait(false))
-        {
-            try
-            {
-                GateSet gates = await new GateFactory(agents.Sandbox, git, request.Directory, baseCommit, request.SecretNames, progress, skipIntegration: request.SkipIntegration)
-                    .CreateAsync(choice, pin, cancellationToken).ConfigureAwait(false);
-                if (gates.Stop is string stop)
-                {
-                    await PostAsync(request, stop, cancellationToken).ConfigureAwait(false);
-                    return new FeedbackRunResult(0, threads.Count, 0);
-                }
-
-                var build = new FeedbackBuild(
-                    new BuildPhase(agents.Builder, RecipeRules.BuildText(choice.Recipe, RunKind.Feedback)),
-                    title, body, request.BuildModel, request.BuildTurns, threads);
-                var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(choice.Recipe, RunKind.Feedback));
-                var loop = new BuildLoop(_summary, _clock, progress, gates.Lint, request.Directory, title, request.AuthorName, request.AuthorEmail);
-                BuildLoopResult result = await loop.RunAsync(
-                    build,
-                    gates.Gates,
-                    token => reviewPhase.RunAsync(title, body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, token),
-                    cancellationToken).ConfigureAwait(false);
-                if (result.End is not BuildLoopEnd.Passed)
-                {
-                    await PostAsync(request, result.Comment ?? "", cancellationToken).ConfigureAwait(false);
-                    return new FeedbackRunResult(0, threads.Count, result.Redos);
-                }
-
-                await agents.CollectAsync(branch, cancellationToken).ConfigureAwait(false);
-                await git.PushAsync(branch, request.Directory, request.Token, cancellationToken).ConfigureAwait(false);
-                int resolved = 0;
-                foreach (ReviewThread thread in threads)
-                {
-                    ThreadAnswer answer = build.Answers.First(a => a.Id == thread.Id);
-                    await reviewThreads.ReplyAsync(thread.Id, answer.Reply, cancellationToken).ConfigureAwait(false);
-                    await reviewThreads.ResolveAsync(thread.Id, cancellationToken).ConfigureAwait(false);
-                    resolved++;
-                }
-
-                return new FeedbackRunResult(resolved, threads.Count - resolved, result.Redos);
-            }
-            finally
-            {
-                _sessions = agents.Sessions;
-            }
-        }
-    }
-
-    private Task Say(string line) => ProgressLine.WriteAsync(progress, line);
-
-    /// <summary>Writes <paramref name="body"/> as a progress line and posts it on the pull request unchanged.</summary>
-    private async Task PostAsync(FeedbackRunRequest request, string body, CancellationToken cancellationToken)
-    {
-        await Say(body).ConfigureAwait(false);
-        await client.PostCommentAsync(request.Owner, request.Repo, request.PullNumber, body, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task WriteSummaryAsync()
-    {
-        if (string.IsNullOrEmpty(summaryPath) || _summary.IsEmpty)
-        {
-            return;
-        }
-
-        _summary.AddSessions(_sessions);
-        try
-        {
-            await JobSummary.AppendToFileAsync(summaryPath, _summary.Render(SummaryHeading)).ConfigureAwait(false);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-        {
-            await ProgressLine.WriteAsync(log, $"summary: cannot write {summaryPath}: {exception.Message}").ConfigureAwait(false);
-        }
+        var kind = new FeedbackKind(request, reviewThreads, threads, branch, choice, title, Describe(threads, issueBody, RecipeRules.ThreadRules(choice.Recipe)));
+        var shared = new RunRequest(
+            request.Owner, request.Repo, request.Token, request.Directory, request.ImageTag, request.RootDirectory, request.ReviewModel,
+            request.ReviewTurns, request.AuthorName, request.AuthorEmail, request.SecretNames, request.SkipIntegration, request.Managed);
+        RunOutcome<FeedbackRunResult> outcome = await _run.RunAsync(shared, kind, cancellationToken).ConfigureAwait(false);
+        return outcome.Passed ?? new FeedbackRunResult(0, threads.Count, outcome.Redos);
     }
 
     /// <summary>
@@ -245,5 +145,70 @@ public sealed class FeedbackRun(
         }
 
         return text.ToString();
+    }
+
+    /// <summary>
+    /// The feedback round as a kind of <see cref="Run"/>. The checkout takes the head branch of the pull request, and the step before
+    /// the gates pins the work tree as the recipe says. A pass puts the session's commits on the head branch, pushes it, and replies
+    /// to each thread and resolves it.
+    /// </summary>
+    private sealed class FeedbackKind(
+        FeedbackRunRequest request,
+        ReviewThreads reviewThreads,
+        IReadOnlyList<ReviewThread> threads,
+        string branch,
+        RecipeChoice choice,
+        string title,
+        string body) : IRunKind<FeedbackRunResult>
+    {
+        private Git? _git;
+        private FeedbackBuild? _build;
+
+        public RunKind Kind => RunKind.Feedback;
+
+        public RecipeChoice Choice => choice;
+
+        public string Title => title;
+
+        public string Body => body;
+
+        public string ScratchBranch => $"{branch}-session";
+
+        public int CommentNumber => request.PullNumber;
+
+        public string SummaryHeading => FeedbackRun.SummaryHeading;
+
+        public async Task<string?> CheckoutAsync(Git git, CancellationToken cancellationToken = default)
+        {
+            _git = git;
+            await git.CheckoutExistingBranchAsync(branch, request.Directory, cancellationToken).ConfigureAwait(false);
+            return await git.ReadHeadShaAsync(request.Directory, cancellationToken).ConfigureAwait(false);
+        }
+
+        public Task<PinOrStop> BeforeGatesAsync(RunAgents agents, JobSummary summary, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PinOrStop(RecipeRules.TakePin(choice.Recipe, request.Directory), null));
+
+        public IBuild Build(Agent builder) => _build = new FeedbackBuild(
+            new BuildPhase(builder, RecipeRules.BuildText(choice.Recipe, RunKind.Feedback)), title, body, request.BuildModel, request.BuildTurns, threads);
+
+        public async Task<FeedbackRunResult> AfterPassAsync(RunAgents agents, GateSet gates, BuildLoopResult result, decimal spend, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(agents);
+            ArgumentNullException.ThrowIfNull(result);
+            Git git = _git ?? throw new InvalidOperationException("The round pushes only after its checkout.");
+            FeedbackBuild build = _build ?? throw new InvalidOperationException("The round replies only after its build.");
+            await agents.CollectAsync(branch, cancellationToken).ConfigureAwait(false);
+            await git.PushAsync(branch, request.Directory, request.Token, cancellationToken).ConfigureAwait(false);
+            int resolved = 0;
+            foreach (ReviewThread thread in threads)
+            {
+                ThreadAnswer answer = build.Answers.First(a => a.Id == thread.Id);
+                await reviewThreads.ReplyAsync(thread.Id, answer.Reply, cancellationToken).ConfigureAwait(false);
+                await reviewThreads.ResolveAsync(thread.Id, cancellationToken).ConfigureAwait(false);
+                resolved++;
+            }
+
+            return new FeedbackRunResult(resolved, threads.Count - resolved, result.Redos);
+        }
     }
 }
