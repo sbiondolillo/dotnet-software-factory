@@ -342,7 +342,6 @@ public sealed class ConsoleProgramTests : IDisposable
     [Fact]
     public async Task AFeedbackWithNoThreadClonesNothingAndExits0()
     {
-        _h.Threads = "none";
         Assert.Equal(0, await StartAsync($"feedback {Repo} --pr 10"));
         Assert.Empty(_h.CloneDirectories);
         Assert.Contains("checks: green, unresolved threads: 0", ConsoleHarness.Lines(_h.Out));

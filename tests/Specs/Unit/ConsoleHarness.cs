@@ -47,7 +47,6 @@ public sealed class ConsoleHarness : IDisposable
     private bool _resolved;
     private bool _requested;
     private int _readsAfterRequest;
-    private string _threads = "none";
 
     public ConsoleHarness()
     {
@@ -95,9 +94,8 @@ public sealed class ConsoleHarness : IDisposable
     /// <summary>The answer to a read of the reviews from the number of reads after the review request (0 before it), or null for <see cref="Reviews"/>.</summary>
     public Func<int, string>? ReviewsByRead { get; set; }
 
-    /// <summary>"none", "always", "until-resolved" (thread A until its resolve, then no thread) or "resolvable" (thread A on each read, with <c>isResolved</c> true after its resolve, as GitHub answers).
-    /// Null gives "until-resolved" to the command <c>feedback</c>, so a round builds once, and "none" to any other command.</summary>
-    public string? Threads { get; set; }
+    /// <summary>"none", "always", "until-resolved" (thread A until its resolve, then no thread) or "resolvable" (thread A on each read, with <c>isResolved</c> true after its resolve, as GitHub answers).</summary>
+    public string Threads { get; set; } = "none";
 
     public bool Disputed { get; set; }
 
@@ -206,7 +204,6 @@ public sealed class ConsoleHarness : IDisposable
 
     public Task<int> RunAsync(string[] args, CancellationToken cancellationToken = default)
     {
-        _threads = Threads ?? (args is ["feedback", ..] ? "until-resolved" : "none");
         var mock = new Mock<CommandRunner>(MockBehavior.Strict);
         mock.Setup(r => r.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec spec, CancellationToken _) => Task.FromResult(Answer(spec)));
@@ -486,8 +483,8 @@ public sealed class ConsoleHarness : IDisposable
         string query = json.RootElement.GetProperty("query").GetString() ?? "";
         if (query.Contains("reviewThreads", StringComparison.Ordinal))
         {
-            bool listed = _threads is "always" or "resolvable" || (_threads is "until-resolved" && !_resolved);
-            bool isResolved = _threads is "resolvable" && _resolved;
+            bool listed = Threads is "always" or "resolvable" || (Threads is "until-resolved" && !_resolved);
+            bool isResolved = Threads is "resolvable" && _resolved;
             var nodes = listed
                 ? new[] { new { id = ThreadA, isResolved, path = "src/Core/Checkout.cs", line = (int?)14, comments = new { nodes = new[] { new { author = new { login = "sbiondolillo" }, body = ThreadABody } } } } }
                 : [];

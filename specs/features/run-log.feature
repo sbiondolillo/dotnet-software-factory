@@ -69,7 +69,8 @@ Feature: The log of a run shows each call to claude and each gate command with i
     Then standard error holds the line "command: check exited 1"
 
   Scenario: Each dotnet command of the gates of a feedback round has a line with its exit code
-    Given every dotnet command in the container exits with the code 0
+    Given GitHub answers each read of the review threads with the thread A until the resolve of the thread A, and with no thread after it
+    And every dotnet command in the container exits with the code 0
     When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10"
     Then standard error holds these command lines in this order
       | line                                                                                        |

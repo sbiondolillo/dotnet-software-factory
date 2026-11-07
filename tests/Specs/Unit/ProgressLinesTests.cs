@@ -118,7 +118,7 @@ public sealed class ProgressLinesTests
     [Fact]
     public async Task FeedbackWithoutThreadsWritesNoCloneLine()
     {
-        (ConsoleHarness h, List<string> lines) = await StartAsync(Feedback, x => x.Threads = "none");
+        (ConsoleHarness h, List<string> lines) = await StartAsync(Feedback);
         using (h)
         {
             Assert.Equal(["feedback: start", "watch: start", "checks: green, unresolved threads: 0"], lines);

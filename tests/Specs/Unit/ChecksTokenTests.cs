@@ -54,7 +54,6 @@ public sealed class ChecksTokenTests : IDisposable
     {
         _h.Environment["FACTORY_CHECKS_TOKEN"] = "checks-token-2";
         _h.Refusal = ("/check-runs", 403);
-        _h.Threads = "none";
         Assert.Equal(1, await StartAsync($"feedback {Repo} --pr 10"));
         Assert.Equal(["GitHub refused a request with the status code 403."], ConsoleHarness.Lines(_h.Error));
     }
