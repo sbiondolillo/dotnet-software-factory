@@ -18,8 +18,8 @@ public sealed class ReviewRequestOverRefusalTests : IDisposable
             CheckRunsBody = WatchHandler.RunsJson([("build", "completed", "success")]),
             ReviewsBody = WatchHandler.ReviewsJson(reviews),
         };
-        var client = new GitHubClient(new HttpClient(handler), "token");
-        return (new PullRequestWatch(new PullRequests(client), new ReviewThreads(client)), handler);
+        var client = new GitHubClient(new HttpClient(handler), "token", TimeSpan.Zero);
+        return (WatchHandler.FakeClockWatch(client, new FakeTime()), handler);
     }
 
     [Fact]
