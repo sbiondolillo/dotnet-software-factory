@@ -6,9 +6,10 @@ namespace Core;
 /// <summary>
 /// The job summary of a run: one table row for each phase that ran after the clone and one list item for each Redo text.
 /// A Redo text is named after the row of the gate or the phase that produced it: <c>scope N</c>, <c>test N</c>, <c>api N</c>,
-/// <c>check N</c> or <c>review N</c>. A lost test is named after <c>test N</c>, whose gate found it.
+/// <c>check N</c> or <c>review N</c>. A lost test is named after <c>test N</c>, whose gate found it. Each row writes its
+/// result line, <c>&lt;phase&gt;: &lt;result&gt;</c>, to <paramref name="progress"/>, so a line and a row cannot disagree.
 /// </summary>
-public sealed class JobSummary
+public sealed class JobSummary(TextWriter? progress = null)
 {
     private readonly List<string> _rows = [];
     private readonly List<string> _redos = [];
@@ -29,9 +30,11 @@ public sealed class JobSummary
         _pendingCost += cost;
     }
 
-    /// <summary>Adds the row of <paramref name="phase"/> and gives its name; <paramref name="elapsed"/> null takes the time of the noted answers.</summary>
-    public string AddRow(string phase, TimeSpan? elapsed, string result)
+    /// <summary>Adds the row of <paramref name="phase"/>, writes the line <c>&lt;phase&gt;: &lt;result&gt;</c>, and gives the name of
+    /// the row; <paramref name="elapsed"/> null takes the time of the noted answers.</summary>
+    public async Task<string> AddRowAsync(string phase, TimeSpan? elapsed, string result, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         int number = _counts.GetValueOrDefault(phase) + 1;
         _counts[phase] = number;
         string name = phase is "plan" ? phase : string.Create(CultureInfo.InvariantCulture, $"{phase} {number}");
@@ -40,6 +43,7 @@ public sealed class JobSummary
         _pendingTime = TimeSpan.Zero;
         _pendingTurns = 0;
         _pendingCost = 0m;
+        await ProgressLine.WriteAsync(progress, $"{phase}: {result}").ConfigureAwait(false);
         return name;
     }
 

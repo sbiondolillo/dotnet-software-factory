@@ -80,7 +80,7 @@ Feature: A feedback run answers every unresolved review thread
 
   Scenario: A round appends its own section to the job summary
     When a caller starts a feedback run
-    Then the job summary of the round is one section "## Feedback run" with the rows "build 1", "test 1" and "review 1", in this order
+    Then the job summary of the round is one section "## Feedback run" with the rows "build 1", "lint 1", "test 1" and "review 1", in this order
 
   Scenario: A missing report sends the run back to the build before any gate
     Given on the first build prompt the agent writes no report

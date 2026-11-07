@@ -13,7 +13,9 @@ Feature: The console program writes one line to standard output as each step of 
       | plan: start                                         |
       | plan: passed                                        |
       | build: start                                        |
+      | build: passed                                       |
       | lint: start                                         |
+      | lint: passed                                        |
       | test: start                                         |
       | test: passed                                        |
       | review: start                                       |
@@ -73,7 +75,9 @@ Feature: The console program writes one line to standard output as each step of 
       | clone: start                         |
       | sandbox: start                       |
       | build: start                         |
+      | build: passed                        |
       | lint: start                          |
+      | lint: passed                         |
       | test: start                          |
       | test: passed                         |
       | review: start                        |

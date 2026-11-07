@@ -115,7 +115,9 @@ Feature: The option --agent runs the agent phases as Claude Code in a sandbox or
       | plan: start                                             |
       | plan: passed                                            |
       | build: start                                            |
+      | build: passed                                           |
       | lint: start                                             |
+      | lint: passed                                            |
       | test: start                                             |
       | test: passed                                            |
       | review: start                                           |
@@ -138,7 +140,9 @@ Feature: The option --agent runs the agent phases as Claude Code in a sandbox or
       | clone: start                         |
       | sessions: start                      |
       | build: start                         |
+      | build: passed                        |
       | lint: start                          |
+      | lint: passed                         |
       | test: start                          |
       | test: passed                         |
       | review: start                        |

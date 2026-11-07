@@ -142,7 +142,7 @@ public sealed class JobSummarySteps : IDisposable
     }
 
     [Given("the summary of a run holds the row of a passed plan of {int} seconds")]
-    public void GivenPlanRow(int seconds) => _summary.AddRow("plan", TimeSpan.FromSeconds(seconds), "passed");
+    public Task GivenPlanRow(int seconds) => _summary.AddRowAsync("plan", TimeSpan.FromSeconds(seconds), "passed");
 
     [When("the summary gets the session {string} of the role {string} at {int} cents and the session {string} of the role {string} at {int} cents")]
     public void WhenSessions(string first, string firstRole, int firstCents, string second, string secondRole, int secondCents)

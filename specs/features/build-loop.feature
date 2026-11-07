@@ -36,6 +36,7 @@ Feature: One build loop runs every recipe
     Then the loop stopped with 0 Redos and the comment "The API answered 529."
     And the job summary holds the row "| build 1 | 5 | 0 | $0 | failed |"
     And the loop called build in that order
+    And the progress lines are build: start, build: failed
 
   Scenario: An error of the review stops the loop with its text
     Given a build loop with the gates test
@@ -43,9 +44,17 @@ Feature: One build loop runs every recipe
     When the build loop runs
     Then the loop stopped with 0 Redos and the comment "The API answered 500."
     And the job summary holds the row "| review 1 | 7 | 3 | $0.5 | failed |"
+    And the progress lines are build: start, build: passed, lint: start, lint: passed, test: start, test: passed, review: start, review: failed
 
   Scenario: The lint runs after every build that passes
     Given a build loop with the gates test
     And the gate test fails once with the Redo text "test failed: GreeterTests.Hello"
     When the build loop runs
     Then the loop called build, lint, test, build, lint, test, review in that order
+
+  Scenario: Each row writes its result line, and the lint has a row of its own
+    Given a build loop with the gates test
+    When the build loop runs
+    Then the progress lines are build: start, build: passed, lint: start, lint: passed, test: start, test: passed, review: start, review: approved
+    And the job summary holds the row "| build 1 | 5 | 0 | $0 | passed |"
+    And the job summary holds the row "| lint 1 | 1 | 0 | $0 | passed |"

@@ -62,8 +62,6 @@ public sealed class JobSummaryHarness : IDisposable
 
     public Dictionary<int, double> TestSeconds { get; } = [];
 
-    public Dictionary<int, double> CheckSeconds { get; } = [];
-
     /// <summary>The builds whose test gate is red, with the two Redo texts the gate gives.</summary>
     public Dictionary<int, (string First, string Second)> RedBuilds { get; } = [];
 
@@ -170,7 +168,6 @@ public sealed class JobSummaryHarness : IDisposable
         string subcommand = arguments.Count > id + 2 ? arguments[id + 2] : "";
         if (program is "sh" && subcommand is "-c")
         {
-            _clock.Advance(_builds is 0 ? 0 : CheckSeconds.GetValueOrDefault(_builds));
             int code = CheckCodes.TryGetValue(_builds, out int given) ? given : _builds is 0 ? 1 : 0;
             return new CommandResult { ExitCode = code };
         }

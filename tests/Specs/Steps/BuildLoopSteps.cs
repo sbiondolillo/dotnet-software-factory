@@ -71,6 +71,9 @@ public sealed class BuildLoopSteps : IAsyncDisposable
     [Then("the job summary holds the row {string}")]
     public void ThenRow(string row) => Assert.Contains(row, _harness.Rows);
 
+    [Then("^the progress lines are (.+)$")]
+    public void ThenLines(string lines) => Assert.Equal(lines.Split(", "), _harness.Lines);
+
     [Then("the second build got the Redo text {string}")]
     public void ThenSecondBuild(string text) => Assert.Equal([text], _harness.BuildTexts[1]);
 

@@ -3,155 +3,104 @@ using Xunit;
 
 namespace Specs.Unit;
 
+/// <summary>The job summary as a value: its rows, its lines, its Redo items and its file. The whole-run tests at the end are the
+/// wiring of <see cref="FactoryRun"/> to its summary file, and <c>BuildLoopTests</c> holds the rows and the lines of the loop.</summary>
 public sealed class JobSummaryTests
 {
     private static string[] Lines(JobSummaryHarness h) => h.Summary.Split('\n');
 
     [Fact]
-    public async Task AnUnsetPathWritesNothingAndTheRunBehavesAsBefore()
+    public async Task ARowWritesItsResultLineWithThePhaseAndNoNumber()
     {
-        using var h = new JobSummaryHarness { SummaryPath = null };
-        FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.NotNull(result.PullRequest);
-        Assert.Equal("", Directory.GetFiles(h.FilesDirectory).Select(File.ReadAllText).Single());
+        using var progress = new StringWriter();
+        var summary = new JobSummary(progress);
+        string first = await summary.AddRowAsync("test", TimeSpan.Zero, "failed", TestContext.Current.CancellationToken);
+        string second = await summary.AddRowAsync("test", TimeSpan.Zero, "passed", TestContext.Current.CancellationToken);
+        Assert.Equal(("test 1", "test 2"), (first, second));
+        Assert.Equal("test: failed\ntest: passed\n", progress.ToString().Replace("\r\n", "\n", StringComparison.Ordinal));
     }
 
     [Fact]
-    public async Task AnEmptyPathWritesNothing()
+    public async Task ARowWithNoWriterWritesNoLine()
     {
-        using var h = new JobSummaryHarness { SummaryPath = "" };
-        FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.NotNull(result.PullRequest);
-        Assert.Equal("", Directory.GetFiles(h.FilesDirectory).Select(File.ReadAllText).Single());
+        var summary = new JobSummary();
+        string name = await summary.AddRowAsync("plan", TimeSpan.Zero, "passed", TestContext.Current.CancellationToken);
+        Assert.Equal("plan", name);
+        Assert.Contains("| plan | 0 | 0 | $0 | passed |", summary.Render(FactoryRun.SummaryHeading), StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task AFailedPlanGivesThePlanRowAloneAndNoRedosHeading()
+    public async Task ACancelledTokenAddsNoRowAndWritesNoLine()
     {
-        using var h = new JobSummaryHarness();
-        h.PlanAnswers.Add(new SummaryAnswer(7, "0.4213", 31.9, IsError: true, Text: "boom"));
-        await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Equal(
-            "## Factory run\n\n| phase | seconds | turns | spend | result |\n|---|---|---|---|---|\n| plan | 31 | 7 | $0.4213 | failed |\n",
-            h.Summary);
-        Assert.DoesNotContain("### Redos", h.Summary, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ARedTestGateFailsItsRowAndListsEachTextInOrder()
-    {
-        using var h = new JobSummaryHarness();
-        h.RedBuilds[1] = ("dotnet test exited with the code 1", "failed test: Specs.Unit.CheckoutTests.AddsTwoPrices: Values differ");
-        await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("| test 1 | 0 | 0 | $0 | failed |", Lines(h));
-        string[] items = [.. Lines(h).Where(line => line.StartsWith("- Redo", StringComparison.Ordinal))];
-        Assert.Equal(
-            ["- Redo 1, after test 1: dotnet test exited with the code 1", "- Redo 1, after test 1: failed test: Specs.Unit.CheckoutTests.AddsTwoPrices: Values differ"],
-            items);
-    }
-
-    [Fact]
-    public async Task ABlockingReviewListsEachItemAfterTheReviewRow()
-    {
-        using var h = new JobSummaryHarness();
-        h.BlockedBuilds[1] = "First fault.";
-        await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("| review 1 | 0 | 1 | $0 | blocked |", Lines(h));
-        Assert.Contains("- Redo 1, after review 1: First fault.", Lines(h));
-        Assert.Contains("| review 2 | 0 | 1 | $0 | approved |", Lines(h));
-    }
-
-    [Theory]
-    [InlineData(1, "red")]
-    [InlineData(0, "green")]
-    public async Task ACheckIsGreenOnTheCodeZeroAndRedOtherwise(int code, string result)
-    {
-        using var h = new JobSummaryHarness();
-        h.Labels.Add("cleanup");
-        h.Body = JobSummaryHarness.CleanupBody;
-        h.CheckCodes[1] = code;
-        await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains($"| check 1 | 0 | 0 | $0 | {result} |", Lines(h));
-    }
-
-    [Fact]
-    public async Task AFailedBuildEndsTheSummaryWithItsFailedRow()
-    {
-        using var h = new JobSummaryHarness();
-        h.BuildAnswers[1] = new SummaryAnswer(3, "0.5000", 10, IsError: true, Text: "stuck");
-        FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Null(result.PullRequest);
-        Assert.Equal("| build 1 | 10 | 3 | $0.5000 | failed |", Lines(h)[^2]);
-    }
-
-    [Fact]
-    public async Task AReviewErrorEndsTheRunWithAReviewRowThatIsNotApproved()
-    {
-        using var h = new JobSummaryHarness();
-        h.ReviewAnswers[1] = new SummaryAnswer(2, "0.1000", 5, IsError: true, Text: "api error");
-        FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Null(result.PullRequest);
-        Assert.Contains("| review 1 | 5 | 2 | $0.1000 | failed |", Lines(h));
-        Assert.DoesNotContain("approved", h.Summary, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ASpentBudgetListsFourBuildsAndThreeRedos()
-    {
-        using var h = new JobSummaryHarness();
-        foreach (int build in new[] { 1, 2, 3, 4 })
-        {
-            h.RedBuilds[build] = ("dotnet test exited with the code 1", $"output {build}");
-        }
-
-        FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Null(result.PullRequest);
-        Assert.Equal(3, result.Redos);
-        string[] lines = Lines(h);
-        Assert.Equal(4, lines.Count(line => line.StartsWith("| build ", StringComparison.Ordinal)));
-        Assert.Equal(4, lines.Count(line => line.StartsWith("| test ", StringComparison.Ordinal)));
-        Assert.Equal(3, lines.Count(line => line.StartsWith("- Redo ", StringComparison.Ordinal)));
-        Assert.Contains("- Redo 3, after test 3: dotnet test exited with the code 1", lines);
+        using var progress = new StringWriter();
+        using var source = new CancellationTokenSource();
+        await source.CancelAsync();
+        var summary = new JobSummary(progress);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => summary.AddRowAsync("plan", TimeSpan.Zero, "passed", source.Token));
+        Assert.True(summary.IsEmpty);
+        Assert.Equal("", progress.ToString());
     }
 
     [Fact]
     public async Task ARedoTextListsItsFirstLineOnly()
     {
-        using var h = new JobSummaryHarness();
-        h.RedBuilds[1] = ("dotnet test exited with the code 1", "hidden second line");
-        await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("- Redo 1, after test 1: dotnet test exited with the code 1", Lines(h));
-        Assert.DoesNotContain("hidden", h.Summary, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void ATextWithALeadingEmptyLineOrOneLineIsHandled()
-    {
         var summary = new JobSummary();
-        summary.AddRedos(1, "test 1", ["\n\nsecond", "only", "", "\r\n"]);
+        string row = await summary.AddRowAsync("test", TimeSpan.Zero, "failed", TestContext.Current.CancellationToken);
+        summary.AddRedos(1, row, ["dotnet test exited with the code 1\nhidden second line", "\n\nsecond", "only", "", "\r\n"]);
         string text = summary.Render(FactoryRun.SummaryHeading);
+        Assert.Contains("- Redo 1, after test 1: dotnet test exited with the code 1\n", text, StringComparison.Ordinal);
         Assert.Contains("- Redo 1, after test 1: second\n", text, StringComparison.Ordinal);
         Assert.Contains("- Redo 1, after test 1: only\n", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("hidden", text, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task ACostKeepsItsZerosAndAPartOfASecondIsDropped()
     {
-        using var h = new JobSummaryHarness();
-        h.BuildAnswers[1] = new SummaryAnswer(4, "0.9000", 31.9);
-        await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("| build 1 | 31 | 4 | $0.9000 | passed |", Lines(h));
+        var summary = new JobSummary();
+        summary.Prompt(TimeSpan.FromSeconds(31.9), 4, 0.9000m);
+        await summary.AddRowAsync("build", null, "passed", TestContext.Current.CancellationToken);
+        Assert.Contains("| build 1 | 31 | 4 | $0.9000 | passed |", summary.Render(FactoryRun.SummaryHeading), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ARowWithAnElapsedTimeStillTakesTheTurnsAndTheSpendOfTheAnswers()
+    {
+        var summary = new JobSummary();
+        summary.Prompt(TimeSpan.FromSeconds(10), 2, 0.25m);
+        await summary.AddRowAsync("build", TimeSpan.FromSeconds(3), "passed", TestContext.Current.CancellationToken);
+        await summary.AddRowAsync("lint", TimeSpan.FromSeconds(1), "passed", TestContext.Current.CancellationToken);
+        string text = summary.Render(FactoryRun.SummaryHeading);
+        Assert.Contains("| build 1 | 3 | 2 | $0.25 | passed |", text, StringComparison.Ordinal);
+        Assert.Contains("| lint 1 | 1 | 0 | $0 | passed |", text, StringComparison.Ordinal);
     }
 
     [Theory]
     [InlineData("earlier\n", "earlier\n\n## Factory run")]
     [InlineData("earlier", "earlier\n\n## Factory run")]
+    [InlineData("", "## Factory run")]
     public async Task EarlierTextStaysAndTheSummaryFollowsIt(string earlier, string start)
     {
-        using var h = new JobSummaryHarness();
-        File.WriteAllText(h.SummaryPath!, earlier);
-        await h.RunAsync(TestContext.Current.CancellationToken);
-        Assert.StartsWith(start, h.Summary, StringComparison.Ordinal);
+        using var files = new TempDirectory();
+        string path = Path.Combine(files.Path, "summary.md");
+        await File.WriteAllTextAsync(path, earlier, TestContext.Current.CancellationToken);
+        var summary = new JobSummary();
+        await summary.AddRowAsync("plan", TimeSpan.Zero, "passed", TestContext.Current.CancellationToken);
+        await JobSummary.AppendToFileAsync(path, summary.Render(FactoryRun.SummaryHeading), TestContext.Current.CancellationToken);
+        string text = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
+        Assert.StartsWith(start, text, StringComparison.Ordinal);
+        Assert.EndsWith("| plan | 0 | 0 | $0 | passed |\n", text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task AnUnsetPathWritesNothingAndTheRunBehavesAsBefore(string? path)
+    {
+        using var h = new JobSummaryHarness { SummaryPath = path };
+        FactoryRunResult result = await h.RunAsync(TestContext.Current.CancellationToken);
+        Assert.NotNull(result.PullRequest);
+        Assert.Equal("", Directory.GetFiles(h.FilesDirectory).Select(File.ReadAllText).Single());
     }
 
     [Fact]
@@ -180,6 +129,15 @@ public sealed class JobSummaryTests
     {
         using var h = new JobSummaryHarness { LintFails = true };
         await Assert.ThrowsAsync<LintGateException>(() => h.RunAsync(TestContext.Current.CancellationToken));
-        Assert.Contains("| plan | 0 | 1 | $0 | passed |", Lines(h));
+        Assert.Equal(["plan", "build 1"], Lines(h).Where(line => line.StartsWith("| ", StringComparison.Ordinal)).Skip(1).Select(line => line.Split('|')[1].Trim()));
+    }
+
+    private sealed class TempDirectory : IDisposable
+    {
+        private readonly DirectoryInfo _directory = Directory.CreateTempSubdirectory("job-summary-file-");
+
+        public string Path => _directory.FullName;
+
+        public void Dispose() => _directory.Delete(recursive: true);
     }
 }

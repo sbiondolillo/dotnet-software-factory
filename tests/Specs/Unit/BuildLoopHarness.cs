@@ -8,7 +8,7 @@ namespace Specs.Unit;
 /// A <see cref="BuildLoop"/> over a fake build, fake gates and a fake review, with the lint over a <see cref="Sandbox"/> of a
 /// mock <see cref="CommandRunner"/>, and no <see cref="RunAgents"/>. Each fake takes the next answer of its script, and the last answer repeats. Every call
 /// goes to <see cref="Calls"/>: <c>build</c>, <c>lint</c>, the text of a gate, or <c>review</c>. A build moves the clock 5
-/// seconds, a gate 2 seconds, and the review notes one prompt of 7 seconds, 3 turns and $0.5.
+/// seconds, the lint 1 second, a gate 2 seconds, and the review notes one prompt of 7 seconds, 3 turns and $0.5.
 /// </summary>
 public sealed class BuildLoopHarness : IAsyncDisposable
 {
@@ -26,6 +26,7 @@ public sealed class BuildLoopHarness : IAsyncDisposable
     {
         File.WriteAllText(Path.Combine(_root.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
         Progress = new CancellingWriter(Source);
+        Summary = new JobSummary(Progress);
     }
 
     /// <summary>The gates of the loop, in order.</summary>
@@ -61,7 +62,7 @@ public sealed class BuildLoopHarness : IAsyncDisposable
 
     public CancellingWriter Progress { get; }
 
-    public JobSummary Summary { get; } = new();
+    public JobSummary Summary { get; }
 
     public StepClock Clock { get; } = new();
 
@@ -171,6 +172,7 @@ public sealed class BuildLoopHarness : IAsyncDisposable
         if (spec.Arguments[0] is "exec" && spec.Arguments.Contains("format"))
         {
             Calls.Add("lint");
+            Clock.Advance(1);
             return Next(Formats, _lints++);
         }
 

@@ -206,7 +206,9 @@ Feature: A refactor run changes the structure of the code and leaves every test 
       | plan: start |
       | plan: passed |
       | build: start |
+      | build: passed |
       | lint: start |
+      | lint: passed |
       | test: start |
       | test: passed |
       | check: start |
@@ -229,7 +231,9 @@ Feature: A refactor run changes the structure of the code and leaves every test 
       | plan: start |
       | plan: passed |
       | build: start |
+      | build: passed |
       | lint: start |
+      | lint: passed |
       | test: start |
       | test: passed |
       | review: start |
