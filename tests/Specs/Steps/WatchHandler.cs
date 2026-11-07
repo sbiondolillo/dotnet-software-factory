@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Core;
+using Specs.Unit;
 
 namespace Specs.Steps;
 
@@ -9,6 +11,21 @@ public sealed class WatchHandler : HttpMessageHandler
 {
     private readonly Dictionary<int, string> _checkRuns = [];
     private readonly Dictionary<int, string> _reviews = [];
+
+    /// <summary>
+    /// Builds a watch over <paramref name="client"/> on the fake clock <paramref name="time"/>, so no test waits on the real clock.
+    /// Each wait moves the clock by its length, and a wait of zero by one tick, as the real clock moves between two polls. So a
+    /// watch that misses its timeout still ends. <paramref name="afterWait"/> runs after each move of the clock.
+    /// </summary>
+    public static PullRequestWatch FakeClockWatch(GitHubClient client, FakeTime time, Func<CancellationToken, Task>? afterWait = null) =>
+        new(new PullRequests(client), new ReviewThreads(client), async (span, token) =>
+        {
+            await time.WaitAsync(span > TimeSpan.Zero ? span : TimeSpan.FromTicks(1), token);
+            if (afterWait is not null)
+            {
+                await afterWait(token);
+            }
+        }, time);
 
     public string Sha { get; set; } = "2878cae3e3bab7f3b1dcdfa14206f2c361021085";
 

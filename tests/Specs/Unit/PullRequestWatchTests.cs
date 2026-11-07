@@ -8,22 +8,19 @@ public sealed class PullRequestWatchTests
 {
     private static readonly (string, string, string?)[] Done = [("build", "completed", "success")];
 
-    /// <summary>Builds the watch on a <see cref="FakeTime"/>: each wait moves the clock and returns at once, so no test waits on the real clock.</summary>
-    private static (PullRequestWatch Sut, WatchHandler Handler) Make(Func<TimeSpan, CancellationToken, Task>? delay = null)
+    private static (PullRequestWatch Sut, WatchHandler Handler) Make(Func<CancellationToken, Task>? afterWait = null)
     {
-        var time = new FakeTime();
         var handler = new WatchHandler
         {
             CheckRunsBody = WatchHandler.RunsJson(Done),
             ReviewsBody = WatchHandler.ReviewsJson([("me", "COMMENTED", new WatchHandler().Sha)]),
         };
         var client = new GitHubClient(new HttpClient(handler), "t", TimeSpan.Zero);
-        return (new PullRequestWatch(new PullRequests(client), new ReviewThreads(client), delay ?? time.WaitAsync, time), handler);
+        return (WatchHandler.FakeClockWatch(client, new FakeTime(), afterWait), handler);
     }
 
-    /// <summary>Watches with a wait of 1 s by default. A wait of zero moves the fake clock by nothing, so a watch that misses its timeout would loop forever.</summary>
     private static Task<PullRequestWatchResult> Watch(PullRequestWatch sut, TimeSpan timeout, TimeSpan? wait = null, CancellationToken token = default) =>
-        sut.WatchAsync("o", "r", 1, "me", wait ?? TimeSpan.FromSeconds(1), timeout, token);
+        sut.WatchAsync("o", "r", 1, "me", wait ?? TimeSpan.Zero, timeout, token);
 
     [Fact]
     public async Task APullRequestReadThatFailsThrowsWith404()
@@ -161,7 +158,7 @@ public sealed class PullRequestWatchTests
     public async Task CancellingDuringTheWaitThrowsAndPollsNoMore()
     {
         using var source = new CancellationTokenSource();
-        (PullRequestWatch sut, WatchHandler handler) = Make(async (_, token) =>
+        (PullRequestWatch sut, WatchHandler handler) = Make(async token =>
         {
             await source.CancelAsync();
             token.ThrowIfCancellationRequested();

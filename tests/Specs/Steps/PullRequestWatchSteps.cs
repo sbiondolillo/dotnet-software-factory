@@ -1,5 +1,6 @@
 using Core;
 using Reqnroll;
+using Specs.Unit;
 using Xunit;
 
 namespace Specs.Steps;
@@ -17,6 +18,9 @@ public sealed class PullRequestWatchSteps(ExceptionState exceptionState, Console
     private TimeSpan _timeout = TimeSpan.FromHours(1);
     private PullRequests? _pullRequests;
     private PullRequestWatch? _watch;
+    private readonly FakeTime _time = new();
+    private CancellationTokenSource? _source;
+    private TimeSpan? _cancelAt;
     private string? _sha;
     private PullRequestWatchResult? _result;
 
@@ -27,7 +31,7 @@ public sealed class PullRequestWatchSteps(ExceptionState exceptionState, Console
     {
         var client = new GitHubClient(new HttpClient(_handler), "token", TimeSpan.Zero);
         _pullRequests = new PullRequests(client);
-        _watch = new PullRequestWatch(_pullRequests, new ReviewThreads(client));
+        _watch = WatchHandler.FakeClockWatch(client, _time, CancelOnTimeAsync);
     }
 
     [Given("the watch is for the repo {string} of the owner {string}, the pull request {int}, the reviewer login {string}, a wait of zero between two polls and a timeout of 1 hour")]
@@ -161,7 +165,9 @@ public sealed class PullRequestWatchSteps(ExceptionState exceptionState, Console
     [When("a caller starts the watch and cancels the cancellation token {int} second after the start")]
     public async Task WhenStartAndCancel(int seconds)
     {
-        using var source = new CancellationTokenSource(TimeSpan.FromSeconds(seconds));
+        using var source = new CancellationTokenSource();
+        _source = source;
+        _cancelAt = _time.Now + TimeSpan.FromSeconds(seconds);
         await Run(source.Token);
     }
 
@@ -215,6 +221,16 @@ public sealed class PullRequestWatchSteps(ExceptionState exceptionState, Console
 
     [Then("the watch throws an OperationCanceledException")]
     public void ThenCanceled() => Assert.IsAssignableFrom<OperationCanceledException>(exceptionState.Exception);
+
+    /// <summary>Cancels the token once the fake clock reaches the time of the cancel. Only a wait moves that clock, so the cancel comes during a wait.</summary>
+    private async Task CancelOnTimeAsync(CancellationToken token)
+    {
+        if (_cancelAt is { } at && _time.Now >= at)
+        {
+            await _source!.CancelAsync();
+            token.ThrowIfCancellationRequested();
+        }
+    }
 
     private async Task Run(CancellationToken token)
     {

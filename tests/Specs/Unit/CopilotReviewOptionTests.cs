@@ -66,6 +66,6 @@ public sealed class CopilotReviewOptionTests : IDisposable
     {
         var handler = new WatchHandler { CheckRunsBody = runs, ReviewsBody = WatchHandler.ReviewsJson([]) };
         var client = new GitHubClient(new HttpClient(handler), "t", TimeSpan.Zero);
-        return (new PullRequestWatch(new PullRequests(client), new ReviewThreads(client)), handler);
+        return (WatchHandler.FakeClockWatch(client, new FakeTime()), handler);
     }
 }
