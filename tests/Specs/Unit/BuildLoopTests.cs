@@ -20,7 +20,7 @@ public sealed class BuildLoopTests
         Assert.Equal(new BuildLoopResult(BuildLoopEnd.Stopped, 0, "The API answered 529."), h.Result);
         Assert.Equal(["build"], h.Calls);
         Assert.Equal(["| build 1 | 5 | 0 | $0 | failed |"], h.Rows);
-        Assert.Equal(["build: start"], h.Lines);
+        Assert.Equal(["build: start", "build: failed"], h.Lines);
     }
 
     [Fact]
@@ -49,7 +49,7 @@ public sealed class BuildLoopTests
         Assert.Equal(["build", "lint", "scope", "test", "api", "check", "review"], h.Calls);
         Assert.Equal(
             [
-                "build: start", "lint: start",
+                "build: start", "build: passed", "lint: start", "lint: passed",
                 "scope: start", "scope: passed", "test: start", "test: passed",
                 "api: start", "api: passed", "check: start", "check: passed",
                 "review: start", "review: approved",
@@ -58,6 +58,7 @@ public sealed class BuildLoopTests
         Assert.Equal(
             [
                 "| build 1 | 5 | 0 | $0 | passed |",
+                "| lint 1 | 1 | 0 | $0 | passed |",
                 "| scope 1 | 2 | 0 | $0 | passed |",
                 "| test 1 | 2 | 0 | $0 | passed |",
                 "| api 1 | 2 | 0 | $0 | passed |",
@@ -124,7 +125,7 @@ public sealed class BuildLoopTests
 
         Assert.Equal(new BuildLoopResult(BuildLoopEnd.Stopped, 0, "The API answered 500."), h.Result);
         Assert.Equal("| review 1 | 7 | 3 | $0.5 | failed |", h.Rows[^1]);
-        Assert.Equal("review: start", h.Lines[^1]);
+        Assert.Equal(["review: start", "review: failed"], h.Lines.TakeLast(2));
         Assert.Equal(["build", "lint", "test", "review"], h.Calls);
     }
 
@@ -240,12 +241,12 @@ public sealed class BuildLoopTests
 
     [Theory]
     [InlineData("build", new string[0])]
-    [InlineData("lint", new string[0])]
-    [InlineData("scope", new[] { "| build 1 | 5 | 0 | $0 | passed |" })]
-    [InlineData("test", new[] { "| build 1 | 5 | 0 | $0 | passed |", "| scope 1 | 2 | 0 | $0 | passed |" })]
-    [InlineData("api", new[] { "| build 1 | 5 | 0 | $0 | passed |", "| scope 1 | 2 | 0 | $0 | passed |", "| test 1 | 2 | 0 | $0 | passed |" })]
-    [InlineData("check", new[] { "| build 1 | 5 | 0 | $0 | passed |", "| scope 1 | 2 | 0 | $0 | passed |", "| test 1 | 2 | 0 | $0 | passed |", "| api 1 | 2 | 0 | $0 | passed |" })]
-    [InlineData("review", new[] { "| build 1 | 5 | 0 | $0 | passed |", "| scope 1 | 2 | 0 | $0 | passed |", "| test 1 | 2 | 0 | $0 | passed |", "| api 1 | 2 | 0 | $0 | passed |", "| check 1 | 2 | 0 | $0 | passed |" })]
+    [InlineData("lint", new[] { "| build 1 | 5 | 0 | $0 | passed |" })]
+    [InlineData("scope", new[] { "| build 1 | 5 | 0 | $0 | passed |", "| lint 1 | 1 | 0 | $0 | passed |" })]
+    [InlineData("test", new[] { "| build 1 | 5 | 0 | $0 | passed |", "| lint 1 | 1 | 0 | $0 | passed |", "| scope 1 | 2 | 0 | $0 | passed |" })]
+    [InlineData("api", new[] { "| build 1 | 5 | 0 | $0 | passed |", "| lint 1 | 1 | 0 | $0 | passed |", "| scope 1 | 2 | 0 | $0 | passed |", "| test 1 | 2 | 0 | $0 | passed |" })]
+    [InlineData("check", new[] { "| build 1 | 5 | 0 | $0 | passed |", "| lint 1 | 1 | 0 | $0 | passed |", "| scope 1 | 2 | 0 | $0 | passed |", "| test 1 | 2 | 0 | $0 | passed |", "| api 1 | 2 | 0 | $0 | passed |" })]
+    [InlineData("review", new[] { "| build 1 | 5 | 0 | $0 | passed |", "| lint 1 | 1 | 0 | $0 | passed |", "| scope 1 | 2 | 0 | $0 | passed |", "| test 1 | 2 | 0 | $0 | passed |", "| api 1 | 2 | 0 | $0 | passed |", "| check 1 | 2 | 0 | $0 | passed |" })]
     public async Task AnExceptionOfADependencyReachesTheCallerUnchangedAndTheRowsSoFarStay(string point, string[] rows)
     {
         await using var h = new BuildLoopHarness();
@@ -310,7 +311,7 @@ public sealed class BuildLoopTests
         }];
         await h.RunAsync();
 
-        Assert.Equal(["| build 1 | 5 | 0 | $0 | passed |", "| test 1 | 42 | 0 | $0 | passed |", "| check 1 | 2 | 0 | $0 | passed |", "| review 1 | 7 | 3 | $0.5 | approved |"], h.Rows);
+        Assert.Equal(["| build 1 | 5 | 0 | $0 | passed |", "| lint 1 | 1 | 0 | $0 | passed |", "| test 1 | 42 | 0 | $0 | passed |", "| check 1 | 2 | 0 | $0 | passed |", "| review 1 | 7 | 3 | $0.5 | approved |"], h.Rows);
     }
 
     [Fact]
@@ -377,8 +378,12 @@ public sealed class BuildLoopTests
 
     [Theory]
     [InlineData("build: start", new string[0])]
+    [InlineData("build: passed", new[] { "build" })]
+    [InlineData("lint: passed", new[] { "build", "lint" })]
     [InlineData("test: start", new[] { "build", "lint" })]
+    [InlineData("test: passed", new[] { "build", "lint", "test" })]
     [InlineData("review: start", new[] { "build", "lint", "test" })]
+    [InlineData("review: blocked", new[] { "build", "lint", "test", "review" })]
     [InlineData("redo: 1", new[] { "build", "lint", "test", "review" })]
     public async Task ACancelDuringAProgressWriteThrowsBeforeTheNextCall(string line, string[] calls)
     {

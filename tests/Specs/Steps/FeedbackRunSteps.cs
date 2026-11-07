@@ -357,13 +357,13 @@ public sealed class FeedbackRunSteps : IDisposable
     [Then("the run starts no session")]
     public void ThenNoSession() => Assert.Empty(_h.Managed!.Sessions);
 
-    [Then("the job summary of the round is one section {string} with the rows {string}, {string} and {string}, in this order")]
-    public void ThenSummarySection(string heading, string first, string second, string third)
+    [Then("the job summary of the round is one section {string} with the rows {string}, {string}, {string} and {string}, in this order")]
+    public void ThenSummarySection(string heading, string first, string second, string third, string fourth)
     {
         string[] lines = _h.Summary.Split('\n');
         Assert.Equal(heading, lines[0]);
         Assert.Single(lines, line => line.StartsWith("## ", StringComparison.Ordinal));
-        Assert.Equal([first, second, third], lines.Where(line => line.StartsWith("| ", StringComparison.Ordinal)).Skip(1).Select(line => line.Split('|')[1].Trim()));
+        Assert.Equal([first, second, third, fourth], lines.Where(line => line.StartsWith("| ", StringComparison.Ordinal)).Skip(1).Select(line => line.Split('|')[1].Trim()));
     }
 
     [Then("FeedbackRun removes the container")]

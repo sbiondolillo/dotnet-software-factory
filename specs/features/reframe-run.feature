@@ -285,7 +285,9 @@ Feature: A reframe run keeps every test and every public type and member
       | api: start |
       | api: listed |
       | build: start |
+      | build: passed |
       | lint: start |
+      | lint: passed |
       | scope: start |
       | scope: in scope |
       | test: start |

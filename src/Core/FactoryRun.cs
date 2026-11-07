@@ -45,7 +45,7 @@ public sealed class FactoryRun(
     public const string SummaryHeading = "Factory run";
 
     private readonly TimeProvider _clock = time ?? TimeProvider.System;
-    private JobSummary _summary = new();
+    private JobSummary _summary = new(progress);
     private decimal _spend;
     private long _started;
     private IReadOnlyList<SessionCost> _sessions = [];
@@ -60,7 +60,7 @@ public sealed class FactoryRun(
     public async Task<FactoryRunResult> RunAsync(FactoryRunRequest request, CancellationToken cancellationToken = default)
     {
         Declined = false;
-        _summary = new JobSummary();
+        _summary = new JobSummary(progress);
         _spend = 0m;
         _sessions = [];
         _started = _clock.GetTimestamp();
@@ -145,14 +145,12 @@ public sealed class FactoryRun(
                         .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, request.Directory, cancellationToken).ConfigureAwait(false);
                     if (!plan.Passed || (choice.Recipe is Recipe.Behavior && plan.Pin is null))
                     {
-                        _summary.AddRow(Phase.Plan.Text(), null, "failed");
-                        await Say("plan: failed").ConfigureAwait(false);
+                        await _summary.AddRowAsync(Phase.Plan.Text(), null, "failed", cancellationToken).ConfigureAwait(false);
                         await CommentAsync(request, "The plan phase failed:", plan.Failures, cancellationToken).ConfigureAwait(false);
                         return new FactoryRunResult(null, 0);
                     }
 
-                    _summary.AddRow(Phase.Plan.Text(), null, "passed");
-                    await Say("plan: passed").ConfigureAwait(false);
+                    await _summary.AddRowAsync(Phase.Plan.Text(), null, "passed", cancellationToken).ConfigureAwait(false);
                     pin = plan.Pin is Pin planned && choice.Recipe is Recipe.Behavior ? planned : RecipeRules.TakePin(choice.Recipe, request.Directory);
                 }
                 else

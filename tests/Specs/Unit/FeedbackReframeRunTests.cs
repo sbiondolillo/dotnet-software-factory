@@ -27,7 +27,7 @@ public sealed class FeedbackReframeRunTests
     {
         using FeedbackRunHarness h = Reframe();
         Assert.Equal(new FeedbackRunResult(2, 0, 0), await h.RunAsync(Ct));
-        Assert.Equal(["build 1", "scope 1", "test 1", "api 1", "check 1", "review 1"], RowNames(h.Summary));
+        Assert.Equal(["build 1", "lint 1", "scope 1", "test 1", "api 1", "check 1", "review 1"], RowNames(h.Summary));
         Assert.EndsWith("| same |", Row(h.Summary, "api 1"), StringComparison.Ordinal);
         string[] lines = h.Out.ToString().Split('\n');
         Assert.True(Array.IndexOf(lines, "api: listed") < Array.IndexOf(lines, "build: start"));
@@ -39,7 +39,7 @@ public sealed class FeedbackReframeRunTests
         using FeedbackRunHarness h = Reframe();
         h.ApiLines = build => build is 1 ? "" : Symbol + "\n";
         Assert.Equal(new FeedbackRunResult(2, 0, 1), await h.RunAsync(Ct));
-        Assert.Equal(["build 1", "scope 1", "test 1", "api 1", "build 2", "scope 2", "test 2", "api 2", "check 1", "review 1"], RowNames(h.Summary));
+        Assert.Equal(["build 1", "lint 1", "scope 1", "test 1", "api 1", "build 2", "lint 2", "scope 2", "test 2", "api 2", "check 1", "review 1"], RowNames(h.Summary));
         Assert.EndsWith("| changed |", Row(h.Summary, "api 1"), StringComparison.Ordinal);
         Assert.Contains($"- Redo 1, after api 1: lost symbol: {Symbol}", h.Summary.Split('\n'));
         Assert.Contains($"lost symbol: {Symbol}", h.BuildPrompts.ElementAt(1).Text, StringComparison.Ordinal);

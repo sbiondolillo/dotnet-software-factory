@@ -20,8 +20,10 @@ Feature: A run writes a job summary with one row for each phase and the reason f
       |---|---|---|---|---|
       | plan | 31 | 7 | $0.4213 | passed |
       | build 1 | 300 | 40 | $1.2034 | passed |
+      | lint 1 | 0 | 0 | $0 | passed |
       | test 1 | 120 | 0 | $0 | failed |
       | build 2 | 200 | 30 | $0.9000 | passed |
+      | lint 2 | 0 | 0 | $0 | passed |
       | test 2 | 110 | 0 | $0 | passed |
       | review 1 | 95 | 12 | $0.3100 | approved |
 
@@ -31,12 +33,13 @@ Feature: A run writes a job summary with one row for each phase and the reason f
       - Redo 1, after test 1: failed test: Specs.Unit.CheckoutTests.AddsTwoPrices: Assert.Equal() Failure: Values differ
       """
 
-  Scenario: The seconds of a build row run to the end of the lint gate after it
+  Scenario: The seconds of a build row end with the build, and the lint gate after it has a row of its own
     Given the issue has no recipe label
     And the first build answer comes 300 seconds after its prompt
     And the lint gate after the first build takes 15 seconds
     When the run delivers with 0 Redos
-    Then the row "build 1" has the seconds 315
+    Then the row "build 1" has the seconds 300
+    And the row "lint 1" has the seconds 15
 
   Scenario: A Redo text of several lines lists its first line
     Given the issue has no recipe label
@@ -84,6 +87,7 @@ Feature: A run writes a job summary with one row for each phase and the reason f
     Then the summary rows are in this order
       | row      |
       | build 1  |
+      | lint 1   |
       | scope 1  |
       | test 1   |
       | check 1  |
@@ -108,6 +112,7 @@ Feature: A run writes a job summary with one row for each phase and the reason f
       | row      |
       | plan     |
       | build 1  |
+      | lint 1   |
       | test 1   |
       | check 1  |
       | review 1 |
@@ -119,6 +124,7 @@ Feature: A run writes a job summary with one row for each phase and the reason f
       | row      |
       | plan     |
       | build 1  |
+      | lint 1   |
       | test 1   |
       | review 1 |
 

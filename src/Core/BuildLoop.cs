@@ -31,8 +31,9 @@ public sealed record BuildLoopResult(BuildLoopEnd End, int Redos, string? Commen
 
 /// <summary>
 /// The build loop of a run: the build, the lint, the gates in the order of the recipe, then the review, repeated within the
-/// budget of <see cref="RedoBudget"/> Redos. It writes every row of <paramref name="summary"/> and every progress line of the
-/// loop. The lint commits a change of <paramref name="workTree"/> with <paramref name="message"/> and the author.
+/// budget of <see cref="RedoBudget"/> Redos. It writes every row of <paramref name="summary"/>, which writes the result line of
+/// each row, and the start line of each phase and gate and the line of each Redo. The lint commits a change of
+/// <paramref name="workTree"/> with <paramref name="message"/> and the author.
 /// The faults of a rejected build join its Redo texts, after the gates and the review.
 /// A token that is cancelled when an await returns throws <see cref="OperationCanceledException"/> before the next call.
 /// The loop catches nothing: an exception of a phase, the lint or a gate reaches the caller unchanged, and the rows so far stay.
@@ -74,14 +75,18 @@ public sealed class BuildLoop(
             cancellationToken.ThrowIfCancellationRequested();
             if (built.Stop is string stop)
             {
-                summary.AddRow(Phase.Build.Text(), clock.GetElapsedTime(buildStart), "failed");
+                await summary.AddRowAsync(Phase.Build.Text(), clock.GetElapsedTime(buildStart), "failed", cancellationToken).ConfigureAwait(false);
                 return Stopped(redos, stop);
             }
 
-            await SayAsync("lint: start", cancellationToken).ConfigureAwait(false);
+            string producer = await summary.AddRowAsync(Phase.Build.Text(), clock.GetElapsedTime(buildStart), "passed", cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            await SayAsync($"{LintGate.Name}: start", cancellationToken).ConfigureAwait(false);
+            long lintStart = clock.GetTimestamp();
             await lint.RunAsync(workTree, message, authorName, authorEmail, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            string producer = summary.AddRow(Phase.Build.Text(), clock.GetElapsedTime(buildStart), "passed");
+            await summary.AddRowAsync(LintGate.Name, clock.GetElapsedTime(lintStart), "passed", cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             redoTexts = built.RedoTexts;
             foreach (IGate gate in gates)
             {
@@ -98,13 +103,15 @@ public sealed class BuildLoop(
                 await SayAsync("review: start", cancellationToken).ConfigureAwait(false);
                 ReviewPhaseResult reviewed = await review(cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
-                string reviewRow = summary.AddRow(Phase.Review.Text(), null, reviewed.IsError ? "failed" : reviewed.Approved ? "approved" : "blocked");
+                string reviewRow = await summary
+                    .AddRowAsync(Phase.Review.Text(), null, reviewed.IsError ? "failed" : reviewed.Approved ? "approved" : "blocked", cancellationToken)
+                    .ConfigureAwait(false);
                 if (reviewed.IsError)
                 {
                     return Stopped(redos, reviewed.Blocking.Count is 0 ? "" : reviewed.Blocking[0]);
                 }
 
-                await SayAsync(reviewed.Approved ? "review: approved" : "review: blocked", cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (reviewed.Approved)
                 {
                     return new BuildLoopResult(BuildLoopEnd.Passed, redos);
@@ -132,7 +139,8 @@ public sealed class BuildLoop(
     private static BuildLoopResult Stopped(int redos, string text) =>
         new(BuildLoopEnd.Stopped, redos, CommentText.Fit(text, []));
 
-    /// <summary>Runs <paramref name="gate"/> between its two progress lines, adds its row, and gives its Redo texts and the name of the row.</summary>
+    /// <summary>Runs <paramref name="gate"/> after its start line, adds its row, whose result line follows, and gives its Redo
+    /// texts and the name of the row.</summary>
     private async Task<(IReadOnlyList<string> RedoTexts, string Row)> RunGateAsync(IGate gate, CancellationToken cancellationToken)
     {
         string name = gate.Name.Text();
@@ -140,8 +148,9 @@ public sealed class BuildLoop(
         long start = clock.GetTimestamp();
         GateOutcome outcome = await gate.RunAsync(cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        await SayAsync($"{name}: {outcome.Result}", cancellationToken).ConfigureAwait(false);
-        return (outcome.RedoTexts, summary.AddRow(name, clock.GetElapsedTime(start), outcome.Result));
+        string row = await summary.AddRowAsync(name, clock.GetElapsedTime(start), outcome.Result, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return (outcome.RedoTexts, row);
     }
 
     /// <summary>Writes one progress line, then throws when the token is cancelled, so no call follows a cancel.</summary>

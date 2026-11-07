@@ -167,7 +167,7 @@ public sealed class FeedbackRunTests
         Assert.StartsWith("## Factory run\n\n## Feedback run\n", summary, StringComparison.Ordinal);
         string section = summary[summary.IndexOf("## Feedback run", StringComparison.Ordinal)..];
         Assert.Equal(
-            ["build 1", "test 1", "review 1"],
+            ["build 1", "lint 1", "test 1", "review 1"],
             section.Split('\n').Where(line => line.StartsWith("| ", StringComparison.Ordinal)).Skip(1).Select(line => line.Split('|')[1].Trim()));
         Assert.Matches(@"\n### Sessions\n\n(- sesn_\d+, \w+, \$\d+\.\d\d\n)+$", section);
     }

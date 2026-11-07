@@ -44,7 +44,7 @@ public sealed class FeedbackRun(
     public const string SummaryHeading = "Feedback run";
 
     private readonly TimeProvider _clock = time ?? TimeProvider.System;
-    private JobSummary _summary = new();
+    private JobSummary _summary = new(progress);
     private IReadOnlyList<SessionCost> _sessions = [];
 
     /// <summary>True when the last <see cref="RunAsync"/> ended on a closing issue that the recipe rules decline, with a
@@ -60,7 +60,7 @@ public sealed class FeedbackRun(
     public async Task<FeedbackRunResult> RunAsync(FeedbackRunRequest request, CancellationToken cancellationToken = default)
     {
         Declined = false;
-        _summary = new JobSummary();
+        _summary = new JobSummary(progress);
         _sessions = [];
         try
         {

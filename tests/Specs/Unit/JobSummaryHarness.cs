@@ -62,8 +62,6 @@ public sealed class JobSummaryHarness : IDisposable
 
     public Dictionary<int, double> TestSeconds { get; } = [];
 
-    public Dictionary<int, double> CheckSeconds { get; } = [];
-
     /// <summary>The builds whose test gate is red, with the two Redo texts the gate gives.</summary>
     public Dictionary<int, (string First, string Second)> RedBuilds { get; } = [];
 
@@ -89,13 +87,9 @@ public sealed class JobSummaryHarness : IDisposable
     /// <summary>The body of the pull request the run opened, or null for none.</summary>
     public string? PullBody { get; private set; }
 
-    public StringWriter Progress { get; } = new();
+    private readonly StringWriter _progress = new();
 
     public StringWriter Errors { get; } = new();
-
-    public List<CommandSpec> Commands { get; } = [];
-
-    public int Comments { get; private set; }
 
     public string Summary => File.Exists(SummaryPath ?? "") ? File.ReadAllText(SummaryPath!).Replace("\r\n", "\n", StringComparison.Ordinal) : "";
 
@@ -110,7 +104,7 @@ public sealed class JobSummaryHarness : IDisposable
         var request = new FactoryRunRequest(
             "sbiondolillo", "factory-scratch", 12, "token", "a1b2c3d4", _clone.FullName, "main", "factory-sandbox:test", _root.FullName,
             "plan-model", 20, "build-model", 60, "review-model", 30, "Factory", "factory@example.com", []);
-        return new FactoryRun(mock.Object, client, Progress, Errors, _clock, SummaryPath, Version).RunAsync(request, cancellationToken);
+        return new FactoryRun(mock.Object, client, _progress, Errors, _clock, SummaryPath, Version).RunAsync(request, cancellationToken);
     }
 
     public void Dispose()
@@ -122,7 +116,6 @@ public sealed class JobSummaryHarness : IDisposable
 
     private CommandResult Answer(CommandSpec spec)
     {
-        Commands.Add(spec);
         if (spec.Command is "git")
         {
             return spec.Arguments[0] switch
@@ -170,7 +163,6 @@ public sealed class JobSummaryHarness : IDisposable
         string subcommand = arguments.Count > id + 2 ? arguments[id + 2] : "";
         if (program is "sh" && subcommand is "-c")
         {
-            _clock.Advance(_builds is 0 ? 0 : CheckSeconds.GetValueOrDefault(_builds));
             int code = CheckCodes.TryGetValue(_builds, out int given) ? given : _builds is 0 ? 1 : 0;
             return new CommandResult { ExitCode = code };
         }
@@ -295,11 +287,6 @@ public sealed class JobSummaryHarness : IDisposable
             if (method is "POST" && path.EndsWith("/pulls", StringComparison.Ordinal))
             {
                 harness.PullBody = JsonDocument.Parse(request.Content!.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult()).RootElement.GetProperty("body").GetString();
-            }
-
-            if (method is "POST" && path.EndsWith("/comments", StringComparison.Ordinal))
-            {
-                harness.Comments++;
             }
 
             (int status, string body) = (method, path) switch

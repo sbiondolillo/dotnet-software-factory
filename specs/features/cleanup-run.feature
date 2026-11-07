@@ -218,7 +218,9 @@ Feature: A cleanup run fixes a test, a config file or a document
       | check: start |
       | check: red |
       | build: start |
+      | build: passed |
       | lint: start |
+      | lint: passed |
       | scope: start |
       | scope: in scope |
       | test: start |
