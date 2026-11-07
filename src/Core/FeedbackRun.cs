@@ -10,8 +10,6 @@ public sealed record FeedbackRunRequest(
     int PullNumber,
     string Token,
     string Directory,
-    string ImageTag,
-    string RootDirectory,
     string BuildModel,
     int BuildTurns,
     string ReviewModel,
@@ -19,31 +17,28 @@ public sealed record FeedbackRunRequest(
     string AuthorName,
     string AuthorEmail,
     IReadOnlyList<string> SecretNames,
-    bool SkipIntegration = false,
-    ManagedAgentsSettings? Managed = null);
+    bool SkipIntegration = false);
 
 /// <summary>The outcome of a <see cref="FeedbackRun"/>: the threads resolved, the threads left unresolved, and the Redos spent.
 /// The run resolves each thread that it replies to, so the threads left unresolved are the threads with no reply.</summary>
 public sealed record FeedbackRunResult(int Resolved, int Unresolved, int Redos);
 
-/// <summary>Answers every unresolved review thread of a pull request within the budget of the <see cref="BuildLoop"/>. The
-/// <paramref name="time"/>, the <paramref name="handler"/> and the <paramref name="delay"/> serve the Managed Agents path, when the
-/// request holds its settings. A round that builds appends its section <c>## Feedback run</c> to the file at
-/// <paramref name="summaryPath"/>, and a write that fails goes to <paramref name="log"/>.</summary>
+/// <summary>Answers every unresolved review thread of a pull request within the budget of the <see cref="BuildLoop"/>, with the
+/// agents of the backend that <paramref name="startBackend"/> starts. A round that builds appends its section
+/// <c>## Feedback run</c> to the file at <paramref name="summaryPath"/>, and a write that fails goes to <paramref name="log"/>.</summary>
 public sealed class FeedbackRun(
     CommandRunner runner,
     GitHubClient client,
+    StartBackend startBackend,
     TextWriter? progress = null,
     TimeProvider? time = null,
-    HttpMessageHandler? handler = null,
-    Func<TimeSpan, CancellationToken, Task>? delay = null,
     string? summaryPath = null,
     TextWriter? log = null)
 {
     /// <summary>The heading of the section of a round in the job summary.</summary>
     public const string SummaryHeading = "Feedback run";
 
-    private readonly Run _run = new(runner, client, progress, log, time, summaryPath, handler, delay);
+    private readonly Run _run = new(runner, client, startBackend, progress, log, time, summaryPath);
 
     /// <summary>True when the last <see cref="RunAsync"/> ended on a closing issue that the recipe rules decline, with a
     /// comment on the pull request and no build.</summary>
@@ -88,8 +83,8 @@ public sealed class FeedbackRun(
         string title = $"Answer the review threads of pull request #{request.PullNumber.ToString(CultureInfo.InvariantCulture)}";
         var kind = new FeedbackKind(request, reviewThreads, threads, branch, choice, title, Describe(threads, issueBody, RecipeRules.ThreadRules(choice.Recipe)));
         var shared = new RunRequest(
-            request.Owner, request.Repo, request.Token, request.Directory, request.ImageTag, request.RootDirectory, request.ReviewModel,
-            request.ReviewTurns, request.AuthorName, request.AuthorEmail, request.SecretNames, request.SkipIntegration, request.Managed);
+            request.Owner, request.Repo, request.Token, request.Directory, request.ReviewModel, request.ReviewTurns, request.AuthorName,
+            request.AuthorEmail, request.SecretNames, request.SkipIntegration);
         RunOutcome<FeedbackRunResult> outcome = await _run.RunAsync(shared, kind, cancellationToken).ConfigureAwait(false);
         return outcome.Passed ?? new FeedbackRunResult(0, threads.Count, outcome.Redos);
     }
@@ -185,19 +180,19 @@ public sealed class FeedbackRun(
             return await git.ReadHeadShaAsync(request.Directory, cancellationToken).ConfigureAwait(false);
         }
 
-        public Task<PinOrStop> BeforeGatesAsync(RunAgents agents, JobSummary summary, CancellationToken cancellationToken = default) =>
+        public Task<PinOrStop> BeforeGatesAsync(AgentBackend backend, JobSummary summary, CancellationToken cancellationToken = default) =>
             Task.FromResult(new PinOrStop(RecipeRules.TakePin(choice.Recipe, request.Directory), null));
 
         public IBuild Build(Agent builder) => _build = new FeedbackBuild(
             new BuildPhase(builder, RecipeRules.BuildText(choice.Recipe, RunKind.Feedback)), title, body, request.BuildModel, request.BuildTurns, threads);
 
-        public async Task<FeedbackRunResult> AfterPassAsync(RunAgents agents, GateSet gates, BuildLoopResult result, decimal spend, CancellationToken cancellationToken = default)
+        public async Task<FeedbackRunResult> AfterPassAsync(AgentBackend backend, GateSet gates, BuildLoopResult result, decimal spend, CancellationToken cancellationToken = default)
         {
-            ArgumentNullException.ThrowIfNull(agents);
+            ArgumentNullException.ThrowIfNull(backend);
             ArgumentNullException.ThrowIfNull(result);
             Git git = _git ?? throw new InvalidOperationException("The round pushes only after its checkout.");
             FeedbackBuild build = _build ?? throw new InvalidOperationException("The round replies only after its build.");
-            await agents.CollectAsync(branch, cancellationToken).ConfigureAwait(false);
+            await backend.CollectAsync(branch, cancellationToken).ConfigureAwait(false);
             await git.PushAsync(branch, request.Directory, request.Token, cancellationToken).ConfigureAwait(false);
             int resolved = 0;
             foreach (ReviewThread thread in threads)

@@ -1,21 +1,18 @@
 namespace Core;
 
-/// <summary>What <see cref="Run.RunAsync"/> reads of a request, which both run kinds share: the repo, the clone, the sandbox, the
-/// review model, the author of each commit, the names of the secrets and the agents' settings.</summary>
+/// <summary>What <see cref="Run.RunAsync"/> reads of a request, which both run kinds share: the repo, the clone, the review model,
+/// the author of each commit and the names of the secrets.</summary>
 public sealed record RunRequest(
     string Owner,
     string Repo,
     string Token,
     string Directory,
-    string ImageTag,
-    string RootDirectory,
     string ReviewModel,
     int ReviewTurns,
     string AuthorName,
     string AuthorEmail,
     IReadOnlyList<string> SecretNames,
-    bool SkipIntegration,
-    ManagedAgentsSettings? Managed);
+    bool SkipIntegration);
 
 /// <summary>What the step before the gates gives: the <paramref name="Pin"/> of the gates, or, when it is null, the text of the
 /// comment that stops the run in <paramref name="Stop"/>.</summary>
@@ -58,36 +55,35 @@ public interface IRunKind<TOutcome>
     Task<string?> CheckoutAsync(Git git, CancellationToken cancellationToken = default);
 
     /// <summary>Runs between the start of the agents and the gates, and gives the pin of the gates or the text of a stop.</summary>
-    Task<PinOrStop> BeforeGatesAsync(RunAgents agents, JobSummary summary, CancellationToken cancellationToken = default);
+    Task<PinOrStop> BeforeGatesAsync(AgentBackend backend, JobSummary summary, CancellationToken cancellationToken = default);
 
     /// <summary>The build of the build loop, over the <paramref name="builder"/>.</summary>
     IBuild Build(Agent builder);
 
-    /// <summary>Ends a run whose build loop passed, within the life of the <paramref name="agents"/>. <paramref name="spend"/> is
+    /// <summary>Ends a run whose build loop passed, within the life of the <paramref name="backend"/>. <paramref name="spend"/> is
     /// the cost in dollars of every answer of the run.</summary>
-    Task<TOutcome> AfterPassAsync(RunAgents agents, GateSet gates, BuildLoopResult result, decimal spend, CancellationToken cancellationToken = default);
+    Task<TOutcome> AfterPassAsync(AgentBackend backend, GateSet gates, BuildLoopResult result, decimal spend, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
 /// The wiring that every kind of run shares, from the clone to the end of the build loop: the agents, the gates, the build loop and
 /// the review, the comment that a stop posts, and the run's section of the job summary, appended to the file at
-/// <paramref name="summaryPath"/> when the run wrote a row. A write that fails goes to <paramref name="log"/>. The
-/// <paramref name="handler"/> and the <paramref name="delay"/> serve the Managed Agents path, when the request holds its settings.
+/// <paramref name="summaryPath"/> when the run wrote a row. A write that fails goes to <paramref name="log"/>. The run takes its
+/// agents and the sandbox of its gates from the backend that <paramref name="startBackend"/> starts after the checkout.
 /// </summary>
 public sealed class Run(
     CommandRunner runner,
     GitHubClient client,
+    StartBackend startBackend,
     TextWriter? progress = null,
     TextWriter? log = null,
     TimeProvider? time = null,
-    string? summaryPath = null,
-    HttpMessageHandler? handler = null,
-    Func<TimeSpan, CancellationToken, Task>? delay = null)
+    string? summaryPath = null)
 {
     private readonly TimeProvider _clock = time ?? TimeProvider.System;
 
     /// <summary>
-    /// Clones the repo, checks out the kind's tree, starts the agents, runs the kind's step before the gates, builds the gates, and
+    /// Clones the repo, checks out the kind's tree, starts the backend, runs the kind's step before the gates, builds the gates, and
     /// runs the build loop with the kind's build and the review. A stop posts its comment on the kind's issue or pull request, and
     /// gives no outcome. A <see cref="SessionBranchException"/> is such a stop. A pass gives what the kind's ending gives.
     /// </summary>
@@ -109,28 +105,26 @@ public sealed class Run(
                 return new RunOutcome<TOutcome>(null, 0);
             }
 
-            var setup = new RunAgentsSetup(
-                runner, git, request.Owner, request.Repo, request.Token, request.Directory, request.RootDirectory, request.ImageTag,
-                baseCommit, kind.ScratchBranch, kind.Title, request.AuthorName, request.AuthorEmail,
-                request.Managed, handler, delay, time, progress, log,
+            var start = new BackendStart(
+                git, request.Directory, baseCommit, kind.ScratchBranch, kind.Title,
                 (elapsed, answer) =>
                 {
                     spend += answer.CostUsd;
                     summary.Prompt(elapsed, answer.NumTurns, answer.CostUsd);
                 });
-            RunAgents agents = await RunAgents.StartAsync(setup, cancellationToken).ConfigureAwait(false);
-            await using (agents.ConfigureAwait(false))
+            AgentBackend backend = await startBackend(start, cancellationToken).ConfigureAwait(false);
+            await using (backend.ConfigureAwait(false))
             {
                 try
                 {
-                    PinOrStop before = await kind.BeforeGatesAsync(agents, summary, cancellationToken).ConfigureAwait(false);
+                    PinOrStop before = await kind.BeforeGatesAsync(backend, summary, cancellationToken).ConfigureAwait(false);
                     if (before.Pin is not Pin pin)
                     {
                         await PostAsync(request, kind.CommentNumber, before.Stop ?? "", cancellationToken).ConfigureAwait(false);
                         return new RunOutcome<TOutcome>(null, 0);
                     }
 
-                    GateSet gates = await new GateFactory(agents.Sandbox, git, request.Directory, baseCommit, request.SecretNames, progress, log, request.SkipIntegration)
+                    GateSet gates = await new GateFactory(backend.Sandbox, git, request.Directory, baseCommit, request.SecretNames, progress, log, request.SkipIntegration)
                         .CreateAsync(kind.Choice, pin, cancellationToken).ConfigureAwait(false);
                     if (gates.Stop is string stop)
                     {
@@ -138,10 +132,10 @@ public sealed class Run(
                         return new RunOutcome<TOutcome>(null, 0);
                     }
 
-                    var reviewPhase = new ReviewPhase(agents.Reviewer, git, RecipeRules.ReviewSteps(kind.Choice.Recipe, kind.Kind));
+                    var reviewPhase = new ReviewPhase(backend.Reviewer, git, RecipeRules.ReviewSteps(kind.Choice.Recipe, kind.Kind));
                     var loop = new BuildLoop(summary, _clock, progress, gates.Lint, request.Directory, kind.Title, request.AuthorName, request.AuthorEmail);
                     BuildLoopResult result = await loop.RunAsync(
-                        kind.Build(agents.Builder),
+                        kind.Build(backend.Builder),
                         gates.Gates,
                         token => reviewPhase.RunAsync(kind.Title, kind.Body, request.ReviewModel, request.ReviewTurns, request.Directory, baseCommit, token),
                         cancellationToken).ConfigureAwait(false);
@@ -151,7 +145,7 @@ public sealed class Run(
                         return new RunOutcome<TOutcome>(null, result.Redos);
                     }
 
-                    TOutcome passed = await kind.AfterPassAsync(agents, gates, result, spend, cancellationToken).ConfigureAwait(false);
+                    TOutcome passed = await kind.AfterPassAsync(backend, gates, result, spend, cancellationToken).ConfigureAwait(false);
                     return new RunOutcome<TOutcome>(passed, result.Redos);
                 }
                 catch (SessionBranchException exception)
@@ -161,7 +155,7 @@ public sealed class Run(
                 }
                 finally
                 {
-                    sessions = agents.Sessions;
+                    sessions = backend.Sessions;
                 }
             }
         }

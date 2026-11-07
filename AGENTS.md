@@ -131,10 +131,12 @@ A `Sandbox` sends every `docker` command through the one `CommandRunner` it is b
 over. `Sandbox.StartAsync` runs `docker image inspect` first, then `docker build` when the
 inspect exits with a code other than 0, then `docker run`. Each command runs as
 `docker exec`, and the disposal runs `docker rm --force`. The `docker run` carries
-`--env HOME=<home>`, `--env ANTHROPIC_API_KEY` and `--env ANTHROPIC_BASE_URL`. So a mock `CommandRunner` under
-a `Sandbox` answers `run` and `exec` by name and every other `docker` command with the
-code 0, as `tests/Specs/Steps/LintGateSteps.cs` does. `Sandbox.StartForGatesAsync` does
-the same, and its `docker run` carries neither Anthropic variable.
+`--env HOME=<home>`, `--env ANTHROPIC_API_KEY` and `--env ANTHROPIC_BASE_URL`. So in a
+test of the sandbox or of a gate, a mock `CommandRunner` under a `Sandbox` answers `run`
+and `exec` by name and every other `docker` command with the code 0, as
+`tests/Specs/Steps/LintGateSteps.cs` does. `Sandbox.StartForGatesAsync` does the same,
+and its `docker run` carries neither Anthropic variable. A test of a run hands the run a
+fake `AgentBackend` through its `StartBackend` delegate, and starts no `claude`.
 
 The gates of every run run in a `Sandbox`, since they run an agent's code. A Managed
 Agents run starts one with `Sandbox.StartForGatesAsync`, before the first session. No
