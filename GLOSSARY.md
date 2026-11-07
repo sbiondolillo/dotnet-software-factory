@@ -84,6 +84,10 @@ _Avoid_: snapshot, prepare
 What a phase sends one request through and takes one answer from. A phase sees the agent alone, and never the adapter behind it.
 _Avoid_: session, claude
 
+**Backend**:
+What a run gets from its adapter: the builder, the reviewer, the container the gates run in, the cost rows for the summary and the collect step. The run sees the backend alone, and never the adapter.
+_Avoid_: source, factory, run agents
+
 **Output**:
 A file that a phase asks the agent for by name, and that the answer carries as text. The agent keeps it fresh: an output in the answer is one that this prompt wrote.
 _Avoid_: artifact, result (the result is the text of the answer)

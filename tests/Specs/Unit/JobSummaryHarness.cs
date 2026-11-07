@@ -102,9 +102,10 @@ public sealed class JobSummaryHarness : IDisposable
             .Returns((CommandSpec spec, CancellationToken _) => Task.FromResult(Answer(spec)));
         var client = new GitHubClient(new HttpClient(new Handler(this)), "token", TimeSpan.Zero);
         var request = new FactoryRunRequest(
-            "sbiondolillo", "factory-scratch", 12, "token", "a1b2c3d4", _clone.FullName, "main", "factory-sandbox:test", _root.FullName,
+            "sbiondolillo", "factory-scratch", 12, "token", "a1b2c3d4", _clone.FullName, "main",
             "plan-model", 20, "build-model", 60, "review-model", 30, "Factory", "factory@example.com", []);
-        return new FactoryRun(mock.Object, client, _progress, Errors, _clock, SummaryPath, Version).RunAsync(request, cancellationToken);
+        StartBackend backend = ClaudeCodeBackend.Starter(mock.Object, "factory-sandbox:test", _root.FullName, Errors, _clock, _progress);
+        return new FactoryRun(mock.Object, client, backend, _progress, Errors, _clock, SummaryPath, Version).RunAsync(request, cancellationToken);
     }
 
     public void Dispose()

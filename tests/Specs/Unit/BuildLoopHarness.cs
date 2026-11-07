@@ -6,7 +6,7 @@ namespace Specs.Unit;
 
 /// <summary>
 /// A <see cref="BuildLoop"/> over a fake build, fake gates and a fake review, with the lint over a <see cref="Sandbox"/> of a
-/// mock <see cref="CommandRunner"/>, and no <see cref="RunAgents"/>. Each fake takes the next answer of its script, and the last answer repeats. Every call
+/// mock <see cref="CommandRunner"/>, and no <see cref="AgentBackend"/>. Each fake takes the next answer of its script, and the last answer repeats. Every call
 /// goes to <see cref="Calls"/>: <c>build</c>, <c>lint</c>, the text of a gate, or <c>review</c>. A build moves the clock 5
 /// seconds, the lint 1 second, a gate 2 seconds, and the review notes one prompt of 7 seconds, 3 turns and $0.5.
 /// </summary>

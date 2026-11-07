@@ -10,8 +10,6 @@ public sealed record FactoryRunRequest(
     string RunId,
     string Directory,
     string BaseBranch,
-    string ImageTag,
-    string RootDirectory,
     string PlanModel,
     int PlanTurns,
     string BuildModel,
@@ -22,24 +20,22 @@ public sealed record FactoryRunRequest(
     string AuthorEmail,
     IReadOnlyList<string> SecretNames,
     bool SkipIntegration = false,
-    ManagedAgentsSettings? Managed = null,
     string? BaseCommit = null);
 
 /// <summary>The outcome of a <see cref="FactoryRun"/>: the pull request, or null for none, and the Redos spent.</summary>
 public sealed record FactoryRunResult(PullRequest? PullRequest, int Redos);
 
-/// <summary>Takes one issue of a target repo to a pull request within three Redos. The <paramref name="handler"/> and the
-/// <paramref name="delay"/> serve the Managed Agents path, when the request holds its settings.</summary>
+/// <summary>Takes one issue of a target repo to a pull request within three Redos, with the agents of the backend that
+/// <paramref name="startBackend"/> starts.</summary>
 public sealed class FactoryRun(
     CommandRunner runner,
     GitHubClient client,
+    StartBackend startBackend,
     TextWriter? progress = null,
     TextWriter? log = null,
     TimeProvider? time = null,
     string? summaryPath = null,
-    string? version = null,
-    HttpMessageHandler? handler = null,
-    Func<TimeSpan, CancellationToken, Task>? delay = null)
+    string? version = null)
 {
     /// <summary>The heading of the section of a factory run in the job summary.</summary>
     public const string SummaryHeading = "Factory run";
@@ -48,7 +44,7 @@ public sealed class FactoryRun(
     private static readonly string[] LayoutDirectories = ["specs/features/", "tests/Specs/", "tests/Integration/"];
 
     private readonly TimeProvider _clock = time ?? TimeProvider.System;
-    private readonly Run _run = new(runner, client, progress, log, time, summaryPath, handler, delay);
+    private readonly Run _run = new(runner, client, startBackend, progress, log, time, summaryPath);
 
     /// <summary>True when the last <see cref="RunAsync"/> ended on an input error of the issue's author, with a comment and no run.</summary>
     public bool Declined { get; private set; }
@@ -69,8 +65,8 @@ public sealed class FactoryRun(
         }
 
         var shared = new RunRequest(
-            request.Owner, request.Repo, request.Token, request.Directory, request.ImageTag, request.RootDirectory, request.ReviewModel,
-            request.ReviewTurns, request.AuthorName, request.AuthorEmail, request.SecretNames, request.SkipIntegration, request.Managed);
+            request.Owner, request.Repo, request.Token, request.Directory, request.ReviewModel, request.ReviewTurns, request.AuthorName,
+            request.AuthorEmail, request.SecretNames, request.SkipIntegration);
         RunOutcome<PullRequest> outcome = await _run.RunAsync(shared, new FactoryKind(this, request, issue, choice, started), cancellationToken).ConfigureAwait(false);
         return new FactoryRunResult(outcome.Passed, outcome.Redos);
     }
@@ -165,11 +161,11 @@ public sealed class FactoryRun(
             return _baseCommit;
         }
 
-        public async Task<PinOrStop> BeforeGatesAsync(RunAgents agents, JobSummary summary, CancellationToken cancellationToken = default)
+        public async Task<PinOrStop> BeforeGatesAsync(AgentBackend backend, JobSummary summary, CancellationToken cancellationToken = default)
         {
-            ArgumentNullException.ThrowIfNull(agents);
+            ArgumentNullException.ThrowIfNull(backend);
             ArgumentNullException.ThrowIfNull(summary);
-            if (choice.Check is string check && await owner.PreCheckAsync(agents.Sandbox, check, choice.Recipe, cancellationToken).ConfigureAwait(false) is string stop)
+            if (choice.Check is string check && await owner.PreCheckAsync(backend.Sandbox, check, choice.Recipe, cancellationToken).ConfigureAwait(false) is string stop)
             {
                 return new PinOrStop(null, stop);
             }
@@ -180,7 +176,7 @@ public sealed class FactoryRun(
             }
 
             await owner.Say("plan: start").ConfigureAwait(false);
-            PlanPhaseResult plan = await new PlanPhase(agents.Builder, RecipeRules.PlanText(choice.Recipe, _scenarios))
+            PlanPhaseResult plan = await new PlanPhase(backend.Builder, RecipeRules.PlanText(choice.Recipe, _scenarios))
                 .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, request.Directory, cancellationToken).ConfigureAwait(false);
             if (!plan.Passed || (choice.Recipe is Recipe.Behavior && plan.Pin is null))
             {
@@ -195,15 +191,15 @@ public sealed class FactoryRun(
         public IBuild Build(Agent builder) => new FactoryBuild(
             new BuildPhase(builder, RecipeRules.BuildText(choice.Recipe, RunKind.Factory)), issue.Title, issue.Body, request.BuildModel, request.BuildTurns);
 
-        public async Task<PullRequest> AfterPassAsync(RunAgents agents, GateSet gates, BuildLoopResult result, decimal spend, CancellationToken cancellationToken = default)
+        public async Task<PullRequest> AfterPassAsync(AgentBackend backend, GateSet gates, BuildLoopResult result, decimal spend, CancellationToken cancellationToken = default)
         {
-            ArgumentNullException.ThrowIfNull(agents);
+            ArgumentNullException.ThrowIfNull(backend);
             ArgumentNullException.ThrowIfNull(gates);
             ArgumentNullException.ThrowIfNull(result);
             Git git = _git ?? throw new InvalidOperationException("The run delivers only after its checkout.");
             await owner.Say("deliver: start").ConfigureAwait(false);
             TestGate testGate = gates.Gates.OfType<TestGate>().Single();
-            DeliveryFacts facts = owner.Facts(_baseCommit, testGate, choice, result.Redos, spend, started, agents.Sessions);
+            DeliveryFacts facts = owner.Facts(_baseCommit, testGate, choice, result.Redos, spend, started, backend.Sessions);
             return await owner.DeliverAsync(request, issue.Title, git, facts, cancellationToken).ConfigureAwait(false);
         }
     }

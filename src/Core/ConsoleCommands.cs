@@ -222,6 +222,8 @@ public static partial class ConsoleCommands
         JsonElement repoJson = await client.SendAsync(HttpMethod.Get, $"/repos/{owner}/{repo}", null, cancellationToken).ConfigureAwait(false);
         string baseBranch = repoJson.GetProperty("default_branch").GetString() ?? "";
 
+        StartBackend backend = host.Backend(new BackendOptions(
+            host.Runner, ImageTag, host.RootDirectory, options.Settings, owner, repo, token, AuthorName, AuthorEmail, host.Handler, host.Delay, host.Error, host.Time, host.Out));
         int number;
         string? localHead;
         if (options.Verb is "run")
@@ -233,9 +235,9 @@ public static partial class ConsoleCommands
             try
             {
                 var request = new FactoryRunRequest(
-                    owner, repo, options.Number, token, runId, directory.FullName, baseBranch, ImageTag, host.RootDirectory,
-                    Model, 50, Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration, options.Settings, options.BaseCommit);
-                var factoryRun = new FactoryRun(host.Runner, client, host.Out, host.Error, host.Time, host.Environment("GITHUB_STEP_SUMMARY"), EntryVersion(), host.Handler, host.Delay);
+                    owner, repo, options.Number, token, runId, directory.FullName, baseBranch,
+                    Model, 50, Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration, options.BaseCommit);
+                var factoryRun = new FactoryRun(host.Runner, client, backend, host.Out, host.Error, host.Time, host.Environment("GITHUB_STEP_SUMMARY"), EntryVersion());
                 result = await factoryRun.RunAsync(request, cancellationToken).ConfigureAwait(false);
                 declined = factoryRun.Declined;
                 localHead = result.PullRequest is null ? null : await git.ReadHeadShaAsync(directory.FullName, cancellationToken).ConfigureAwait(false);
@@ -261,7 +263,7 @@ public static partial class ConsoleCommands
 
         if (options.Verb is "feedback")
         {
-            (localHead, bool declined) = await FeedbackAsync(options, host, client, token, number, cancellationToken).ConfigureAwait(false);
+            (localHead, bool declined) = await FeedbackAsync(options, host, client, backend, token, number, cancellationToken).ConfigureAwait(false);
             if (declined)
             {
                 return 0;
@@ -275,7 +277,7 @@ public static partial class ConsoleCommands
             bool changed = true;
             while (last.Refusal is null && last.Threads.Count > 0 && rounds < options.ReviewRounds && changed)
             {
-                (localHead, bool declined) = await FeedbackAsync(options, host, client, token, number, cancellationToken).ConfigureAwait(false);
+                (localHead, bool declined) = await FeedbackAsync(options, host, client, backend, token, number, cancellationToken).ConfigureAwait(false);
                 if (declined)
                 {
                     return 0;
@@ -299,16 +301,16 @@ public static partial class ConsoleCommands
 
     /// <summary>Runs one feedback run in a new work tree, and gives back the head commit of that work tree, or null when it cloned
     /// nothing, and whether the run declined its closing issue.</summary>
-    private static async Task<(string? Head, bool Declined)> FeedbackAsync(Options options, ConsoleHost host, GitHubClient client, string token, int number, CancellationToken cancellationToken)
+    private static async Task<(string? Head, bool Declined)> FeedbackAsync(Options options, ConsoleHost host, GitHubClient client, StartBackend backend, string token, int number, CancellationToken cancellationToken)
     {
         await host.Out.WriteLineAsync("feedback: start").ConfigureAwait(false);
         DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-feedback-");
         try
         {
             var request = new FeedbackRunRequest(
-                options.Repo.Owner, options.Repo.Name, number, token, directory.FullName, ImageTag, host.RootDirectory,
-                Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration, options.Settings);
-            var feedbackRun = new FeedbackRun(host.Runner, client, host.Out, host.Time, host.Handler, host.Delay, host.Environment("GITHUB_STEP_SUMMARY"), host.Error);
+                options.Repo.Owner, options.Repo.Name, number, token, directory.FullName,
+                Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration);
+            var feedbackRun = new FeedbackRun(host.Runner, client, backend, host.Out, host.Time, host.Environment("GITHUB_STEP_SUMMARY"), host.Error);
             FeedbackRunResult result = await feedbackRun.RunAsync(request, cancellationToken).ConfigureAwait(false);
             if (feedbackRun.Declined)
             {

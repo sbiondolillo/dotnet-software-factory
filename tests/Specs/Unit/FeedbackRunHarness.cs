@@ -159,9 +159,11 @@ public sealed class FeedbackRunHarness : IDisposable
             .Returns((CommandSpec spec, CancellationToken _) => Task.FromResult(Answer(spec)));
         var client = new GitHubClient(new HttpClient(new Handler(this)), Token, TimeSpan.Zero);
         var request = new FeedbackRunRequest(
-            Owner, Repo, Pull, Token, _clone.FullName, "factory-sandbox:test", _root.FullName,
-            BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames, Managed: Managed is null ? null : ManagedRunFake.Settings());
-        var run = new FeedbackRun(mock.Object, client, Out, handler: new Handler(this), delay: (_, _) => Task.CompletedTask, summaryPath: SummaryPath, log: Log);
+            Owner, Repo, Pull, Token, _clone.FullName, BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames);
+        StartBackend backend = AgentBackend.Pick(new BackendOptions(
+            mock.Object, "factory-sandbox:test", _root.FullName, Managed is null ? null : ManagedRunFake.Settings(), Owner, Repo, Token, AuthorName, AuthorEmail,
+            new Handler(this), (_, _) => Task.CompletedTask, Log, Progress: Out));
+        var run = new FeedbackRun(mock.Object, client, backend, Out, summaryPath: SummaryPath, log: Log);
         try
         {
             return await run.RunAsync(request, cancellationToken);

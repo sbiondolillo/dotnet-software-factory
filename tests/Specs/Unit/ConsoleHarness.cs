@@ -215,7 +215,8 @@ public sealed class ConsoleHarness : IDisposable
             Error,
             Root,
             Time.WaitAsync,
-            Time);
+            Time,
+            AgentBackend.Pick);
         return ConsoleProgram.RunAsync(args, host, cancellationToken);
     }
 

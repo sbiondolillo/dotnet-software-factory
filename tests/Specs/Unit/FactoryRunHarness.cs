@@ -202,10 +202,12 @@ public sealed class FactoryRunHarness : IDisposable
             .Returns((CommandSpec spec, CancellationToken _) => Task.FromResult(Answer(spec)));
         var client = new GitHubClient(new HttpClient(new Handler(this)), Token, TimeSpan.Zero);
         var request = new FactoryRunRequest(
-            Owner, Repo, Issue, Token, RunId, _clone.FullName, BaseBranch, "factory-sandbox:test", _root.FullName,
-            PlanModel, PlanTurns, BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames, SkipIntegration,
-            Managed is null ? null : ManagedRunFake.Settings(), BaseCommit);
-        var run = new FactoryRun(mock.Object, client, Progress, summaryPath: SummaryPath, handler: new Handler(this), delay: (_, _) => Task.CompletedTask);
+            Owner, Repo, Issue, Token, RunId, _clone.FullName, BaseBranch,
+            PlanModel, PlanTurns, BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames, SkipIntegration, BaseCommit);
+        StartBackend backend = AgentBackend.Pick(new BackendOptions(
+            mock.Object, "factory-sandbox:test", _root.FullName, Managed is null ? null : ManagedRunFake.Settings(), Owner, Repo, Token, AuthorName, AuthorEmail,
+            new Handler(this), (_, _) => Task.CompletedTask, Progress: Progress));
+        var run = new FactoryRun(mock.Object, client, backend, Progress, summaryPath: SummaryPath);
         FactoryRunResult result = await run.RunAsync(request, cancellationToken);
         Declined = run.Declined;
         return result;
