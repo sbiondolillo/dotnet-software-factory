@@ -5,7 +5,7 @@ The factory takes an issue of a .NET repo to a pull request. An agent writes the
 ## Recipes
 
 **Recipe**:
-A named, fixed sequence of phases, picked by a label of the issue. The four recipes are behavior, refactor, cleanup and reframe.
+A named, fixed sequence of phases, picked by a label of the issue. The four recipes are behavior, refactor, cleanup and reframe. No code outside RecipeRules branches on the recipe.
 _Avoid_: run kind, mode
 
 **Behavior**:

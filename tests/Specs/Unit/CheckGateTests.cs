@@ -35,41 +35,36 @@ public sealed class CheckGateTests
     }
 
     [Theory]
-    [InlineData(Recipe.Refactor, "The check passes before the plan, so there is nothing to refactor.")]
-    [InlineData(Recipe.Cleanup, "The check passes before the build, so there is nothing to clean up.")]
-    [InlineData(Recipe.Reframe, "The check passes before the build, so there is nothing to reframe.")]
-    public async Task APassingPreCheckGivesTheStopTextOfItsRecipe(Recipe recipe, string stop)
+    [InlineData("before the plan", "refactor", "The check passes before the plan, so there is nothing to refactor.")]
+    [InlineData("before the build", "clean up", "The check passes before the build, so there is nothing to clean up.")]
+    public async Task APassingPreCheckGivesTheStopTextOfItsWords(string when, string work, string stop)
     {
         await using GateSandbox box = Answering(0);
         using var progress = new StringWriter();
-        string? text = await CheckGate.PreCheckAsync(await box.StartAsync(Ct), Command, recipe, progress, cancellationToken: Ct);
+        string? text = await CheckGate.PreCheckAsync(await box.StartAsync(Ct), Command, new PreCheckWords(when, work), progress, cancellationToken: Ct);
         Assert.Equal(stop, text);
         Assert.Equal(["check: start", "check: green"], progress.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries));
     }
 
-    [Theory]
-    [InlineData(Recipe.Refactor)]
-    [InlineData(Recipe.Cleanup)]
-    [InlineData(Recipe.Reframe)]
-    public async Task APreCheckThatExitsWithTheCodeOneGivesNoStopText(Recipe recipe)
+    [Fact]
+    public async Task APreCheckThatExitsWithTheCodeOneGivesNoStopText()
     {
         await using GateSandbox box = Answering(1);
         using var progress = new StringWriter();
-        Assert.Null(await CheckGate.PreCheckAsync(await box.StartAsync(Ct), Command, recipe, progress, cancellationToken: Ct));
+        Assert.Null(await CheckGate.PreCheckAsync(await box.StartAsync(Ct), Command, new PreCheckWords("before the plan", "refactor"), progress, cancellationToken: Ct));
         Assert.Equal(["check: start", "check: red"], progress.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries));
     }
 
     [Theory]
-    [InlineData(Recipe.Refactor, 126, "before the plan")]
-    [InlineData(Recipe.Refactor, 127, "before the plan")]
-    [InlineData(Recipe.Cleanup, 126, "before the build")]
-    [InlineData(Recipe.Cleanup, 127, "before the build")]
-    [InlineData(Recipe.Reframe, 127, "before the build")]
-    public async Task APreCheckThatDidNotRunGivesItsCodeAndItsStandardError(Recipe recipe, int code, string when)
+    [InlineData(126, "before the plan")]
+    [InlineData(127, "before the plan")]
+    [InlineData(126, "before the build")]
+    [InlineData(127, "before the build")]
+    public async Task APreCheckThatDidNotRunGivesItsCodeAndItsStandardError(int code, string when)
     {
         await using GateSandbox box = Answering(code, "", "sh: grep: not found");
         using var progress = new StringWriter();
-        string? text = await CheckGate.PreCheckAsync(await box.StartAsync(Ct), Command, recipe, progress, cancellationToken: Ct);
+        string? text = await CheckGate.PreCheckAsync(await box.StartAsync(Ct), Command, new PreCheckWords(when, "refactor"), progress, cancellationToken: Ct);
         Assert.Equal($"The check command exited with the code {code} {when}, so it did not run. Its standard error:\n\nsh: grep: not found", text);
         Assert.Equal(["check: start", "check: red"], progress.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries));
     }

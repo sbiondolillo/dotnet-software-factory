@@ -15,22 +15,22 @@ public sealed class CheckGate(Sandbox sandbox, string command, TextWriter? log =
         return result.ExitCode is 0 ? new GateOutcome("green", []) : new GateOutcome("red", [Redo(result)]);
     }
 
-    /// <summary>Runs the check before the first phase of <paramref name="recipe"/>, writes <c>check: start</c> and then
+    /// <summary>Runs the check before the first phase, writes <c>check: start</c> and then
     /// <c>check: green</c> or <c>check: red</c> to <paramref name="progress"/>, and gives the text of the comment that stops the
     /// run, or null when the check fails as the run needs. A check that passes stops the run, and so does the code 126 or 127,
-    /// with which the shell says that the command did not run.</summary>
+    /// with which the shell says that the command did not run. The comment takes its phase and its work from <paramref name="words"/>.</summary>
     public static async Task<string?> PreCheckAsync(
         Sandbox sandbox,
         string command,
-        Recipe recipe,
+        PreCheckWords words,
         TextWriter? progress,
         TextWriter? log = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(words);
         await ProgressLine.WriteAsync(progress, "check: start").ConfigureAwait(false);
         CommandResult result = await RunCheckAsync(sandbox, command, log, cancellationToken).ConfigureAwait(false);
         await ProgressLine.WriteAsync(progress, result.ExitCode is 0 ? "check: green" : "check: red").ConfigureAwait(false);
-        PreCheckWords words = RecipeRules.PreCheck(recipe);
         if (result.ExitCode is 0)
         {
             return $"The check passes {words.When}, so there is nothing to {words.Work}.";

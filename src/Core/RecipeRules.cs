@@ -27,6 +27,40 @@ public sealed record BuildText(string Lead, string Instructions);
 /// phase, such as <c>before the plan</c>, and <paramref name="Work"/> names the work, such as <c>refactor</c>.</summary>
 public sealed record PreCheckWords(string When, string Work);
 
+/// <summary>Where the pin of the gates comes from: the plan, or the files that Pin.Take or Pin.TakeRefactor record.</summary>
+public enum PinSource
+{
+    Plan,
+    FeatureFiles,
+    TestFiles,
+}
+
+/// <summary>Where a plan phase takes its input: the scenarios of the issue when the body holds them, or the text of the issue alone.</summary>
+public enum PlanInput
+{
+    IssueScenarios,
+    IssueText,
+}
+
+/// <summary>The plan phase of a sequence: the lead of its prompt, and where it takes its input.</summary>
+public sealed record PlanStep(string Lead, PlanInput Input);
+
+/// <summary>The steps of a run that vary by recipe. A null step does not run. Two sequences are equal when each step is equal and
+/// the gates are the same names in the same order.</summary>
+public sealed record RecipeSequence(
+    PreCheckWords? PreCheck,
+    PlanStep? Plan,
+    PinSource Pin,
+    IReadOnlyList<GateName> Gates)
+{
+    /// <inheritdoc/>
+    public bool Equals(RecipeSequence? other) =>
+        other is not null && PreCheck == other.PreCheck && Plan == other.Plan && Pin == other.Pin && Gates.SequenceEqual(other.Gates);
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => HashCode.Combine(PreCheck, Plan, Pin, Gates.Count);
+}
+
 /// <summary>Holds every rule that a recipe picks: the labels and the body it reads, its pin, and the texts of its prompts.</summary>
 public static class RecipeRules
 {
@@ -54,6 +88,8 @@ public static class RecipeRules
         + "Write unit tests for the new code under tests/Specs/Unit/. ";
 
     private const string PlanLead = "Plan the work of the issue below.";
+
+    private const string RefactorPlanLead = "Plan the work of the refactor issue below.";
 
     private const string ThreadScopeText = "A thread that asks for a change to a path outside the `## Scope` takes the status `disputed`, and its reply names the scope.";
 
@@ -95,18 +131,61 @@ public static class RecipeRules
         return new RecipeChoice(Recipe.Behavior, [], null);
     }
 
-    /// <summary>Records the pin of a recipe: every test file and the settings files for a refactor, and the feature files and the
-    /// settings files for any other recipe.</summary>
-    public static Pin TakePin(Recipe recipe, string workTree) =>
-        recipe is Recipe.Refactor ? Pin.TakeRefactor(workTree) : Pin.Take(workTree);
+    /// <summary>The steps of a run of <paramref name="choice"/> by a run of the kind <paramref name="run"/>, as the recipe picks
+    /// them. A feedback run has no plan phase. The check before the first phase runs only for a choice with a check.</summary>
+    public static RecipeSequence Sequence(RecipeChoice choice, RunKind run)
+    {
+        ArgumentNullException.ThrowIfNull(choice);
+        bool planned = run is RunKind.Factory;
+        return choice.Recipe switch
+        {
+            Recipe.Behavior => new(
+                null,
+                planned ? new PlanStep(PlanLead, PlanInput.IssueScenarios) : null,
+                planned ? PinSource.Plan : PinSource.FeatureFiles,
+                [GateName.Test]),
+            Recipe.Refactor => new(
+                PreCheck(choice, "before the plan", "refactor"),
+                planned ? new PlanStep(RefactorPlanLead, PlanInput.IssueText) : null,
+                PinSource.TestFiles,
+                choice.Check is null ? [GateName.Test] : [GateName.Test, GateName.Check]),
+            Recipe.Cleanup => new(
+                PreCheck(choice, "before the build", "clean up"),
+                null,
+                PinSource.FeatureFiles,
+                [GateName.Scope, GateName.Test, GateName.Check]),
+            Recipe.Reframe => new(
+                PreCheck(choice, "before the build", "reframe"),
+                null,
+                PinSource.FeatureFiles,
+                [GateName.Scope, GateName.Test, GateName.Api, GateName.Check]),
+            _ => throw new ArgumentOutOfRangeException(nameof(choice), choice.Recipe, "The recipe has no sequence."),
+        };
+    }
 
-    /// <summary>The words of the plan prompt and the gate of the plan phase. A behavior with no <paramref name="scenarios"/>
-    /// writes feature files and a plan. A behavior with scenarios, and a refactor, write the plan alone. A cleanup and a reframe
-    /// have no plan phase, so they throw.</summary>
-    public static PlanText PlanText(Recipe recipe, IssueScenariosResult? scenarios = null) => recipe switch
+    /// <summary>Records the pin of <paramref name="source"/>: every test file and the settings files for
+    /// <see cref="PinSource.TestFiles"/>, and the feature files and the settings files for <see cref="PinSource.FeatureFiles"/>.
+    /// The pin of <see cref="PinSource.Plan"/> comes from the plan phase, so it throws.</summary>
+    public static Pin TakePin(PinSource source, string workTree) => source switch
+    {
+        PinSource.TestFiles => Pin.TakeRefactor(workTree),
+        PinSource.FeatureFiles => Pin.Take(workTree),
+        _ => throw new ArgumentOutOfRangeException(nameof(source), source, "The plan phase gives the pin of the plan."),
+    };
+
+    /// <summary>The words of the plan prompt and the gate of the plan phase, with the lead of <paramref name="plan"/>. A behavior
+    /// with no <paramref name="scenarios"/> writes feature files and a plan. A behavior with scenarios, and a refactor, write the
+    /// plan alone. A cleanup and a reframe have no plan phase, so they throw.</summary>
+    public static PlanText PlanText(Recipe recipe, PlanStep plan, IssueScenariosResult? scenarios = null)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        return Plan(recipe, plan.Lead, scenarios);
+    }
+
+    private static PlanText Plan(Recipe recipe, string lead, IssueScenariosResult? scenarios) => recipe switch
     {
         Recipe.Behavior when scenarios is { } given => new(
-            PlanLead,
+            lead,
             Named("The issue wrote these feature files, and the build makes their scenarios pass: ", given.Written)
             + Named("The issue removed these feature files: ", given.Removed)
             + $"Write the plan to {PlanPath}, stating each result the build owes. "
@@ -115,7 +194,7 @@ public static class RecipeRules
             + "Leave every other file as it is.",
             PlanMode.PlanOnly),
         Recipe.Behavior => new(
-            PlanLead,
+            lead,
             $"Write Gherkin scenarios for the behavior in feature files under {FeatureDirectory} "
             + $"and write the plan to {PlanPath}, stating each result the build owes. "
             + IntegrationText
@@ -123,7 +202,7 @@ public static class RecipeRules
             + "Leave every other file as it is.",
             PlanMode.FeaturesAndPlan),
         Recipe.Refactor => new(
-            "Plan the work of the refactor issue below.",
+            lead,
             $"Write the plan to {PlanPath}, stating the structure the build gives the code and the steps to get there. "
             + $"Write no other file: {PlanPath} is the only file the plan phase writes. "
             + "Leave every other file as it is.",
@@ -195,32 +274,12 @@ public static class RecipeRules
             + "New steps, state of a step class moved into a shared class, and new helpers pass.\n",
     };
 
-    /// <summary>The gates of a build of <paramref name="choice"/>, in the order they run, for both run kinds. The review runs after
-    /// every gate passes, so it has no place in the list.</summary>
-    public static IReadOnlyList<GateName> Gates(RecipeChoice choice)
-    {
-        ArgumentNullException.ThrowIfNull(choice);
-        return choice.Recipe switch
-        {
-            Recipe.Refactor when choice.Check is not null => [GateName.Test, GateName.Check],
-            Recipe.Cleanup => [GateName.Scope, GateName.Test, GateName.Check],
-            Recipe.Reframe => [GateName.Scope, GateName.Test, GateName.Api, GateName.Check],
-            _ => [GateName.Test],
-        };
-    }
-
-    /// <summary>The words of the comment that a check before the first phase stops the run with, for a recipe with a check.</summary>
-    public static PreCheckWords PreCheck(Recipe recipe) => recipe switch
-    {
-        Recipe.Refactor => new("before the plan", "refactor"),
-        Recipe.Cleanup => new("before the build", "clean up"),
-        Recipe.Reframe => new("before the build", "reframe"),
-        _ => throw new ArgumentOutOfRangeException(nameof(recipe), recipe, "A behavior has no check."),
-    };
-
     /// <summary>The sentence of a feedback run on a thread that asks for a change outside the scope, for a cleanup and a
     /// reframe, or the empty string for a recipe with no scope.</summary>
     public static string ThreadRules(Recipe recipe) => recipe is Recipe.Cleanup or Recipe.Reframe ? ThreadScopeText : "";
+
+    private static PreCheckWords? PreCheck(RecipeChoice choice, string when, string work) =>
+        choice.Check is null ? null : new PreCheckWords(when, work);
 
     private static RecipeChoice Decline(Recipe recipe, string text) => new(recipe, [], null, text);
 

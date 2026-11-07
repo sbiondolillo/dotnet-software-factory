@@ -7,6 +7,9 @@ public sealed class GateFactoryTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    private static Task<GateSet> CreateAsync(GateFactory factory, RecipeChoice choice, Pin pin) =>
+        factory.CreateAsync(choice, RecipeRules.Sequence(choice, RunKind.Factory), pin, Ct);
+
     public static TheoryData<RecipeChoice> Choices() =>
     [
         new RecipeChoice(Recipe.Behavior, [], null),
@@ -27,10 +30,11 @@ public sealed class GateFactoryTests
         Sandbox sandbox = await box.StartAsync(Ct);
         var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, "base", []);
 
-        GateSet set = await factory.CreateAsync(choice, Pin.Take(box.WorkTree.FullName), Ct);
+        RecipeSequence sequence = RecipeRules.Sequence(choice, RunKind.Factory);
+        GateSet set = await factory.CreateAsync(choice, sequence, Pin.Take(box.WorkTree.FullName), Ct);
 
         Assert.Null(set.Stop);
-        Assert.Equal(RecipeRules.Gates(choice), set.Gates.Select(GateSandbox.NameOf));
+        Assert.Equal(sequence.Gates, set.Gates.Select(GateSandbox.NameOf));
         Assert.All(set.Gates, gate => Assert.Equal(gate.Name switch
         {
             GateName.Scope => typeof(ScopeGate),
@@ -47,10 +51,10 @@ public sealed class GateFactoryTests
         Sandbox sandbox = await box.StartAsync(Ct);
         var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, "base", []);
 
-        await factory.CreateAsync(new RecipeChoice(Recipe.Refactor, [], "true"), Pin.Take(box.WorkTree.FullName), Ct);
+        await CreateAsync(factory, new RecipeChoice(Recipe.Refactor, [], "true"), Pin.Take(box.WorkTree.FullName));
         Assert.Empty(box.Seen);
 
-        await factory.CreateAsync(new RecipeChoice(Recipe.Cleanup, ["README.md"], "true"), Pin.Take(box.WorkTree.FullName), Ct);
+        await CreateAsync(factory, new RecipeChoice(Recipe.Cleanup, ["README.md"], "true"), Pin.Take(box.WorkTree.FullName));
         Assert.Contains(box.Seen, words => words is ["dotnet", "test", ..]);
     }
 
@@ -65,7 +69,7 @@ public sealed class GateFactoryTests
         using var progress = new StringWriter();
         var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, "base", [], progress);
 
-        GateSet set = await factory.CreateAsync(new RecipeChoice(Recipe.Reframe, ["src/"], "true"), Pin.Take(box.WorkTree.FullName), Ct);
+        GateSet set = await CreateAsync(factory, new RecipeChoice(Recipe.Reframe, ["src/"], "true"), Pin.Take(box.WorkTree.FullName));
 
         Assert.Empty(set.Gates);
         Assert.StartsWith("The public API of the base commit could not be listed, so there is no build:", set.Stop, StringComparison.Ordinal);
@@ -81,7 +85,7 @@ public sealed class GateFactoryTests
         using var progress = new StringWriter();
         var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, "base", [], progress);
 
-        await factory.CreateAsync(new RecipeChoice(Recipe.Reframe, ["src/"], "true"), Pin.Take(box.WorkTree.FullName), Ct);
+        await CreateAsync(factory, new RecipeChoice(Recipe.Reframe, ["src/"], "true"), Pin.Take(box.WorkTree.FullName));
 
         Assert.Equal("api: start\napi: listed\n", progress.ToString().ReplaceLineEndings("\n"));
     }

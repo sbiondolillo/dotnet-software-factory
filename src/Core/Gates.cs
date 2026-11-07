@@ -55,15 +55,16 @@ public sealed class GateFactory(
     TextWriter? log = null,
     bool skipIntegration = false)
 {
-    /// <summary>Gives a gate for each name of <see cref="RecipeRules.Gates"/>, in that order, and the lint gate. The test gate of a choice with a
+    /// <summary>Gives a gate for each name of <see cref="RecipeSequence.Gates"/> of <paramref name="sequence"/>, in that order, and the lint gate. The test gate of a choice with a
     /// scope reads the baseline of its lost-test check. The API gate lists the public API of the base commit between
     /// <c>api: start</c> and <c>api: listed</c>, and a listing that fails gives the stop text and no gate.</summary>
-    public async Task<GateSet> CreateAsync(RecipeChoice choice, Pin pin, CancellationToken cancellationToken = default)
+    public async Task<GateSet> CreateAsync(RecipeChoice choice, RecipeSequence sequence, Pin pin, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(choice);
+        ArgumentNullException.ThrowIfNull(sequence);
         var lint = new LintGate(sandbox, git, log);
         List<IGate> gates = [];
-        foreach (GateName name in RecipeRules.Gates(choice))
+        foreach (GateName name in sequence.Gates)
         {
             switch (name)
             {

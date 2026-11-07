@@ -46,7 +46,7 @@ public sealed class PlanPhaseIntegrationTests
             Assert.True(File.Exists(Path.Combine(copy, Greeting)));
 
             await using Sandbox sandbox = await Sandbox.StartAsync(new CommandRunner(), Tag, RepoRoot(), copy, TestContext.Current.CancellationToken);
-            PlanPhaseResult result = await new PlanPhase(new ClaudeCodeAgent(sandbox, copy), RecipeRules.PlanText(Recipe.Behavior)).RunAsync(
+            PlanPhaseResult result = await new PlanPhase(new ClaudeCodeAgent(sandbox, copy), RecipeRules.PlanText(Recipe.Behavior, RecipeRules.Sequence(new RecipeChoice(Recipe.Behavior, [], null), RunKind.Factory).Plan ?? throw new InvalidOperationException("A behavior has a plan phase."))).RunAsync(
                 "The program converts a length from miles to kilometres",
                 "The console program converts a length from miles to kilometres. A person runs it with one argument, a number of miles, and it prints the number of kilometres as one line. The conversion replaces the greeting of the starter. The greeting's code, its feature files, including the one that launches the program, and its tests leave the repo.",
                 "claude-sonnet-5-5",

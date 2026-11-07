@@ -64,7 +64,8 @@ public sealed class FeedbackRun(
 
         string branch = await new PullRequests(client).ReadHeadBranchAsync(request.Owner, request.Repo, request.PullNumber, cancellationToken).ConfigureAwait(false);
         var pullRequests = new PullRequests(client);
-        var choice = new RecipeChoice(Recipe.Behavior, [], null);
+        // With no closing issue, the round takes the choice of an issue with no label.
+        RecipeChoice choice = RecipeRules.Parse([], "");
         string? issueBody = null;
         if (PullRequests.ParseClosingIssue(await pullRequests.ReadBodyAsync(request.Owner, request.Repo, request.PullNumber, cancellationToken).ConfigureAwait(false)) is int issueNumber)
         {
@@ -181,7 +182,7 @@ public sealed class FeedbackRun(
         }
 
         public Task<PinOrStop> BeforeGatesAsync(AgentBackend backend, JobSummary summary, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new PinOrStop(RecipeRules.TakePin(choice.Recipe, request.Directory), null));
+            Task.FromResult(new PinOrStop(RecipeRules.TakePin(RecipeRules.Sequence(choice, RunKind.Feedback).Pin, request.Directory), null));
 
         public IBuild Build(Agent builder) => _build = new FeedbackBuild(
             new BuildPhase(builder, RecipeRules.BuildText(choice.Recipe, RunKind.Feedback)), title, body, request.BuildModel, request.BuildTurns, threads);

@@ -109,7 +109,7 @@ public sealed class PlanPhaseTests : IDisposable
     [Fact]
     public async Task AnErrorOnARefactorPlanSendsOnePromptAndFails()
     {
-        _h.Text = RecipeRules.PlanText(Recipe.Refactor);
+        _h.Text = RecipeRules.PlanText(Recipe.Refactor, new PlanStep("Plan the work of the refactor issue below.", PlanInput.IssueText));
         _h.Answer(null, true, "Invalid API key");
         PlanPhaseResult result = await _h.RunAsync();
         Assert.False(result.Passed);

@@ -68,18 +68,15 @@ public sealed class RecipeRulesTests
         Assert.Equal(new RecipeChoice(Recipe.Behavior, [], null), RecipeRules.Parse(labels, Body));
 
     [Fact]
-    public void ARefactorTakesTheWidePinAndEveryOtherRecipeTheNarrowPin()
+    public void TheTestFilesTakeTheWidePinAndTheFeatureFilesTheNarrowPin()
     {
         DirectoryInfo work = Directory.CreateTempSubdirectory("recipe-pin-");
         try
         {
             Directory.CreateDirectory(Path.Combine(work.FullName, "tests", "Specs"));
             File.WriteAllText(Path.Combine(work.FullName, "tests", "Specs", "GreeterTests.cs"), "class GreeterTests;");
-            Assert.Contains("tests/Specs/GreeterTests.cs", RecipeRules.TakePin(Recipe.Refactor, work.FullName).Hashes.Keys);
-            foreach (Recipe recipe in new[] { Recipe.Behavior, Recipe.Cleanup, Recipe.Reframe })
-            {
-                Assert.DoesNotContain("tests/Specs/GreeterTests.cs", RecipeRules.TakePin(recipe, work.FullName).Hashes.Keys);
-            }
+            Assert.Contains("tests/Specs/GreeterTests.cs", RecipeRules.TakePin(PinSource.TestFiles, work.FullName).Hashes.Keys);
+            Assert.DoesNotContain("tests/Specs/GreeterTests.cs", RecipeRules.TakePin(PinSource.FeatureFiles, work.FullName).Hashes.Keys);
         }
         finally
         {
@@ -88,9 +85,13 @@ public sealed class RecipeRulesTests
     }
 
     [Fact]
+    public void ThePinOfThePlanIsNoInputOfTakePin() =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => RecipeRules.TakePin(PinSource.Plan, "."));
+
+    [Fact]
     public void ABehaviorWithNoScenariosWritesFeatureFilesAndAPlan()
     {
-        PlanText text = RecipeRules.PlanText(Recipe.Behavior);
+        PlanText text = RecipeRules.PlanText(Recipe.Behavior, PlanOf(Recipe.Behavior));
         Assert.Equal("Plan the work of the issue below.", text.Lead);
         Assert.Equal(PlanMode.FeaturesAndPlan, text.Mode);
         Assert.StartsWith("Write Gherkin scenarios for the behavior in feature files under specs/features/ and write the plan to .factory/plan.md", text.Instructions, StringComparison.Ordinal);
@@ -101,7 +102,7 @@ public sealed class RecipeRulesTests
     [Fact]
     public void ABehaviorWithScenariosWritesThePlanAloneAndNamesTheFiles()
     {
-        PlanText text = RecipeRules.PlanText(Recipe.Behavior, new IssueScenariosResult([], ["specs/features/a.feature"], ["specs/features/gone.feature"]));
+        PlanText text = RecipeRules.PlanText(Recipe.Behavior, PlanOf(Recipe.Behavior), new IssueScenariosResult([], ["specs/features/a.feature"], ["specs/features/gone.feature"]));
         Assert.Equal("Plan the work of the issue below.", text.Lead);
         Assert.Equal(PlanMode.PlanOnly, text.Mode);
         Assert.StartsWith(
@@ -114,7 +115,7 @@ public sealed class RecipeRulesTests
     [Fact]
     public void ARefactorWritesThePlanAlone()
     {
-        PlanText text = RecipeRules.PlanText(Recipe.Refactor);
+        PlanText text = RecipeRules.PlanText(Recipe.Refactor, PlanOf(Recipe.Refactor));
         Assert.Equal("Plan the work of the refactor issue below.", text.Lead);
         Assert.Equal(PlanMode.PlanOnly, text.Mode);
         Assert.Equal(
@@ -126,7 +127,7 @@ public sealed class RecipeRulesTests
     [InlineData(Recipe.Cleanup)]
     [InlineData(Recipe.Reframe)]
     public void ACleanupAndAReframeHaveNoPlanText(Recipe recipe) =>
-        Assert.Throws<ArgumentOutOfRangeException>(() => RecipeRules.PlanText(recipe));
+        Assert.Throws<ArgumentOutOfRangeException>(() => RecipeRules.PlanText(recipe, new PlanStep("Plan the work of the issue below.", PlanInput.IssueText)));
 
     [Theory]
     [InlineData(Recipe.Behavior, "Build the work of the issue below.")]
@@ -282,16 +283,46 @@ public sealed class RecipeRulesTests
     [InlineData(Recipe.Refactor)]
     public void ARecipeWithNoScopeHasNoThreadRule(Recipe recipe) => Assert.Equal("", RecipeRules.ThreadRules(recipe));
 
-    public static TheoryData<RecipeChoice, GateName[]> GateLists() => new()
+    public static TheoryData<RecipeChoice, RunKind, RecipeSequence> Sequences()
     {
-        { new RecipeChoice(Recipe.Behavior, [], null), [GateName.Test] },
-        { new RecipeChoice(Recipe.Refactor, [], null), [GateName.Test] },
-        { new RecipeChoice(Recipe.Refactor, [], "true"), [GateName.Test, GateName.Check] },
-        { new RecipeChoice(Recipe.Cleanup, ["README.md"], "true"), [GateName.Scope, GateName.Test, GateName.Check] },
-        { new RecipeChoice(Recipe.Reframe, ["src/"], "true"), [GateName.Scope, GateName.Test, GateName.Api, GateName.Check] },
-    };
+        var behavior = new RecipeChoice(Recipe.Behavior, [], null);
+        var refactor = new RecipeChoice(Recipe.Refactor, [], "true");
+        var cleanup = new RecipeChoice(Recipe.Cleanup, ["README.md"], "true");
+        var reframe = new RecipeChoice(Recipe.Reframe, ["src/"], "true");
+        var refactorCheck = new PreCheckWords("before the plan", "refactor");
+        var cleanupCheck = new PreCheckWords("before the build", "clean up");
+        var reframeCheck = new PreCheckWords("before the build", "reframe");
+        GateName[] cleanupGates = [GateName.Scope, GateName.Test, GateName.Check];
+        GateName[] reframeGates = [GateName.Scope, GateName.Test, GateName.Api, GateName.Check];
+        return new()
+        {
+            { behavior, RunKind.Factory, new(null, new PlanStep("Plan the work of the issue below.", PlanInput.IssueScenarios), PinSource.Plan, [GateName.Test]) },
+            { behavior, RunKind.Feedback, new(null, null, PinSource.FeatureFiles, [GateName.Test]) },
+            { refactor, RunKind.Factory, new(refactorCheck, new PlanStep("Plan the work of the refactor issue below.", PlanInput.IssueText), PinSource.TestFiles, [GateName.Test, GateName.Check]) },
+            { refactor, RunKind.Feedback, new(refactorCheck, null, PinSource.TestFiles, [GateName.Test, GateName.Check]) },
+            { cleanup, RunKind.Factory, new(cleanupCheck, null, PinSource.FeatureFiles, cleanupGates) },
+            { cleanup, RunKind.Feedback, new(cleanupCheck, null, PinSource.FeatureFiles, cleanupGates) },
+            { reframe, RunKind.Factory, new(reframeCheck, null, PinSource.FeatureFiles, reframeGates) },
+            { reframe, RunKind.Feedback, new(reframeCheck, null, PinSource.FeatureFiles, reframeGates) },
+            { new RecipeChoice(Recipe.Refactor, [], null), RunKind.Factory, new(null, new PlanStep("Plan the work of the refactor issue below.", PlanInput.IssueText), PinSource.TestFiles, [GateName.Test]) },
+            { new RecipeChoice(Recipe.Refactor, [], null), RunKind.Feedback, new(null, null, PinSource.TestFiles, [GateName.Test]) },
+        };
+    }
 
     [Theory]
-    [MemberData(nameof(GateLists))]
-    public void EachChoiceGetsItsGatesInOrder(RecipeChoice choice, GateName[] gates) => Assert.Equal(gates, RecipeRules.Gates(choice));
+    [MemberData(nameof(Sequences))]
+    public void EachRecipeAndKindGetsItsSequence(RecipeChoice choice, RunKind run, RecipeSequence sequence) =>
+        Assert.Equal(sequence, RecipeRules.Sequence(choice, run));
+
+    [Fact]
+    public void TwoSequencesDifferWhenTheirGatesDiffer()
+    {
+        var one = new RecipeSequence(null, null, PinSource.FeatureFiles, [GateName.Test, GateName.Check]);
+        Assert.Equal(one, new RecipeSequence(null, null, PinSource.FeatureFiles, [GateName.Test, GateName.Check]));
+        Assert.NotEqual(one, new RecipeSequence(null, null, PinSource.FeatureFiles, [GateName.Check, GateName.Test]));
+        Assert.NotEqual(one, new RecipeSequence(null, null, PinSource.FeatureFiles, [GateName.Test]));
+    }
+
+    private static PlanStep PlanOf(Recipe recipe) =>
+        RecipeRules.Sequence(new RecipeChoice(recipe, [], null), RunKind.Factory).Plan ?? throw new InvalidOperationException("The recipe has no plan phase.");
 }

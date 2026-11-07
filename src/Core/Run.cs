@@ -125,7 +125,7 @@ public sealed class Run(
                     }
 
                     GateSet gates = await new GateFactory(backend.Sandbox, git, request.Directory, baseCommit, request.SecretNames, progress, log, request.SkipIntegration)
-                        .CreateAsync(kind.Choice, pin, cancellationToken).ConfigureAwait(false);
+                        .CreateAsync(kind.Choice, RecipeRules.Sequence(kind.Choice, kind.Kind), pin, cancellationToken).ConfigureAwait(false);
                     if (gates.Stop is string stop)
                     {
                         await PostAsync(request, kind.CommentNumber, stop, cancellationToken).ConfigureAwait(false);

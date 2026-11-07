@@ -141,6 +141,17 @@ public sealed class JobSummaryTests
     }
 
     [Fact]
+    public async Task ARunThatStopsAfterTheCloneWithNoRowWritesNoSummary()
+    {
+        using var h = new RunHarness();
+        h.Lacks.Add("Solution.slnx");
+        FactoryRunResult result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        Assert.Null(result.PullRequest);
+        Assert.Contains(h.Commands, c => c.Command is "git" && c.Arguments.Contains("clone"));
+        Assert.False(File.Exists(h.SummaryPath));
+    }
+
+    [Fact]
     public async Task ARunThatThrowsAfterTheCloneStillWritesTheRowsThatRan()
     {
         using var h = new RunHarness { LintFails = true };
