@@ -48,7 +48,8 @@
 # The step merges nothing on a pull request whose diff touches a file under
 # .github/workflows/ other than factory.yml, or .github/judge/,
 # .github/repair/, .github/shared/, .github/skills/ or
-# .claude/skills/change/JUDGES.md, as #406 and #545 decided. It also merges nothing on a diff of factory.yml that changes the
+# .claude/skills/change/JUDGES.md, as #406 and #545 decided. It also merges
+# nothing on a diff of factory.yml that changes the
 # block of its top-level on: key or of a permissions: key at any depth, or
 # whose added or removed lines hold the token permissions, on as a key at
 # column 0, a flow collection, a quoted scalar, an anchor, an alias, a tag or
