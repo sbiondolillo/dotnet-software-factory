@@ -20,15 +20,16 @@ public sealed class Deliver(Git git, PullRequests pullRequests, GitHubClient cli
     private const string FeatureDirectory = "specs/features/";
 
     /// <summary>Pushes <c>factory/&lt;runId&gt;</c>, opens a pull request that closes the issue and comments its web address on the issue.</summary>
-    public async Task<PullRequest> RunAsync(string workTree, string runId, string owner, string repo, string baseBranch, int issueNumber, string issueTitle, string token, CancellationToken cancellationToken = default)
+    public async Task<PullRequest> RunAsync(string workTree, string runId, IssueNumber issue, string baseBranch, string issueTitle, string token, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(issue);
         string branch = "factory/" + runId;
         await git.CheckoutBranchAsync(branch, workTree, cancellationToken).ConfigureAwait(false);
         await git.PushAsync(branch, workTree, token, cancellationToken).ConfigureAwait(false);
 
-        string body = await BuildBodyAsync(workTree, issueNumber, cancellationToken).ConfigureAwait(false);
-        PullRequest pullRequest = await pullRequests.OpenAsync(new RepoName(owner, repo), branch, baseBranch, issueTitle, body, cancellationToken).ConfigureAwait(false);
-        await client.PostCommentAsync(owner, repo, issueNumber, $"Opened {pullRequest.HtmlUrl}", cancellationToken).ConfigureAwait(false);
+        string body = await BuildBodyAsync(workTree, issue.Number, cancellationToken).ConfigureAwait(false);
+        PullRequest pullRequest = await pullRequests.OpenAsync(issue.Repo, branch, baseBranch, issueTitle, body, cancellationToken).ConfigureAwait(false);
+        await client.PostCommentAsync(issue, $"Opened {pullRequest.HtmlUrl}", cancellationToken).ConfigureAwait(false);
         return pullRequest;
     }
 

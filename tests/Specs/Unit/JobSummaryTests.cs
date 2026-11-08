@@ -100,7 +100,7 @@ public sealed class JobSummaryTests
         using var h = new RunHarness();
         File.WriteAllText(Path.Combine(h.FilesDirectory, "summary.md"), "");
         h.SummaryPath = path;
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        RunResult<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.NotNull(result.Passed);
         Assert.Equal("", Directory.GetFiles(h.FilesDirectory).Select(File.ReadAllText).Single());
     }
@@ -110,7 +110,7 @@ public sealed class JobSummaryTests
     {
         using var h = new RunHarness();
         h.SummaryPath = Path.Combine(h.FilesDirectory, "absent", "summary.md");
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        RunResult<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.NotNull(result.Passed);
         Assert.Contains("summary: cannot write", h.Log.ToString(), StringComparison.Ordinal);
     }
@@ -121,7 +121,7 @@ public sealed class JobSummaryTests
         using var h = new RunHarness();
         h.Sessions.Add(new SessionCost("sesn_01", "builder", 250));
         h.Sessions.Add(new SessionCost("sesn_02", "reviewer", 40));
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        RunResult<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.NotNull(result.Passed);
         Assert.EndsWith(
             "### Sessions\n\n- sesn_01, builder, $2.50\n- sesn_02, reviewer, $0.40\n",
@@ -135,7 +135,7 @@ public sealed class JobSummaryTests
         using var h = new RunHarness();
         h.Labels.Add("refactor");
         h.Labels.Add("behavior");
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        RunResult<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.Null(result.Passed);
         Assert.Equal("", h.Summary);
     }
@@ -145,7 +145,7 @@ public sealed class JobSummaryTests
     {
         using var h = new RunHarness();
         h.Lacks.Add("Solution.slnx");
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        RunResult<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.Null(result.Passed);
         Assert.Contains(h.Commands, c => c.Command is "git" && c.Arguments.Contains("clone"));
         Assert.False(File.Exists(h.SummaryPath));

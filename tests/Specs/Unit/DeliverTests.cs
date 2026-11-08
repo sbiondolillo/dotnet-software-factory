@@ -23,7 +23,7 @@ public sealed class DeliverTests
     }
 
     private static Task<PullRequest> RunAsync(Deliver deliver) =>
-        deliver.RunAsync("/work", "abc", "o", "r", "main", 7, "Title", "token", TestContext.Current.CancellationToken);
+        deliver.RunAsync("/work", "abc", new IssueNumber(new RepoName("o", "r"), 7), "main", "Title", "token", TestContext.Current.CancellationToken);
 
     private static string PullBody(RoutingHandler handler) =>
         System.Text.Json.JsonDocument.Parse(handler.Requests.Single(r => r.Uri.EndsWith("/pulls", StringComparison.Ordinal) && r.Method is "POST").Content!).RootElement.GetProperty("body").GetString()!;
@@ -51,7 +51,7 @@ public sealed class DeliverTests
             var handler = new RoutingHandler { PostStatus = 200, PostBody = "{\"number\":10,\"html_url\":\"https://x/pull/10\"}" };
             var client = new GitHubClient(new HttpClient(handler), "token", TimeSpan.Zero);
             var deliver = new Deliver(new Git(mock.Object), new PullRequests(client), client, facts ?? new DeliveryFacts("base"));
-            await deliver.RunAsync(tree.FullName, "abc", "o", "r", "main", 7, "Title", "token", TestContext.Current.CancellationToken);
+            await deliver.RunAsync(tree.FullName, "abc", new IssueNumber(new RepoName("o", "r"), 7), "main", "Title", "token", TestContext.Current.CancellationToken);
             return PullBody(handler);
         }
         finally

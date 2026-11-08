@@ -22,7 +22,7 @@ public sealed class ReviewThreadsTests
     public async Task AReviewReadWithErrorsAndNullPullRequestThrowsGraphQl()
     {
         (ReviewThreads sut, _) = Make(200, "{\"data\":{\"repository\":{\"pullRequest\":null}},\"errors\":[{\"message\":\"nope\"}]}");
-        GitHubGraphQLException ex = await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ReadReviewsAsync("o", "r", 0, Token));
+        GitHubGraphQLException ex = await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ReadReviewsAsync(new IssueNumber(new RepoName("o", "r"), 0), Token));
         Assert.Contains("nope", ex.Message, StringComparison.Ordinal);
     }
 
@@ -30,7 +30,7 @@ public sealed class ReviewThreadsTests
     public async Task AThreadReadWithErrorsThrowsGraphQl()
     {
         (ReviewThreads sut, _) = Make(200, Errors);
-        await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ReadThreadsAsync("o", "r", 1, Token));
+        await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ReadThreadsAsync(new IssueNumber(new RepoName("o", "r"), 1), Token));
     }
 
     [Fact]
@@ -62,8 +62,8 @@ public sealed class ReviewThreadsTests
     public async Task AFailingStatusThrowsRequestExceptionOnEveryOperation(int status)
     {
         (ReviewThreads sut, _) = Make(status, "x");
-        Assert.Equal(status, (await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadReviewsAsync("o", "r", 1, Token))).StatusCode);
-        Assert.Equal(status, (await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadThreadsAsync("o", "r", 1, Token))).StatusCode);
+        Assert.Equal(status, (await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadReviewsAsync(new IssueNumber(new RepoName("o", "r"), 1), Token))).StatusCode);
+        Assert.Equal(status, (await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadThreadsAsync(new IssueNumber(new RepoName("o", "r"), 1), Token))).StatusCode);
         Assert.Equal(status, (await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReplyAsync("t", "b", Token))).StatusCode);
         Assert.Equal(status, (await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ResolveAsync("t", Token))).StatusCode);
     }
@@ -82,7 +82,7 @@ public sealed class ReviewThreadsTests
     public async Task ANullLineAndANullAuthorRead()
     {
         (ReviewThreads sut, _) = Make(200, "{\"data\":{\"repository\":{\"pullRequest\":{\"reviewThreads\":{\"nodes\":[{\"id\":\"i\",\"isResolved\":false,\"path\":\"p\",\"line\":null,\"comments\":{\"nodes\":[{\"author\":null,\"body\":\"b\"}]}}]}}}}}");
-        ReviewThread thread = Assert.Single(await sut.ReadThreadsAsync("o", "r", 1, Token));
+        ReviewThread thread = Assert.Single(await sut.ReadThreadsAsync(new IssueNumber(new RepoName("o", "r"), 1), Token));
         Assert.Null(thread.Line);
         Assert.Equal("", Assert.Single(thread.Comments).Author);
     }
@@ -91,8 +91,8 @@ public sealed class ReviewThreadsTests
     public async Task EmptyListsReadAsEmpty()
     {
         (ReviewThreads sut, _) = Make(200, "{\"data\":{\"repository\":{\"pullRequest\":{\"reviews\":{\"nodes\":[]},\"reviewThreads\":{\"nodes\":[]}}}}}");
-        Assert.Empty(await sut.ReadReviewsAsync("o", "r", 1, Token));
-        Assert.Empty(await sut.ReadThreadsAsync("o", "r", 1, Token));
+        Assert.Empty(await sut.ReadReviewsAsync(new IssueNumber(new RepoName("o", "r"), 1), Token));
+        Assert.Empty(await sut.ReadThreadsAsync(new IssueNumber(new RepoName("o", "r"), 1), Token));
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public sealed class ReviewThreadsTests
     public async Task APendingReviewWithNoCommitReadsWithAnEmptyCommitSha()
     {
         (ReviewThreads sut, _) = Make(200, "{\"data\":{\"repository\":{\"pullRequest\":{\"reviews\":{\"nodes\":[{\"state\":\"PENDING\",\"author\":{\"login\":\"a\"},\"commit\":null}]}}}}}");
-        Assert.Equal(new Review("a", "PENDING", ""), Assert.Single(await sut.ReadReviewsAsync("o", "r", 1, Token)));
+        Assert.Equal(new Review("a", "PENDING", ""), Assert.Single(await sut.ReadReviewsAsync(new IssueNumber(new RepoName("o", "r"), 1), Token)));
     }
 
     [Fact]

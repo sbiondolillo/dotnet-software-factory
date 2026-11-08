@@ -99,7 +99,7 @@ public sealed class DeliverSteps(PullRequestAnswer answer, DeliverBodyState body
         var deliver = new Deliver(new Git(mock.Object), new PullRequests(client), client, _facts);
         try
         {
-            _result = await deliver.RunAsync(_workTree, _runId, _owner, _repo, _baseBranch, _issue, _title, token);
+            _result = await deliver.RunAsync(_workTree, _runId, new IssueNumber(new RepoName(_owner, _repo), _issue), _baseBranch, _title, token);
         }
         catch (Exception ex) when (ex is GitCommandException or GitHubRequestException)
         {

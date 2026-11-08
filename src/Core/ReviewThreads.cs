@@ -32,9 +32,9 @@ public sealed class ReviewThreads(GitHubClient client)
     private const string ResolveQuery = "mutation($threadId: ID!) { resolveReviewThread(input: {threadId: $threadId}) { thread { isResolved } } }";
 
     /// <summary>Reads every review of a pull request.</summary>
-    public async Task<IReadOnlyList<Review>> ReadReviewsAsync(string owner, string repo, int number, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<Review>> ReadReviewsAsync(IssueNumber pullRequest, CancellationToken cancellationToken = default)
     {
-        JsonElement data = await SendAsync(ReviewsQuery, new { owner, name = repo, number }, cancellationToken).ConfigureAwait(false);
+        JsonElement data = await SendAsync(ReviewsQuery, Variables(pullRequest), cancellationToken).ConfigureAwait(false);
         var reviews = new List<Review>();
         foreach (JsonElement node in Nodes(data.GetProperty("repository").GetProperty("pullRequest").GetProperty("reviews")))
         {
@@ -49,9 +49,9 @@ public sealed class ReviewThreads(GitHubClient client)
         await SendAsync(RequestQuery, new { pullRequestId, botLogins = new[] { botLogin } }, cancellationToken).ConfigureAwait(false);
 
     /// <summary>Reads every review thread of a pull request.</summary>
-    public async Task<IReadOnlyList<ReviewThread>> ReadThreadsAsync(string owner, string repo, int number, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ReviewThread>> ReadThreadsAsync(IssueNumber pullRequest, CancellationToken cancellationToken = default)
     {
-        JsonElement data = await SendAsync(ThreadsQuery, new { owner, name = repo, number }, cancellationToken).ConfigureAwait(false);
+        JsonElement data = await SendAsync(ThreadsQuery, Variables(pullRequest), cancellationToken).ConfigureAwait(false);
         var threads = new List<ReviewThread>();
         foreach (JsonElement node in Nodes(data.GetProperty("repository").GetProperty("pullRequest").GetProperty("reviewThreads")))
         {
@@ -80,6 +80,12 @@ public sealed class ReviewThreads(GitHubClient client)
     /// <summary>Marks a review thread as resolved.</summary>
     public async Task ResolveAsync(string threadId, CancellationToken cancellationToken = default) =>
         await SendAsync(ResolveQuery, new { threadId }, cancellationToken).ConfigureAwait(false);
+
+    private static object Variables(IssueNumber pullRequest)
+    {
+        ArgumentNullException.ThrowIfNull(pullRequest);
+        return new { owner = pullRequest.Repo.Owner, name = pullRequest.Repo.Name, number = pullRequest.Number };
+    }
 
     private static JsonElement.ArrayEnumerator Nodes(JsonElement connection) => connection.GetProperty("nodes").EnumerateArray();
 

@@ -21,8 +21,7 @@ public sealed record BackendOptions(
     string ImageTag,
     string RootDirectory,
     ManagedAgentsSettings? Settings,
-    string Owner,
-    string Repo,
+    RepoName Repo,
     string Token,
     string AuthorName,
     string AuthorEmail,
@@ -63,7 +62,7 @@ public abstract class AgentBackend : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(options);
         return options.Settings is ManagedAgentsSettings settings
             ? ManagedBackend.Starter(
-                options.Runner, options.ImageTag, options.RootDirectory, settings, options.Owner, options.Repo, options.Token,
+                options.Runner, options.ImageTag, options.RootDirectory, settings, options.Repo, options.Token,
                 options.AuthorName, options.AuthorEmail, options.Handler, options.Delay, options.Log, options.Time, options.Progress)
             : ClaudeCodeBackend.Starter(options.Runner, options.ImageTag, options.RootDirectory, options.Log, options.Time, options.Progress);
     }

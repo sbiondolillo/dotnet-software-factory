@@ -29,7 +29,7 @@ public sealed class RefactorRunTests
     public async Task RefactorWithAnExcludedLabelGetsOneCommentNoCloneAndNoContainer(string other)
     {
         using RunHarness h = Make(labels: other);
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        RunResult<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         string comment = Assert.Single(h.CommentBodies);
         Assert.Contains("refactor", comment, StringComparison.Ordinal);
         Assert.Contains(other, comment, StringComparison.Ordinal);
@@ -42,7 +42,7 @@ public sealed class RefactorRunTests
     public async Task ARefactorAppliesNoScenarioOfItsBodyAndPlansFromTheText()
     {
         using RunHarness h = Make("## Scenarios\n\nThe scenarios follow.\n");
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        RunResult<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.NotEqual(RunEnd.Declined, result.Stop?.End);
         AgentRequest plan = Assert.Single(h.AgentRequests, r => r.Phase is Phase.Plan);
         Assert.StartsWith("Plan the work of the refactor issue below.", plan.Prompt.Text, StringComparison.Ordinal);
@@ -53,7 +53,7 @@ public sealed class RefactorRunTests
     {
         using RunHarness h = Make();
         h.CheckResults[0] = (0, "", "");
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        RunResult<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.Contains("The check passes before the plan", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Plan);
         Assert.Contains(h.Commands, c => c.Arguments.Contains("remove"));
@@ -105,7 +105,7 @@ public sealed class RefactorRunTests
         {
             h.Builder.Act(Phase.Plan, _ => h.Write("src/Old.cs", PlanPhaseHarness.SoundFeature), 1);
         }
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        RunResult<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.Contains("src/Old.cs", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.Contains(remove ? "gone" : "changed", h.CommentBodies.Single(), StringComparison.Ordinal);
         Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Build);
@@ -118,7 +118,7 @@ public sealed class RefactorRunTests
     {
         using RunHarness h = Make();
         h.Builder.Clear(Phase.Plan);
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        RunResult<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.Contains(".factory/plan.md", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.Equal(2, h.Builder.Of(Phase.Plan).Count());
         Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Build);
@@ -208,7 +208,7 @@ public sealed class RefactorRunTests
     {
         using RunHarness h = Make();
         h.Builder.Answer(Phase.Plan, FakeAgent.Error("plan went wrong"));
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        RunResult<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.Contains("plan went wrong", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Build);
         Assert.Null(result.Passed);

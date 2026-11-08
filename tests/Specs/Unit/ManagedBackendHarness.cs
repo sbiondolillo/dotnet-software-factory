@@ -80,7 +80,7 @@ public sealed class ManagedBackendHarness : IDisposable
         mock.Setup(r => r.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec spec, CancellationToken _) => Task.FromResult(Answer(spec)));
         StartBackend start = AgentBackend.Pick(new BackendOptions(
-            mock.Object, "factory-sandbox:test", _root.FullName, ManagedRunFake.Settings(), "sbiondolillo", "factory-scratch", "token",
+            mock.Object, "factory-sandbox:test", _root.FullName, ManagedRunFake.Settings(), new RepoName("sbiondolillo", "factory-scratch"), "token",
             "Factory", "factory@example.com", new Handler(this), (_, _) => Task.CompletedTask, Log, Clock, Progress));
         var git = new Git(mock.Object);
         _backend = await start(

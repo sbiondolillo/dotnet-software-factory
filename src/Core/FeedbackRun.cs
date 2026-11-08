@@ -47,17 +47,17 @@ public sealed class FeedbackRun(
     /// with no unresolved thread passes with nothing pushed. A closing issue that the recipe rules decline ends with a comment on the
     /// pull request, no build and the end <see cref="RunEnd.Declined"/>.
     /// </summary>
-    public async Task<RunOutcome<Answered>> RunAsync(FeedbackRunRequest request, CancellationToken cancellationToken = default)
+    public async Task<RunResult<Answered>> RunAsync(FeedbackRunRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         IssueNumber pull = request.PullRequest;
         RepoName repo = pull.Repo;
         var reviewThreads = new ReviewThreads(client);
-        IReadOnlyList<ReviewThread> all = await reviewThreads.ReadThreadsAsync(repo.Owner, repo.Name, pull.Number, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<ReviewThread> all = await reviewThreads.ReadThreadsAsync(pull, cancellationToken).ConfigureAwait(false);
         List<ReviewThread> threads = [.. all.Where(thread => !thread.IsResolved)];
         if (threads.Count is 0)
         {
-            return new RunOutcome<Answered>(new Answered(0, 0, null), null, 0);
+            return new RunResult<Answered>(new Answered(0, 0, null), null, 0);
         }
 
         string branch = await new PullRequests(client).ReadHeadBranchAsync(pull, cancellationToken).ConfigureAwait(false);
@@ -67,14 +67,14 @@ public sealed class FeedbackRun(
         string? issueBody = null;
         if (PullRequests.ParseClosingIssue(await pullRequests.ReadBodyAsync(pull, cancellationToken).ConfigureAwait(false)) is int issueNumber)
         {
-            GitHubIssue issue = await client.ReadIssueAsync(repo.Owner, repo.Name, issueNumber, cancellationToken).ConfigureAwait(false);
+            GitHubIssue issue = await client.ReadIssueAsync(new IssueNumber(repo, issueNumber), cancellationToken).ConfigureAwait(false);
             issueBody = issue.Body;
             choice = RecipeRules.Parse(issue.Labels, issue.Body);
             if (choice.Declined is string refusal)
             {
                 await ProgressLine.WriteAsync(progress, refusal).ConfigureAwait(false);
-                await client.PostCommentAsync(repo.Owner, repo.Name, pull.Number, refusal, cancellationToken).ConfigureAwait(false);
-                return new RunOutcome<Answered>(null, new RunStop(refusal, RunEnd.Declined), 0);
+                await client.PostCommentAsync(pull, refusal, cancellationToken).ConfigureAwait(false);
+                return new RunResult<Answered>(null, new RunStop(refusal, RunEnd.Declined), 0);
             }
         }
 

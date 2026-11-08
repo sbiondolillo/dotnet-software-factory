@@ -119,9 +119,6 @@ public sealed class PullRequestWatchSteps(ExceptionState exceptionState, Console
     [Given("GitHub answers the first read of the reviews with no review")]
     public void GivenFirstNoReview() => _handler.ReviewsAt(1, WatchHandler.ReviewsJson([]));
 
-    [Given("GitHub answers the second read of the reviews with one review by {string} with the state {string} of the commit {string}")]
-    public void GivenSecondReview(string login, string state, string commit) => _handler.ReviewsAt(2, WatchHandler.ReviewsJson([(login, state, commit)]));
-
     [Given("GitHub answers the first two reads of the reviews with no review")]
     public void GivenFirstTwoNoReview()
     {

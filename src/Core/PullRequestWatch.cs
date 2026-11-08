@@ -27,7 +27,7 @@ public sealed class PullRequestWatch(
         if (reviewerLogin is not null)
         {
             string head = await pullRequests.ReadHeadShaAsync(pullRequest, cancellationToken).ConfigureAwait(false);
-            IReadOnlyList<Review> reviews = await reviewThreads.ReadReviewsAsync(pullRequest.Repo.Owner, pullRequest.Repo.Name, pullRequest.Number, cancellationToken).ConfigureAwait(false);
+            IReadOnlyList<Review> reviews = await reviewThreads.ReadReviewsAsync(pullRequest, cancellationToken).ConfigureAwait(false);
             int onHead = reviews.Count(r => r.Author == reviewerLogin && r.CommitSha.Length is not 0 && r.CommitSha == head);
             if (onHead is 0 || Review.Refusal(reviews, reviewerLogin, head) is not null)
             {
@@ -43,8 +43,6 @@ public sealed class PullRequestWatch(
     /// <summary>Polls as the public watch states, but the first <paramref name="skippedReviews"/> reviews by the reviewer on <paramref name="skippedHead"/>, the ones that existed when a new review was requested, count for neither the refusal nor the settled check.</summary>
     private async Task<PullRequestWatchResult> WatchAsync(IssueNumber pullRequest, string? reviewerLogin, TimeSpan wait, TimeSpan timeout, int skippedReviews, string? skippedHead, CancellationToken cancellationToken)
     {
-        (string owner, string repo) = pullRequest.Repo;
-        int number = pullRequest.Number;
         long start = _time.GetTimestamp();
         bool green;
         string? refusal = null;
@@ -55,7 +53,7 @@ public sealed class PullRequestWatch(
             IReadOnlyList<CheckRun> runs = await pullRequests.ReadCheckRunsAsync(pullRequest.Repo, sha, cancellationToken).ConfigureAwait(false);
             IReadOnlyList<Review> reviews = reviewerLogin is null
                 ? []
-                : await reviewThreads.ReadReviewsAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
+                : await reviewThreads.ReadReviewsAsync(pullRequest, cancellationToken).ConfigureAwait(false);
             if (reviewerLogin is not null && skippedReviews > 0 && sha == skippedHead)
             {
                 reviews = [.. SkipOld(reviews, reviewerLogin, sha, skippedReviews)];
@@ -86,7 +84,7 @@ public sealed class PullRequestWatch(
             await _delay(wait, cancellationToken).ConfigureAwait(false);
         }
 
-        IReadOnlyList<ReviewThread> threads = await reviewThreads.ReadThreadsAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<ReviewThread> threads = await reviewThreads.ReadThreadsAsync(pullRequest, cancellationToken).ConfigureAwait(false);
         return new PullRequestWatchResult(green, [.. threads.Where(t => !t.IsResolved)], refusal);
     }
 

@@ -90,9 +90,9 @@ public sealed class GitHubClient(HttpClient httpClient, string token, TimeSpan? 
     private sealed record Answer(int Status, string Text, TimeSpan? RetryAfter, bool TimedOut);
 
     /// <summary>Reads an issue: title, body, author and labels.</summary>
-    public async Task<GitHubIssue> ReadIssueAsync(string owner, string repo, int number, CancellationToken cancellationToken = default)
+    public async Task<GitHubIssue> ReadIssueAsync(IssueNumber issue, CancellationToken cancellationToken = default)
     {
-        JsonElement json = await SendAsync(HttpMethod.Get, IssuePath(owner, repo, number), null, cancellationToken).ConfigureAwait(false);
+        JsonElement json = await SendAsync(HttpMethod.Get, IssuePath(issue), null, cancellationToken).ConfigureAwait(false);
         string title = json.GetProperty("title").GetString() ?? "";
         string body = json.TryGetProperty("body", out JsonElement b) && b.ValueKind is JsonValueKind.String ? b.GetString() ?? "" : "";
         string author = json.GetProperty("user").GetProperty("login").GetString() ?? "";
@@ -109,12 +109,15 @@ public sealed class GitHubClient(HttpClient httpClient, string token, TimeSpan? 
     }
 
     /// <summary>Posts a comment on an issue.</summary>
-    public async Task PostCommentAsync(string owner, string repo, int number, string text, CancellationToken cancellationToken = default)
+    public async Task PostCommentAsync(IssueNumber issue, string text, CancellationToken cancellationToken = default)
     {
         string json = JsonSerializer.Serialize(new Dictionary<string, string> { ["body"] = text });
-        await SendAsync(HttpMethod.Post, IssuePath(owner, repo, number) + "/comments", json, cancellationToken).ConfigureAwait(false);
+        await SendAsync(HttpMethod.Post, IssuePath(issue) + "/comments", json, cancellationToken).ConfigureAwait(false);
     }
 
-    private static string IssuePath(string owner, string repo, int number) =>
-        string.Create(CultureInfo.InvariantCulture, $"/repos/{owner}/{repo}/issues/{number}");
+    private static string IssuePath(IssueNumber issue)
+    {
+        ArgumentNullException.ThrowIfNull(issue);
+        return string.Create(CultureInfo.InvariantCulture, $"/repos/{issue.Repo.Owner}/{issue.Repo.Name}/issues/{issue.Number}");
+    }
 }

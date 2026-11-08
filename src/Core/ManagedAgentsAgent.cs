@@ -11,8 +11,7 @@ namespace Core;
 public sealed class ManagedAgentsAgent(
     ManagedAgentsClient client,
     GitHubAppTokens tokens,
-    string owner,
-    string repo,
+    RepoName repo,
     string sessionBranch,
     string baseCommit,
     string workTree,
@@ -91,7 +90,7 @@ public sealed class ManagedAgentsAgent(
         {
             await ProgressLine.WriteAsync(log, $"session: {phase} push failed with {SessionPrompt.AuthenticationFailed}, token rotated").ConfigureAwait(false);
             await RotateAsync(cancellationToken).ConfigureAwait(false);
-            var again = new JsonObject { ["events"] = new JsonArray(UserMessage(SessionPrompt.PushAgain(repo, sessionBranch))) };
+            var again = new JsonObject { ["events"] = new JsonArray(UserMessage(SessionPrompt.PushAgain(repo.Name, sessionBranch))) };
             await client.SendAsync(HttpMethod.Post, $"{SessionPath}/events", again, cancellationToken).ConfigureAwait(false);
             Turn retry = await WaitForTurnAsync(cancellationToken).ConfigureAwait(false);
             await WriteEventsAsync(retry.NewEvents, cancellationToken).ConfigureAwait(false);
@@ -223,7 +222,7 @@ public sealed class ManagedAgentsAgent(
         name.Length > 0 && name is not "." and not ".." && Path.GetFileName(name) == name && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
 
     private string Compose(string prompt, IReadOnlyList<string> outputs) =>
-        SessionPrompt.Compose(prompt, repo, sessionBranch, baseCommit, _uploads, outputs, role);
+        SessionPrompt.Compose(prompt, repo.Name, sessionBranch, baseCommit, _uploads, outputs, role);
 
     private async Task CreateSessionAsync(string prompt, string model, IReadOnlyList<string> outputs, CancellationToken cancellationToken)
     {
@@ -252,21 +251,21 @@ public sealed class ManagedAgentsAgent(
             }
         }
 
-        _token = await tokens.MintAsync(repo, role is SessionRole.Builder, cancellationToken).ConfigureAwait(false);
+        _token = await tokens.MintAsync(repo.Name, role is SessionRole.Builder, cancellationToken).ConfigureAwait(false);
         _tokenStamp = _time.GetTimestamp();
         resources.Insert(0, new JsonObject
         {
             ["type"] = "github_repository",
-            ["url"] = $"https://github.com/{owner}/{repo}",
-            ["mount_path"] = $"/workspace/{repo}",
+            ["url"] = $"https://github.com/{repo.Owner}/{repo.Name}",
+            ["mount_path"] = $"/workspace/{repo.Name}",
             ["authorization_token"] = _token,
         });
         var body = new JsonObject
         {
             ["agent"] = new JsonObject { ["type"] = "agent_with_overrides", ["id"] = client.AgentId, ["model"] = new JsonObject { ["id"] = model } },
             ["environment_id"] = client.EnvironmentId,
-            ["title"] = $"dsf {owner}/{repo} {RoleName} {sessionBranch}",
-            ["metadata"] = new JsonObject { ["repo"] = $"{owner}/{repo}", ["branch"] = sessionBranch, ["role"] = RoleName },
+            ["title"] = $"dsf {repo.Owner}/{repo.Name} {RoleName} {sessionBranch}",
+            ["metadata"] = new JsonObject { ["repo"] = $"{repo.Owner}/{repo.Name}", ["branch"] = sessionBranch, ["role"] = RoleName },
             ["budget"] = new JsonObject
             {
                 ["type"] = "limit",
@@ -310,7 +309,7 @@ public sealed class ManagedAgentsAgent(
                 ?? throw new ClaudeCodeException($"The session {_sessionId} lists no github_repository resource, so its token cannot be rotated.");
         }
 
-        string fresh = await tokens.MintAsync(repo, role is SessionRole.Builder, cancellationToken).ConfigureAwait(false);
+        string fresh = await tokens.MintAsync(repo.Name, role is SessionRole.Builder, cancellationToken).ConfigureAwait(false);
         try
         {
             await client.SendAsync(

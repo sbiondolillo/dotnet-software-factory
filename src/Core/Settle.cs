@@ -67,12 +67,11 @@ public sealed class Settle(
     {
         ArgumentNullException.ThrowIfNull(issue);
         ArgumentNullException.ThrowIfNull(options);
-        (string owner, string repo) = issue.Repo;
-        JsonElement repoJson = await client.SendAsync(HttpMethod.Get, $"/repos/{owner}/{repo}", null, cancellationToken).ConfigureAwait(false);
+        JsonElement repoJson = await client.SendAsync(HttpMethod.Get, $"/repos/{issue.Repo.Owner}/{issue.Repo.Name}", null, cancellationToken).ConfigureAwait(false);
         string baseBranch = repoJson.GetProperty("default_branch").GetString() ?? "";
         string runId = Convert.ToHexString(RandomNumberGenerator.GetBytes(4)).ToLowerInvariant();
         DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-run-");
-        RunOutcome<Delivered> result;
+        RunResult<Delivered> result;
         try
         {
             var request = new FactoryRunRequest(
@@ -103,7 +102,7 @@ public sealed class Settle(
     {
         ArgumentNullException.ThrowIfNull(pullRequest);
         ArgumentNullException.ThrowIfNull(options);
-        RunOutcome<Answered> opening = await FeedbackAsync(pullRequest, options, cancellationToken).ConfigureAwait(false);
+        RunResult<Answered> opening = await FeedbackAsync(pullRequest, options, cancellationToken).ConfigureAwait(false);
         if (opening.Stop?.End is RunEnd.Declined)
         {
             return new SettleResult(SettleEnd.Declined, null, 1);
@@ -121,7 +120,7 @@ public sealed class Settle(
         int spent = 0;
         while (last.Refusal is null && last.Threads.Count > 0 && spent < options.Rounds)
         {
-            RunOutcome<Answered> round = await FeedbackAsync(pullRequest, options, cancellationToken).ConfigureAwait(false);
+            RunResult<Answered> round = await FeedbackAsync(pullRequest, options, cancellationToken).ConfigureAwait(false);
             spent++;
             if (round.Stop is { } stop)
             {
@@ -147,7 +146,7 @@ public sealed class Settle(
     }
 
     /// <summary>Runs one feedback run in a new work tree, and removes the work tree after it.</summary>
-    private async Task<RunOutcome<Answered>> FeedbackAsync(IssueNumber pullRequest, SettleOptions options, CancellationToken cancellationToken)
+    private async Task<RunResult<Answered>> FeedbackAsync(IssueNumber pullRequest, SettleOptions options, CancellationToken cancellationToken)
     {
         await progress.WriteLineAsync("feedback: start").ConfigureAwait(false);
         DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-feedback-");

@@ -107,8 +107,8 @@ Feature: With --copilot-review on, the factory requests the Copilot review of ea
     And the watch is for the repo "factory-scratch" of the owner "sbiondolillo", the pull request 565, the reviewer login "copilot-pull-request-reviewer", a wait of zero between two polls and a timeout of 1 hour
     And GitHub answers the read of the pull request with the head sha "2878cae3e3bab7f3b1dcdfa14206f2c361021085"
     And GitHub answers each read of the check runs with the check run "build" with the status "completed" and the conclusion "success"
-    And GitHub answers the first read of the reviews with no review
-    And GitHub answers the second read of the reviews with one review by "copilot-pull-request-reviewer" with the state "COMMENTED" of the commit "2878cae3e3bab7f3b1dcdfa14206f2c361021085"
+    And GitHub answers the first two reads of the reviews with no review
+    And GitHub answers the third read of the reviews with one review by "copilot-pull-request-reviewer" with the state "COMMENTED" of the commit "2878cae3e3bab7f3b1dcdfa14206f2c361021085"
     And GitHub answers the read of the review threads with an empty list of threads
     When a caller starts the watch
     Then the watch gives back a green result

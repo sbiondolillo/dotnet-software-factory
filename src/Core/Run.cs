@@ -42,7 +42,7 @@ public sealed record RunStop(string Comment, RunEnd End);
 
 /// <summary>The end of a <see cref="Run"/>: what the step after a pass gave, or null on a stop; the stop, or null on a pass; and the
 /// Redos spent.</summary>
-public sealed record RunOutcome<TOutcome>(TOutcome? Passed, RunStop? Stop, int Redos)
+public sealed record RunResult<TOutcome>(TOutcome? Passed, RunStop? Stop, int Redos)
     where TOutcome : class;
 
 /// <summary>
@@ -111,7 +111,7 @@ public sealed class Run(
     /// gives that comment as its <see cref="RunStop"/>. A <see cref="SessionBranchException"/> is such a stop. A pass gives what the
     /// kind's ending gives.
     /// </summary>
-    public async Task<RunOutcome<TOutcome>> RunAsync<TOutcome>(RunRequest request, IRunKind<TOutcome> kind, CancellationToken cancellationToken = default)
+    public async Task<RunResult<TOutcome>> RunAsync<TOutcome>(RunRequest request, IRunKind<TOutcome> kind, CancellationToken cancellationToken = default)
         where TOutcome : class
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -127,7 +127,7 @@ public sealed class Run(
             BaseOrStop checkout = await kind.CheckoutAsync(git, cancellationToken).ConfigureAwait(false);
             if (checkout.BaseCommit is not string baseCommit)
             {
-                return new RunOutcome<TOutcome>(null, checkout.Stop, 0);
+                return new RunResult<TOutcome>(null, checkout.Stop, 0);
             }
 
             var start = new BackendStart(
@@ -145,14 +145,14 @@ public sealed class Run(
                     PinOrStop before = await kind.BeforeGatesAsync(backend, summary, cancellationToken).ConfigureAwait(false);
                     if (before.Pin is not Pin pin)
                     {
-                        return new RunOutcome<TOutcome>(null, await PostAsync(request, kind.CommentNumber, before.Stop ?? "", cancellationToken).ConfigureAwait(false), 0);
+                        return new RunResult<TOutcome>(null, await PostAsync(request, kind.CommentNumber, before.Stop ?? "", cancellationToken).ConfigureAwait(false), 0);
                     }
 
                     GateSet gates = await new GateFactory(backend.Sandbox, git, request.Directory, baseCommit, request.SecretNames, progress, log, request.SkipIntegration)
                         .CreateAsync(kind.Choice, RecipeRules.Sequence(kind.Choice, kind.Kind), pin, cancellationToken).ConfigureAwait(false);
                     if (gates.Stop is string stop)
                     {
-                        return new RunOutcome<TOutcome>(null, await PostAsync(request, kind.CommentNumber, stop, cancellationToken).ConfigureAwait(false), 0);
+                        return new RunResult<TOutcome>(null, await PostAsync(request, kind.CommentNumber, stop, cancellationToken).ConfigureAwait(false), 0);
                     }
 
                     var reviewPhase = new ReviewPhase(backend.Reviewer, git, RecipeRules.ReviewSteps(kind.Choice.Recipe, kind.Kind));
@@ -164,15 +164,15 @@ public sealed class Run(
                         cancellationToken).ConfigureAwait(false);
                     if (result.End is not BuildLoopEnd.Passed)
                     {
-                        return new RunOutcome<TOutcome>(null, await PostAsync(request, kind.CommentNumber, result.Comment ?? "", cancellationToken).ConfigureAwait(false), result.Redos);
+                        return new RunResult<TOutcome>(null, await PostAsync(request, kind.CommentNumber, result.Comment ?? "", cancellationToken).ConfigureAwait(false), result.Redos);
                     }
 
                     TOutcome passed = await kind.AfterPassAsync(backend, gates, result, spend, cancellationToken).ConfigureAwait(false);
-                    return new RunOutcome<TOutcome>(passed, null, result.Redos);
+                    return new RunResult<TOutcome>(passed, null, result.Redos);
                 }
                 catch (SessionBranchException exception)
                 {
-                    return new RunOutcome<TOutcome>(null, await PostAsync(request, kind.CommentNumber, exception.Message, cancellationToken).ConfigureAwait(false), 0);
+                    return new RunResult<TOutcome>(null, await PostAsync(request, kind.CommentNumber, exception.Message, cancellationToken).ConfigureAwait(false), 0);
                 }
                 finally
                 {
@@ -193,7 +193,7 @@ public sealed class Run(
     private async Task<RunStop> PostAsync(RunRequest request, int number, string body, CancellationToken cancellationToken)
     {
         await Say(body).ConfigureAwait(false);
-        await client.PostCommentAsync(request.Repo.Owner, request.Repo.Name, number, body, cancellationToken).ConfigureAwait(false);
+        await client.PostCommentAsync(new IssueNumber(request.Repo, number), body, cancellationToken).ConfigureAwait(false);
         return new RunStop(body, RunEnd.Stopped);
     }
 

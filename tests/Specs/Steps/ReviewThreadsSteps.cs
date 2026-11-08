@@ -62,11 +62,11 @@ public sealed class ReviewThreadsSteps(ExceptionState exceptionState, RecordingH
 
     [When("a caller reads the reviews of pull request {int} of the repo {string} of the owner {string}")]
     public async Task WhenReadReviews(int number, string repo, string owner) =>
-        await Try(async () => _reviews = await _sut!.ReadReviewsAsync(owner, repo, number));
+        await Try(async () => _reviews = await _sut!.ReadReviewsAsync(new IssueNumber(new RepoName(owner, repo), number)));
 
     [When("a caller reads the review threads of pull request {int} of the repo {string} of the owner {string}")]
     public async Task WhenReadThreads(int number, string repo, string owner) =>
-        await Try(async () => _threads = await _sut!.ReadThreadsAsync(owner, repo, number));
+        await Try(async () => _threads = await _sut!.ReadThreadsAsync(new IssueNumber(new RepoName(owner, repo), number)));
 
     [When("a caller replies to the thread {string} with the text {string}")]
     public async Task WhenReply(string threadId, string text) =>

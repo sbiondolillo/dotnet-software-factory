@@ -17,7 +17,7 @@ public sealed class FactoryRunTests
     {
         using var h = new RunHarness();
         h.Lacks.Add(path);
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(Ct);
+        RunResult<Delivered> result = await h.RunFactoryAsync(Ct);
         Assert.Contains(path, Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.Null(result.Passed);
         Assert.Equal(0, result.Redos);
@@ -69,7 +69,7 @@ public sealed class FactoryRunTests
     {
         using var h = new RunHarness();
         h.Builder.Clear(Phase.Plan);
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(Ct);
+        RunResult<Delivered> result = await h.RunFactoryAsync(Ct);
         Assert.Contains(".factory/plan.md", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Build);
         Assert.Null(result.Passed);
@@ -86,7 +86,7 @@ public sealed class FactoryRunTests
             h.RedBuilds.Add(build);
         }
 
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(Ct);
+        RunResult<Delivered> result = await h.RunFactoryAsync(Ct);
         Assert.Equal(4, h.Builder.Of(Phase.Build).Count());
         Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Review);
         string body = Assert.Single(h.CommentBodies);
@@ -102,7 +102,7 @@ public sealed class FactoryRunTests
     {
         using var h = new RunHarness();
         h.Builder.Answer(Phase.Plan, FakeAgent.Error("plan went wrong"));
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(Ct);
+        RunResult<Delivered> result = await h.RunFactoryAsync(Ct);
         Assert.Null(result.Passed);
         Assert.Equal(0, result.Redos);
         Assert.Equal(["plan"], h.AgentRequests.Select(r => r.Phase.Text()));
@@ -115,7 +115,7 @@ public sealed class FactoryRunTests
         using var h = new RunHarness();
         h.Labels.Add("refactor");
         h.Builder.Answer(Phase.Plan, FakeAgent.Error("plan went wrong"));
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(Ct);
+        RunResult<Delivered> result = await h.RunFactoryAsync(Ct);
         Assert.Null(result.Passed);
         Assert.Equal(["plan"], h.AgentRequests.Select(r => r.Phase.Text()));
     }

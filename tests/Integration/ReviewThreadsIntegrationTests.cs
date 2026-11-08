@@ -54,8 +54,8 @@ public sealed class ReviewThreadsIntegrationTests
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
         var sut = new ReviewThreads(Client());
-        Assert.Empty(await sut.ReadReviewsAsync(Owner, Repo, ScratchFixtures.EmptyPull, ct));
-        Assert.Empty(await sut.ReadThreadsAsync(Owner, Repo, ScratchFixtures.EmptyPull, ct));
+        Assert.Empty(await sut.ReadReviewsAsync(new IssueNumber(new RepoName(Owner, Repo), ScratchFixtures.EmptyPull), ct));
+        Assert.Empty(await sut.ReadThreadsAsync(new IssueNumber(new RepoName(Owner, Repo), ScratchFixtures.EmptyPull), ct));
     }
 
     [Fact]
@@ -69,12 +69,12 @@ public sealed class ReviewThreadsIntegrationTests
             JsonElement comment = await CommentAsync(client, s, 2, ct);
             string login = comment.GetProperty("user").GetProperty("login").GetString() ?? "";
             var sut = new ReviewThreads(client);
-            ReviewThread thread = Assert.Single(await sut.ReadThreadsAsync(Owner, Repo, s.Number, ct));
+            ReviewThread thread = Assert.Single(await sut.ReadThreadsAsync(new IssueNumber(new RepoName(Owner, Repo), s.Number), ct));
             Assert.False(thread.IsResolved);
             Assert.Equal(s.Path, thread.Path);
             Assert.Equal(2, thread.Line);
             Assert.Equal(new ReviewThreadComment(login, "comment on 2"), Assert.Single(thread.Comments));
-            Assert.Equal(new Review(login, "COMMENTED", s.CommitSha), Assert.Single(await sut.ReadReviewsAsync(Owner, Repo, s.Number, ct)));
+            Assert.Equal(new Review(login, "COMMENTED", s.CommitSha), Assert.Single(await sut.ReadReviewsAsync(new IssueNumber(new RepoName(Owner, Repo), s.Number), ct)));
         });
     }
 
@@ -89,7 +89,7 @@ public sealed class ReviewThreadsIntegrationTests
             await CommentAsync(client, s, 1, ct);
             await CommentAsync(client, s, 3, ct);
             var sut = new ReviewThreads(client);
-            IReadOnlyList<ReviewThread> threads = await sut.ReadThreadsAsync(Owner, Repo, s.Number, ct);
+            IReadOnlyList<ReviewThread> threads = await sut.ReadThreadsAsync(new IssueNumber(new RepoName(Owner, Repo), s.Number), ct);
             Assert.Equal(2, threads.Count);
             ReviewThread first = threads.Single(t => t.Line is 1);
             ReviewThread other = threads.Single(t => t.Line is 3);
@@ -99,7 +99,7 @@ public sealed class ReviewThreadsIntegrationTests
             await sut.ResolveAsync(first.Id, ct);
             await sut.ResolveAsync(first.Id, ct);
 
-            threads = await sut.ReadThreadsAsync(Owner, Repo, s.Number, ct);
+            threads = await sut.ReadThreadsAsync(new IssueNumber(new RepoName(Owner, Repo), s.Number), ct);
             ReviewThread after = threads.Single(t => t.Id == first.Id);
             Assert.True(after.IsResolved);
             Assert.Equal(body, after.Comments[^1].Body);
@@ -117,10 +117,10 @@ public sealed class ReviewThreadsIntegrationTests
             Scratch s = await CreatePullAsync(client, cleanup, ct);
             await CommentAsync(client, s, 2, ct);
             var sut = new ReviewThreads(client);
-            ReviewThread thread = Assert.Single(await sut.ReadThreadsAsync(Owner, Repo, s.Number, ct));
+            ReviewThread thread = Assert.Single(await sut.ReadThreadsAsync(new IssueNumber(new RepoName(Owner, Repo), s.Number), ct));
             await sut.ReplyAsync(thread.Id, "", ct);
             await sut.ReplyAsync(thread.Id, "  ", ct);
-            ReviewThread after = (await sut.ReadThreadsAsync(Owner, Repo, s.Number, ct)).Single(t => t.Id == thread.Id);
+            ReviewThread after = (await sut.ReadThreadsAsync(new IssueNumber(new RepoName(Owner, Repo), s.Number), ct)).Single(t => t.Id == thread.Id);
             Assert.Single(after.Comments);
         });
     }
@@ -137,11 +137,11 @@ public sealed class ReviewThreadsIntegrationTests
             string content = Convert.ToBase64String(Encoding.UTF8.GetBytes("changed\n"));
             await client.SendAsync(HttpMethod.Put, $"/repos/{Owner}/{Repo}/contents/{s.Path}", JsonSerializer.Serialize(new { message = "shrink", content, sha = s.FileSha, branch = s.Branch }), ct);
             var sut = new ReviewThreads(client);
-            ReviewThread thread = Assert.Single(await sut.ReadThreadsAsync(Owner, Repo, s.Number, ct));
+            ReviewThread thread = Assert.Single(await sut.ReadThreadsAsync(new IssueNumber(new RepoName(Owner, Repo), s.Number), ct));
             for (int i = 0; i < 30 && thread.Line is not null; i++)
             {
                 await Task.Delay(TimeSpan.FromSeconds(2), ct);
-                thread = Assert.Single(await sut.ReadThreadsAsync(Owner, Repo, s.Number, ct));
+                thread = Assert.Single(await sut.ReadThreadsAsync(new IssueNumber(new RepoName(Owner, Repo), s.Number), ct));
             }
 
             Assert.Null(thread.Line);
@@ -155,15 +155,15 @@ public sealed class ReviewThreadsIntegrationTests
         var sut = new ReviewThreads(Client());
         await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ReplyAsync("PRRT_unknown", "x", ct));
         await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ResolveAsync("PRRT_unknown", ct));
-        await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ReadReviewsAsync(Owner, Repo, 0, ct));
-        await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ReadThreadsAsync(Owner, Repo, 0, ct));
+        await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ReadReviewsAsync(new IssueNumber(new RepoName(Owner, Repo), 0), ct));
+        await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ReadThreadsAsync(new IssueNumber(new RepoName(Owner, Repo), 0), ct));
     }
 
     [Fact]
     public async Task AnInvalidTokenThrowsRequestExceptionWith401()
     {
         var sut = new ReviewThreads(Client("invalid"));
-        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadThreadsAsync(Owner, Repo, 1, TestContext.Current.CancellationToken));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadThreadsAsync(new IssueNumber(new RepoName(Owner, Repo), 1), TestContext.Current.CancellationToken));
         Assert.Equal(401, ex.StatusCode);
     }
 

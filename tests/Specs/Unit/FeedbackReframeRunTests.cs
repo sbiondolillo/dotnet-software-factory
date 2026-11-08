@@ -26,7 +26,7 @@ public sealed class FeedbackReframeRunTests
     public async Task APassingRoundRunsTheApiGateBetweenTheTestGateAndTheCheck()
     {
         using RunHarness h = Reframe();
-        Assert.Equal(new RunOutcome<Answered>(new Answered(2, 0, h.HeadSha), null, 0), await h.RunFeedbackAsync(Ct));
+        Assert.Equal(new RunResult<Answered>(new Answered(2, 0, h.HeadSha), null, 0), await h.RunFeedbackAsync(Ct));
         Assert.Equal(["build 1", "lint 1", "scope 1", "test 1", "api 1", "check 1", "review 1"], RowNames(h.Summary));
         Assert.EndsWith("| same |", Row(h.Summary, "api 1"), StringComparison.Ordinal);
         string[] lines = h.Progress.ToString().Split('\n');
@@ -38,7 +38,7 @@ public sealed class FeedbackReframeRunTests
     {
         using RunHarness h = Reframe();
         h.ApiLines = build => build is 1 ? "" : Symbol + "\n";
-        Assert.Equal(new RunOutcome<Answered>(new Answered(2, 0, h.HeadSha), null, 1), await h.RunFeedbackAsync(Ct));
+        Assert.Equal(new RunResult<Answered>(new Answered(2, 0, h.HeadSha), null, 1), await h.RunFeedbackAsync(Ct));
         Assert.Equal(["build 1", "lint 1", "scope 1", "test 1", "api 1", "build 2", "lint 2", "scope 2", "test 2", "api 2", "check 1", "review 1"], RowNames(h.Summary));
         Assert.EndsWith("| changed |", Row(h.Summary, "api 1"), StringComparison.Ordinal);
         Assert.Contains($"- Redo 1, after api 1: lost symbol: {Symbol}", h.Summary.Split('\n'));
@@ -50,7 +50,7 @@ public sealed class FeedbackReframeRunTests
     {
         using RunHarness h = Reframe();
         h.ApiFails = true;
-        RunOutcome<Answered> result = await h.RunFeedbackAsync(Ct);
+        RunResult<Answered> result = await h.RunFeedbackAsync(Ct);
         Assert.Null(result.Passed);
         Assert.Equal(new RunStop(Assert.Single(h.CommentBodies), RunEnd.Stopped), result.Stop);
         Assert.Equal(0, result.Redos);

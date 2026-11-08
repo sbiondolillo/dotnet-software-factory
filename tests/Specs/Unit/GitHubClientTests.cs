@@ -45,7 +45,7 @@ public sealed class GitHubClientTests
     public async Task ReadingAnIssueThrowsOnFailure()
     {
         (GitHubClient client, _) = Make(404, "nope");
-        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => client.ReadIssueAsync("o", "r", 1, TestContext.Current.CancellationToken));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => client.ReadIssueAsync(new IssueNumber(new RepoName("o", "r"), 1), TestContext.Current.CancellationToken));
         Assert.Equal(404, ex.StatusCode);
     }
 
@@ -53,14 +53,14 @@ public sealed class GitHubClientTests
     public async Task PostingACommentThrowsOnFailure()
     {
         (GitHubClient client, _) = Make(403, "nope");
-        await Assert.ThrowsAsync<GitHubRequestException>(() => client.PostCommentAsync("o", "r", 1, "hi", TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<GitHubRequestException>(() => client.PostCommentAsync(new IssueNumber(new RepoName("o", "r"), 1), "hi", TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task MissingBodyReadsAsEmpty()
     {
         (GitHubClient client, _) = Make(200, "{\"title\":\"t\",\"user\":{\"login\":\"u\"},\"labels\":[]}");
-        GitHubIssue issue = await client.ReadIssueAsync("o", "r", 1, TestContext.Current.CancellationToken);
+        GitHubIssue issue = await client.ReadIssueAsync(new IssueNumber(new RepoName("o", "r"), 1), TestContext.Current.CancellationToken);
         Assert.Equal("", issue.Body);
     }
 
@@ -196,14 +196,14 @@ public sealed class GitHubClientTests
         var handler = new RecordingHandler();
         handler.Enqueue(500, "x");
         handler.Answer(200, "{\"title\":\"t\",\"user\":{\"login\":\"u\"}}");
-        GitHubIssue issue = await Client(handler).ReadIssueAsync("o", "r", 1, TestContext.Current.CancellationToken);
+        GitHubIssue issue = await Client(handler).ReadIssueAsync(new IssueNumber(new RepoName("o", "r"), 1), TestContext.Current.CancellationToken);
         Assert.Equal("t", issue.Title);
         Assert.Equal(2, handler.Requests.Count);
 
         var postHandler = new RecordingHandler();
         postHandler.Enqueue(500, "x");
         postHandler.Answer(201, "{}");
-        await Client(postHandler).PostCommentAsync("o", "r", 1, "hi", TestContext.Current.CancellationToken);
+        await Client(postHandler).PostCommentAsync(new IssueNumber(new RepoName("o", "r"), 1), "hi", TestContext.Current.CancellationToken);
         Assert.Equal(2, postHandler.Requests.Count);
     }
 

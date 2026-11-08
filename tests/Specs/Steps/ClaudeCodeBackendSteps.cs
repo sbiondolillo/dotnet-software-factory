@@ -55,7 +55,7 @@ public sealed class ClaudeCodeBackendSteps : IDisposable
         mock.Setup(r => r.RunAsync(It.IsAny<CommandSpec>(), It.IsAny<CancellationToken>()))
             .Returns((CommandSpec spec, CancellationToken _) => Task.FromResult(Answer(spec)));
         StartBackend start = AgentBackend.Pick(new BackendOptions(
-            mock.Object, "factory-sandbox:test", _root.FullName, null, "sbiondolillo", "factory-scratch", "token", "Factory", "factory@example.com",
+            mock.Object, "factory-sandbox:test", _root.FullName, null, new RepoName("sbiondolillo", "factory-scratch"), "token", "Factory", "factory@example.com",
             Log: _log, Time: _clock, Progress: _progress));
         _backend = await start(
             new BackendStart(new Git(mock.Object), _clone.FullName, "base", "factory/a1b2c3d4-session", "Title", (elapsed, answer) => _reported.Add((elapsed, answer))),
