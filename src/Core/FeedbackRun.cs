@@ -5,9 +5,7 @@ namespace Core;
 
 /// <summary>What a <see cref="FeedbackRun"/> needs: the pull request, the clone, the models and the author.</summary>
 public sealed record FeedbackRunRequest(
-    string Owner,
-    string Repo,
-    int PullNumber,
+    IssueNumber PullRequest,
     string Token,
     string Directory,
     string BuildModel,
@@ -19,9 +17,10 @@ public sealed record FeedbackRunRequest(
     IReadOnlyList<string> SecretNames,
     bool SkipIntegration = false);
 
-/// <summary>The outcome of a <see cref="FeedbackRun"/>: the threads resolved, the threads left unresolved, and the Redos spent.
-/// The run resolves each thread that it replies to, so the threads left unresolved are the threads with no reply.</summary>
-public sealed record FeedbackRunResult(int Resolved, int Unresolved, int Redos);
+/// <summary>What a <see cref="FeedbackRun"/> that passed gives: the threads resolved, the threads left unresolved, and the head
+/// commit it pushed. The run resolves each thread that it replies to, so the threads left unresolved are the threads with no reply.
+/// Head is null when the round pushed nothing.</summary>
+public sealed record Answered(int Resolved, int Unresolved, string? Head);
 
 /// <summary>Answers every unresolved review thread of a pull request within the budget of the <see cref="BuildLoop"/>, with the
 /// agents of the backend that <paramref name="startBackend"/> starts. A round that builds appends its section
@@ -40,54 +39,51 @@ public sealed class FeedbackRun(
 
     private readonly Run _run = new(runner, client, startBackend, progress, log, time, summaryPath);
 
-    /// <summary>True when the last <see cref="RunAsync"/> ended on a closing issue that the recipe rules decline, with a
-    /// comment on the pull request and no build.</summary>
-    public bool Declined { get; private set; }
-
     /// <summary>
     /// Builds an answer to each unresolved thread, gates and reviews it, pushes it, and replies to each thread. Then it
     /// resolves each thread that it replied to, fixed or disputed. The reply of a disputed thread states the dispute. A round
     /// that stops on an error or spends its budget posts the comment of the loop on the pull request and pushes nothing. A
-    /// <see cref="SessionBranchException"/> posts its message on the pull request and stops the round in the same way.
+    /// <see cref="SessionBranchException"/> posts its message on the pull request and stops the round in the same way. A pull request
+    /// with no unresolved thread passes with nothing pushed. A closing issue that the recipe rules decline ends with a comment on the
+    /// pull request, no build and the end <see cref="RunEnd.Declined"/>.
     /// </summary>
-    public async Task<FeedbackRunResult> RunAsync(FeedbackRunRequest request, CancellationToken cancellationToken = default)
+    public async Task<RunOutcome<Answered>> RunAsync(FeedbackRunRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        Declined = false;
+        IssueNumber pull = request.PullRequest;
+        RepoName repo = pull.Repo;
         var reviewThreads = new ReviewThreads(client);
-        IReadOnlyList<ReviewThread> all = await reviewThreads.ReadThreadsAsync(request.Owner, request.Repo, request.PullNumber, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<ReviewThread> all = await reviewThreads.ReadThreadsAsync(repo.Owner, repo.Name, pull.Number, cancellationToken).ConfigureAwait(false);
         List<ReviewThread> threads = [.. all.Where(thread => !thread.IsResolved)];
         if (threads.Count is 0)
         {
-            return new FeedbackRunResult(0, 0, 0);
+            return new RunOutcome<Answered>(new Answered(0, 0, null), null, 0);
         }
 
-        string branch = await new PullRequests(client).ReadHeadBranchAsync(request.Owner, request.Repo, request.PullNumber, cancellationToken).ConfigureAwait(false);
+        string branch = await new PullRequests(client).ReadHeadBranchAsync(pull, cancellationToken).ConfigureAwait(false);
         var pullRequests = new PullRequests(client);
         // With no closing issue, the round takes the choice of an issue with no label.
         RecipeChoice choice = RecipeRules.Parse([], "");
         string? issueBody = null;
-        if (PullRequests.ParseClosingIssue(await pullRequests.ReadBodyAsync(request.Owner, request.Repo, request.PullNumber, cancellationToken).ConfigureAwait(false)) is int issueNumber)
+        if (PullRequests.ParseClosingIssue(await pullRequests.ReadBodyAsync(pull, cancellationToken).ConfigureAwait(false)) is int issueNumber)
         {
-            GitHubIssue issue = await client.ReadIssueAsync(request.Owner, request.Repo, issueNumber, cancellationToken).ConfigureAwait(false);
+            GitHubIssue issue = await client.ReadIssueAsync(repo.Owner, repo.Name, issueNumber, cancellationToken).ConfigureAwait(false);
             issueBody = issue.Body;
             choice = RecipeRules.Parse(issue.Labels, issue.Body);
             if (choice.Declined is string refusal)
             {
                 await ProgressLine.WriteAsync(progress, refusal).ConfigureAwait(false);
-                await client.PostCommentAsync(request.Owner, request.Repo, request.PullNumber, refusal, cancellationToken).ConfigureAwait(false);
-                Declined = true;
-                return new FeedbackRunResult(0, threads.Count, 0);
+                await client.PostCommentAsync(repo.Owner, repo.Name, pull.Number, refusal, cancellationToken).ConfigureAwait(false);
+                return new RunOutcome<Answered>(null, new RunStop(refusal, RunEnd.Declined), 0);
             }
         }
 
-        string title = $"Answer the review threads of pull request #{request.PullNumber.ToString(CultureInfo.InvariantCulture)}";
+        string title = $"Answer the review threads of pull request #{pull.Number.ToString(CultureInfo.InvariantCulture)}";
         var kind = new FeedbackKind(request, reviewThreads, threads, branch, choice, title, Describe(threads, issueBody, RecipeRules.ThreadRules(choice.Recipe)));
         var shared = new RunRequest(
-            request.Owner, request.Repo, request.Token, request.Directory, request.ReviewModel, request.ReviewTurns, request.AuthorName,
+            repo, request.Token, request.Directory, request.ReviewModel, request.ReviewTurns, request.AuthorName,
             request.AuthorEmail, request.SecretNames, request.SkipIntegration);
-        RunOutcome<FeedbackRunResult> outcome = await _run.RunAsync(shared, kind, cancellationToken).ConfigureAwait(false);
-        return outcome.Passed ?? new FeedbackRunResult(0, threads.Count, outcome.Redos);
+        return await _run.RunAsync(shared, kind, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -145,8 +141,8 @@ public sealed class FeedbackRun(
 
     /// <summary>
     /// The feedback round as a kind of <see cref="Run"/>. The checkout takes the head branch of the pull request, and the step before
-    /// the gates pins the work tree as the recipe says. A pass puts the session's commits on the head branch, pushes it, and replies
-    /// to each thread and resolves it.
+    /// the gates pins the work tree as the recipe says. A pass puts the session's commits on the head branch, pushes it, reads the head
+    /// commit it pushed, and replies to each thread and resolves it.
     /// </summary>
     private sealed class FeedbackKind(
         FeedbackRunRequest request,
@@ -155,7 +151,7 @@ public sealed class FeedbackRun(
         string branch,
         RecipeChoice choice,
         string title,
-        string body) : IRunKind<FeedbackRunResult>
+        string body) : IRunKind<Answered>
     {
         private Git? _git;
         private FeedbackBuild? _build;
@@ -170,15 +166,15 @@ public sealed class FeedbackRun(
 
         public string ScratchBranch => $"{branch}-session";
 
-        public int CommentNumber => request.PullNumber;
+        public int CommentNumber => request.PullRequest.Number;
 
         public string SummaryHeading => FeedbackRun.SummaryHeading;
 
-        public async Task<string?> CheckoutAsync(Git git, CancellationToken cancellationToken = default)
+        public async Task<BaseOrStop> CheckoutAsync(Git git, CancellationToken cancellationToken = default)
         {
             _git = git;
             await git.CheckoutExistingBranchAsync(branch, request.Directory, cancellationToken).ConfigureAwait(false);
-            return await git.ReadHeadShaAsync(request.Directory, cancellationToken).ConfigureAwait(false);
+            return new BaseOrStop(await git.ReadHeadShaAsync(request.Directory, cancellationToken).ConfigureAwait(false), null);
         }
 
         public Task<PinOrStop> BeforeGatesAsync(AgentBackend backend, JobSummary summary, CancellationToken cancellationToken = default) =>
@@ -187,7 +183,7 @@ public sealed class FeedbackRun(
         public IBuild Build(Agent builder) => _build = new FeedbackBuild(
             new BuildPhase(builder, RecipeRules.BuildText(choice.Recipe, RunKind.Feedback)), title, body, request.BuildModel, request.BuildTurns, threads);
 
-        public async Task<FeedbackRunResult> AfterPassAsync(AgentBackend backend, GateSet gates, BuildLoopResult result, decimal spend, CancellationToken cancellationToken = default)
+        public async Task<Answered> AfterPassAsync(AgentBackend backend, GateSet gates, BuildLoopResult result, decimal spend, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(backend);
             ArgumentNullException.ThrowIfNull(result);
@@ -195,6 +191,7 @@ public sealed class FeedbackRun(
             FeedbackBuild build = _build ?? throw new InvalidOperationException("The round replies only after its build.");
             await backend.CollectAsync(branch, cancellationToken).ConfigureAwait(false);
             await git.PushAsync(branch, request.Directory, request.Token, cancellationToken).ConfigureAwait(false);
+            string head = await git.ReadHeadShaAsync(request.Directory, cancellationToken).ConfigureAwait(false);
             int resolved = 0;
             foreach (ReviewThread thread in threads)
             {
@@ -204,7 +201,7 @@ public sealed class FeedbackRun(
                 resolved++;
             }
 
-            return new FeedbackRunResult(resolved, threads.Count - resolved, result.Redos);
+            return new Answered(resolved, threads.Count - resolved, head);
         }
     }
 }

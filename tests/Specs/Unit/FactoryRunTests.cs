@@ -17,9 +17,10 @@ public sealed class FactoryRunTests
     {
         using var h = new RunHarness();
         h.Lacks.Add(path);
-        FactoryRunResult result = await h.RunFactoryAsync(Ct);
+        RunOutcome<Delivered> result = await h.RunFactoryAsync(Ct);
         Assert.Contains(path, Assert.Single(h.CommentBodies), StringComparison.Ordinal);
-        Assert.Equal(new FactoryRunResult(null, 0), result);
+        Assert.Null(result.Passed);
+        Assert.Equal(0, result.Redos);
         Assert.DoesNotContain(h.Commands, c => c.Command is "docker");
         Assert.Empty(h.AgentRequests);
     }
@@ -68,10 +69,11 @@ public sealed class FactoryRunTests
     {
         using var h = new RunHarness();
         h.Builder.Clear(Phase.Plan);
-        FactoryRunResult result = await h.RunFactoryAsync(Ct);
+        RunOutcome<Delivered> result = await h.RunFactoryAsync(Ct);
         Assert.Contains(".factory/plan.md", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Build);
-        Assert.Equal(new FactoryRunResult(null, 0), result);
+        Assert.Null(result.Passed);
+        Assert.Equal(0, result.Redos);
         Assert.Contains("rm", h.Events);
     }
 
@@ -84,14 +86,15 @@ public sealed class FactoryRunTests
             h.RedBuilds.Add(build);
         }
 
-        FactoryRunResult result = await h.RunFactoryAsync(Ct);
+        RunOutcome<Delivered> result = await h.RunFactoryAsync(Ct);
         Assert.Equal(4, h.Builder.Of(Phase.Build).Count());
         Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Review);
         string body = Assert.Single(h.CommentBodies);
         Assert.Contains(RunHarness.RedText, body, StringComparison.Ordinal);
         Assert.Contains("spent", body, StringComparison.Ordinal);
         Assert.DoesNotContain("push", h.Events);
-        Assert.Equal(new FactoryRunResult(null, 3), result);
+        Assert.Null(result.Passed);
+        Assert.Equal(3, result.Redos);
     }
 
     [Fact]
@@ -99,8 +102,9 @@ public sealed class FactoryRunTests
     {
         using var h = new RunHarness();
         h.Builder.Answer(Phase.Plan, FakeAgent.Error("plan went wrong"));
-        FactoryRunResult result = await h.RunFactoryAsync(Ct);
-        Assert.Equal(new FactoryRunResult(null, 0), result);
+        RunOutcome<Delivered> result = await h.RunFactoryAsync(Ct);
+        Assert.Null(result.Passed);
+        Assert.Equal(0, result.Redos);
         Assert.Equal(["plan"], h.AgentRequests.Select(r => r.Phase.Text()));
         Assert.Contains("plan went wrong", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
     }
@@ -111,8 +115,8 @@ public sealed class FactoryRunTests
         using var h = new RunHarness();
         h.Labels.Add("refactor");
         h.Builder.Answer(Phase.Plan, FakeAgent.Error("plan went wrong"));
-        FactoryRunResult result = await h.RunFactoryAsync(Ct);
-        Assert.Null(result.PullRequest);
+        RunOutcome<Delivered> result = await h.RunFactoryAsync(Ct);
+        Assert.Null(result.Passed);
         Assert.Equal(["plan"], h.AgentRequests.Select(r => r.Phase.Text()));
     }
 

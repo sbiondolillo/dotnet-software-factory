@@ -18,7 +18,7 @@ public sealed class HeadBranchTests
         var handler = new RecordingHandler();
         handler.Answer(status, "{\"message\":\"x\"}");
         var sut = new PullRequests(new GitHubClient(new HttpClient(handler), "t", TimeSpan.Zero));
-        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadHeadBranchAsync("o", "r", 10, Ct));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadHeadBranchAsync(new IssueNumber(new RepoName("o", "r"), 10), Ct));
         Assert.Equal(status, ex.StatusCode);
     }
 
@@ -28,7 +28,7 @@ public sealed class HeadBranchTests
         var handler = new RecordingHandler();
         handler.Answer(200, JsonSerializer.Serialize(new { head = new { @ref = "factory/a1b2c3d4" } }));
         var sut = new PullRequests(new GitHubClient(new HttpClient(handler), "t", TimeSpan.Zero));
-        Assert.Equal("factory/a1b2c3d4", await sut.ReadHeadBranchAsync("o", "r", 10, Ct));
+        Assert.Equal("factory/a1b2c3d4", await sut.ReadHeadBranchAsync(new IssueNumber(new RepoName("o", "r"), 10), Ct));
         Assert.EndsWith("/repos/o/r/pulls/10", Assert.Single(handler.Requests).Uri, StringComparison.Ordinal);
     }
 
@@ -37,7 +37,7 @@ public sealed class HeadBranchTests
     {
         var handler = new RecordingHandler { Throw = new OperationCanceledException() };
         var sut = new PullRequests(new GitHubClient(new HttpClient(handler), "t", TimeSpan.Zero));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.ReadHeadBranchAsync("o", "r", 10, Ct));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.ReadHeadBranchAsync(new IssueNumber(new RepoName("o", "r"), 10), Ct));
     }
 
     [Fact]

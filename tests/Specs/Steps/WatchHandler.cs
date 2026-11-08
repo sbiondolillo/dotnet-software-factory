@@ -6,11 +6,13 @@ using Specs.Unit;
 
 namespace Specs.Steps;
 
-/// <summary>A stand-in for GitHub for the watch: answers the pull request, the check runs, the reviews and the threads.</summary>
+/// <summary>A stand-in for GitHub for the watch: answers the pull request, the check runs, the reviews, the threads and the review
+/// request.</summary>
 public sealed class WatchHandler : HttpMessageHandler
 {
     private readonly Dictionary<int, string> _checkRuns = [];
     private readonly Dictionary<int, string> _reviews = [];
+    private readonly Dictionary<int, string> _shas = [];
 
     /// <summary>
     /// Builds a watch over <paramref name="client"/> on the fake clock <paramref name="time"/>, so no test waits on the real clock.
@@ -48,6 +50,9 @@ public sealed class WatchHandler : HttpMessageHandler
     public int CheckRunReads { get; private set; }
 
     public int ReviewReads { get; private set; }
+
+    /// <summary>The bot logins of each review request, in order.</summary>
+    public List<IReadOnlyList<string>> ReviewRequests { get; } = [];
 
     public List<RecordedRequest> Requests { get; } = [];
 
@@ -94,6 +99,9 @@ public sealed class WatchHandler : HttpMessageHandler
     /// <summary>Sets the answer of the nth read of the reviews, counted from 1.</summary>
     public void ReviewsAt(int read, string body) => _reviews[read] = body;
 
+    /// <summary>Sets the head sha of the nth read of the pull request, counted from 1.</summary>
+    public void ShaAt(int read, string sha) => _shas[read] = sha;
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         string? content = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
@@ -111,6 +119,12 @@ public sealed class WatchHandler : HttpMessageHandler
             {
                 answer = (ThreadStatus, ThreadsBody);
             }
+            else if (content.Contains("requestReviewsByLogin", StringComparison.Ordinal))
+            {
+                using var json = JsonDocument.Parse(content);
+                ReviewRequests.Add([.. json.RootElement.GetProperty("variables").GetProperty("botLogins").EnumerateArray().Select(e => e.GetString() ?? "")]);
+                answer = (200, "{\"data\":{\"requestReviewsByLogin\":{\"pullRequest\":{\"id\":\"PR_kwDOUpm1Qc6abc\"}}}}");
+            }
             else
             {
                 ReviewReads++;
@@ -120,7 +134,7 @@ public sealed class WatchHandler : HttpMessageHandler
         else
         {
             PullReads++;
-            answer = (PullStatus, JsonSerializer.Serialize(new { head = new { sha = Sha } }));
+            answer = (PullStatus, JsonSerializer.Serialize(new { node_id = "PR_kwDOUpm1Qc6abc", head = new { sha = _shas.GetValueOrDefault(PullReads, Sha) } }));
         }
 
         return new HttpResponseMessage((HttpStatusCode)answer.status) { Content = new StringContent(answer.body, Encoding.UTF8, "application/json") };

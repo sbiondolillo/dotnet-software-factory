@@ -175,7 +175,7 @@ public sealed class ReviewThreadsIntegrationTests
         await Cleanup.RunAsync(async cleanup =>
         {
             Scratch s = await CreatePullAsync(client, cleanup, ct);
-            string id = await new PullRequests(client).ReadNodeIdAsync(Owner, Repo, s.Number, ct);
+            string id = await new PullRequests(client).ReadNodeIdAsync(new IssueNumber(new RepoName(Owner, Repo), s.Number), ct);
             await new ReviewThreads(client).RequestReviewAsync(id, "copilot-pull-request-reviewer", ct);
             cleanup.Add($"remove the review requests of the pull request #{s.Number}", () =>
             {

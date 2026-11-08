@@ -47,15 +47,15 @@ public sealed class PullRequestsIntegrationTests
         {
             var sut = new PullRequests(client);
             string first = await CreateBranchAsync(client, cleanup, ct);
-            PullRequest a = await sut.OpenAsync(Owner, Repo, first, "main", "test " + first, "body", ct);
+            PullRequest a = await sut.OpenAsync(new RepoName(Owner, Repo), first, "main", "test " + first, "body", ct);
             cleanup.Add($"close the pull request #{a.Number}", () => client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/pulls/{a.Number}", "{\"state\":\"closed\"}"));
-            PullRequest again = await sut.OpenAsync(Owner, Repo, first, "main", "test " + first, "body", ct);
+            PullRequest again = await sut.OpenAsync(new RepoName(Owner, Repo), first, "main", "test " + first, "body", ct);
             Assert.Equal(a, again);
 
-            PullRequest b = await sut.OpenAsync(Owner, Repo, ScratchFixtures.EmptyBranch, "main", "test", "body", ct);
+            PullRequest b = await sut.OpenAsync(new RepoName(Owner, Repo), ScratchFixtures.EmptyBranch, "main", "test", "body", ct);
             Assert.Equal(ScratchFixtures.EmptyPull, b.Number);
             Assert.NotEqual(a.Number, b.Number);
-            Assert.Equal(a, await sut.OpenAsync(Owner, Repo, first, "main", "test", "body", ct));
+            Assert.Equal(a, await sut.OpenAsync(new RepoName(Owner, Repo), first, "main", "test", "body", ct));
         });
     }
 
@@ -63,7 +63,7 @@ public sealed class PullRequestsIntegrationTests
     public async Task ACompletedCheckRunReadsWithNameStatusAndConclusion()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
-        IReadOnlyList<CheckRun> runs = await new PullRequests(Client()).ReadCheckRunsAsync(Owner, Repo, FixtureSha, ct);
+        IReadOnlyList<CheckRun> runs = await new PullRequests(Client()).ReadCheckRunsAsync(new RepoName(Owner, Repo), FixtureSha, ct);
         Assert.Equal(new CheckRun("fixture", "completed", "success"), Assert.Single(runs));
     }
 
@@ -76,7 +76,7 @@ public sealed class PullRequestsIntegrationTests
         {
             string branch = await CreateBranchAsync(client, cleanup, ct);
             string sha = await HeadShaAsync(client, branch, ct);
-            Assert.Empty(await new PullRequests(client).ReadCheckRunsAsync(Owner, Repo, sha, ct));
+            Assert.Empty(await new PullRequests(client).ReadCheckRunsAsync(new RepoName(Owner, Repo), sha, ct));
         });
     }
 
@@ -85,7 +85,7 @@ public sealed class PullRequestsIntegrationTests
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
         GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() =>
-            new PullRequests(Client()).ReadCheckRunsAsync(Owner, Repo, new string('0', 40), ct));
+            new PullRequests(Client()).ReadCheckRunsAsync(new RepoName(Owner, Repo), new string('0', 40), ct));
         Assert.Equal(422, ex.StatusCode);
     }
 
@@ -96,7 +96,7 @@ public sealed class PullRequestsIntegrationTests
         GitHubClient client = Client();
         string head = "pr-test/" + Guid.NewGuid().ToString("N");
         GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() =>
-            new PullRequests(client).OpenAsync(Owner, Repo, head, "main", "test " + head, "body", ct));
+            new PullRequests(client).OpenAsync(new RepoName(Owner, Repo), head, "main", "test " + head, "body", ct));
         Assert.Equal(422, ex.StatusCode);
         GitHubRequestException gone = await Assert.ThrowsAsync<GitHubRequestException>(() =>
             client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/git/ref/heads/{head}", null, ct));

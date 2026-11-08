@@ -151,7 +151,7 @@ public sealed class PullRequestWatchSteps(ExceptionState exceptionState, Console
     {
         try
         {
-            _sha = await _pullRequests!.ReadHeadShaAsync(owner, repo, number);
+            _sha = await _pullRequests!.ReadHeadShaAsync(new IssueNumber(new RepoName(owner, repo), number));
         }
         catch (GitHubRequestException ex)
         {
@@ -236,7 +236,7 @@ public sealed class PullRequestWatchSteps(ExceptionState exceptionState, Console
     {
         try
         {
-            _result = await _watch!.WatchAsync(_owner, _repo, _number, _reviewer, _wait, _timeout, token);
+            _result = await _watch!.WatchAsync(new IssueNumber(new RepoName(_owner, _repo), _number), _reviewer, _wait, _timeout, token);
         }
         catch (Exception ex) when (ex is GitHubRequestException or OperationCanceledException)
         {

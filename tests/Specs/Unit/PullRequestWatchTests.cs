@@ -6,6 +6,7 @@ namespace Specs.Unit;
 
 public sealed class PullRequestWatchTests
 {
+    private const string Refusal = "Copilot was unable to review this pull request because the user who requested the review has reached their quota limit.";
     private static readonly (string, string, string?)[] Done = [("build", "completed", "success")];
 
     private static (PullRequestWatch Sut, WatchHandler Handler) Make(Func<CancellationToken, Task>? afterWait = null)
@@ -19,8 +20,10 @@ public sealed class PullRequestWatchTests
         return (WatchHandler.FakeClockWatch(client, new FakeTime(), afterWait), handler);
     }
 
+    private static readonly IssueNumber Pull = new(new RepoName("o", "r"), 1);
+
     private static Task<PullRequestWatchResult> Watch(PullRequestWatch sut, TimeSpan timeout, TimeSpan? wait = null, CancellationToken token = default) =>
-        sut.WatchAsync("o", "r", 1, "me", wait ?? TimeSpan.Zero, timeout, token);
+        sut.WatchAsync(Pull, "me", wait ?? TimeSpan.Zero, timeout, token);
 
     [Fact]
     public async Task APullRequestReadThatFailsThrowsWith404()
@@ -140,7 +143,8 @@ public sealed class PullRequestWatchTests
         PullRequestWatchResult result = await Watch(sut, TimeSpan.FromHours(1), null, TestContext.Current.CancellationToken);
         Assert.True(result.IsGreen);
         Assert.Equal(2, handler.CheckRunReads);
-        Assert.Equal(2, handler.PullReads);
+        // The read of the head before the poll, then one for each poll.
+        Assert.Equal(3, handler.PullReads);
     }
 
     [Fact]
@@ -211,5 +215,117 @@ public sealed class PullRequestWatchTests
         (PullRequestWatch sut, WatchHandler handler) = Make();
         handler.ReviewsBody = WatchHandler.ReviewsJson([("me", "PENDING", "")]);
         Assert.False((await Watch(sut, TimeSpan.Zero, null, TestContext.Current.CancellationToken)).IsGreen);
+    }
+
+    [Fact]
+    public async Task NoReviewOnTheHeadGetsOneRequestForTheReviewerBeforeTheFirstReadOfTheCheckRuns()
+    {
+        (PullRequestWatch sut, WatchHandler handler) = Make();
+        handler.ReviewsBody = WatchHandler.ReviewsJson([]);
+        await Watch(sut, TimeSpan.Zero, null, TestContext.Current.CancellationToken);
+        Assert.Equal(["me"], Assert.Single(handler.ReviewRequests));
+        int request = handler.Requests.FindIndex(r => r.Content is string c && c.Contains("requestReviewsByLogin", StringComparison.Ordinal));
+        Assert.True(request < handler.Requests.FindIndex(r => r.Uri.EndsWith("/check-runs", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task AReviewOfAnEarlierCommitOnlyGetsOneRequest()
+    {
+        (PullRequestWatch sut, WatchHandler handler) = Make();
+        handler.ReviewsBody = WatchHandler.ReviewsJson([("me", "COMMENTED", "d7d0afd495cc64aa2ac153de8d001ad8d86fe074")]);
+        await Watch(sut, TimeSpan.Zero, null, TestContext.Current.CancellationToken);
+        Assert.Single(handler.ReviewRequests);
+    }
+
+    [Fact]
+    public async Task AReviewOnTheHeadThatIsNotARefusalGetsNoRequest()
+    {
+        (PullRequestWatch sut, WatchHandler handler) = Make();
+        handler.ReviewsBody = WatchHandler.ReviewsWithBodiesJson([("me", "COMMENTED", handler.Sha, "<!-- ccr-overview-v2 -->")]);
+        PullRequestWatchResult result = await Watch(sut, TimeSpan.Zero, null, TestContext.Current.CancellationToken);
+        Assert.Empty(handler.ReviewRequests);
+        Assert.True(result.IsGreen);
+    }
+
+    [Fact]
+    public async Task ARefusalOnTheHeadGetsOneRequestAndNeitherSettlesNorEndsTheWatch()
+    {
+        (PullRequestWatch sut, WatchHandler handler) = Make();
+        handler.ReviewsBody = WatchHandler.ReviewsWithBodiesJson([("me", "COMMENTED", handler.Sha, Refusal)]);
+        PullRequestWatchResult result = await Watch(sut, TimeSpan.Zero, null, TestContext.Current.CancellationToken);
+        Assert.Single(handler.ReviewRequests);
+        Assert.False(result.IsGreen);
+        Assert.Null(result.Refusal);
+    }
+
+    [Fact]
+    public async Task TheReviewThatWasOnTheHeadBeforeTheRequestDoesNotSettleTheWatch()
+    {
+        (PullRequestWatch sut, WatchHandler handler) = Make();
+        handler.ReviewsBody = WatchHandler.ReviewsWithBodiesJson([("me", "COMMENTED", handler.Sha, Refusal)]);
+        handler.ReviewsAt(3, WatchHandler.ReviewsWithBodiesJson([("me", "COMMENTED", handler.Sha, Refusal), ("me", "COMMENTED", handler.Sha, "No findings.")]));
+        PullRequestWatchResult result = await Watch(sut, TimeSpan.FromHours(1), null, TestContext.Current.CancellationToken);
+        Assert.True(result.IsGreen);
+        Assert.Null(result.Refusal);
+        // The read before the request, a poll that the old refusal does not settle, then the poll with the new review.
+        Assert.Equal(3, handler.ReviewReads);
+        Assert.Equal(2, handler.CheckRunReads);
+    }
+
+    [Fact]
+    public async Task ANewRefusalAfterTheRequestEndsTheWatchRedWithItsBody()
+    {
+        (PullRequestWatch sut, WatchHandler handler) = Make();
+        handler.ReviewsAt(1, WatchHandler.ReviewsWithBodiesJson([("me", "COMMENTED", handler.Sha, Refusal)]));
+        handler.ReviewsBody = WatchHandler.ReviewsWithBodiesJson([("me", "COMMENTED", handler.Sha, Refusal), ("me", "COMMENTED", handler.Sha, Refusal)]);
+        PullRequestWatchResult result = await Watch(sut, TimeSpan.FromHours(1), null, TestContext.Current.CancellationToken);
+        Assert.False(result.IsGreen);
+        Assert.Equal(Refusal, result.Refusal);
+        Assert.Single(handler.ReviewRequests);
+    }
+
+    [Fact]
+    public async Task AReviewOnAHeadOtherThanTheOneOfTheRequestCounts()
+    {
+        (PullRequestWatch sut, WatchHandler handler) = Make();
+        const string earlier = "d7d0afd495cc64aa2ac153de8d001ad8d86fe074";
+        handler.ShaAt(1, earlier);
+        handler.ReviewsBody = WatchHandler.ReviewsWithBodiesJson([("me", "COMMENTED", earlier, Refusal), ("me", "COMMENTED", handler.Sha, "No findings.")]);
+        PullRequestWatchResult result = await Watch(sut, TimeSpan.Zero, null, TestContext.Current.CancellationToken);
+        Assert.Single(handler.ReviewRequests);
+        Assert.True(result.IsGreen);
+    }
+
+    [Theory]
+    [InlineData("completed", "success", true)]
+    [InlineData("completed", "skipped", true)]
+    [InlineData("completed", "failure", false)]
+    public async Task WithNoReviewerTheWatchSettlesOnTheChecksAloneAndRequestsNoReview(string status, string conclusion, bool green)
+    {
+        (PullRequestWatch sut, WatchHandler handler) = Make();
+        handler.CheckRunsBody = WatchHandler.RunsJson([("build", status, conclusion)]);
+        handler.ReviewsBody = WatchHandler.ReviewsJson([]);
+        PullRequestWatchResult result = await sut.WatchAsync(Pull, null, TimeSpan.Zero, TimeSpan.Zero, TestContext.Current.CancellationToken);
+        Assert.Equal(green, result.IsGreen);
+        Assert.Equal(0, handler.ReviewReads);
+        Assert.Empty(handler.ReviewRequests);
+    }
+
+    [Fact]
+    public async Task WithNoReviewerARunInProgressIsWaitedFor()
+    {
+        (PullRequestWatch sut, WatchHandler handler) = Make();
+        handler.CheckRunsAt(1, WatchHandler.RunsJson([("build", "in_progress", null)]));
+        PullRequestWatchResult result = await sut.WatchAsync(Pull, null, TimeSpan.Zero, TimeSpan.FromHours(1), TestContext.Current.CancellationToken);
+        Assert.True(result.IsGreen);
+    }
+
+    [Fact]
+    public async Task WithNoReviewerNoCheckRunIsRedAfterTheTimeout()
+    {
+        (PullRequestWatch sut, WatchHandler handler) = Make();
+        handler.CheckRunsBody = WatchHandler.RunsJson([]);
+        PullRequestWatchResult result = await sut.WatchAsync(Pull, null, TimeSpan.Zero, TimeSpan.Zero, TestContext.Current.CancellationToken);
+        Assert.False(result.IsGreen);
     }
 }

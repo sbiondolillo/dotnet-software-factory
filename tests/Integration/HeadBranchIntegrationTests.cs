@@ -38,7 +38,7 @@ public sealed class HeadBranchIntegrationTests
     public async Task TheHeadBranchOfAnOpenPullRequestIsTheBranchItWasOpenedFrom()
     {
         var client = new GitHubClient(new HttpClient(), Token);
-        Assert.Equal(ScratchFixtures.EmptyBranch, await new PullRequests(client).ReadHeadBranchAsync(Owner, Repo, ScratchFixtures.EmptyPull, TestContext.Current.CancellationToken));
+        Assert.Equal(ScratchFixtures.EmptyBranch, await new PullRequests(client).ReadHeadBranchAsync(new IssueNumber(new RepoName(Owner, Repo), ScratchFixtures.EmptyPull), TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -46,7 +46,7 @@ public sealed class HeadBranchIntegrationTests
     {
         var client = new GitHubClient(new HttpClient(), Token);
         GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(
-            () => new PullRequests(client).ReadHeadBranchAsync(Owner, Repo, 999999999, TestContext.Current.CancellationToken));
+            () => new PullRequests(client).ReadHeadBranchAsync(new IssueNumber(new RepoName(Owner, Repo), 999999999), TestContext.Current.CancellationToken));
         Assert.Equal(404, ex.StatusCode);
     }
 
@@ -62,9 +62,9 @@ public sealed class HeadBranchIntegrationTests
             cleanup.Add($"delete the directory {directory.FullName}", () => directory.Delete(recursive: true));
             string branch = await CreateBranchAsync(client, cleanup, ct);
             var sut = new PullRequests(client);
-            PullRequest opened = await sut.OpenAsync(Owner, Repo, branch, "main", "test " + branch, "body", ct);
+            PullRequest opened = await sut.OpenAsync(new RepoName(Owner, Repo), branch, "main", "test " + branch, "body", ct);
             cleanup.Add($"close the pull request #{opened.Number}", () => client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/pulls/{opened.Number}", "{\"state\":\"closed\"}"));
-            string headSha = await sut.ReadHeadShaAsync(Owner, Repo, opened.Number, ct);
+            string headSha = await sut.ReadHeadShaAsync(new IssueNumber(new RepoName(Owner, Repo), opened.Number), ct);
 
             var git = new Git(new CommandRunner());
             await git.CloneAsync($"https://github.com/{Owner}/{Repo}.git", token, directory.FullName, ct);

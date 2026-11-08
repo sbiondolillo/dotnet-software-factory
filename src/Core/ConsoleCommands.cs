@@ -213,10 +213,8 @@ public static partial class ConsoleCommands
 
     private static async Task<int> ExecuteAsync(Options options, ConsoleHost host, GitHubClient client, GitHubClient checksClient, string token, CancellationToken cancellationToken)
     {
-        var pullRequests = new PullRequests(client, checksClient);
-        var reviewThreads = new ReviewThreads(client);
-        var watch = new PullRequestWatch(pullRequests, reviewThreads, host.Delay, host.Time);
-        var git = new Git(host.Runner);
+        var pullRequests = new PullRequests(client, checksClient, host.Delay, host.Time);
+        var watch = new PullRequestWatch(pullRequests, new ReviewThreads(client), host.Delay, host.Time);
         (string owner, string repo) = options.Repo;
 
         JsonElement repoJson = await client.SendAsync(HttpMethod.Get, $"/repos/{owner}/{repo}", null, cancellationToken).ConfigureAwait(false);
@@ -230,30 +228,28 @@ public static partial class ConsoleCommands
         {
             string runId = Convert.ToHexString(RandomNumberGenerator.GetBytes(4)).ToLowerInvariant();
             DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-run-");
-            FactoryRunResult result;
-            bool declined;
+            RunOutcome<Delivered> result;
             try
             {
                 var request = new FactoryRunRequest(
-                    owner, repo, options.Number, token, runId, directory.FullName, baseBranch,
+                    new IssueNumber(options.Repo, options.Number), token, runId, directory.FullName, baseBranch,
                     Model, 50, Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration, options.BaseCommit);
                 var factoryRun = new FactoryRun(host.Runner, client, backend, host.Out, host.Error, host.Time, host.Environment("GITHUB_STEP_SUMMARY"), EntryVersion());
                 result = await factoryRun.RunAsync(request, cancellationToken).ConfigureAwait(false);
-                declined = factoryRun.Declined;
-                localHead = result.PullRequest is null ? null : await git.ReadHeadShaAsync(directory.FullName, cancellationToken).ConfigureAwait(false);
             }
             finally
             {
                 Remove(directory);
             }
 
-            if (result.PullRequest is not PullRequest pullRequest)
+            if (result.Passed is not Delivered delivered)
             {
-                return declined ? 0 : 1;
+                return result.Stop?.End is RunEnd.Declined ? 0 : 1;
             }
 
-            number = pullRequest.Number;
-            await host.Out.WriteLineAsync(pullRequest.HtmlUrl).ConfigureAwait(false);
+            number = delivered.PullRequest.Number;
+            localHead = delivered.Head;
+            await host.Out.WriteLineAsync(delivered.PullRequest.HtmlUrl).ConfigureAwait(false);
         }
         else
         {
@@ -270,7 +266,8 @@ public static partial class ConsoleCommands
             }
         }
 
-        (PullRequestWatchResult last, string head) = await WatchAsync(host, pullRequests, reviewThreads, watch, owner, repo, number, localHead, options.Timeout, options.CopilotReview, cancellationToken).ConfigureAwait(false);
+        var pullRequest = new IssueNumber(options.Repo, number);
+        (PullRequestWatchResult last, string head) = await WatchAsync(host, pullRequests, watch, pullRequest, localHead, options.Timeout, options.CopilotReview, cancellationToken).ConfigureAwait(false);
         if (options.Verb is "run")
         {
             int rounds = 0;
@@ -285,7 +282,7 @@ public static partial class ConsoleCommands
 
                 rounds++;
                 string before = head;
-                (last, head) = await WatchAsync(host, pullRequests, reviewThreads, watch, owner, repo, number, localHead, options.Timeout, options.CopilotReview, cancellationToken).ConfigureAwait(false);
+                (last, head) = await WatchAsync(host, pullRequests, watch, pullRequest, localHead, options.Timeout, options.CopilotReview, cancellationToken).ConfigureAwait(false);
                 changed = head != before;
             }
         }
@@ -299,8 +296,8 @@ public static partial class ConsoleCommands
         return last.IsGreen && last.Threads.Count is 0 ? 0 : 1;
     }
 
-    /// <summary>Runs one feedback run in a new work tree, and gives back the head commit of that work tree, or null when it cloned
-    /// nothing, and whether the run declined its closing issue.</summary>
+    /// <summary>Runs one feedback run in a new work tree, and gives back the head commit it pushed, or null when it pushed nothing,
+    /// and whether the run declined its closing issue.</summary>
     private static async Task<(string? Head, bool Declined)> FeedbackAsync(Options options, ConsoleHost host, GitHubClient client, StartBackend backend, string token, int number, CancellationToken cancellationToken)
     {
         await host.Out.WriteLineAsync("feedback: start").ConfigureAwait(false);
@@ -308,18 +305,11 @@ public static partial class ConsoleCommands
         try
         {
             var request = new FeedbackRunRequest(
-                options.Repo.Owner, options.Repo.Name, number, token, directory.FullName,
+                new IssueNumber(options.Repo, number), token, directory.FullName,
                 Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration);
             var feedbackRun = new FeedbackRun(host.Runner, client, backend, host.Out, host.Time, host.Environment("GITHUB_STEP_SUMMARY"), host.Error);
-            FeedbackRunResult result = await feedbackRun.RunAsync(request, cancellationToken).ConfigureAwait(false);
-            if (feedbackRun.Declined)
-            {
-                return (null, true);
-            }
-
-            return (result.Resolved + result.Unresolved is 0
-                ? null
-                : await new Git(host.Runner).ReadHeadShaAsync(directory.FullName, cancellationToken).ConfigureAwait(false), false);
+            RunOutcome<Answered> result = await feedbackRun.RunAsync(request, cancellationToken).ConfigureAwait(false);
+            return (result.Passed?.Head, result.Stop?.End is RunEnd.Declined);
         }
         finally
         {
@@ -327,56 +317,23 @@ public static partial class ConsoleCommands
         }
     }
 
+    /// <summary>Waits for GitHub to read the pushed head <paramref name="localHead"/>, when there is one, then watches the pull request,
+    /// and gives back the result of the watch and the head it started on.</summary>
     private static async Task<(PullRequestWatchResult Result, string Head)> WatchAsync(
         ConsoleHost host,
         PullRequests pullRequests,
-        ReviewThreads reviewThreads,
         PullRequestWatch watch,
-        string owner,
-        string repo,
-        int number,
+        IssueNumber pullRequest,
         string? localHead,
         TimeSpan timeout,
         bool copilotReview,
         CancellationToken cancellationToken)
     {
         await host.Out.WriteLineAsync("watch: start").ConfigureAwait(false);
-        if (localHead is not null)
-        {
-            long? firstDifferent = null;
-            while (true)
-            {
-                string sha = await pullRequests.ReadHeadShaAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
-                if (sha == localHead)
-                {
-                    break;
-                }
-
-                firstDifferent ??= host.Time.GetTimestamp();
-                if (host.Time.GetElapsedTime(firstDifferent.Value) >= HeadGrace)
-                {
-                    break;
-                }
-
-                await host.Delay(HeadPoll, cancellationToken).ConfigureAwait(false);
-            }
-        }
-
-        string head = await pullRequests.ReadHeadShaAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
-        int skipped = 0;
-        if (copilotReview)
-        {
-            IReadOnlyList<Review> reviews = await reviewThreads.ReadReviewsAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
-            List<Review> onHead = [.. reviews.Where(r => r.Author == Reviewer && r.CommitSha.Length is not 0 && r.CommitSha == head)];
-            if (onHead.Count is 0 || Review.Refusal(reviews, Reviewer, head) is not null)
-            {
-                skipped = onHead.Count;
-                string nodeId = await pullRequests.ReadNodeIdAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
-                await reviewThreads.RequestReviewAsync(nodeId, Reviewer, cancellationToken).ConfigureAwait(false);
-            }
-        }
-
-        PullRequestWatchResult result = await watch.WatchAsync(owner, repo, number, copilotReview ? Reviewer : null, PollWait, timeout, skipped, head, cancellationToken).ConfigureAwait(false);
+        string head = localHead is null
+            ? await pullRequests.ReadHeadShaAsync(pullRequest, cancellationToken).ConfigureAwait(false)
+            : await pullRequests.ReadHeadShaAsync(pullRequest, localHead, HeadGrace, HeadPoll, cancellationToken).ConfigureAwait(false);
+        PullRequestWatchResult result = await watch.WatchAsync(pullRequest, copilotReview ? Reviewer : null, PollWait, timeout, cancellationToken).ConfigureAwait(false);
         return (result, head);
     }
 
@@ -395,11 +352,6 @@ public static partial class ConsoleCommands
         {
             directory.Delete(recursive: true);
         }
-    }
-
-    private sealed record RepoName(string Owner, string Name)
-    {
-        public void Deconstruct(out string owner, out string name) => (owner, name) = (Owner, Name);
     }
 
     private sealed record Options(string Verb, RepoName Repo, int Number, IReadOnlyList<string> SecretNames, TimeSpan Timeout, int ReviewRounds, bool CopilotReview, bool SkipIntegration, bool Managed)

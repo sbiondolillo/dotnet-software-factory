@@ -27,7 +27,7 @@ public sealed class Deliver(Git git, PullRequests pullRequests, GitHubClient cli
         await git.PushAsync(branch, workTree, token, cancellationToken).ConfigureAwait(false);
 
         string body = await BuildBodyAsync(workTree, issueNumber, cancellationToken).ConfigureAwait(false);
-        PullRequest pullRequest = await pullRequests.OpenAsync(owner, repo, branch, baseBranch, issueTitle, body, cancellationToken).ConfigureAwait(false);
+        PullRequest pullRequest = await pullRequests.OpenAsync(new RepoName(owner, repo), branch, baseBranch, issueTitle, body, cancellationToken).ConfigureAwait(false);
         await client.PostCommentAsync(owner, repo, issueNumber, $"Opened {pullRequest.HtmlUrl}", cancellationToken).ConfigureAwait(false);
         return pullRequest;
     }

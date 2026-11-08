@@ -28,14 +28,14 @@ public sealed class PullRequestWatchIntegrationTests
         cleanup.Add($"delete the branch {branch}", () => client.SendAsync(HttpMethod.Delete, $"/repos/{Owner}/{Repo}/git/refs/heads/{branch}"));
         string content = Convert.ToBase64String(Encoding.UTF8.GetBytes(branch));
         await client.SendAsync(HttpMethod.Put, $"/repos/{Owner}/{Repo}/contents/{branch}.txt", JsonSerializer.Serialize(new { message = "add " + branch, content, branch }), ct);
-        PullRequest pr = await new PullRequests(client).OpenAsync(Owner, Repo, branch, "main", "watch test " + branch, "body", ct);
+        PullRequest pr = await new PullRequests(client).OpenAsync(new RepoName(Owner, Repo), branch, "main", "watch test " + branch, "body", ct);
         cleanup.Add($"close the pull request #{pr.Number}", () => client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/pulls/{pr.Number}", "{\"state\":\"closed\"}"));
         return (branch, pr.Number);
     }
 
     private static async Task CommentAsync(GitHubClient client, int number, string path, CancellationToken ct)
     {
-        string sha = await new PullRequests(client).ReadHeadShaAsync(Owner, Repo, number, ct);
+        string sha = await new PullRequests(client).ReadHeadShaAsync(new IssueNumber(new RepoName(Owner, Repo), number), ct);
         string comment = JsonSerializer.Serialize(new { body = "Name the unit.", commit_id = sha, path, line = 1, side = "RIGHT" });
         await client.SendAsync(HttpMethod.Post, $"/repos/{Owner}/{Repo}/pulls/{number}/comments", comment, ct);
     }
@@ -49,15 +49,15 @@ public sealed class PullRequestWatchIntegrationTests
         GitHubClient client = Client();
         var pulls = new PullRequests(client);
         var threads = new ReviewThreads(client);
-        string sha = await pulls.ReadHeadShaAsync(Owner, Repo, number, ct);
-        IReadOnlyList<CheckRun> runs = await pulls.ReadCheckRunsAsync(Owner, Repo, sha, ct);
+        string sha = await pulls.ReadHeadShaAsync(new IssueNumber(new RepoName(Owner, Repo), number), ct);
+        IReadOnlyList<CheckRun> runs = await pulls.ReadCheckRunsAsync(new RepoName(Owner, Repo), sha, ct);
         Assert.Contains(new CheckRun("build", "completed", conclusion), runs);
         Assert.Contains(new CheckRun("skipped", "completed", "skipped"), runs);
         Assert.All(runs, r => Assert.Equal("completed", r.Status));
         Assert.Contains(await threads.ReadReviewsAsync(Owner, Repo, number, ct), r => r.Author == Owner && r.CommitSha == sha);
 
         var watch = new PullRequestWatch(pulls, threads);
-        PullRequestWatchResult result = await watch.WatchAsync(Owner, Repo, number, Owner, TimeSpan.Zero, TimeSpan.Zero, ct);
+        PullRequestWatchResult result = await watch.WatchAsync(new IssueNumber(new RepoName(Owner, Repo), number), Owner, TimeSpan.Zero, TimeSpan.Zero, ct);
         Assert.Equal(green, result.IsGreen);
         Assert.Null(result.Refusal);
     }
@@ -69,8 +69,8 @@ public sealed class PullRequestWatchIntegrationTests
         GitHubClient client = Client();
         JsonElement reference = await client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/git/ref/heads/{ScratchFixtures.EmptyBranch}", null, ct);
         string expected = reference.GetProperty("object").GetProperty("sha").GetString() ?? "";
-        Assert.Equal(expected, await new PullRequests(client).ReadHeadShaAsync(Owner, Repo, ScratchFixtures.EmptyPull, ct));
-        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => new PullRequests(client).ReadHeadShaAsync(Owner, Repo, 0, ct));
+        Assert.Equal(expected, await new PullRequests(client).ReadHeadShaAsync(new IssueNumber(new RepoName(Owner, Repo), ScratchFixtures.EmptyPull), ct));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => new PullRequests(client).ReadHeadShaAsync(new IssueNumber(new RepoName(Owner, Repo), 0), ct));
         Assert.Equal(404, ex.StatusCode);
     }
 
@@ -86,13 +86,13 @@ public sealed class PullRequestWatchIntegrationTests
             Assert.Empty(await threads.ReadReviewsAsync(Owner, Repo, number, ct));
             await CommentAsync(client, number, branch + ".txt", ct);
             var watch = new PullRequestWatch(new PullRequests(client), threads);
-            PullRequestWatchResult result = await watch.WatchAsync(Owner, Repo, number, Owner, TimeSpan.Zero, TimeSpan.Zero, ct);
+            PullRequestWatchResult result = await watch.WatchAsync(new IssueNumber(new RepoName(Owner, Repo), number), Owner, TimeSpan.Zero, TimeSpan.Zero, ct);
             Assert.False(result.IsGreen);
             ReviewThread thread = Assert.Single(result.Threads);
             Assert.Equal("Name the unit.", Assert.Single(thread.Comments).Body);
 
             await threads.ResolveAsync(thread.Id, ct);
-            PullRequestWatchResult after = await watch.WatchAsync(Owner, Repo, number, Owner, TimeSpan.Zero, TimeSpan.Zero, ct);
+            PullRequestWatchResult after = await watch.WatchAsync(new IssueNumber(new RepoName(Owner, Repo), number), Owner, TimeSpan.Zero, TimeSpan.Zero, ct);
             Assert.Empty(after.Threads);
             Assert.Contains(await threads.ReadReviewsAsync(Owner, Repo, number, ct), r => r.Author == Owner);
         });

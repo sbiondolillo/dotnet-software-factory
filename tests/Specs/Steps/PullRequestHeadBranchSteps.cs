@@ -33,7 +33,7 @@ public sealed class PullRequestHeadBranchSteps(RecordingHandler handler)
         var pullRequests = new PullRequests(new GitHubClient(new HttpClient(handler), "token", TimeSpan.Zero));
         try
         {
-            _branch = await pullRequests.ReadHeadBranchAsync(parts[0], parts[1], number, TestContext.Current.CancellationToken);
+            _branch = await pullRequests.ReadHeadBranchAsync(new IssueNumber(new RepoName(parts[0], parts[1]), number), TestContext.Current.CancellationToken);
         }
         catch (GitHubRequestException ex)
         {

@@ -10,7 +10,7 @@ namespace Specs.Steps;
 public sealed class JobSummarySteps : IDisposable
 {
     private readonly RunHarness _h = new();
-    private FactoryRunResult? _result;
+    private RunOutcome<Delivered>? _result;
     private readonly JobSummary _summary = new();
     private string _rendered = "";
 
@@ -122,7 +122,7 @@ public sealed class JobSummarySteps : IDisposable
     public async Task WhenDelivers(int redos)
     {
         _result = await _h.RunFactoryAsync().ConfigureAwait(false);
-        Assert.NotNull(_result.PullRequest);
+        Assert.NotNull(_result.Passed);
         Assert.Equal(redos, _result.Redos);
     }
 
@@ -154,7 +154,7 @@ public sealed class JobSummarySteps : IDisposable
     public async Task WhenEnds()
     {
         _result = await _h.RunFactoryAsync().ConfigureAwait(false);
-        Assert.Null(_result.PullRequest);
+        Assert.Null(_result.Passed);
     }
 
     [Then("the summary file ends with the lines")]
