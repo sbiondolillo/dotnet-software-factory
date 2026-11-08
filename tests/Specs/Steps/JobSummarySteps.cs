@@ -10,7 +10,7 @@ namespace Specs.Steps;
 public sealed class JobSummarySteps : IDisposable
 {
     private readonly RunHarness _h = new();
-    private RunOutcome<Delivered>? _result;
+    private RunResult<Delivered>? _result;
     private readonly JobSummary _summary = new();
     private string _rendered = "";
 

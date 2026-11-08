@@ -40,7 +40,7 @@ public sealed class AgentBackendTests : IDisposable
             .Returns((CommandSpec spec, CancellationToken _) => Task.FromResult(
                 spec.Arguments[0] is "run" ? new CommandResult { StandardOutput = "abc123\n" } : new CommandResult()));
         StartBackend start = AgentBackend.Pick(new BackendOptions(
-            mock.Object, "t:1", _root.FullName, settings, "owner", "repo", "token", "Factory", "factory@example.com", _handler));
+            mock.Object, "t:1", _root.FullName, settings, new RepoName("owner", "repo"), "token", "Factory", "factory@example.com", _handler));
         return await start(new BackendStart(new Git(mock.Object), _tree.FullName, "base", "scratch", "Title", null), TestContext.Current.CancellationToken);
     }
 

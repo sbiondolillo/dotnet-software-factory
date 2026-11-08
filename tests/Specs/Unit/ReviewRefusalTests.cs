@@ -16,7 +16,7 @@ public sealed class ReviewRefusalTests
         var handler = new RecordingHandler();
         handler.Answer(200, WatchHandler.ReviewsWithBodiesJson([(Reviewer, "COMMENTED", Sha, Text)]));
         var sut = new ReviewThreads(new GitHubClient(new HttpClient(handler), "t", TimeSpan.Zero));
-        Review review = Assert.Single(await sut.ReadReviewsAsync("o", "r", 1, TestContext.Current.CancellationToken));
+        Review review = Assert.Single(await sut.ReadReviewsAsync(new IssueNumber(new RepoName("o", "r"), 1), TestContext.Current.CancellationToken));
         Assert.Equal(Text, review.Body);
     }
 
@@ -26,7 +26,7 @@ public sealed class ReviewRefusalTests
         var handler = new RecordingHandler();
         handler.Answer(200, "{\"data\":{\"repository\":{\"pullRequest\":{\"reviews\":{\"nodes\":[{\"state\":\"COMMENTED\"}]}}}}}");
         var sut = new ReviewThreads(new GitHubClient(new HttpClient(handler), "t", TimeSpan.Zero));
-        Review review = Assert.Single(await sut.ReadReviewsAsync("o", "r", 1, TestContext.Current.CancellationToken));
+        Review review = Assert.Single(await sut.ReadReviewsAsync(new IssueNumber(new RepoName("o", "r"), 1), TestContext.Current.CancellationToken));
         Assert.Equal("", review.Body);
     }
 

@@ -10,7 +10,7 @@ namespace Specs.Steps;
 public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState promptState) : IDisposable
 {
     private readonly RunHarness _h = new();
-    private RunOutcome<Delivered>? _result;
+    private RunResult<Delivered>? _result;
     private Exception? _exception;
 
     /// <summary>The harness of the run, which the step classes of a factory run and of a feedback run share.</summary>
@@ -26,9 +26,9 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     private List<string> Timeline => _h.Timeline;
 
     /// <summary>The result of the run, for a step class of another feature of the same run.</summary>
-    public RunOutcome<Delivered> LastResult => Result;
+    public RunResult<Delivered> LastResult => Result;
 
-    private RunOutcome<Delivered> Result => _result ?? throw new InvalidOperationException("the run gave no result");
+    private RunResult<Delivered> Result => _result ?? throw new InvalidOperationException("the run gave no result");
 
     private IEnumerable<AgentRequest> Builds => _h.Builder.Of(Phase.Build);
 

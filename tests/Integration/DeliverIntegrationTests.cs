@@ -41,7 +41,7 @@ public sealed class DeliverIntegrationTests
             cleanup.Add($"delete the branch {branch} when GitHub holds it", () => DeleteWhenHeldAsync(client, branch));
             var pullRequests = new PullRequests(client);
             var deliver = new Deliver(git, pullRequests, client);
-            PullRequest result = await deliver.RunAsync(directory.FullName, runId, Owner, Repo, "main", issue, title, token, ct);
+            PullRequest result = await deliver.RunAsync(directory.FullName, runId, new IssueNumber(new RepoName(Owner, Repo), issue), "main", title, token, ct);
             int pull = result.Number;
             cleanup.Add($"close the pull request #{pull}", () => client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/pulls/{pull}", "{\"state\":\"closed\"}"));
 

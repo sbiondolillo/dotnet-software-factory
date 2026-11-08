@@ -38,13 +38,13 @@ public sealed class GitHubClientIntegrationTests
         await Cleanup.RunAsync(async cleanup =>
         {
             (int number, string login) = await CreateAsync(client, cleanup, JsonSerializer.Serialize(new { title, body = "the body", labels = BugAndQuestion }), ct);
-            GitHubIssue issue = await client.ReadIssueAsync(Owner, Repo, number, ct);
+            GitHubIssue issue = await client.ReadIssueAsync(new IssueNumber(new RepoName(Owner, Repo), number), ct);
             Assert.Equal(title, issue.Title);
             Assert.Equal("the body", issue.Body);
             Assert.Equal(login, issue.Author);
             Assert.Equal<string[]>(["bug", "question"], [.. issue.Labels.Order()]);
 
-            await client.PostCommentAsync(Owner, Repo, number, comment, ct);
+            await client.PostCommentAsync(new IssueNumber(new RepoName(Owner, Repo), number), comment, ct);
             JsonElement comments = await client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/issues/{number}/comments", null, ct);
             Assert.Equal(comment, Assert.Single(comments.EnumerateArray()).GetProperty("body").GetString());
         });
@@ -59,7 +59,7 @@ public sealed class GitHubClientIntegrationTests
         await Cleanup.RunAsync(async cleanup =>
         {
             (int number, _) = await CreateAsync(client, cleanup, JsonSerializer.Serialize(new { title = "client-test " + Guid.NewGuid(), body = written, labels = CleanupAndReframe }), ct);
-            GitHubIssue issue = await client.ReadIssueAsync(Owner, Repo, number, ct);
+            GitHubIssue issue = await client.ReadIssueAsync(new IssueNumber(new RepoName(Owner, Repo), number), ct);
             Assert.Equal<string[]>(["cleanup", "reframe"], [.. issue.Labels.Order()]);
             Assert.Equal(written, issue.Body);
             Assert.Equal<string[]>(["README.md"], [.. CleanupBody.ReadScope(issue.Body)]);
@@ -76,7 +76,7 @@ public sealed class GitHubClientIntegrationTests
         await Cleanup.RunAsync(async cleanup =>
         {
             (int number, _) = await CreateAsync(client, cleanup, JsonSerializer.Serialize(new { title = "client-test " + Guid.NewGuid(), body = written }), ct);
-            GitHubIssue issue = await client.ReadIssueAsync(Owner, Repo, number, ct);
+            GitHubIssue issue = await client.ReadIssueAsync(new IssueNumber(new RepoName(Owner, Repo), number), ct);
             Assert.Empty(issue.Labels);
             Assert.Equal(written, issue.Body);
             Assert.True(IssueScenarios.Holds(issue.Body));
@@ -90,7 +90,7 @@ public sealed class GitHubClientIntegrationTests
     [Fact]
     public async Task AnIssueWithATitleAloneReadsWithEmptyBodyAndNoLabels()
     {
-        GitHubIssue issue = await Client().ReadIssueAsync(Owner, Repo, ScratchFixtures.TitleAloneIssue, TestContext.Current.CancellationToken);
+        GitHubIssue issue = await Client().ReadIssueAsync(new IssueNumber(new RepoName(Owner, Repo), ScratchFixtures.TitleAloneIssue), TestContext.Current.CancellationToken);
         Assert.Equal("", issue.Body);
         Assert.Empty(issue.Labels);
     }
@@ -98,7 +98,7 @@ public sealed class GitHubClientIntegrationTests
     [Fact]
     public async Task ReadingIssueZeroGives404()
     {
-        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Client().ReadIssueAsync(Owner, Repo, 0, TestContext.Current.CancellationToken));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Client().ReadIssueAsync(new IssueNumber(new RepoName(Owner, Repo), 0), TestContext.Current.CancellationToken));
         Assert.Equal(404, ex.StatusCode);
     }
 
@@ -110,8 +110,8 @@ public sealed class GitHubClientIntegrationTests
         await Cleanup.RunAsync(async cleanup =>
         {
             (int number, _) = await CreateAsync(client, cleanup, JsonSerializer.Serialize(new { title = "client-test " + Guid.NewGuid() }), ct);
-            await client.PostCommentAsync(Owner, Repo, number, new string('a', 262144), ct);
-            GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => client.PostCommentAsync(Owner, Repo, number, new string('é', 131073), ct));
+            await client.PostCommentAsync(new IssueNumber(new RepoName(Owner, Repo), number), new string('a', 262144), ct);
+            GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => client.PostCommentAsync(new IssueNumber(new RepoName(Owner, Repo), number), new string('é', 131073), ct));
             Assert.Equal(422, ex.StatusCode);
         });
     }
@@ -119,7 +119,7 @@ public sealed class GitHubClientIntegrationTests
     [Fact]
     public async Task AnInvalidTokenGives401()
     {
-        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Client("invalid").ReadIssueAsync(Owner, Repo, 1, TestContext.Current.CancellationToken));
+        GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => Client("invalid").ReadIssueAsync(new IssueNumber(new RepoName(Owner, Repo), 1), TestContext.Current.CancellationToken));
         Assert.Equal(401, ex.StatusCode);
     }
 }

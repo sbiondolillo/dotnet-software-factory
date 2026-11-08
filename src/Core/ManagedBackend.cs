@@ -56,8 +56,7 @@ public sealed class ManagedBackend : AgentBackend
         string imageTag,
         string rootDirectory,
         ManagedAgentsSettings settings,
-        string owner,
-        string repo,
+        RepoName repo,
         string token,
         string authorName,
         string authorEmail,
@@ -68,7 +67,7 @@ public sealed class ManagedBackend : AgentBackend
         TextWriter? progress = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        var config = new Config(runner, imageTag, rootDirectory, settings, owner, repo, token, authorName, authorEmail, handler, delay, log, time, progress);
+        var config = new Config(runner, imageTag, rootDirectory, settings, repo, token, authorName, authorEmail, handler, delay, log, time, progress);
         return (start, cancellationToken) => StartAsync(config, start, cancellationToken);
     }
 
@@ -118,7 +117,6 @@ public sealed class ManagedBackend : AgentBackend
     private ManagedAgentsAgent Session(ManagedAgentsClient client, GitHubAppTokens tokens, SessionRole role, int budgetCents) => new(
         client,
         tokens,
-        _config.Owner,
         _config.Repo,
         _start.ScratchBranch,
         _start.BaseCommit,
@@ -157,8 +155,7 @@ public sealed class ManagedBackend : AgentBackend
         string ImageTag,
         string RootDirectory,
         ManagedAgentsSettings Settings,
-        string Owner,
-        string Repo,
+        RepoName Repo,
         string Token,
         string AuthorName,
         string AuthorEmail,

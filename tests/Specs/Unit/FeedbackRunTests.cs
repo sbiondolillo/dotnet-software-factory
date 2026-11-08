@@ -19,7 +19,7 @@ public sealed class FeedbackRunTests
     public async Task NoThreadsEndsTheRunBeforeAnyCloneContainerOrComment()
     {
         using var h = new RunHarness { Threads = [] };
-        Assert.Equal(new RunOutcome<Answered>(new Answered(0, 0, null), null, 0), await h.RunFeedbackAsync(Ct));
+        Assert.Equal(new RunResult<Answered>(new Answered(0, 0, null), null, 0), await h.RunFeedbackAsync(Ct));
         Assert.Empty(h.Commands);
         Assert.Empty(h.AgentRequests);
         Assert.Empty(h.CommentBodies);
@@ -29,7 +29,7 @@ public sealed class FeedbackRunTests
     public async Task OnlyResolvedThreadsEndTheRunBeforeAnyCloneContainerOrComment()
     {
         using var h = new RunHarness { Threads = [RunHarness.ThreadC] };
-        Assert.Equal(new RunOutcome<Answered>(new Answered(0, 0, null), null, 0), await h.RunFeedbackAsync(Ct));
+        Assert.Equal(new RunResult<Answered>(new Answered(0, 0, null), null, 0), await h.RunFeedbackAsync(Ct));
         Assert.Empty(h.Commands);
         Assert.Empty(h.CommentBodies);
     }
@@ -40,7 +40,7 @@ public sealed class FeedbackRunTests
         using var h = new RunHarness();
         h.Report(Both());
         h.Report(null, 1);
-        RunOutcome<Answered> result = await h.RunFeedbackAsync(Ct);
+        RunResult<Answered> result = await h.RunFeedbackAsync(Ct);
         Assert.Contains(".factory/threads.json", h.Builder.Of(Phase.Build).ElementAt(1).Prompt.Text, StringComparison.Ordinal);
         Assert.Equal(1, result.Redos);
         Assert.Equal(["build", "build", "dotnet", "review"], h.Events.Where(e => e is "build" or "dotnet" or "review"));
@@ -59,7 +59,7 @@ public sealed class FeedbackRunTests
         using var h = new RunHarness();
         h.Report(Both());
         h.Report(text, 1);
-        RunOutcome<Answered> result = await h.RunFeedbackAsync(Ct);
+        RunResult<Answered> result = await h.RunFeedbackAsync(Ct);
         Assert.Equal(1, result.Redos);
         Assert.Contains(".factory/threads.json", h.Builder.Of(Phase.Build).ElementAt(1).Prompt.Text, StringComparison.Ordinal);
     }
@@ -103,7 +103,7 @@ public sealed class FeedbackRunTests
         using var h = new RunHarness();
         h.Report(Both());
         h.Report(report, 1);
-        RunOutcome<Answered> result = await h.RunFeedbackAsync(Ct);
+        RunResult<Answered> result = await h.RunFeedbackAsync(Ct);
         Assert.Equal(1, result.Redos);
         string text = h.Builder.Of(Phase.Build).ElementAt(1).Prompt.Text;
         Assert.Contains(A, text, StringComparison.Ordinal);
@@ -125,7 +125,7 @@ public sealed class FeedbackRunTests
         string extra = RunHarness.Items([(A, "fixed", "x"), (B, "fixed", "y"), ("PRRT_other", "done", "")]);
         using var g = new RunHarness();
         g.Report(extra);
-        Assert.Equal(new RunOutcome<Answered>(new Answered(2, 0, g.HeadSha), null, 0), await g.RunFeedbackAsync(Ct));
+        Assert.Equal(new RunResult<Answered>(new Answered(2, 0, g.HeadSha), null, 0), await g.RunFeedbackAsync(Ct));
     }
 
     [Fact]
@@ -134,7 +134,7 @@ public sealed class FeedbackRunTests
         string report = RunHarness.Items([(A, "fixed", "fixed it"), (B, "disputed", "the name is right")]);
         using var h = new RunHarness();
         h.Report(report);
-        Assert.Equal(new RunOutcome<Answered>(new Answered(2, 0, h.HeadSha), null, 0), await h.RunFeedbackAsync(Ct));
+        Assert.Equal(new RunResult<Answered>(new Answered(2, 0, h.HeadSha), null, 0), await h.RunFeedbackAsync(Ct));
         Assert.Equal(
             ["reply:" + A, "resolve:" + A, "reply:" + B, "resolve:" + B],
             h.Events.Where(e => e.StartsWith("reply:", StringComparison.Ordinal) || e.StartsWith("resolve:", StringComparison.Ordinal)));
@@ -149,7 +149,7 @@ public sealed class FeedbackRunTests
         h.Report(null);
         h.Report(Both(), 1);
         h.RedBuilds.Add(1);
-        RunOutcome<Answered> result = await h.RunFeedbackAsync(Ct);
+        RunResult<Answered> result = await h.RunFeedbackAsync(Ct);
         Assert.Contains(".factory/threads.json", h.Builder.Of(Phase.Build).ElementAt(2).Prompt.Text, StringComparison.Ordinal);
         Assert.Null(result.Passed);
         Assert.Equal(RunEnd.Stopped, result.Stop?.End);
@@ -165,7 +165,7 @@ public sealed class FeedbackRunTests
             h.RedBuilds.Add(build);
         }
 
-        RunOutcome<Answered> result = await h.RunFeedbackAsync(Ct);
+        RunResult<Answered> result = await h.RunFeedbackAsync(Ct);
         Assert.Null(result.Passed);
         Assert.Equal(RunEnd.Stopped, result.Stop?.End);
         Assert.Equal(3, result.Redos);
@@ -183,7 +183,7 @@ public sealed class FeedbackRunTests
         h.Sessions.Add(new SessionCost("sesn_01", "builder", 300));
         h.Sessions.Add(new SessionCost("sesn_02", "reviewer", 37));
         File.WriteAllText(h.SummaryPath!, "## Factory run\n");
-        Assert.Equal(new RunOutcome<Answered>(new Answered(2, 0, h.HeadSha), null, 0), await h.RunFeedbackAsync(Ct));
+        Assert.Equal(new RunResult<Answered>(new Answered(2, 0, h.HeadSha), null, 0), await h.RunFeedbackAsync(Ct));
         string summary = h.Summary;
         Assert.StartsWith("## Factory run\n\n## Feedback run\n", summary, StringComparison.Ordinal);
         string section = summary[summary.IndexOf("## Feedback run", StringComparison.Ordinal)..];
@@ -210,7 +210,7 @@ public sealed class FeedbackRunTests
     {
         using var h = new RunHarness();
         h.SummaryPath = Path.Combine(h.CloneDirectory, "absent", "summary.md");
-        Assert.Equal(new RunOutcome<Answered>(new Answered(2, 0, h.HeadSha), null, 0), await h.RunFeedbackAsync(Ct));
+        Assert.Equal(new RunResult<Answered>(new Answered(2, 0, h.HeadSha), null, 0), await h.RunFeedbackAsync(Ct));
         Assert.Contains(h.Log.ToString().Split('\n'), line => line.StartsWith($"summary: cannot write {h.SummaryPath}: ", StringComparison.Ordinal));
     }
 
@@ -260,7 +260,7 @@ public sealed class FeedbackRunTests
     public async Task AThreadWithNoLineShowsNoLineInTheBuildPromptAndTheRunGoesOn()
     {
         using var h = new RunHarness { NullLine = true };
-        Assert.Equal(new RunOutcome<Answered>(new Answered(2, 0, h.HeadSha), null, 0), await h.RunFeedbackAsync(Ct));
+        Assert.Equal(new RunResult<Answered>(new Answered(2, 0, h.HeadSha), null, 0), await h.RunFeedbackAsync(Ct));
         Assert.DoesNotContain("Line: 14", h.Builder.Of(Phase.Build).First().Prompt.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("Line: \n", h.Builder.Of(Phase.Build).First().Prompt.Text, StringComparison.Ordinal);
     }

@@ -200,7 +200,7 @@ public static partial class ConsoleCommands
     {
         SettleSettings settings = host.Settings;
         StartBackend backend = host.Backend(new BackendOptions(
-            host.Runner, ImageTag, host.RootDirectory, options.Settings, options.Repo.Owner, options.Repo.Name, token, settings.AuthorName, settings.AuthorEmail, host.Handler, host.Delay, host.Error, host.Time, host.Out));
+            host.Runner, ImageTag, host.RootDirectory, options.Settings, options.Repo, token, settings.AuthorName, settings.AuthorEmail, host.Handler, host.Delay, host.Error, host.Time, host.Out));
         var settle = new Settle(host.Runner, client, checksClient, token, backend, settings, host.Out, host.Error, host.Time, host.Delay, host.Environment("GITHUB_STEP_SUMMARY"));
         var settleOptions = new SettleOptions(options.ReviewRounds, options.CopilotReview, options.Timeout, options.SecretNames, options.SkipIntegration);
         var number = new IssueNumber(options.Repo, options.Number);

@@ -22,11 +22,11 @@ public sealed class ReviewThreadsRetryTests
 
     private static Task Call(ReviewThreads sut, int op) => op switch
     {
-        0 => sut.ReadReviewsAsync("o", "r", 1, Token),
+        0 => sut.ReadReviewsAsync(new IssueNumber(new RepoName("o", "r"), 1), Token),
         1 => sut.RequestReviewAsync("id", "bot", Token),
         2 => sut.ReplyAsync("t", "b", Token),
         3 => sut.ResolveAsync("t", Token),
-        _ => sut.ReadThreadsAsync("o", "r", 1, Token),
+        _ => sut.ReadThreadsAsync(new IssueNumber(new RepoName("o", "r"), 1), Token),
     };
 
     [Theory]
@@ -64,7 +64,7 @@ public sealed class ReviewThreadsRetryTests
     {
         (ReviewThreads sut, RecordingHandler handler) = Make();
         handler.Answer(200, Errors("Oops: Something went wrong while executing your query"));
-        await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ReadReviewsAsync("o", "r", 1, Token));
+        await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ReadReviewsAsync(new IssueNumber(new RepoName("o", "r"), 1), Token));
         Assert.Single(handler.Requests);
     }
 
@@ -74,7 +74,7 @@ public sealed class ReviewThreadsRetryTests
         (ReviewThreads sut, RecordingHandler handler) = Make();
         handler.Enqueue(200, Errors("nope", Fault));
         handler.Answer(200, Good);
-        Assert.Empty(await sut.ReadReviewsAsync("o", "r", 1, Token));
+        Assert.Empty(await sut.ReadReviewsAsync(new IssueNumber(new RepoName("o", "r"), 1), Token));
         Assert.Equal(2, handler.Requests.Count);
     }
 
@@ -85,7 +85,7 @@ public sealed class ReviewThreadsRetryTests
         handler.Enqueue(200, Errors(Fault));
         handler.Enqueue(200, Errors(Fault));
         handler.Answer(200, Good);
-        Assert.Empty(await sut.ReadReviewsAsync("o", "r", 1, Token));
+        Assert.Empty(await sut.ReadReviewsAsync(new IssueNumber(new RepoName("o", "r"), 1), Token));
         Assert.Equal(3, handler.Requests.Count);
     }
 
@@ -102,7 +102,7 @@ public sealed class ReviewThreadsRetryTests
         (ReviewThreads sut, RecordingHandler handler) = Make(TimeSpan.FromMilliseconds(100));
         handler.Answer(200, Errors(Fault));
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ReadReviewsAsync("o", "r", 1, Token));
+        await Assert.ThrowsAsync<GitHubGraphQLException>(() => sut.ReadReviewsAsync(new IssueNumber(new RepoName("o", "r"), 1), Token));
         Assert.True(watch.Elapsed >= TimeSpan.FromMilliseconds(290), watch.Elapsed.ToString());
     }
 }

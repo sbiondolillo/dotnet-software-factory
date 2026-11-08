@@ -284,5 +284,5 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
             at => lines.Skip(at).Take(wanted.Count).SequenceEqual(wanted));
     }
 
-    private RunOutcome<Delivered> FactoryResult() => factory.LastResult;
+    private RunResult<Delivered> FactoryResult() => factory.LastResult;
 }

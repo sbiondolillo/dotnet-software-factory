@@ -140,7 +140,7 @@ public sealed partial class ManagedAgentsHarness : IDisposable
         var tokens = new GitHubAppTokens(new GitHubHandler(this), "1", "2", Key.Value, Time, TimeSpan.Zero);
         var git = new Git(Mock.Of<CommandRunner>(MockBehavior.Strict));
         return new ManagedAgentsAgent(
-            client, tokens, Owner, Repo, SessionBranch, BaseCommit, WorkTree, RootDirectory, role, budgetCents, Log, Time);
+            client, tokens, new RepoName(Owner, Repo), SessionBranch, BaseCommit, WorkTree, RootDirectory, role, budgetCents, Log, Time);
     }
 
     /// <summary>Adds a file to the outputs of the session now, before the next message.</summary>

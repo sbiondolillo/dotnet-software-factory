@@ -55,7 +55,7 @@ public sealed class PullRequestWatchIntegrationTests
         Assert.Contains(new CheckRun("build", "completed", conclusion), runs);
         Assert.Contains(new CheckRun("skipped", "completed", "skipped"), runs);
         Assert.All(runs, r => Assert.Equal("completed", r.Status));
-        Assert.Contains(await threads.ReadReviewsAsync(Owner, Repo, number, ct), r => r.Author == Owner && r.CommitSha == sha);
+        Assert.Contains(await threads.ReadReviewsAsync(new IssueNumber(new RepoName(Owner, Repo), number), ct), r => r.Author == Owner && r.CommitSha == sha);
 
         var watch = new PullRequestWatch(pulls, threads);
         PullRequestWatchResult result = await watch.WatchAsync(new IssueNumber(new RepoName(Owner, Repo), number), Owner, TimeSpan.Zero, TimeSpan.Zero, ct);
@@ -84,9 +84,9 @@ public sealed class PullRequestWatchIntegrationTests
         {
             (string branch, int number) = await OpenAsync(client, cleanup, ct);
             var threads = new ReviewThreads(client);
-            Assert.Empty(await threads.ReadReviewsAsync(Owner, Repo, number, ct));
+            Assert.Empty(await threads.ReadReviewsAsync(new IssueNumber(new RepoName(Owner, Repo), number), ct));
             string sha = await CommentAsync(client, number, branch + ".txt", ct);
-            Assert.Contains(await threads.ReadReviewsAsync(Owner, Repo, number, ct), r => r.Author == Owner && r.CommitSha == sha);
+            Assert.Contains(await threads.ReadReviewsAsync(new IssueNumber(new RepoName(Owner, Repo), number), ct), r => r.Author == Owner && r.CommitSha == sha);
             var watch = new PullRequestWatch(new PullRequests(client), threads);
             PullRequestWatchResult result = await watch.WatchAsync(new IssueNumber(new RepoName(Owner, Repo), number), Owner, TimeSpan.Zero, TimeSpan.Zero, ct);
             Assert.False(result.IsGreen);
@@ -96,7 +96,7 @@ public sealed class PullRequestWatchIntegrationTests
             await threads.ResolveAsync(thread.Id, ct);
             PullRequestWatchResult after = await watch.WatchAsync(new IssueNumber(new RepoName(Owner, Repo), number), Owner, TimeSpan.Zero, TimeSpan.Zero, ct);
             Assert.Empty(after.Threads);
-            Assert.Contains(await threads.ReadReviewsAsync(Owner, Repo, number, ct), r => r.Author == Owner);
+            Assert.Contains(await threads.ReadReviewsAsync(new IssueNumber(new RepoName(Owner, Repo), number), ct), r => r.Author == Owner);
         });
     }
 }

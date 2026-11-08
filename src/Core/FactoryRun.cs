@@ -46,17 +46,17 @@ public sealed class FactoryRun(
 
     /// <summary>Runs the issue through the plan, the build, the gates and the review, and delivers an approved build. An issue
     /// that the run declines, as an input error of its author, ends with a comment, no run and the end <see cref="RunEnd.Declined"/>.</summary>
-    public async Task<RunOutcome<Delivered>> RunAsync(FactoryRunRequest request, CancellationToken cancellationToken = default)
+    public async Task<RunResult<Delivered>> RunAsync(FactoryRunRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         long started = _clock.GetTimestamp();
         RepoName repo = request.Issue.Repo;
-        GitHubIssue issue = await client.ReadIssueAsync(repo.Owner, repo.Name, request.Issue.Number, cancellationToken).ConfigureAwait(false);
+        GitHubIssue issue = await client.ReadIssueAsync(request.Issue, cancellationToken).ConfigureAwait(false);
         RecipeChoice choice = RecipeRules.Parse(issue.Labels, issue.Body);
         if (choice.Declined is string refusal)
         {
             string comment = await CommentAsync(request, refusal, [], cancellationToken).ConfigureAwait(false);
-            return new RunOutcome<Delivered>(null, new RunStop(comment, RunEnd.Declined), 0);
+            return new RunResult<Delivered>(null, new RunStop(comment, RunEnd.Declined), 0);
         }
 
         var shared = new RunRequest(
@@ -83,7 +83,7 @@ public sealed class FactoryRun(
 
     private Task<PullRequest> DeliverAsync(FactoryRunRequest request, string title, Git git, DeliveryFacts facts, CancellationToken cancellationToken) =>
         new Deliver(git, new PullRequests(client), client, facts)
-            .RunAsync(request.Directory, request.RunId, request.Issue.Repo.Owner, request.Issue.Repo.Name, request.BaseBranch, request.Issue.Number, title, request.Token, cancellationToken);
+            .RunAsync(request.Directory, request.RunId, request.Issue, request.BaseBranch, title, request.Token, cancellationToken);
 
     /// <summary>Posts the comment of <paramref name="lead"/> and <paramref name="texts"/> on the issue, and gives its body.</summary>
     private async Task<string> CommentAsync(FactoryRunRequest request, string lead, IReadOnlyList<string> texts, CancellationToken cancellationToken)
@@ -97,7 +97,7 @@ public sealed class FactoryRun(
     private async Task PostAsync(FactoryRunRequest request, string body, CancellationToken cancellationToken)
     {
         await Say(body).ConfigureAwait(false);
-        await client.PostCommentAsync(request.Issue.Repo.Owner, request.Issue.Repo.Name, request.Issue.Number, body, cancellationToken).ConfigureAwait(false);
+        await client.PostCommentAsync(request.Issue, body, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

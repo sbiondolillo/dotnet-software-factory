@@ -16,7 +16,7 @@ public sealed class DeliverBodyState : IDisposable
 
     public int ExpectedRedos { get; set; }
 
-    public RunOutcome<Delivered>? Result { get; set; }
+    public RunResult<Delivered>? Result { get; set; }
 
     public string Body { get; set; } = "";
 

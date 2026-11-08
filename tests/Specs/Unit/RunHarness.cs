@@ -369,7 +369,7 @@ public sealed class RunHarness : IDisposable
     /// <summary>The reviewer for a review, and the builder for a plan or a build.</summary>
     private FakeAgent AgentOf(Phase phase) => phase is Phase.Review ? Reviewer : Builder;
 
-    public Task<RunOutcome<Delivered>> RunFactoryAsync(CancellationToken cancellationToken = default)
+    public Task<RunResult<Delivered>> RunFactoryAsync(CancellationToken cancellationToken = default)
     {
         _kind = RunKind.Factory;
         (Mock<CommandRunner> runner, GitHubClient client, StartBackend backend) = Parts();
@@ -380,7 +380,7 @@ public sealed class RunHarness : IDisposable
         return run.RunAsync(request, cancellationToken);
     }
 
-    public Task<RunOutcome<Answered>> RunFeedbackAsync(CancellationToken cancellationToken = default)
+    public Task<RunResult<Answered>> RunFeedbackAsync(CancellationToken cancellationToken = default)
     {
         _kind = RunKind.Feedback;
         (Mock<CommandRunner> runner, GitHubClient client, StartBackend backend) = Parts();

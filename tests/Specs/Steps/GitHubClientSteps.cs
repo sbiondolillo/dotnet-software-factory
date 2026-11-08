@@ -52,7 +52,7 @@ public sealed class GitHubClientSteps(ExceptionState exceptionState, RecordingHa
     {
         try
         {
-            _issue = await state.Client!.ReadIssueAsync(owner, repo, number);
+            _issue = await state.Client!.ReadIssueAsync(new IssueNumber(new RepoName(owner, repo), number));
         }
         catch (GitHubRequestException ex)
         {
@@ -62,7 +62,7 @@ public sealed class GitHubClientSteps(ExceptionState exceptionState, RecordingHa
 
     [When("I post the comment {string} on issue {int} of the repo {string} of the owner {string}")]
     public async Task WhenIPost(string text, int number, string repo, string owner) =>
-        await state.Client!.PostCommentAsync(owner, repo, number, text);
+        await state.Client!.PostCommentAsync(new IssueNumber(new RepoName(owner, repo), number), text);
 
     [Then("the stand-in received one request")]
     public void ThenOneRequest() => Assert.Single(_handler.Requests);

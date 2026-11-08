@@ -84,11 +84,11 @@ public sealed class FeedbackCleanupScopeTests
         using RunHarness h = Cleanup("## Scope\n.editorconfig\n\n## Check\n\n```sh\ntrue\n```\n");
         h.FirstBuildChanges.Add(".editorconfig");
         h.BuildWrites(1, ".editorconfig");
-        RunOutcome<Answered> result = await h.RunFeedbackAsync(Ct);
+        RunResult<Answered> result = await h.RunFeedbackAsync(Ct);
         string[] lines = h.Progress.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Contains("test: passed", lines);
         Assert.DoesNotContain("test: failed", lines);
-        Assert.Equal(new RunOutcome<Answered>(new Answered(2, 0, h.HeadSha), null, 0), result);
+        Assert.Equal(new RunResult<Answered>(new Answered(2, 0, h.HeadSha), null, 0), result);
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public sealed class FeedbackCleanupScopeTests
     public async Task ABodyWithNoCheckBlockDeclinesTheRoundWithTheDeclineText()
     {
         using RunHarness h = Cleanup("## Scope\nREADME.md\n");
-        RunOutcome<Answered> result = await h.RunFeedbackAsync(Ct);
+        RunResult<Answered> result = await h.RunFeedbackAsync(Ct);
         Assert.Equal(RecipeRules.Parse(["cleanup"], "## Scope\nREADME.md\n").Declined, Assert.Single(h.CommentBodies));
         Assert.Null(result.Passed);
         Assert.Equal(new RunStop(Assert.Single(h.CommentBodies), RunEnd.Declined), result.Stop);

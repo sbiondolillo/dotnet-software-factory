@@ -24,7 +24,7 @@ public sealed class CleanupRunTests
     public async Task BothLabelsGetOneCommentAndNoContainer()
     {
         using RunHarness h = Make("cleanup", "behavior");
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        RunResult<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.Contains("behavior", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain(h.Commands, c => c.Command is "docker");
         Assert.Null(result.Passed);
@@ -40,7 +40,7 @@ public sealed class CleanupRunTests
     {
         using RunHarness h = Make("cleanup");
         h.Body = body;
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        RunResult<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.Contains(heading, Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain(h.Commands, c => c.Command is "docker");
         Assert.Null(result.Passed);
@@ -51,7 +51,7 @@ public sealed class CleanupRunTests
     {
         using RunHarness h = Make("cleanup");
         h.CheckResults[0] = (0, "", "");
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        RunResult<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.Contains("The check passes before the build", Assert.Single(h.CommentBodies), StringComparison.Ordinal);
         Assert.DoesNotContain(h.AgentRequests, r => r.Phase is Phase.Build);
         Assert.Contains(h.Commands, c => c.Arguments.Contains("remove"));
@@ -94,7 +94,7 @@ public sealed class CleanupRunTests
         h.Body = "## Scope\n.editorconfig\n\n## Check\n\n```sh\ntrue\n```\n";
         h.FirstBuildChanges.Add(".editorconfig");
         h.BuildWrites(1, ".editorconfig");
-        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        RunResult<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
         Assert.DoesNotContain(h.AgentRequests, r => r.Prompt.Text.Contains("pin: .editorconfig", StringComparison.Ordinal));
         Assert.NotEmpty(h.Reviewer.Of(Phase.Review));
         Assert.NotNull(result.Passed);

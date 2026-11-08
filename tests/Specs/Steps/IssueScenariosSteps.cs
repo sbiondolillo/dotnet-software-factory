@@ -56,11 +56,11 @@ public sealed class IssueScenariosSteps(FactoryRunSteps factory, PlanPhaseSteps 
     private readonly List<string> _removed = [];
     private string? _body;
     private string _blockText = "";
-    private RunOutcome<Delivered>? _result;
+    private RunResult<Delivered>? _result;
 
     private RunHarness H => factory.Harness;
 
-    private RunOutcome<Delivered> Result => _result ?? throw new InvalidOperationException("the run gave no result");
+    private RunResult<Delivered> Result => _result ?? throw new InvalidOperationException("the run gave no result");
 
     private IEnumerable<string> PlanPrompts => H.Builder.Of(Phase.Plan).Select(r => r.Prompt.Text);
 

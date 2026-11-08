@@ -9,7 +9,7 @@ namespace Specs.Steps;
 [Binding]
 public sealed class FeedbackRunSteps(FactoryRunSteps shared, BuildPhaseSteps buildPhase, ReviewPromptState reviewPrompt)
 {
-    private RunOutcome<Answered>? _result;
+    private RunResult<Answered>? _result;
     private Exception? _exception;
     private AgentRequest? _prompt;
 
@@ -18,7 +18,7 @@ public sealed class FeedbackRunSteps(FactoryRunSteps shared, BuildPhaseSteps bui
 
     private RunHarness H => shared.Harness;
 
-    private RunOutcome<Answered> Result => _result ?? throw new InvalidOperationException("the run gave no result");
+    private RunResult<Answered> Result => _result ?? throw new InvalidOperationException("the run gave no result");
 
     private string Build(int index) => H.Builder.Of(Phase.Build).ElementAt(index - 1).Prompt.Text;
 
