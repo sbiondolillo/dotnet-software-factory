@@ -194,13 +194,16 @@ public sealed class ConsoleProgramTests : IDisposable
         Assert.DoesNotContain("checks:", _run.Out.ToString(), StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task ALaterRefusalGivesTheStatusCodeAndExits1()
+    [Theory]
+    [InlineData("/pulls", 422)]
+    [InlineData("/check-runs", 500)]
+    public async Task ALaterRefusalGivesTheStatusCodeAndExits1(string suffix, int status)
     {
-        _run.Refusal = ("/pulls", 422);
+        _run.Refusal = (suffix, status);
         Assert.Equal(1, await RunAsync($"run {Repo} --issue 1 --timeout 0"));
         string[] others = [.. SettleHarness.Lines(_run.Error).Where(l => !l.StartsWith("agent: ", StringComparison.Ordinal) && !l.StartsWith("command: ", StringComparison.Ordinal))];
-        Assert.Contains("422", Assert.Single(others), StringComparison.Ordinal);
+        Assert.Contains(status.ToString(System.Globalization.CultureInfo.InvariantCulture), Assert.Single(others), StringComparison.Ordinal);
+        Assert.All(_run.CloneDirectories, directory => Assert.False(Directory.Exists(directory)));
     }
 
     [Fact]

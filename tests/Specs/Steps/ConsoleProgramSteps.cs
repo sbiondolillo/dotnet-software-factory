@@ -116,7 +116,7 @@ public sealed partial class ConsoleProgramSteps : IDisposable
     public void GivenNoThread() => _h.Threads = "none";
 
     [Given("GitHub answers each read of the review threads with the thread A")]
-    public void GivenThreadA() => _h.Threads = "always";
+    public void GivenThreadA() => _h.Threads = "resolvable";
 
     [Given("GitHub answers each read of the review threads with the thread A until the resolve of the thread A, and with no thread after it")]
     public void GivenThreadUntilResolved() => _h.Threads = "until-resolved";
@@ -189,7 +189,7 @@ public sealed partial class ConsoleProgramSteps : IDisposable
         int gives = -1;
         for (int i = 0; i < _h.Requests.Count && gives < 0; i++)
         {
-            if (IsHeadRead(_h.Requests[i]) && _h.HeadSha(++reads) == SettleHarness.DefaultSha)
+            if (IsHeadRead(_h.Requests[i]) && _h.HeadSha(++reads) is SettleHarness.DefaultSha)
             {
                 gives = i;
             }

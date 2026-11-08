@@ -219,7 +219,6 @@ public static partial class ConsoleCommands
         host.Environment(InstallationIdName)!,
         host.Environment(PrivateKeyName)!);
 
-
     private sealed record Options(string Verb, RepoName Repo, int Number, IReadOnlyList<string> SecretNames, TimeSpan Timeout, int ReviewRounds, bool CopilotReview, bool SkipIntegration, bool Managed)
     {
         /// <summary>The settings of the managed path, or null for the path of Claude Code in a sandbox.</summary>

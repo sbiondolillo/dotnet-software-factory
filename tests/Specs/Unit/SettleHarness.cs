@@ -129,7 +129,7 @@ public sealed class SettleHarness : IDisposable
     /// <summary>The answer to a read of the reviews from the number of reads after the review request (0 before it), or null for <see cref="Reviews"/>.</summary>
     public Func<int, string>? ReviewsByRead { get; set; }
 
-    /// <summary>"none", "always", "until-resolved" (thread A until its resolve, then no thread), "resolvable" (thread A on each read,
+    /// <summary>"none", "always" (thread A unresolved on each read, as when each push brings a new review with a new thread), "until-resolved" (thread A until its resolve, then no thread), "resolvable" (thread A on each read,
     /// with <c>isResolved</c> true after its resolve, as GitHub answers) or "watch-only" (thread A on each odd read, which is a watch's,
     /// and no thread on each even read, which is the start of a feedback run, so each feedback run finds no thread and pushes nothing).</summary>
     public string Threads { get; set; } = "none";
