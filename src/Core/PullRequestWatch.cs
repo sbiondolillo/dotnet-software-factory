@@ -3,7 +3,7 @@ namespace Core;
 /// <summary>The end of a watch: green or red, the review threads that are not resolved, and the body of a refusal by the reviewer on the head commit, or null.</summary>
 public sealed record PullRequestWatchResult(bool IsGreen, IReadOnlyList<ReviewThread> Threads, string? Refusal = null);
 
-/// <summary>Polls GitHub until a pull request is settled or a timeout passes.</summary>
+/// <summary>Polls GitHub until a pull request is settled or a timeout passes, and requests the review that it waits for.</summary>
 public sealed class PullRequestWatch(
     PullRequests pullRequests,
     ReviewThreads reviewThreads,
@@ -13,21 +13,46 @@ public sealed class PullRequestWatch(
     private readonly Func<TimeSpan, CancellationToken, Task> _delay = delay ?? ((span, token) => Task.Delay(span, token));
     private readonly TimeProvider _time = time ?? TimeProvider.System;
 
-    /// <summary>Polls the check runs and the reviews of a pull request (the check runs alone when <paramref name="reviewerLogin"/> is null), then gives back green or red and the unresolved threads. A refusal by the reviewer on the head commit ends the watch at once with red.</summary>
-    public Task<PullRequestWatchResult> WatchAsync(string owner, string repo, int number, string? reviewerLogin, TimeSpan wait, TimeSpan timeout, CancellationToken cancellationToken = default) =>
-        WatchAsync(owner, repo, number, reviewerLogin, wait, timeout, 0, null, cancellationToken);
-
-    /// <summary>Polls like the watch without the skip, but the first <paramref name="skippedReviews"/> reviews by the reviewer on <paramref name="skippedHead"/>, the ones that existed when a new review was requested, count for neither the refusal nor the settled check.</summary>
-    public async Task<PullRequestWatchResult> WatchAsync(string owner, string repo, int number, string? reviewerLogin, TimeSpan wait, TimeSpan timeout, int skippedReviews, string? skippedHead, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Polls the check runs and the reviews of a pull request (the check runs alone when <paramref name="reviewerLogin"/> is null),
+    /// then gives back green or red and the unresolved threads. Before the poll, when the reviewer has no review on the head commit
+    /// or a refusal is its last review there, the watch requests a review by the reviewer, and the reviews that existed then count for
+    /// nothing. A refusal by the reviewer on the head commit ends the watch at once with red.
+    /// </summary>
+    public async Task<PullRequestWatchResult> WatchAsync(IssueNumber pullRequest, string? reviewerLogin, TimeSpan wait, TimeSpan timeout, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(pullRequest);
+        int skipped = 0;
+        string? skippedHead = null;
+        if (reviewerLogin is not null)
+        {
+            string head = await pullRequests.ReadHeadShaAsync(pullRequest, cancellationToken).ConfigureAwait(false);
+            IReadOnlyList<Review> reviews = await reviewThreads.ReadReviewsAsync(pullRequest.Repo.Owner, pullRequest.Repo.Name, pullRequest.Number, cancellationToken).ConfigureAwait(false);
+            int onHead = reviews.Count(r => r.Author == reviewerLogin && r.CommitSha.Length is not 0 && r.CommitSha == head);
+            if (onHead is 0 || Review.Refusal(reviews, reviewerLogin, head) is not null)
+            {
+                string nodeId = await pullRequests.ReadNodeIdAsync(pullRequest, cancellationToken).ConfigureAwait(false);
+                await reviewThreads.RequestReviewAsync(nodeId, reviewerLogin, cancellationToken).ConfigureAwait(false);
+                (skipped, skippedHead) = (onHead, head);
+            }
+        }
+
+        return await WatchAsync(pullRequest, reviewerLogin, wait, timeout, skipped, skippedHead, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Polls as the public watch states, but the first <paramref name="skippedReviews"/> reviews by the reviewer on <paramref name="skippedHead"/>, the ones that existed when a new review was requested, count for neither the refusal nor the settled check.</summary>
+    private async Task<PullRequestWatchResult> WatchAsync(IssueNumber pullRequest, string? reviewerLogin, TimeSpan wait, TimeSpan timeout, int skippedReviews, string? skippedHead, CancellationToken cancellationToken)
+    {
+        (string owner, string repo) = pullRequest.Repo;
+        int number = pullRequest.Number;
         long start = _time.GetTimestamp();
         bool green;
         string? refusal = null;
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            string sha = await pullRequests.ReadHeadShaAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);
-            IReadOnlyList<CheckRun> runs = await pullRequests.ReadCheckRunsAsync(owner, repo, sha, cancellationToken).ConfigureAwait(false);
+            string sha = await pullRequests.ReadHeadShaAsync(pullRequest, cancellationToken).ConfigureAwait(false);
+            IReadOnlyList<CheckRun> runs = await pullRequests.ReadCheckRunsAsync(pullRequest.Repo, sha, cancellationToken).ConfigureAwait(false);
             IReadOnlyList<Review> reviews = reviewerLogin is null
                 ? []
                 : await reviewThreads.ReadReviewsAsync(owner, repo, number, cancellationToken).ConfigureAwait(false);

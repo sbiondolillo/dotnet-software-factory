@@ -10,7 +10,7 @@ namespace Specs.Steps;
 public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState promptState) : IDisposable
 {
     private readonly RunHarness _h = new();
-    private FactoryRunResult? _result;
+    private RunOutcome<Delivered>? _result;
     private Exception? _exception;
 
     /// <summary>The harness of the run, which the step classes of a factory run and of a feedback run share.</summary>
@@ -26,9 +26,9 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     private List<string> Timeline => _h.Timeline;
 
     /// <summary>The result of the run, for a step class of another feature of the same run.</summary>
-    public FactoryRunResult LastResult => Result;
+    public RunOutcome<Delivered> LastResult => Result;
 
-    private FactoryRunResult Result => _result ?? throw new InvalidOperationException("the run gave no result");
+    private RunOutcome<Delivered> Result => _result ?? throw new InvalidOperationException("the run gave no result");
 
     private IEnumerable<AgentRequest> Builds => _h.Builder.Of(Phase.Build);
 
@@ -203,7 +203,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     [Then("FactoryRun gives back a result with no pull request and {int} Redo(s)")]
     public void ThenNoPull(int redos)
     {
-        Assert.Null(Result.PullRequest);
+        Assert.Null(Result.Passed);
         Assert.Equal(redos, Result.Redos);
     }
 
@@ -255,7 +255,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     [Then("FactoryRun gives back a result with the pull request of the number {int} and the web address {string}, and {int} Redo(s)")]
     public void ThenPullUrl(int number, string url, int redos)
     {
-        Assert.Equal(new PullRequest(number, url), Result.PullRequest);
+        Assert.Equal(new PullRequest(number, url), Result.Passed?.PullRequest);
         Assert.Equal(redos, Result.Redos);
     }
 
@@ -291,7 +291,7 @@ public sealed class FactoryRunSteps(PullRequestAnswer answer, ReviewPromptState 
     public void ThenCommentAndResult(string text, int redos)
     {
         Assert.Contains(text, Assert.Single(_h.CommentBodies), StringComparison.Ordinal);
-        Assert.Null(Result.PullRequest);
+        Assert.Null(Result.Passed);
         Assert.Equal(redos, Result.Redos);
     }
 

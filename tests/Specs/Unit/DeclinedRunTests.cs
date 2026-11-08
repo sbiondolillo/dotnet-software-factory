@@ -18,21 +18,23 @@ public sealed class DeclinedRunTests
     public async Task ADeclineOfTheRecipeRulesPostsItsTextOnceAndRunsNothing()
     {
         using RunHarness h = Make(Body, "cleanup", "refactor");
-        FactoryRunResult result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
-        Assert.True(h.Declined);
+        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(RunEnd.Declined, result.Stop?.End);
         Assert.Equal(RecipeRules.Parse(["cleanup", "refactor"], Body).Declined, Assert.Single(h.CommentBodies));
         Assert.Empty(h.AgentRequests);
-        Assert.Equal(new FactoryRunResult(null, 0), result);
+        Assert.Null(result.Passed);
+        Assert.Equal(0, result.Redos);
     }
 
     [Fact]
     public async Task AScenarioFaultDeclinesTheIssue()
     {
         using RunHarness h = Make("## Scenarios\n\nThe scenarios follow.\n");
-        FactoryRunResult result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
-        Assert.True(h.Declined);
+        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(RunEnd.Declined, result.Stop?.End);
         Assert.Single(h.CommentBodies);
-        Assert.Equal(new FactoryRunResult(null, 0), result);
+        Assert.Null(result.Passed);
+        Assert.Equal(0, result.Redos);
     }
 
     [Fact]
@@ -40,10 +42,11 @@ public sealed class DeclinedRunTests
     {
         using RunHarness h = Make(Body, "cleanup");
         h.Lacks.Add("Solution.slnx");
-        FactoryRunResult result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
-        Assert.False(h.Declined);
+        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(RunEnd.Stopped, result.Stop?.End);
         Assert.Single(h.CommentBodies);
-        Assert.Equal(new FactoryRunResult(null, 0), result);
+        Assert.Null(result.Passed);
+        Assert.Equal(0, result.Redos);
     }
 
     [Fact]
@@ -51,15 +54,15 @@ public sealed class DeclinedRunTests
     {
         using RunHarness h = Make(Body, "cleanup");
         h.CheckResults[0] = (0, "", "");
-        await h.RunFactoryAsync(TestContext.Current.CancellationToken);
-        Assert.False(h.Declined);
+        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(RunEnd.Stopped, result.Stop?.End);
     }
 
     [Fact]
     public async Task AnIssueThatRunsDoesNotDecline()
     {
         using RunHarness h = Make("The checkout shows the total of the cart.", "factory");
-        await h.RunFactoryAsync(TestContext.Current.CancellationToken);
-        Assert.False(h.Declined);
+        RunOutcome<Delivered> result = await h.RunFactoryAsync(TestContext.Current.CancellationToken);
+        Assert.Null(result.Stop);
     }
 }

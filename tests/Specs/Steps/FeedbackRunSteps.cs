@@ -9,7 +9,7 @@ namespace Specs.Steps;
 [Binding]
 public sealed class FeedbackRunSteps(FactoryRunSteps shared, BuildPhaseSteps buildPhase, ReviewPromptState reviewPrompt)
 {
-    private FeedbackRunResult? _result;
+    private RunOutcome<Answered>? _result;
     private Exception? _exception;
     private AgentRequest? _prompt;
 
@@ -18,7 +18,7 @@ public sealed class FeedbackRunSteps(FactoryRunSteps shared, BuildPhaseSteps bui
 
     private RunHarness H => shared.Harness;
 
-    private FeedbackRunResult Result => _result ?? throw new InvalidOperationException("the run gave no result");
+    private RunOutcome<Answered> Result => _result ?? throw new InvalidOperationException("the run gave no result");
 
     private string Build(int index) => H.Builder.Of(Phase.Build).ElementAt(index - 1).Prompt.Text;
 
@@ -160,8 +160,21 @@ public sealed class FeedbackRunSteps(FactoryRunSteps shared, BuildPhaseSteps bui
         Assert.DoesNotContain(H.Commands, c => c.Command is "docker" || c.Arguments[0] is "clone");
 
     [Then("FeedbackRun gives back a result with {int} thread(s) resolved, {int} thread(s) unresolved and {int} Redo(s)")]
-    public void ThenResult(int resolved, int unresolved, int redos) =>
-        Assert.Equal(new FeedbackRunResult(resolved, unresolved, redos), Result);
+    public void ThenResult(int resolved, int unresolved, int redos)
+    {
+        Assert.Equal(redos, Result.Redos);
+        if (Result.Passed is Answered answered)
+        {
+            Assert.Equal((resolved, unresolved), (answered.Resolved, answered.Unresolved));
+            return;
+        }
+
+        // A round with no pass resolves no thread, so each unresolved thread that GitHub listed stays unresolved.
+        Assert.NotNull(Result.Stop);
+        Assert.Equal(0, resolved);
+        Assert.Empty(Resolves);
+        Assert.Equal(unresolved, H.Threads.Count(id => id is not RunHarness.ThreadC));
+    }
 
     [Then("FeedbackRun resolves the threads {string} and {string}")]
     public void ThenResolvesBoth(string first, string second) => Assert.Equal([first, second], Resolves);

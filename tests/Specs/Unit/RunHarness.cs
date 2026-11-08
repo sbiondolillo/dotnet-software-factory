@@ -299,9 +299,6 @@ public sealed class RunHarness : IDisposable
         .Select(r => JsonDocument.Parse(r.Content!).RootElement.GetProperty("body").GetString())
         .LastOrDefault();
 
-    /// <summary>True when the last run declined its issue.</summary>
-    public bool Declined { get; private set; }
-
     /// <summary>The body of an issue with the scope and the check of a cleanup run.</summary>
     public static string CleanupBody => $"## Scope\nREADME.md\n\n## Check\n\n```sh\n{Check}\n```\n";
 
@@ -372,39 +369,25 @@ public sealed class RunHarness : IDisposable
     /// <summary>The reviewer for a review, and the builder for a plan or a build.</summary>
     private FakeAgent AgentOf(Phase phase) => phase is Phase.Review ? Reviewer : Builder;
 
-    public async Task<FactoryRunResult> RunFactoryAsync(CancellationToken cancellationToken = default)
+    public Task<RunOutcome<Delivered>> RunFactoryAsync(CancellationToken cancellationToken = default)
     {
         _kind = RunKind.Factory;
         (Mock<CommandRunner> runner, GitHubClient client, StartBackend backend) = Parts();
         var request = new FactoryRunRequest(
-            Owner, Repo, Issue, Token, RunId, _clone.FullName, BaseBranch,
+            new IssueNumber(new RepoName(Owner, Repo), Issue), Token, RunId, _clone.FullName, BaseBranch,
             PlanModel, PlanTurns, BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames, SkipIntegration, BaseCommit);
         var run = new FactoryRun(runner.Object, client, backend, Progress, Log, Clock, SummaryPath, Version);
-        try
-        {
-            return await run.RunAsync(request, cancellationToken);
-        }
-        finally
-        {
-            Declined = run.Declined;
-        }
+        return run.RunAsync(request, cancellationToken);
     }
 
-    public async Task<FeedbackRunResult> RunFeedbackAsync(CancellationToken cancellationToken = default)
+    public Task<RunOutcome<Answered>> RunFeedbackAsync(CancellationToken cancellationToken = default)
     {
         _kind = RunKind.Feedback;
         (Mock<CommandRunner> runner, GitHubClient client, StartBackend backend) = Parts();
         var request = new FeedbackRunRequest(
-            Owner, Repo, Pull, Token, _clone.FullName, BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames);
+            new IssueNumber(new RepoName(Owner, Repo), Pull), Token, _clone.FullName, BuildModel, BuildTurns, ReviewModel, ReviewTurns, AuthorName, AuthorEmail, SecretNames);
         var run = new FeedbackRun(runner.Object, client, backend, Progress, summaryPath: SummaryPath, log: Log, time: Clock);
-        try
-        {
-            return await run.RunAsync(request, cancellationToken);
-        }
-        finally
-        {
-            Declined = run.Declined;
-        }
+        return run.RunAsync(request, cancellationToken);
     }
 
     public void Dispose()

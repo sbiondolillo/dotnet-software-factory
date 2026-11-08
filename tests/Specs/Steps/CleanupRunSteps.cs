@@ -270,7 +270,7 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
         SeenRequest open = Assert.Single(H.Requests, r => r.Method is "POST" && r.Uri.EndsWith("/pulls", StringComparison.Ordinal));
         using var json = System.Text.Json.JsonDocument.Parse(open.Content!);
         Assert.Equal(title, json.RootElement.GetProperty("title").GetString());
-        Assert.NotNull(FactoryResult().PullRequest);
+        Assert.NotNull(FactoryResult().Passed);
         Assert.Equal(redos, FactoryResult().Redos);
     }
 
@@ -284,5 +284,5 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
             at => lines.Skip(at).Take(wanted.Count).SequenceEqual(wanted));
     }
 
-    private FactoryRunResult FactoryResult() => factory.LastResult;
+    private RunOutcome<Delivered> FactoryResult() => factory.LastResult;
 }

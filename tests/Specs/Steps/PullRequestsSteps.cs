@@ -58,14 +58,14 @@ public sealed class PullRequestsSteps(ExceptionState exceptionState) : IDisposab
 
     [When("a caller opens a pull request on the repo {string} of the owner {string} from the branch {string} into {string} with the title {string} and the body {string}")]
     public async Task WhenOpens(string repo, string owner, string head, string baseBranch, string title, string body) =>
-        _pullRequest = await _pullRequests!.OpenAsync(owner, repo, head, baseBranch, title, body);
+        _pullRequest = await _pullRequests!.OpenAsync(new RepoName(owner, repo), head, baseBranch, title, body);
 
     [When("a caller reads the check runs on the commit {string} of the repo {string} of the owner {string}")]
     public async Task WhenReads(string sha, string repo, string owner)
     {
         try
         {
-            _runs = await _pullRequests!.ReadCheckRunsAsync(owner, repo, sha);
+            _runs = await _pullRequests!.ReadCheckRunsAsync(new RepoName(owner, repo), sha);
         }
         catch (GitHubRequestException ex)
         {

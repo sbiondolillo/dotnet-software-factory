@@ -56,11 +56,11 @@ public sealed class IssueScenariosSteps(FactoryRunSteps factory, PlanPhaseSteps 
     private readonly List<string> _removed = [];
     private string? _body;
     private string _blockText = "";
-    private FactoryRunResult? _result;
+    private RunOutcome<Delivered>? _result;
 
     private RunHarness H => factory.Harness;
 
-    private FactoryRunResult Result => _result ?? throw new InvalidOperationException("the run gave no result");
+    private RunOutcome<Delivered> Result => _result ?? throw new InvalidOperationException("the run gave no result");
 
     private IEnumerable<string> PlanPrompts => H.Builder.Of(Phase.Plan).Select(r => r.Prompt.Text);
 
@@ -345,7 +345,7 @@ public sealed class IssueScenariosSteps(FactoryRunSteps factory, PlanPhaseSteps 
 
     // The test gate compares the work tree with the pin after each build, and the build in this harness leaves every
     // feature file as it is. So a delivered pull request shows that the pin holds the work tree's feature files.
-    private void AssertDeliveredAgainstThePin() => Assert.NotNull(Result.PullRequest);
+    private void AssertDeliveredAgainstThePin() => Assert.NotNull(Result.Passed);
 
     [Then("the pin holds {string} with the hash of the block's text after its first line")]
     public void ThenPinHash(string path)
@@ -481,7 +481,7 @@ public sealed class IssueScenariosSteps(FactoryRunSteps factory, PlanPhaseSteps 
     [Then("the run gives back no pull request and {int} Redos")]
     public void ThenNoPull(int redos)
     {
-        Assert.Null(Result.PullRequest);
+        Assert.Null(Result.Passed);
         Assert.Equal(redos, Result.Redos);
         Assert.Empty(H.AgentRequests);
     }
