@@ -46,6 +46,7 @@ public sealed class SettleTests : IDisposable
         SettleResult result = await IssueAsync();
         Assert.Equal(SettleEnd.Stopped, result.End);
         Assert.Null(result.Last);
+        Assert.Equal(0, result.Rounds);
         Assert.DoesNotContain(_h.Requests, r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal));
         Assert.DoesNotContain("checks:", _h.Out.ToString(), StringComparison.Ordinal);
         Assert.All(_h.CloneDirectories, directory => Assert.False(Directory.Exists(directory)));
@@ -58,6 +59,7 @@ public sealed class SettleTests : IDisposable
         SettleResult result = await IssueAsync();
         Assert.Equal(SettleEnd.Declined, result.End);
         Assert.Null(result.Last);
+        Assert.Equal(0, result.Rounds);
         Assert.Empty(_h.CloneDirectories);
     }
 
@@ -90,6 +92,29 @@ public sealed class SettleTests : IDisposable
         TimedRequest read = _h.Requests.First(r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal));
         Assert.Contains(SettleHarness.DefaultSha, read.Path, StringComparison.Ordinal);
         Assert.True(read.At - _h.PushTimes[0] < TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task AHeadThatARoundPushedAndGitHubReadsLateStartsTheNextWatchOnlyAfter10Seconds()
+    {
+        _h.Threads = "always";
+        _h.HeadSha = _ => _h.PushTimes.Count > 1 ? OldHead : SettleHarness.DefaultSha;
+        await IssueAsync(rounds: 1);
+        Assert.Equal(2, _h.PushTimes.Count);
+        TimedRequest read = _h.Requests.Where(r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal)).ElementAt(1);
+        Assert.True(read.At - _h.PushTimes[1] >= TimeSpan.FromSeconds(10));
+        Assert.True(read.At - _h.PushTimes[1] < TimeSpan.FromSeconds(12));
+    }
+
+    [Fact]
+    public async Task AHeadThatThePullRequestsOpeningRunPushedAndGitHubReadsLateStartsTheWatchOnlyAfter10Seconds()
+    {
+        _h.Threads = "always";
+        _h.HeadSha = _ => OldHead;
+        await PullRequestAsync();
+        TimedRequest read = _h.Requests.First(r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal));
+        Assert.True(read.At - _h.PushTimes[0] >= TimeSpan.FromSeconds(10));
+        Assert.True(read.At - _h.PushTimes[0] < TimeSpan.FromSeconds(12));
     }
 
     [Fact]
@@ -267,6 +292,21 @@ public sealed class SettleTests : IDisposable
     }
 
     [Fact]
+    public async Task APullRequestRoundThatStopsCountsTheOpeningRunAndTheRound()
+    {
+        _h.Threads = "always";
+        foreach (int build in new[] { 2, 3, 4, 5 })
+        {
+            _h.RedBuilds.Add(build);
+        }
+
+        SettleResult result = await _h.SettlePullRequestAsync(SettleHarness.Options(1), Token);
+        Assert.Equal(SettleEnd.Stopped, result.End);
+        Assert.Equal(2, result.Rounds);
+        Assert.Equal(1, Watches);
+    }
+
+    [Fact]
     public async Task APullRequestWithATimedOutWatchIsUnsettled()
     {
         _h.CheckRuns = _ => """{"check_runs":[]}""";
@@ -284,6 +324,7 @@ public sealed class SettleTests : IDisposable
         SettleResult result = await PullRequestAsync();
         Assert.Equal(SettleEnd.Declined, result.End);
         Assert.Null(result.Last);
+        Assert.Equal(1, result.Rounds);
         Assert.Contains("The labels refactor and cleanup exclude each other", Assert.Single(_h.Posts("/issues/10/comments")).Content, StringComparison.Ordinal);
         Assert.Empty(_h.CloneDirectories);
         Assert.DoesNotContain(Out, l => l.StartsWith("checks:", StringComparison.Ordinal));
