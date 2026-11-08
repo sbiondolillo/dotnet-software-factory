@@ -83,8 +83,8 @@ Feature: The factory waits for a pull request's checks and its Copilot review
     Then the watch gives back a green result
 
   Scenario: No review at the first poll and a review at the second gives green
-    Given GitHub answers the first read of the reviews with no review
-    And GitHub answers the second read of the reviews with one review by "sbiondolillo" with the state "COMMENTED" of the commit "2878cae3e3bab7f3b1dcdfa14206f2c361021085"
+    Given GitHub answers the first two reads of the reviews with no review
+    And GitHub answers the third read of the reviews with one review by "sbiondolillo" with the state "COMMENTED" of the commit "2878cae3e3bab7f3b1dcdfa14206f2c361021085"
     When a caller starts the watch
     Then the watch gives back a green result
 

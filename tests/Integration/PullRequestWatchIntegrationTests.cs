@@ -33,11 +33,12 @@ public sealed class PullRequestWatchIntegrationTests
         return (branch, pr.Number);
     }
 
-    private static async Task CommentAsync(GitHubClient client, int number, string path, CancellationToken ct)
+    private static async Task<string> CommentAsync(GitHubClient client, int number, string path, CancellationToken ct)
     {
         string sha = await new PullRequests(client).ReadHeadShaAsync(new IssueNumber(new RepoName(Owner, Repo), number), ct);
         string comment = JsonSerializer.Serialize(new { body = "Name the unit.", commit_id = sha, path, line = 1, side = "RIGHT" });
         await client.SendAsync(HttpMethod.Post, $"/repos/{Owner}/{Repo}/pulls/{number}/comments", comment, ct);
+        return sha;
     }
 
     [Theory]
@@ -84,7 +85,8 @@ public sealed class PullRequestWatchIntegrationTests
             (string branch, int number) = await OpenAsync(client, cleanup, ct);
             var threads = new ReviewThreads(client);
             Assert.Empty(await threads.ReadReviewsAsync(Owner, Repo, number, ct));
-            await CommentAsync(client, number, branch + ".txt", ct);
+            string sha = await CommentAsync(client, number, branch + ".txt", ct);
+            Assert.Contains(await threads.ReadReviewsAsync(Owner, Repo, number, ct), r => r.Author == Owner && r.CommitSha == sha);
             var watch = new PullRequestWatch(new PullRequests(client), threads);
             PullRequestWatchResult result = await watch.WatchAsync(new IssueNumber(new RepoName(Owner, Repo), number), Owner, TimeSpan.Zero, TimeSpan.Zero, ct);
             Assert.False(result.IsGreen);
