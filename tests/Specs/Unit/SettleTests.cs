@@ -190,7 +190,8 @@ public sealed class SettleTests : IDisposable
     [Fact]
     public async Task ARoundThatPushedNothingEndsTheLoopWithTheLastWatch()
     {
-        _h.Threads = "watch-only";
+        _h.Threads = "resolvable";
+        _h.ResolvedBeforeEachRound = true;
         SettleResult result = await IssueAsync();
         Assert.Equal(SettleEnd.Unsettled, result.End);
         Assert.Equal(1, result.Rounds);

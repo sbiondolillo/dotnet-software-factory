@@ -197,7 +197,7 @@ public sealed class ConsoleProgramTests : IDisposable
     [Theory]
     [InlineData("/pulls", 422)]
     [InlineData("/check-runs", 500)]
-    public async Task ALaterRefusalGivesTheStatusCodeAndExits1(string suffix, int status)
+    public async Task ALaterRefusalGivesTheStatusCodeAndRemovesTheWorkTree(string suffix, int status)
     {
         _run.Refusal = (suffix, status);
         Assert.Equal(1, await RunAsync($"run {Repo} --issue 1 --timeout 0"));

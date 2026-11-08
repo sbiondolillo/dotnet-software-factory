@@ -12,17 +12,12 @@ public sealed class ReviewRoundsSteps(ConsoleProgramSteps console)
     /// <summary>The feedback runs so far: each line <c>feedback: start</c>, which a feedback run writes before its clone.</summary>
     private int FeedbackRuns => SettleHarness.Lines(H.Out).Count(line => line is "feedback: start");
 
-    /// <summary>Each feedback run pushes a new head, and each new head brings a new review with an unresolved thread, as Copilot
-    /// reviews a new commit. The fake keeps the id of the thread A for that thread, since the agent's report answers that id.</summary>
+    /// <summary>GitHub reads a new head after each push. Under the thread A, a new head brings a new unresolved thread.</summary>
     [Given("each feedback run changes the head commit of the pull request")]
-    public void GivenHeadChanges()
-    {
-        H.HeadSha = _ => $"{FeedbackRuns:x8}{SettleHarness.DefaultSha[8..]}";
-        H.Threads = "always";
-    }
+    public void GivenHeadChanges() => H.HeadSha = _ => $"{H.PushTimes.Count:x8}{SettleHarness.DefaultSha[8..]}";
 
     [Given("each feedback run leaves the head commit of the pull request as it was")]
-    public void GivenHeadStays() => H.Threads = "watch-only";
+    public void GivenHeadStays() => H.ResolvedBeforeEachRound = true;
 
     [Then("standard output holds {string}, {string}, {string}, {string}, {string}, {string} and {string}")]
     public void ThenOutputSeven(string a, string b, string c, string d, string e, string f, string g)

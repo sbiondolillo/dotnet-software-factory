@@ -54,9 +54,10 @@ public sealed class SettleHarness : IDisposable
     private int _headReads;
     private int _checkReads;
     private bool _resolved;
+    private string? _resolvedOn;
+    private string? _lastHead;
     private bool _requested;
     private int _readsAfterRequest;
-    private int _threadReads;
     private HttpClient? _http;
 
     public SettleHarness()
@@ -129,10 +130,18 @@ public sealed class SettleHarness : IDisposable
     /// <summary>The answer to a read of the reviews from the number of reads after the review request (0 before it), or null for <see cref="Reviews"/>.</summary>
     public Func<int, string>? ReviewsByRead { get; set; }
 
-    /// <summary>"none", "always" (thread A unresolved on each read, as when each push brings a new review with a new thread), "until-resolved" (thread A until its resolve, then no thread), "resolvable" (thread A on each read,
-    /// with <c>isResolved</c> true after its resolve, as GitHub answers) or "watch-only" (thread A on each odd read, which is a watch's,
-    /// and no thread on each even read, which is the start of a feedback run, so each feedback run finds no thread and pushes nothing).</summary>
+    /// <summary>
+    /// "none"; "resolvable", the shape GitHub answers: thread A on each read, with <c>isResolved</c> true after its resolve while the
+    /// head of the pull request is the head GitHub read at the resolve, and false on a later head, as a new review of a new commit
+    /// brings a new thread; "always", thread A unresolved on each read whatever the head; or "until-resolved", thread A until its resolve
+    /// and then no thread, which GitHub does not answer, but which reads the same to a caller that keeps only the unresolved threads.
+    /// The fake keeps the id of the thread A for a new thread, since the agent's report answers that id.
+    /// </summary>
     public string Threads { get; set; } = "none";
+
+    /// <summary>True when a person resolves each thread after a watch reads it and before a feedback run reads it, so the run finds no
+    /// unresolved thread and pushes nothing.</summary>
+    public bool ResolvedBeforeEachRound { get; set; }
 
     /// <summary>The message of a GraphQL error that answers the review request, or null for success.</summary>
     public string? ReviewRequestError { get; set; }
@@ -443,9 +452,11 @@ public sealed class SettleHarness : IDisposable
 
         if (path.Contains("/pulls/", StringComparison.Ordinal))
         {
+            string head = HeadSha(++_headReads);
+            _lastHead = head;
             return (200, PullBody is null
-                ? JsonSerializer.Serialize(new { node_id = "PR_kwDOUpm1Qc6abc", head = new { sha = HeadSha(++_headReads), @ref = HeadRef } })
-                : JsonSerializer.Serialize(new { node_id = "PR_kwDOUpm1Qc6abc", body = PullBody, head = new { sha = HeadSha(++_headReads), @ref = HeadRef } }));
+                ? JsonSerializer.Serialize(new { node_id = "PR_kwDOUpm1Qc6abc", head = new { sha = head, @ref = HeadRef } })
+                : JsonSerializer.Serialize(new { node_id = "PR_kwDOUpm1Qc6abc", body = PullBody, head = new { sha = head, @ref = HeadRef } }));
         }
 
         if (path.Contains("/issues/", StringComparison.Ordinal))
@@ -465,8 +476,9 @@ public sealed class SettleHarness : IDisposable
         string query = json.RootElement.GetProperty("query").GetString() ?? "";
         if (query.Contains("reviewThreads", StringComparison.Ordinal))
         {
-            bool listed = Threads is "always" or "resolvable" || (Threads is "until-resolved" && !_resolved) || (Threads is "watch-only" && ++_threadReads % 2 is 1);
-            bool isResolved = Threads is "resolvable" && _resolved;
+            bool listed = Threads is "always" or "resolvable" || (Threads is "until-resolved" && !_resolved);
+            bool roundStart = ResolvedBeforeEachRound && Lines(Out).LastOrDefault() is "feedback: start";
+            bool isResolved = roundStart || (Threads is "resolvable" && _resolved && _resolvedOn == _lastHead);
             var nodes = listed
                 ? new[] { new { id = ThreadA, isResolved, path = "src/Core/Checkout.cs", line = (int?)14, comments = new { nodes = new[] { new { author = new { login = "sbiondolillo" }, body = ThreadABody } } } } }
                 : [];
@@ -481,6 +493,7 @@ public sealed class SettleHarness : IDisposable
         if (query.Contains("resolveReviewThread", StringComparison.Ordinal))
         {
             _resolved = true;
+            _resolvedOn = _lastHead;
             return (200, "{\"data\":{\"resolveReviewThread\":{\"thread\":{\"isResolved\":true}}}}");
         }
 
