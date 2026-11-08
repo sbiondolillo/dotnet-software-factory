@@ -65,7 +65,7 @@ public sealed class ReframeRunSteps(FactoryRunSteps factory, IObjectContainer co
     [Given("the API printer of the program prints no line {string} on the base commit, and after the first build it prints that line and each line of the base commit")]
     public void GivenConsoleApi(string line)
     {
-        ConsoleHarness console = container.Resolve<ConsoleProgramSteps>().Harness;
+        SettleHarness console = container.Resolve<ConsoleProgramSteps>().Harness;
         const string Base = "Core: class static Core.Greeter\n";
         console.ApiOutputs[0] = Base;
         console.ApiOutputs[1] = Base + line + "\n";

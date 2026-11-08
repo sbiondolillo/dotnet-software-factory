@@ -192,7 +192,7 @@ Feature: The console program runs the factory on an issue or a pull request
 
   Scenario: feedback build prompt
     Given GitHub answers each read of the review threads with the thread A
-    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
+    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --review-rounds 1"
     Then the feedback run's build prompt runs with the model "claude-sonnet-5-5" and the turn limit 200, and holds "PRRT_kwDOUpm1Qc6ofWu5" and "The total ignores the second item of the cart."
 
   Scenario: resolves
@@ -219,7 +219,7 @@ Feature: The console program runs the factory on an issue or a pull request
   Scenario: red and thread
     Given GitHub answers each read of the check runs with a red check
     And GitHub answers each read of the review threads with the thread A
-    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12"
+    When the program starts with the arguments "run --repo sbiondolillo/factory-scratch --issue 12 --review-rounds 1"
     Then git clones 2 times in the run
 
   Scenario: feedback clones

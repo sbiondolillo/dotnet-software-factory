@@ -9,15 +9,15 @@ public sealed class ProgressLinesTests
     private const string Feedback = "feedback --repo sbiondolillo/factory-scratch --pr 10";
     private static readonly int[] FourBuilds = [1, 2, 3, 4];
 
-    private static async Task<(ConsoleHarness H, List<string> Lines)> StartAsync(string arguments, Action<ConsoleHarness>? setup = null)
+    private static async Task<(SettleHarness H, List<string> Lines)> StartAsync(string arguments, Action<SettleHarness>? setup = null)
     {
-        var h = new ConsoleHarness();
+        var h = new SettleHarness();
         setup?.Invoke(h);
         await h.RunAsync(arguments.Split(' '), TestContext.Current.CancellationToken);
-        return (h, [.. ConsoleHarness.Lines(h.Out)]);
+        return (h, [.. SettleHarness.Lines(h.Out)]);
     }
 
-    private static string Body(ConsoleHarness h, int number)
+    private static string Body(SettleHarness h, int number)
     {
         TimedRequest post = Assert.Single(h.Posts($"/issues/{number}/comments"));
         using var json = JsonDocument.Parse(post.Content!);
@@ -27,7 +27,7 @@ public sealed class ProgressLinesTests
     [Fact]
     public async Task LayoutFailureWritesTheLineThenTheBodyAndNoSandboxLine()
     {
-        (ConsoleHarness h, List<string> lines) = await StartAsync(Run, x => x.Lacks.Add("Solution.slnx"));
+        (SettleHarness h, List<string> lines) = await StartAsync(Run, x => x.Lacks.Add("Solution.slnx"));
         using (h)
         {
             Assert.DoesNotContain(h.Commands, c => c.Command is "docker");
@@ -41,7 +41,7 @@ public sealed class ProgressLinesTests
     [Fact]
     public async Task PlanFailureWritesTheLineThenTheBodyAndNoBuildLine()
     {
-        (ConsoleHarness h, List<string> lines) = await StartAsync(Run, x => x.PlanWritesOnlyThePlan());
+        (SettleHarness h, List<string> lines) = await StartAsync(Run, x => x.PlanWritesOnlyThePlan());
         using (h)
         {
             Assert.Contains("plan: failed", lines);
@@ -53,7 +53,7 @@ public sealed class ProgressLinesTests
     [Fact]
     public async Task RedGateWritesFailedRedoBuildTogether()
     {
-        (ConsoleHarness h, List<string> lines) = await StartAsync(Run, x => x.RedBuilds.Add(1));
+        (SettleHarness h, List<string> lines) = await StartAsync(Run, x => x.RedBuilds.Add(1));
         using (h)
         {
             int at = lines.IndexOf("test: failed");
@@ -64,7 +64,7 @@ public sealed class ProgressLinesTests
     [Fact]
     public async Task BlockedReviewWritesBlockedRedoBuildTogether()
     {
-        (ConsoleHarness h, List<string> lines) = await StartAsync(Run, x => x.BlockReview(1));
+        (SettleHarness h, List<string> lines) = await StartAsync(Run, x => x.BlockReview(1));
         using (h)
         {
             int at = lines.IndexOf("review: blocked");
@@ -75,7 +75,7 @@ public sealed class ProgressLinesTests
     [Fact]
     public async Task SpentBudgetWritesThreeRedosAndEndsWithTheBody()
     {
-        (ConsoleHarness h, List<string> lines) = await StartAsync(Run, x =>
+        (SettleHarness h, List<string> lines) = await StartAsync(Run, x =>
         {
             foreach (int build in FourBuilds)
             {
@@ -94,7 +94,7 @@ public sealed class ProgressLinesTests
     [Fact]
     public async Task SpentBudgetOfFeedbackWritesTheBodyBeforeWatch()
     {
-        (ConsoleHarness h, List<string> lines) = await StartAsync(Feedback, x =>
+        (SettleHarness h, List<string> lines) = await StartAsync(Feedback, x =>
         {
             x.Threads = "always";
             foreach (int build in FourBuilds)
@@ -114,7 +114,7 @@ public sealed class ProgressLinesTests
     [Fact]
     public async Task FeedbackWithoutThreadsWritesNoCloneLine()
     {
-        (ConsoleHarness h, List<string> lines) = await StartAsync(Feedback);
+        (SettleHarness h, List<string> lines) = await StartAsync(Feedback);
         using (h)
         {
             Assert.Equal(["feedback: start", "watch: start", "checks: green, unresolved threads: 0"], lines);
@@ -124,7 +124,7 @@ public sealed class ProgressLinesTests
     [Fact]
     public async Task LongEvidenceBodyOnStandardOutputEqualsTheBodyPosted()
     {
-        (ConsoleHarness h, List<string> _) = await StartAsync(Run, x =>
+        (SettleHarness h, List<string> _) = await StartAsync(Run, x =>
         {
             foreach (int build in FourBuilds)
             {

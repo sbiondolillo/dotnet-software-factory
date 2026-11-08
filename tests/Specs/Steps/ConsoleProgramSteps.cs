@@ -10,7 +10,7 @@ namespace Specs.Steps;
 [Binding]
 public sealed partial class ConsoleProgramSteps : IDisposable
 {
-    private readonly ConsoleHarness _h = new();
+    private readonly SettleHarness _h = new();
     private readonly ConsoleState _state;
     private readonly FactoryRunSteps _factory;
 
@@ -21,7 +21,7 @@ public sealed partial class ConsoleProgramSteps : IDisposable
         factory.OtherCommands = _h.Commands;
     }
 
-    public ConsoleHarness Harness => _h;
+    public SettleHarness Harness => _h;
 
     public void Dispose() => _h.Dispose();
 
@@ -74,32 +74,32 @@ public sealed partial class ConsoleProgramSteps : IDisposable
     [Given("GitHub answers each later read of the check runs with the check run {string} with the status {string} and the conclusion {string}")]
     public void GivenLaterRuns(string name, string status, string conclusion)
     {
-        string later = ConsoleHarness.RunsJson(name, status, conclusion);
+        string later = SettleHarness.RunsJson(name, status, conclusion);
         _h.CheckRuns = read => read is 1 && _state.FirstCheckRun is { } first
-            ? ConsoleHarness.RunsJson(first.Name, first.Status, null)
+            ? SettleHarness.RunsJson(first.Name, first.Status, null)
             : later;
     }
 
     [Given("GitHub answers each read of the reviews with one review with the author login {string}, the state {string} and the commit {string}")]
     public void GivenReviews(string login, string state, string commit) =>
-        _h.Reviews = ConsoleHarness.ReviewsJson(login, commit).Replace("COMMENTED", state, StringComparison.Ordinal);
+        _h.Reviews = SettleHarness.ReviewsJson(login, commit).Replace("COMMENTED", state, StringComparison.Ordinal);
 
     [Given("GitHub answers each read of the reviews with one review with the author login {string}, the state {string}, the commit {string} and the body {string}")]
     public void GivenReviewsBody(string login, string state, string commit, string body) =>
-        _h.Reviews = ConsoleHarness.ReviewsJson(login, commit, body).Replace("COMMENTED", state, StringComparison.Ordinal);
+        _h.Reviews = SettleHarness.ReviewsJson(login, commit, body).Replace("COMMENTED", state, StringComparison.Ordinal);
 
     [Given("GitHub answers each read of the reviews before the review request with no review, and each read after it with one review with the author login {string}, the state {string}, the commit {string} and the body {string}")]
     public void GivenReviewsAfterRequest(string login, string state, string commit, string body)
     {
-        string after = ConsoleHarness.ReviewsJson(login, commit, body).Replace("COMMENTED", state, StringComparison.Ordinal);
-        _h.ReviewsByRead = read => read is 0 ? ConsoleHarness.NoReviewsJson() : after;
+        string after = SettleHarness.ReviewsJson(login, commit, body).Replace("COMMENTED", state, StringComparison.Ordinal);
+        _h.ReviewsByRead = read => read is 0 ? SettleHarness.NoReviewsJson() : after;
     }
 
     [Given("GitHub answers each read of the reviews before the review request and the first read after it with one review with the author login {string}, the state {string}, the commit {string} and the body {string}, and each later read with that review and a second review with the author login {string}, the state {string}, the commit {string} and the body {string}")]
     public void GivenReviewsTwo(string login, string state, string commit, string body, string secondLogin, string secondState, string secondCommit, string secondBody)
     {
-        string one = ConsoleHarness.ReviewsJson(login, commit, body).Replace("COMMENTED", state, StringComparison.Ordinal);
-        string two = ConsoleHarness.ReviewsJson((login, commit, body), (secondLogin, secondCommit, secondBody)).Replace("COMMENTED", secondState, StringComparison.Ordinal);
+        string one = SettleHarness.ReviewsJson(login, commit, body).Replace("COMMENTED", state, StringComparison.Ordinal);
+        string two = SettleHarness.ReviewsJson((login, commit, body), (secondLogin, secondCommit, secondBody)).Replace("COMMENTED", secondState, StringComparison.Ordinal);
         _h.ReviewsByRead = read => read <= 1 ? one : two;
     }
 
@@ -107,10 +107,10 @@ public sealed partial class ConsoleProgramSteps : IDisposable
     public void GivenRequestError() => _h.ReviewRequestError = "Copilot code review is not available for this repo.";
 
     [Given("GitHub answers each read of the check runs with a green check")]
-    public void GivenGreen() => _h.CheckRuns = _ => ConsoleHarness.RunsJson("build", "completed", "success");
+    public void GivenGreen() => _h.CheckRuns = _ => SettleHarness.RunsJson("build", "completed", "success");
 
     [Given("GitHub answers each read of the check runs with a red check")]
-    public void GivenRed() => _h.CheckRuns = _ => ConsoleHarness.RunsJson("build", "completed", "failure");
+    public void GivenRed() => _h.CheckRuns = _ => SettleHarness.RunsJson("build", "completed", "failure");
 
     [Given("GitHub answers each read of the review threads with no thread")]
     public void GivenNoThread() => _h.Threads = "none";
@@ -140,7 +140,7 @@ public sealed partial class ConsoleProgramSteps : IDisposable
     public void ThenOutputFour(string a, string b, string c, string d) => OutputHolds(a, b, c, d);
 
     [Then("standard output holds the line {string}")]
-    public void ThenOutputLine(string line) => Assert.Contains(line, ConsoleHarness.Lines(_h.Out));
+    public void ThenOutputLine(string line) => Assert.Contains(line, SettleHarness.Lines(_h.Out));
 
     [Then("standard output holds {string}")]
     public void ThenOutputOne(string a) => OutputHolds(a);
@@ -149,18 +149,18 @@ public sealed partial class ConsoleProgramSteps : IDisposable
     public void ThenOutputTwo(string a, string b) => OutputHolds(a, b);
 
     [Then("standard error holds the line {string}")]
-    public void ThenErrorHoldsLine(string line) => Assert.Contains(line, ConsoleHarness.Lines(_h.Error));
+    public void ThenErrorHoldsLine(string line) => Assert.Contains(line, SettleHarness.Lines(_h.Error));
 
     [Then("standard error is the one line {string}")]
-    public void ThenErrorIsLine(string line) => Assert.Equal(line, Assert.Single(ConsoleHarness.Lines(_h.Error)));
+    public void ThenErrorIsLine(string line) => Assert.Equal(line, Assert.Single(SettleHarness.Lines(_h.Error)));
 
     [Then("standard error is one line that holds {string}")]
-    public void ThenErrorIsOneLineHolding(string text) => Assert.Contains(text, Assert.Single(ConsoleHarness.Lines(_h.Error)), StringComparison.Ordinal);
+    public void ThenErrorIsOneLineHolding(string text) => Assert.Contains(text, Assert.Single(SettleHarness.Lines(_h.Error)), StringComparison.Ordinal);
 
     [Then("standard error is one line that holds {string} and {string}")]
     public void ThenErrorIsOneLineHoldingTwo(string a, string b)
     {
-        string line = Assert.Single(ConsoleHarness.Lines(_h.Error));
+        string line = Assert.Single(SettleHarness.Lines(_h.Error));
         Assert.Contains(a, line, StringComparison.Ordinal);
         Assert.Contains(b, line, StringComparison.Ordinal);
     }
@@ -169,7 +169,7 @@ public sealed partial class ConsoleProgramSteps : IDisposable
     public void ThenErrorText() => Assert.NotEmpty(_h.Error.ToString());
 
     [Then("standard error holds one line that holds {string}")]
-    public void ThenErrorLine(string text) => Assert.Contains(text, Assert.Single(ConsoleHarness.Lines(_h.Error)), StringComparison.Ordinal);
+    public void ThenErrorLine(string text) => Assert.Contains(text, Assert.Single(SettleHarness.Lines(_h.Error)), StringComparison.Ordinal);
 
     [Then("GitHub gets no review request")]
     public void ThenNoReviewRequest() => Assert.Empty(ReviewRequests);
@@ -189,7 +189,7 @@ public sealed partial class ConsoleProgramSteps : IDisposable
         int gives = -1;
         for (int i = 0; i < _h.Requests.Count && gives < 0; i++)
         {
-            if (IsHeadRead(_h.Requests[i]) && _h.HeadSha(++reads) == ConsoleHarness.DefaultSha)
+            if (IsHeadRead(_h.Requests[i]) && _h.HeadSha(++reads) == SettleHarness.DefaultSha)
             {
                 gives = i;
             }
@@ -213,7 +213,7 @@ public sealed partial class ConsoleProgramSteps : IDisposable
 
     [Then("standard error holds a line with the message of the GraphQL error")]
     public void ThenErrorGraphQl() =>
-        Assert.Contains(ConsoleHarness.Lines(_h.Error), l => l.Contains(_h.ReviewRequestError!, StringComparison.Ordinal));
+        Assert.Contains(SettleHarness.Lines(_h.Error), l => l.Contains(_h.ReviewRequestError!, StringComparison.Ordinal));
 
     [Then("GitHub gets no request")]
     public void ThenNoRequest() => Assert.Empty(_h.Requests);
@@ -424,7 +424,7 @@ public sealed partial class ConsoleProgramSteps : IDisposable
 
         if (_state.NoReviews)
         {
-            _h.Reviews = ConsoleHarness.NoReviewsJson();
+            _h.Reviews = SettleHarness.NoReviewsJson();
         }
 
         if (_state.NoCheckRuns)
@@ -435,7 +435,7 @@ public sealed partial class ConsoleProgramSteps : IDisposable
         if (_state.FirstCheckRun is { } first)
         {
             Func<int, string> later = _h.CheckRuns;
-            _h.CheckRuns = read => read is 1 ? ConsoleHarness.RunsJson(first.Name, first.Status, null) : later(read);
+            _h.CheckRuns = read => read is 1 ? SettleHarness.RunsJson(first.Name, first.Status, null) : later(read);
         }
 
         for (int i = 0; i < times; i++)

@@ -9,7 +9,7 @@ public sealed class RunLogSteps(ConsoleProgramSteps console)
 {
     private const string CleanupBody = "Tidy the code.\n\n## Scope\n\nsrc/\n\n## Check\n\n```\ntrue\n```\n";
 
-    private ConsoleHarness H => console.Harness;
+    private SettleHarness H => console.Harness;
 
     [Given("every dotnet command in the container exits with the code {int}")]
     public static void GivenEveryDotnet(int code) => Assert.Equal(0, code);
@@ -36,7 +36,7 @@ public sealed class RunLogSteps(ConsoleProgramSteps console)
     [Then("standard error holds these command lines in this order")]
     public void ThenCommandLines(Table table)
     {
-        List<string> lines = [.. ConsoleHarness.Lines(H.Error)];
+        List<string> lines = [.. SettleHarness.Lines(H.Error)];
         int at = 0;
         foreach (DataTableRow? row in table.Rows)
         {

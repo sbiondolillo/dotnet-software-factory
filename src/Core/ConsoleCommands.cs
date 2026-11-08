@@ -1,8 +1,6 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
 using System.Globalization;
-using System.Security.Cryptography;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace Core;
@@ -18,14 +16,7 @@ public static partial class ConsoleCommands
     private const string AppIdName = "FACTORY_APP_ID";
     private const string InstallationIdName = "FACTORY_APP_INSTALLATION_ID";
     private const string PrivateKeyName = "FACTORY_APP_PRIVATE_KEY";
-    private const string Model = "claude-sonnet-5-5";
-    private const string AuthorName = "dotnet-software-factory";
-    private const string AuthorEmail = "dotnet-software-factory@noreply.github.com";
     private const string ImageTag = "dotnet-software-factory-sandbox";
-    private const string Reviewer = "copilot-pull-request-reviewer";
-    private static readonly TimeSpan PollWait = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan HeadGrace = TimeSpan.FromSeconds(10);
-    private static readonly TimeSpan HeadPoll = TimeSpan.FromSeconds(1);
 
     /// <summary>The command tree the console program parses and invokes.</summary>
     public static RootCommand Create(ConsoleHost host)
@@ -163,12 +154,6 @@ public static partial class ConsoleCommands
     [GeneratedRegex("^[0-9a-f]{40}$")]
     private static partial Regex FullSha();
 
-    /// <summary>The informational version of the entry assembly, the text that <c>--version</c> prints.</summary>
-    private static string? EntryVersion() =>
-        (System.Reflection.Assembly.GetEntryAssembly() ?? System.Reflection.Assembly.GetExecutingAssembly())
-            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
-            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion;
-
     /// <summary>The whole number the option's token holds, or <see cref="int.MaxValue"/> when it holds none, for the parser's own line to report.</summary>
     private static int Value(OptionResult result) =>
         result.Tokens is [{ } token] && int.TryParse(token.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) ? value : int.MaxValue;
@@ -213,128 +198,16 @@ public static partial class ConsoleCommands
 
     private static async Task<int> ExecuteAsync(Options options, ConsoleHost host, GitHubClient client, GitHubClient checksClient, string token, CancellationToken cancellationToken)
     {
-        var pullRequests = new PullRequests(client, checksClient, host.Delay, host.Time);
-        var watch = new PullRequestWatch(pullRequests, new ReviewThreads(client), host.Delay, host.Time);
-        (string owner, string repo) = options.Repo;
-
-        JsonElement repoJson = await client.SendAsync(HttpMethod.Get, $"/repos/{owner}/{repo}", null, cancellationToken).ConfigureAwait(false);
-        string baseBranch = repoJson.GetProperty("default_branch").GetString() ?? "";
-
+        SettleSettings settings = host.Settings;
         StartBackend backend = host.Backend(new BackendOptions(
-            host.Runner, ImageTag, host.RootDirectory, options.Settings, owner, repo, token, AuthorName, AuthorEmail, host.Handler, host.Delay, host.Error, host.Time, host.Out));
-        int number;
-        string? localHead;
-        if (options.Verb is "run")
-        {
-            string runId = Convert.ToHexString(RandomNumberGenerator.GetBytes(4)).ToLowerInvariant();
-            DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-run-");
-            RunOutcome<Delivered> result;
-            try
-            {
-                var request = new FactoryRunRequest(
-                    new IssueNumber(options.Repo, options.Number), token, runId, directory.FullName, baseBranch,
-                    Model, 50, Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration, options.BaseCommit);
-                var factoryRun = new FactoryRun(host.Runner, client, backend, host.Out, host.Error, host.Time, host.Environment("GITHUB_STEP_SUMMARY"), EntryVersion());
-                result = await factoryRun.RunAsync(request, cancellationToken).ConfigureAwait(false);
-            }
-            finally
-            {
-                Remove(directory);
-            }
-
-            if (result.Passed is not Delivered delivered)
-            {
-                return result.Stop?.End is RunEnd.Declined ? 0 : 1;
-            }
-
-            number = delivered.PullRequest.Number;
-            localHead = delivered.Head;
-            await host.Out.WriteLineAsync(delivered.PullRequest.HtmlUrl).ConfigureAwait(false);
-        }
-        else
-        {
-            number = options.Number;
-            localHead = null;
-        }
-
-        if (options.Verb is "feedback")
-        {
-            (localHead, bool declined) = await FeedbackAsync(options, host, client, backend, token, number, cancellationToken).ConfigureAwait(false);
-            if (declined)
-            {
-                return 0;
-            }
-        }
-
-        var pullRequest = new IssueNumber(options.Repo, number);
-        (PullRequestWatchResult last, string head) = await WatchAsync(host, pullRequests, watch, pullRequest, localHead, options.Timeout, options.CopilotReview, cancellationToken).ConfigureAwait(false);
-        if (options.Verb is "run")
-        {
-            int rounds = 0;
-            bool changed = true;
-            while (last.Refusal is null && last.Threads.Count > 0 && rounds < options.ReviewRounds && changed)
-            {
-                (localHead, bool declined) = await FeedbackAsync(options, host, client, backend, token, number, cancellationToken).ConfigureAwait(false);
-                if (declined)
-                {
-                    return 0;
-                }
-
-                rounds++;
-                string before = head;
-                (last, head) = await WatchAsync(host, pullRequests, watch, pullRequest, localHead, options.Timeout, options.CopilotReview, cancellationToken).ConfigureAwait(false);
-                changed = head != before;
-            }
-        }
-
-        if (last.Refusal is not null)
-        {
-            await host.Out.WriteLineAsync($"review: refused: {last.Refusal}").ConfigureAwait(false);
-        }
-
-        await host.Out.WriteLineAsync($"checks: {(last.IsGreen ? "green" : "red")}, unresolved threads: {last.Threads.Count.ToString(CultureInfo.InvariantCulture)}").ConfigureAwait(false);
-        return last.IsGreen && last.Threads.Count is 0 ? 0 : 1;
-    }
-
-    /// <summary>Runs one feedback run in a new work tree, and gives back the head commit it pushed, or null when it pushed nothing,
-    /// and whether the run declined its closing issue.</summary>
-    private static async Task<(string? Head, bool Declined)> FeedbackAsync(Options options, ConsoleHost host, GitHubClient client, StartBackend backend, string token, int number, CancellationToken cancellationToken)
-    {
-        await host.Out.WriteLineAsync("feedback: start").ConfigureAwait(false);
-        DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-feedback-");
-        try
-        {
-            var request = new FeedbackRunRequest(
-                new IssueNumber(options.Repo, number), token, directory.FullName,
-                Model, 200, Model, 50, AuthorName, AuthorEmail, options.SecretNames, options.SkipIntegration);
-            var feedbackRun = new FeedbackRun(host.Runner, client, backend, host.Out, host.Time, host.Environment("GITHUB_STEP_SUMMARY"), host.Error);
-            RunOutcome<Answered> result = await feedbackRun.RunAsync(request, cancellationToken).ConfigureAwait(false);
-            return (result.Passed?.Head, result.Stop?.End is RunEnd.Declined);
-        }
-        finally
-        {
-            Remove(directory);
-        }
-    }
-
-    /// <summary>Waits for GitHub to read the pushed head <paramref name="localHead"/>, when there is one, then watches the pull request,
-    /// and gives back the result of the watch and the head it started on.</summary>
-    private static async Task<(PullRequestWatchResult Result, string Head)> WatchAsync(
-        ConsoleHost host,
-        PullRequests pullRequests,
-        PullRequestWatch watch,
-        IssueNumber pullRequest,
-        string? localHead,
-        TimeSpan timeout,
-        bool copilotReview,
-        CancellationToken cancellationToken)
-    {
-        await host.Out.WriteLineAsync("watch: start").ConfigureAwait(false);
-        string head = localHead is null
-            ? await pullRequests.ReadHeadShaAsync(pullRequest, cancellationToken).ConfigureAwait(false)
-            : await pullRequests.ReadHeadShaAsync(pullRequest, localHead, HeadGrace, HeadPoll, cancellationToken).ConfigureAwait(false);
-        PullRequestWatchResult result = await watch.WatchAsync(pullRequest, copilotReview ? Reviewer : null, PollWait, timeout, cancellationToken).ConfigureAwait(false);
-        return (result, head);
+            host.Runner, ImageTag, host.RootDirectory, options.Settings, options.Repo.Owner, options.Repo.Name, token, settings.AuthorName, settings.AuthorEmail, host.Handler, host.Delay, host.Error, host.Time, host.Out));
+        var settle = new Settle(host.Runner, client, checksClient, token, backend, settings, host.Out, host.Error, host.Time, host.Delay, host.Environment("GITHUB_STEP_SUMMARY"));
+        var settleOptions = new SettleOptions(options.ReviewRounds, options.CopilotReview, options.Timeout, options.SecretNames, options.SkipIntegration);
+        var number = new IssueNumber(options.Repo, options.Number);
+        SettleResult result = options.Verb is "run"
+            ? await settle.SettleIssueAsync(number, options.BaseCommit, settleOptions, cancellationToken).ConfigureAwait(false)
+            : await settle.SettlePullRequestAsync(number, settleOptions, cancellationToken).ConfigureAwait(false);
+        return result.End is SettleEnd.Settled or SettleEnd.Declined ? 0 : 1;
     }
 
     /// <summary>The settings of the managed path, from the variables that <see cref="RunVerbAsync"/> found set.</summary>
@@ -346,13 +219,6 @@ public static partial class ConsoleCommands
         host.Environment(InstallationIdName)!,
         host.Environment(PrivateKeyName)!);
 
-    private static void Remove(DirectoryInfo directory)
-    {
-        if (directory.Exists)
-        {
-            directory.Delete(recursive: true);
-        }
-    }
 
     private sealed record Options(string Verb, RepoName Repo, int Number, IReadOnlyList<string> SecretNames, TimeSpan Timeout, int ReviewRounds, bool CopilotReview, bool SkipIntegration, bool Managed)
     {

@@ -12,7 +12,7 @@ public sealed class RunLogTests : IDisposable
 
     public void Dispose() => _directory.Delete(recursive: true);
 
-    private string[] Lines => [.. ConsoleHarness.Lines(_log)];
+    private string[] Lines => [.. SettleHarness.Lines(_log)];
 
     private async Task<Sandbox> SandboxAsync(Func<CommandSpec, CommandResult> exec)
     {

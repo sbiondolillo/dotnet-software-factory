@@ -4,7 +4,7 @@ namespace Specs.Unit;
 
 public sealed class CopilotReviewOptionTests : IDisposable
 {
-    private readonly ConsoleHarness _h = new();
+    private readonly SettleHarness _h = new();
 
     public void Dispose() => _h.Dispose();
 
@@ -17,7 +17,7 @@ public sealed class CopilotReviewOptionTests : IDisposable
     {
         int exit = await _h.RunAsync(arguments.Split(' '), TestContext.Current.CancellationToken);
         Assert.Equal(1, exit);
-        Assert.Contains("--copilot-review", Assert.Single(ConsoleHarness.Lines(_h.Error)), StringComparison.Ordinal);
+        Assert.Contains("--copilot-review", Assert.Single(SettleHarness.Lines(_h.Error)), StringComparison.Ordinal);
         Assert.Empty(_h.Requests);
     }
 
@@ -26,7 +26,7 @@ public sealed class CopilotReviewOptionTests : IDisposable
     [InlineData("feedback --repo a/b --pr 10 --copilot-review off")]
     public async Task WithTheReviewOffNoReviewRequestGoesToGitHub(string arguments)
     {
-        _h.Reviews = ConsoleHarness.NoReviewsJson();
+        _h.Reviews = SettleHarness.NoReviewsJson();
         await _h.RunAsync(arguments.Split(' '), TestContext.Current.CancellationToken);
         Assert.DoesNotContain(_h.Requests, r => r.Path.EndsWith("/graphql", StringComparison.Ordinal) && r.Content!.Contains("requestReviewsByLogin", StringComparison.Ordinal));
     }

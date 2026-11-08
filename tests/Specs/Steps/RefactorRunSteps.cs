@@ -136,7 +136,7 @@ public sealed class RefactorRunSteps(FactoryRunSteps factory, IObjectContainer c
     private void SetConsoleIssue(int number, string label, string body)
     {
         Assert.Equal(12, number);
-        ConsoleHarness console = container.Resolve<ConsoleProgramSteps>().Harness;
+        SettleHarness console = container.Resolve<ConsoleProgramSteps>().Harness;
         console.Labels.Add(label);
         console.IssueBody = body;
     }
