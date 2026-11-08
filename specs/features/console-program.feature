@@ -246,7 +246,8 @@ Feature: The console program runs the factory on an issue or a pull request
     Given GitHub answers each read of the review threads with the thread A
     And GitHub answers each read of the check runs with a red check
     When the program starts with the arguments "feedback --repo sbiondolillo/factory-scratch --pr 10"
-    Then standard output holds the line "checks: red, unresolved threads: 1"
+    Then the program resolves the thread "PRRT_kwDOUpm1Qc6ofWu5"
+    And standard output holds the line "checks: red, unresolved threads: 0"
     And the exit code is 1
 
   Scenario: four red builds

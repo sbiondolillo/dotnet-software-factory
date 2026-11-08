@@ -8,7 +8,7 @@ namespace Specs.Steps;
 [Binding]
 public sealed class AgentOptionSteps(ConsoleProgramSteps console)
 {
-    private ConsoleHarness H => console.Harness;
+    private SettleHarness H => console.Harness;
 
     [Given("the environment holds the variables of the managed agent")]
     public void GivenManaged() => H.AddManagedVariables();

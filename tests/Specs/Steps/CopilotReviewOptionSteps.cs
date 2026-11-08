@@ -18,7 +18,7 @@ public sealed class CopilotReviewOptionSteps(ConsoleProgramSteps console)
 
     [Then("standard error is the one line that holds {string}")]
     public void ThenErrorOneLine(string text) =>
-        Assert.Contains(text, Assert.Single(Specs.Unit.ConsoleHarness.Lines(console.Harness.Error)), StringComparison.Ordinal);
+        Assert.Contains(text, Assert.Single(Specs.Unit.SettleHarness.Lines(console.Harness.Error)), StringComparison.Ordinal);
 
     [Then("claude gets the review prompt")]
     public void ThenReviewPrompt() => Assert.NotEmpty(console.Harness.Reviewer.Of(Phase.Review));

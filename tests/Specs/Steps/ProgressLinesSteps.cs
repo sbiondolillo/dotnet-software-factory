@@ -9,9 +9,9 @@ namespace Specs.Steps;
 [Binding]
 public sealed class ProgressLinesSteps(ConsoleProgramSteps console)
 {
-    private ConsoleHarness H => console.Harness;
+    private SettleHarness H => console.Harness;
 
-    private List<string> Lines => [.. ConsoleHarness.Lines(H.Out)];
+    private List<string> Lines => [.. SettleHarness.Lines(H.Out)];
 
     [Given("the agent writes only {string} on the plan prompt")]
     public void GivenOnlyPlan(string path)

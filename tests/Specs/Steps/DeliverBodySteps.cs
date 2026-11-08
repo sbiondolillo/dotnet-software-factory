@@ -145,11 +145,11 @@ public sealed class DeliverBodySteps(DeliverBodyState state)
     [Given("the console program run delivers a pull request")]
     public async Task GivenConsoleRun()
     {
-        using var console = new ConsoleHarness();
+        using var console = new SettleHarness();
         int exit = await console.RunAsync(["run", "--repo", "sbiondolillo/factory-scratch", "--issue", "12", "--timeout", "0"], TestContext.Current.CancellationToken);
         Assert.Equal(0, exit);
         state.Body = System.Text.Json.JsonDocument.Parse(Assert.Single(console.Posts("/pulls")).Content!).RootElement.GetProperty("body").GetString() ?? "";
-        using var version = new ConsoleHarness();
+        using var version = new SettleHarness();
         Assert.Equal(0, await version.RunAsync(["--version"], TestContext.Current.CancellationToken));
         ConsoleVersion = version.Out.ToString().Trim();
     }

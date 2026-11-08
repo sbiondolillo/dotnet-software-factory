@@ -7,16 +7,17 @@ namespace Specs.Steps;
 [Binding]
 public sealed class ReviewRoundsSteps(ConsoleProgramSteps console)
 {
-    private ConsoleHarness H => console.Harness;
+    private SettleHarness H => console.Harness;
 
-    /// <summary>The feedback runs so far: every clone after the first, which is the factory run's.</summary>
-    private int FeedbackRuns => Math.Max(0, H.Commands.Count(c => c.Command is "git" && c.Arguments[0] is "clone") - 1);
+    /// <summary>The feedback runs so far: each line <c>feedback: start</c>, which a feedback run writes before its clone.</summary>
+    private int FeedbackRuns => SettleHarness.Lines(H.Out).Count(line => line is "feedback: start");
 
+    /// <summary>GitHub reads a new head after each push. Under the thread A, a new head brings a new unresolved thread.</summary>
     [Given("each feedback run changes the head commit of the pull request")]
-    public void GivenHeadChanges() => H.HeadSha = _ => $"{FeedbackRuns:x8}{ConsoleHarness.DefaultSha[8..]}";
+    public void GivenHeadChanges() => H.HeadSha = _ => $"{H.PushTimes.Count:x8}{SettleHarness.DefaultSha[8..]}";
 
     [Given("each feedback run leaves the head commit of the pull request as it was")]
-    public void GivenHeadStays() => H.HeadSha = _ => ConsoleHarness.DefaultSha;
+    public void GivenHeadStays() => H.ResolvedBeforeEachRound = true;
 
     [Then("standard output holds {string}, {string}, {string}, {string}, {string}, {string} and {string}")]
     public void ThenOutputSeven(string a, string b, string c, string d, string e, string f, string g)

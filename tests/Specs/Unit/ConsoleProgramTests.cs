@@ -3,22 +3,27 @@ using Xunit;
 
 namespace Specs.Unit;
 
+/// <summary>The console program: the parse, the help, the environment checks, a refused read of GitHub, the options it hands a
+/// settle, and the exit code of each <see cref="SettleEnd"/>. The lifecycle of a pull request is in <see cref="SettleTests"/>.</summary>
 public sealed class ConsoleProgramTests : IDisposable
 {
     private const string Repo = "--repo sbiondolillo/factory-scratch";
     private readonly ConsoleHarness _h = new();
+    private readonly SettleHarness _run = new();
 
-    public void Dispose() => _h.Dispose();
+    public void Dispose() => _run.Dispose();
 
-    private Task<int> StartAsync(string arguments) =>
-        _h.RunAsync(arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries), TestContext.Current.CancellationToken);
+    private Task<int> StartAsync(string arguments) => _h.RunAsync(arguments, TestContext.Current.CancellationToken);
+
+    private Task<int> RunAsync(string arguments) =>
+        _run.RunAsync(arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries), TestContext.Current.CancellationToken);
 
     private async Task<List<string>> RefusedAsync(string arguments)
     {
         Assert.Equal(1, await StartAsync(arguments));
         Assert.Empty(_h.Requests);
         Assert.Empty(_h.Commands);
-        return [.. ConsoleHarness.Lines(_h.Error)];
+        return [.. SettleHarness.Lines(_h.Error)];
     }
 
     [Fact]
@@ -123,7 +128,7 @@ public sealed class ConsoleProgramTests : IDisposable
     {
         _h.Environment[name] = "";
         Assert.Equal(1, await StartAsync($"run {Repo} --issue 1"));
-        Assert.Contains(name, Assert.Single(ConsoleHarness.Lines(_h.Error)), StringComparison.Ordinal);
+        Assert.Contains(name, Assert.Single(SettleHarness.Lines(_h.Error)), StringComparison.Ordinal);
         Assert.Empty(_h.Requests);
         Assert.Empty(_h.Commands);
     }
@@ -133,7 +138,7 @@ public sealed class ConsoleProgramTests : IDisposable
     {
         _h.Environment.Clear();
         Assert.Equal(1, await StartAsync($"run {Repo} --issue 1"));
-        Assert.Contains("FACTORY_GITHUB_TOKEN", Assert.Single(ConsoleHarness.Lines(_h.Error)), StringComparison.Ordinal);
+        Assert.Contains("FACTORY_GITHUB_TOKEN", Assert.Single(SettleHarness.Lines(_h.Error)), StringComparison.Ordinal);
     }
 
     [Theory]
@@ -141,289 +146,12 @@ public sealed class ConsoleProgramTests : IDisposable
     [InlineData(403)]
     public async Task AReadOfTheRepoThatGitHubRefusesGivesTheStatusCodeAndNoClone(int status)
     {
-        _h.RepoStatus = status;
+        _h.Status = status;
         Assert.Equal(1, await StartAsync($"run {Repo} --issue 1"));
-        Assert.Contains(status.ToString(System.Globalization.CultureInfo.InvariantCulture), Assert.Single(ConsoleHarness.Lines(_h.Error)), StringComparison.Ordinal);
+        Assert.Equal("/repos/sbiondolillo/factory-scratch", Assert.Single(_h.Requests));
+        Assert.Contains(status.ToString(System.Globalization.CultureInfo.InvariantCulture), Assert.Single(SettleHarness.Lines(_h.Error)), StringComparison.Ordinal);
         Assert.DoesNotContain(_h.Commands, c => c.Command is "git");
     }
-
-    [Theory]
-    [InlineData("/pulls", 422)]
-    [InlineData("/check-runs", 500)]
-    public async Task ALaterRefusalGivesTheStatusCodeAndRemovesTheWorkTree(string suffix, int status)
-    {
-        _h.Refusal = (suffix, status);
-        Assert.Equal(1, await StartAsync($"run {Repo} --issue 1 --timeout 0"));
-        string[] others = [.. ConsoleHarness.Lines(_h.Error).Where(l => !l.StartsWith("agent: ", StringComparison.Ordinal) && !l.StartsWith("command: ", StringComparison.Ordinal))];
-        Assert.Contains(status.ToString(System.Globalization.CultureInfo.InvariantCulture), Assert.Single(others), StringComparison.Ordinal);
-        Assert.All(_h.CloneDirectories, directory => Assert.False(Directory.Exists(directory)));
-    }
-
-    [Fact]
-    public async Task ARunThatGivesNoPullRequestExits1WithNoWatchAndNoResultLine()
-    {
-        _h.Lacks.Add("Solution.slnx");
-        Assert.Equal(1, await StartAsync($"run {Repo} --issue 1"));
-        Assert.DoesNotContain(_h.Requests, r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal));
-        Assert.DoesNotContain("checks:", _h.Out.ToString(), StringComparison.Ordinal);
-        Assert.All(_h.CloneDirectories, directory => Assert.False(Directory.Exists(directory)));
-    }
-
-    [Fact]
-    public async Task AHeadThatStaysOldStartsTheWatchOnItOnlyAfter10Seconds()
-    {
-        _h.HeadSha = _ => "9e107d9d372bb6826bd81d3542a419d6f0a3c1b2";
-        _h.Reviews = ConsoleHarness.ReviewsJson("copilot-pull-request-reviewer", "9e107d9d372bb6826bd81d3542a419d6f0a3c1b2");
-        Assert.Equal(0, await StartAsync($"run {Repo} --issue 1"));
-        TimedRequest read = _h.Requests.First(r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal));
-        Assert.True(read.At - _h.PushTimes[0] >= TimeSpan.FromSeconds(10));
-        Assert.True(read.At - _h.PushTimes[0] < TimeSpan.FromSeconds(12));
-    }
-
-    [Fact]
-    public async Task AHeadThatChangesWithin10SecondsStartsTheWatchOnTheNewCommitAtOnce()
-    {
-        _h.HeadSha = read => read < 4 ? "9e107d9d372bb6826bd81d3542a419d6f0a3c1b2" : ConsoleHarness.DefaultSha;
-        Assert.Equal(0, await StartAsync($"run {Repo} --issue 1"));
-        TimedRequest read = _h.Requests.First(r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal));
-        Assert.Contains(ConsoleHarness.DefaultSha, read.Path, StringComparison.Ordinal);
-        Assert.True(read.At - _h.PushTimes[0] < TimeSpan.FromSeconds(10));
-    }
-
-    [Fact]
-    public async Task ARedWatchWithNoThreadExits1WithNoFeedbackRun()
-    {
-        _h.CheckRuns = _ => ConsoleHarness.RunsJson("build", "completed", "failure");
-        Assert.Equal(1, await StartAsync($"run {Repo} --issue 1"));
-        Assert.Contains("checks: red, unresolved threads: 0", ConsoleHarness.Lines(_h.Out));
-        Assert.Single(_h.CloneDirectories);
-    }
-
-    [Fact]
-    public async Task ADisputedThreadIsResolvedAndTheSecondWatchReadsNoUnresolvedThread()
-    {
-        _h.Threads = "resolvable";
-        _h.Report("disputed");
-        Assert.Equal(0, await StartAsync($"run {Repo} --issue 1"));
-        Assert.Equal(2, _h.CloneDirectories.Count);
-        int reply = _h.Requests.FindIndex(r => r.Path.EndsWith("/graphql", StringComparison.Ordinal)
-            && r.Content!.Contains("addPullRequestReviewThreadReply", StringComparison.Ordinal)
-            && r.Content.Contains(ConsoleHarness.ThreadA, StringComparison.Ordinal));
-        int resolve = _h.Requests.FindIndex(r => r.Path.EndsWith("/graphql", StringComparison.Ordinal)
-            && r.Content!.Contains("resolveReviewThread", StringComparison.Ordinal)
-            && r.Content.Contains(ConsoleHarness.ThreadA, StringComparison.Ordinal));
-        Assert.True(reply >= 0);
-        Assert.True(resolve > reply);
-        Assert.Equal("checks: green, unresolved threads: 0", Assert.Single(ConsoleHarness.Lines(_h.Out), l => l.StartsWith("checks:", StringComparison.Ordinal)));
-    }
-
-    [Fact]
-    public async Task AFeedbackRunReachedByARunHasItsWorkTreeRemoved()
-    {
-        _h.Threads = "until-resolved";
-        Assert.Equal(0, await StartAsync($"run {Repo} --issue 1"));
-        Assert.Equal(2, _h.CloneDirectories.Count);
-        Assert.All(_h.CloneDirectories, directory => Assert.False(Directory.Exists(directory)));
-    }
-
-    [Fact]
-    public async Task ARedWatchWithOneThreadRunsFeedbackOnceAndWritesTheSecondWatch()
-    {
-        _h.CheckRuns = _ => ConsoleHarness.RunsJson("build", "completed", "failure");
-        _h.Threads = "always";
-        Assert.Equal(1, await StartAsync($"run {Repo} --issue 1"));
-        Assert.Equal(2, _h.CloneDirectories.Count);
-        Assert.Equal("checks: red, unresolved threads: 1", Assert.Single(ConsoleHarness.Lines(_h.Out), l => l.StartsWith("checks:", StringComparison.Ordinal)));
-    }
-
-    [Fact]
-    public async Task AJobWithThreeRoundsWritesOneFactorySectionAndThreeFeedbackSectionsInOrder()
-    {
-        string path = Path.Combine(Path.GetTempPath(), $"summary-{Guid.NewGuid():N}.md");
-        _h.Environment["GITHUB_STEP_SUMMARY"] = path;
-        _h.Threads = "always";
-        _h.HeadSha = _ => $"{_h.CloneDirectories.Count:x8}{ConsoleHarness.DefaultSha[8..]}";
-        try
-        {
-            Assert.Equal(1, await StartAsync($"run {Repo} --issue 12"));
-            Assert.Equal(4, _h.CloneDirectories.Count);
-            Assert.Equal(
-                ["## Factory run", "## Feedback run", "## Feedback run", "## Feedback run"],
-                File.ReadAllLines(path).Where(line => line.StartsWith("## ", StringComparison.Ordinal)));
-        }
-        finally
-        {
-            File.Delete(path);
-        }
-    }
-
-    [Fact]
-    public async Task AFeedbackWithTheBudgetSpentPostsOneCommentAndExits1()
-    {
-        _h.Threads = "always";
-        foreach (int build in new[] { 1, 2, 3, 4 })
-        {
-            _h.RedBuilds.Add(build);
-        }
-
-        Assert.Equal(1, await StartAsync($"feedback {Repo} --pr 10"));
-        Assert.Single(_h.Posts("/issues/10/comments"));
-    }
-
-    private const string CleanupBody = "Tidy.\n\n## Scope\n\nsrc/\n\n## Check\n\n```\ntrue\n```\n";
-
-    [Theory]
-    [InlineData(1)]
-    [InlineData(2)]
-    public async Task AFailedCheckWritesItsExitCode(int code)
-    {
-        _h.Labels.Add("cleanup");
-        _h.IssueBody = CleanupBody;
-        _h.CheckResults[0] = (code, "", "");
-        await StartAsync($"run {Repo} --issue 1 --timeout 0");
-        Assert.Contains($"command: check exited {code}", ConsoleHarness.Lines(_h.Error));
-    }
-
-    [Fact]
-    public async Task AFailedWorktreeAddWritesNoCheckLine()
-    {
-        _h.Labels.Add("cleanup");
-        _h.IssueBody = CleanupBody;
-        _h.WorktreeAddExit = 128;
-        Assert.Equal(1, await StartAsync($"run {Repo} --issue 1 --timeout 0"));
-        Assert.DoesNotContain(ConsoleHarness.Lines(_h.Error), l => l.StartsWith("command: check", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task TheFeedbackVerbRunsTheBuildAndTheReviewAndWritesACommandLineForEachGateCommand()
-    {
-        _h.Threads = "always";
-        _h.RedBuilds.Add(1);
-        await StartAsync($"feedback {Repo} --pr 10 --timeout 0");
-        List<string> lines = [.. ConsoleHarness.Lines(_h.Error)];
-        Assert.NotEmpty(_h.Builder.Of(Phase.Build));
-        Assert.NotEmpty(_h.Reviewer.Of(Phase.Review));
-        Assert.Contains(lines, l => l.StartsWith("command: dotnet test --no-restore", StringComparison.Ordinal) && l.EndsWith(" exited 1", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task AFeedbackWithATimedOutWatchWritesRedAndExits1()
-    {
-        _h.CheckRuns = _ => """{"check_runs":[]}""";
-        Assert.Equal(1, await StartAsync($"feedback {Repo} --pr 10 --timeout 0"));
-        Assert.Contains("checks: red, unresolved threads: 0", ConsoleHarness.Lines(_h.Out));
-    }
-
-    [Fact]
-    public async Task AFeedbackOnADeclinedIssuePostsOneCommentClonesNothingAndExits0()
-    {
-        _h.Threads = "always";
-        _h.PullBody = "Closes #1";
-        _h.Labels.AddRange(["cleanup", "refactor"]);
-        Assert.Equal(0, await StartAsync($"feedback {Repo} --pr 10"));
-        Assert.Contains("The labels refactor and cleanup exclude each other", Assert.Single(_h.Posts("/issues/10/comments")).Content, StringComparison.Ordinal);
-        Assert.Empty(_h.CloneDirectories);
-        Assert.DoesNotContain(ConsoleHarness.Lines(_h.Out), l => l.StartsWith("checks:", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task AReviewRoundOnADeclinedClosingIssuePostsOneCommentAndExits0WithNoSecondWatch()
-    {
-        _h.CheckRuns = _ => ConsoleHarness.RunsJson("build", "completed", "failure");
-        _h.Threads = "always";
-        _h.PullBody = "Closes #2";
-        _h.ClosingLabels = ["cleanup", "refactor"];
-        Assert.Equal(0, await StartAsync($"run {Repo} --issue 1"));
-        Assert.Contains("The labels refactor and cleanup exclude each other", Assert.Single(_h.Posts("/issues/10/comments")).Content, StringComparison.Ordinal);
-        Assert.Single(_h.CloneDirectories);
-        Assert.DoesNotContain(ConsoleHarness.Lines(_h.Out), l => l.StartsWith("checks:", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task AFeedbackWithNoThreadClonesNothingAndExits0()
-    {
-        Assert.Equal(0, await StartAsync($"feedback {Repo} --pr 10"));
-        Assert.Empty(_h.CloneDirectories);
-        Assert.Contains("checks: green, unresolved threads: 0", ConsoleHarness.Lines(_h.Out));
-    }
-
-    [Fact]
-    public async Task APassEnvGivenTwiceKeepsItsOrder()
-    {
-        Assert.Equal(0, await StartAsync($"run {Repo} --issue 1 --pass-env B_KEY --pass-env A_KEY"));
-        CommandSpec spec = Assert.Single(_h.Commands, c => c.Arguments.Contains("--project") && c.Arguments.Contains("tests/Integration"));
-        List<string> arguments = [.. spec.Arguments];
-        Assert.Equal(["B_KEY", "A_KEY"], arguments[..arguments.IndexOf(GateSandbox.ContainerId)].Where(a => a is not ("exec" or "--env")));
-    }
-
-    [Fact]
-    public async Task ATimeoutAbsentWaitsAnHourBeforeTheWatchGivesUp()
-    {
-        _h.CheckRuns = _ => """{"check_runs":[]}""";
-        Assert.Equal(1, await StartAsync($"feedback {Repo} --pr 10"));
-        Assert.InRange(_h.Time.Now, TimeSpan.FromMinutes(60), TimeSpan.FromMinutes(61));
-    }
-
-    private IEnumerable<TimedRequest> ReviewRequests =>
-        _h.Requests.Where(r => r.Path.EndsWith("/graphql", StringComparison.Ordinal) && r.Content!.Contains("requestReviewsByLogin", StringComparison.Ordinal));
-
-    [Fact]
-    public async Task AReviewOfTheHeadCommitByTheReviewerSendsNoRequest()
-    {
-        Assert.Equal(0, await StartAsync($"run {Repo} --issue 1 --copilot-review on"));
-        Assert.Empty(ReviewRequests);
-    }
-
-    [Fact]
-    public async Task AReviewOfAnEarlierCommitSendsOneRequest()
-    {
-        _h.Reviews = ConsoleHarness.ReviewsJson("copilot-pull-request-reviewer", "9e107d9d372bb6826bd81d3542a419d6f0a3c1b2");
-        await StartAsync($"run {Repo} --issue 1 --timeout 0 --copilot-review on");
-        Assert.Single(ReviewRequests);
-    }
-
-    [Fact]
-    public async Task AReviewOfTheHeadCommitByAnotherLoginSendsOneRequest()
-    {
-        _h.Reviews = ConsoleHarness.ReviewsJson("someone");
-        await StartAsync($"run {Repo} --issue 1 --timeout 0 --copilot-review on");
-        Assert.Single(ReviewRequests);
-    }
-
-    [Fact]
-    public async Task AFailedReviewRequestGivesTheMessageAndTheExitCode1AndNoCheckRunRead()
-    {
-        _h.Reviews = ConsoleHarness.NoReviewsJson();
-        _h.ReviewRequestError = "not available";
-        Assert.Equal(1, await StartAsync($"run {Repo} --issue 1 --copilot-review on"));
-        Assert.Contains(ConsoleHarness.Lines(_h.Error), l => l.Contains("not available", StringComparison.Ordinal));
-        Assert.DoesNotContain(_h.Requests, r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task AFeedbackWatchWithNoReviewSendsTheRequestBeforeTheCheckRuns()
-    {
-        _h.Reviews = ConsoleHarness.NoReviewsJson();
-        _h.Threads = "none";
-        await StartAsync($"feedback {Repo} --pr 10 --timeout 0 --copilot-review on");
-        int request = _h.Requests.FindIndex(r => r.Path.EndsWith("/graphql", StringComparison.Ordinal) && r.Content!.Contains("requestReviewsByLogin", StringComparison.Ordinal));
-        Assert.True(request >= 0);
-        Assert.True(request < _h.Requests.FindIndex(r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal)));
-    }
-
-    [Fact]
-    public async Task TheSecondWatchAfterAFeedbackPassRequestsTheReviewAgain()
-    {
-        _h.Reviews = ConsoleHarness.NoReviewsJson();
-        _h.Threads = "always";
-        await StartAsync($"run {Repo} --issue 1 --timeout 0 --copilot-review on");
-        Assert.Equal(2, ReviewRequests.Count());
-        Assert.Equal(2, _h.Requests.Count(r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal)));
-    }
-
-    private int FeedbackRuns => _h.Commands.Count(c => c.Command is "git" && c.Arguments[0] is "clone") - 1;
-
-    private void HeadChangesEachRun() => _h.HeadSha = _ => $"{FeedbackRuns:x8}{ConsoleHarness.DefaultSha[8..]}";
 
     [Theory]
     [InlineData("-1")]
@@ -435,41 +163,81 @@ public sealed class ConsoleProgramTests : IDisposable
         Assert.Contains("--review-rounds", Assert.Single(lines), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task ASettledRunExits0()
+    {
+        Assert.Equal(0, await RunAsync($"run {Repo} --issue 1"));
+        Assert.Contains("checks: green, unresolved threads: 0", SettleHarness.Lines(_run.Out));
+    }
+
+    [Fact]
+    public async Task AnUnsettledRunExits1()
+    {
+        _run.CheckRuns = _ => SettleHarness.RunsJson("build", "completed", "failure");
+        Assert.Equal(1, await RunAsync($"run {Repo} --issue 1"));
+        Assert.Contains("checks: red, unresolved threads: 0", SettleHarness.Lines(_run.Out));
+    }
+
+    [Fact]
+    public async Task ADeclinedRunExits0()
+    {
+        _run.Labels.AddRange(["cleanup", "refactor"]);
+        Assert.Equal(0, await RunAsync($"run {Repo} --issue 1"));
+        Assert.Empty(_run.CloneDirectories);
+    }
+
+    [Fact]
+    public async Task AStoppedRunExits1()
+    {
+        _run.Lacks.Add("Solution.slnx");
+        Assert.Equal(1, await RunAsync($"run {Repo} --issue 1"));
+        Assert.DoesNotContain("checks:", _run.Out.ToString(), StringComparison.Ordinal);
+    }
+
     [Theory]
-    [InlineData("--review-rounds 0", 0)]
-    [InlineData("--review-rounds 1", 1)]
-    [InlineData("", 3)]
-    public async Task TheRoundBudgetBoundsTheFeedbackRuns(string option, int expected)
+    [InlineData("/pulls", 422)]
+    [InlineData("/check-runs", 500)]
+    public async Task ALaterRefusalGivesTheStatusCodeAndRemovesTheWorkTree(string suffix, int status)
     {
-        _h.Threads = "always";
-        HeadChangesEachRun();
-        Assert.Equal(1, await StartAsync($"run {Repo} --issue 1 {option}"));
-        Assert.Equal(expected, FeedbackRuns);
-        Assert.Contains("unresolved threads: 1", _h.Out.ToString(), StringComparison.Ordinal);
+        _run.Refusal = (suffix, status);
+        Assert.Equal(1, await RunAsync($"run {Repo} --issue 1 --timeout 0"));
+        string[] others = [.. SettleHarness.Lines(_run.Error).Where(l => !l.StartsWith("agent: ", StringComparison.Ordinal) && !l.StartsWith("command: ", StringComparison.Ordinal))];
+        Assert.Contains(status.ToString(System.Globalization.CultureInfo.InvariantCulture), Assert.Single(others), StringComparison.Ordinal);
+        Assert.All(_run.CloneDirectories, directory => Assert.False(Directory.Exists(directory)));
     }
 
     [Fact]
-    public async Task AnUnchangedHeadStopsAfterOneFeedbackRun()
+    public async Task AFailedReviewRequestGivesTheMessageAndTheExitCode1()
     {
-        _h.Threads = "always";
-        Assert.Equal(1, await StartAsync($"run {Repo} --issue 1"));
-        Assert.Equal(1, FeedbackRuns);
+        _run.Reviews = SettleHarness.NoReviewsJson();
+        _run.ReviewRequestError = "not available";
+        Assert.Equal(1, await RunAsync($"run {Repo} --issue 1 --copilot-review on"));
+        Assert.Contains(SettleHarness.Lines(_run.Error), l => l.Contains("not available", StringComparison.Ordinal));
     }
 
     [Fact]
-    public async Task AResolvingRoundEndsTheRunWithExitCode0()
+    public async Task APassEnvGivenTwiceKeepsItsOrder()
     {
-        _h.Threads = "until-resolved";
-        Assert.Equal(0, await StartAsync($"run {Repo} --issue 1"));
-        Assert.Equal(1, FeedbackRuns);
-        Assert.Contains("checks: green, unresolved threads: 0", ConsoleHarness.Lines(_h.Out));
+        Assert.Equal(0, await RunAsync($"run {Repo} --issue 1 --pass-env B_KEY --pass-env A_KEY"));
+        CommandSpec spec = Assert.Single(_run.Commands, c => c.Arguments.Contains("--project") && c.Arguments.Contains("tests/Integration"));
+        List<string> arguments = [.. spec.Arguments];
+        Assert.Equal(["B_KEY", "A_KEY"], arguments[..arguments.IndexOf(GateSandbox.ContainerId)].Where(a => a is not ("exec" or "--env")));
     }
 
     [Fact]
-    public async Task ACleanFirstWatchStartsNoFeedbackRun()
+    public async Task ATimeoutAbsentWaitsAnHourBeforeTheWatchGivesUp()
     {
-        Assert.Equal(0, await StartAsync($"run {Repo} --issue 1"));
-        Assert.Equal(0, FeedbackRuns);
+        _run.CheckRuns = _ => """{"check_runs":[]}""";
+        Assert.Equal(1, await RunAsync($"feedback {Repo} --pr 10"));
+        Assert.InRange(_run.Time.Now, TimeSpan.FromMinutes(60), TimeSpan.FromMinutes(61));
+    }
+
+    [Fact]
+    public async Task AReviewRoundsAbsentGivesThreeFeedbackRuns()
+    {
+        _run.Threads = "always";
+        Assert.Equal(1, await RunAsync($"run {Repo} --issue 1"));
+        Assert.Equal(4, _run.CloneDirectories.Count);
     }
 
     [Fact]
@@ -477,9 +245,8 @@ public sealed class ConsoleProgramTests : IDisposable
     {
         Assert.Equal(0, await StartAsync("feedback --help"));
         Assert.DoesNotContain("--review-rounds", _h.Out.ToString(), StringComparison.Ordinal);
-        _h.Threads = "always";
-        HeadChangesEachRun();
-        Assert.Equal(1, await StartAsync($"feedback {Repo} --pr 10"));
-        Assert.Single(_h.Commands, c => c.Command is "git" && c.Arguments[0] is "clone");
+        _run.Threads = "always";
+        Assert.Equal(1, await RunAsync($"feedback {Repo} --pr 10"));
+        Assert.Single(_run.Commands, c => c.Command is "git" && c.Arguments[0] is "clone");
     }
 }

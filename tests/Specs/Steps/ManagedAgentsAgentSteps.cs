@@ -393,7 +393,7 @@ public sealed class ManagedAgentsAgentSteps(ExceptionState exceptionState) : IDi
     [Then("the log holds these lines in this order:")]
     public void ThenLog(DataTable table)
     {
-        List<string> lines = [.. ConsoleHarness.Lines(_harness.Log)];
+        List<string> lines = [.. SettleHarness.Lines(_harness.Log)];
         int at = 0;
         foreach (DataTableRow row in table.Rows)
         {

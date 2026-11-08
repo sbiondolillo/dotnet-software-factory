@@ -5,7 +5,7 @@ namespace Specs.Unit;
 public sealed class ChecksTokenTests : IDisposable
 {
     private const string Repo = "--repo sbiondolillo/factory-scratch";
-    private readonly ConsoleHarness _h = new();
+    private readonly SettleHarness _h = new();
 
     public ChecksTokenTests() => _h.Environment["FACTORY_GITHUB_TOKEN"] = "github-token-1";
 
@@ -55,7 +55,7 @@ public sealed class ChecksTokenTests : IDisposable
         _h.Environment["FACTORY_CHECKS_TOKEN"] = "checks-token-2";
         _h.Refusal = ("/check-runs", 403);
         Assert.Equal(1, await StartAsync($"feedback {Repo} --pr 10"));
-        Assert.Equal(["GitHub refused a request with the status code 403."], ConsoleHarness.Lines(_h.Error));
+        Assert.Equal(["GitHub refused a request with the status code 403."], SettleHarness.Lines(_h.Error));
     }
 
     [Fact]

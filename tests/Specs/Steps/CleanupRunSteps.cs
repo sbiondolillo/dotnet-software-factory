@@ -149,14 +149,14 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     [Given("the check command exits with the code {int} after the first build and with the code {int} after the second")]
     public void GivenConsoleChecks(int first, int second)
     {
-        ConsoleHarness console = container.Resolve<ConsoleProgramSteps>().Harness;
+        SettleHarness console = container.Resolve<ConsoleProgramSteps>().Harness;
         console.CheckResults[1] = (first, "", "the check is red");
         console.CheckResults[2] = (second, "", "");
     }
 
     private void SetConsoleIssue(string label)
     {
-        ConsoleHarness console = container.Resolve<ConsoleProgramSteps>().Harness;
+        SettleHarness console = container.Resolve<ConsoleProgramSteps>().Harness;
         console.Labels.Add(label);
         console.IssueBody = Body(DefaultScope, DefaultCheck);
     }
@@ -277,7 +277,7 @@ public sealed class CleanupRunSteps(FactoryRunSteps factory, IObjectContainer co
     [Then("standard output holds the lines in this order with no line between them")]
     public void ThenConsecutive(Table table)
     {
-        List<string> lines = [.. ConsoleHarness.Lines(container.Resolve<ConsoleProgramSteps>().Harness.Out)];
+        List<string> lines = [.. SettleHarness.Lines(container.Resolve<ConsoleProgramSteps>().Harness.Out)];
         List<string> wanted = [.. table.Rows.Select(r => r[0])];
         Assert.Contains(
             Enumerable.Range(0, Math.Max(0, lines.Count - wanted.Count + 1)),

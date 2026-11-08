@@ -51,7 +51,7 @@ The end of a run before its first phase, on a fault of the issue's author, such 
 _Avoid_: refusal, rejection (a rejection is the review's verdict on a build)
 
 **Settled**:
-A pull request whose factory run passed. Every check is green, Copilot reviewed the head with no refusal, and no thread is unresolved.
+A pull request whose factory run passed. Every check is green, Copilot reviewed the head with no refusal, and no thread is unresolved. `Settle` in Core is the one class that drives a pull request to settled. No other class reads a head after a push, starts the watch that requests a review, or counts a feedback round.
 _Avoid_: approved (an approval is the judge's verdict), reviewed
 
 ## Issue sections

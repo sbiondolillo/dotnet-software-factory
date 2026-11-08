@@ -11,7 +11,7 @@ public sealed class DeclinedIssueSteps(IObjectContainer container)
     public void GivenLabelAndBody(int number, string label, string body)
     {
         Assert.Equal(12, number);
-        Specs.Unit.ConsoleHarness console = container.Resolve<ConsoleProgramSteps>().Harness;
+        Specs.Unit.SettleHarness console = container.Resolve<ConsoleProgramSteps>().Harness;
         console.Labels.Add(label);
         console.IssueBody = body;
     }

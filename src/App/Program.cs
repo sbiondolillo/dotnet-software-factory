@@ -23,7 +23,8 @@ builder.Services.AddSingleton<ConsoleHost>(provider =>
         Directory.GetCurrentDirectory(),
         (span, token) => Task.Delay(span, token),
         time,
-        AgentBackend.Pick);
+        AgentBackend.Pick,
+        SettleSettings.Default);
 });
 using IHost host = builder.Build();
 ConsoleHost console = host.Services.GetRequiredService<ConsoleHost>();
