@@ -18,8 +18,14 @@ public sealed record RunRequest(
 public sealed record PinOrStop(Pin? Pin, string? Stop);
 
 /// <summary>What the checkout gives: the <paramref name="BaseCommit"/> of the build, or, when it is null, the <paramref name="Stop"/> of the
-/// run, whose comment the kind posted.</summary>
-public sealed record BaseOrStop(string? BaseCommit, RunStop? Stop);
+/// run, whose comment the kind posted. One of the two is not null.</summary>
+public sealed record BaseOrStop(string? BaseCommit, RunStop? Stop)
+{
+    /// <summary>The stop of the run, which is not null when <see cref="BaseCommit"/> is null.</summary>
+    public RunStop? Stop { get; } = BaseCommit is null && Stop is null
+        ? throw new ArgumentException("A checkout gives a base commit or a stop.", nameof(Stop))
+        : Stop;
+}
 
 /// <summary>How a run with no pass ended: it declined its issue, or a gate, the loop or a session branch stopped it.</summary>
 public enum RunEnd
@@ -34,7 +40,7 @@ public enum RunEnd
 /// <summary>Why a run ended with no pass: the comment it posted, and whether it declined its issue or a gate, the loop or a session branch stopped it.</summary>
 public sealed record RunStop(string Comment, RunEnd End);
 
-/// <summary>The end of a <see cref="Run"/>: what the step after a pass gave, or null on a stop, the stop, or null on a pass, and the
+/// <summary>The end of a <see cref="Run"/>: what the step after a pass gave, or null on a stop; the stop, or null on a pass; and the
 /// Redos spent.</summary>
 public sealed record RunOutcome<TOutcome>(TOutcome? Passed, RunStop? Stop, int Redos)
     where TOutcome : class;
@@ -121,7 +127,7 @@ public sealed class Run(
             BaseOrStop checkout = await kind.CheckoutAsync(git, cancellationToken).ConfigureAwait(false);
             if (checkout.BaseCommit is not string baseCommit)
             {
-                return new RunOutcome<TOutcome>(null, checkout.Stop ?? new RunStop("", RunEnd.Stopped), 0);
+                return new RunOutcome<TOutcome>(null, checkout.Stop, 0);
             }
 
             var start = new BackendStart(

@@ -7,6 +7,8 @@ namespace Specs.Unit;
 
 public sealed class PullRequestsTests
 {
+    private const string Old = "d7d0afd495cc64aa2ac153de8d001ad8d86fe074";
+
     private static (PullRequests Sut, RoutingHandler Handler) Make()
     {
         var handler = new RoutingHandler();
@@ -109,8 +111,6 @@ public sealed class PullRequestsTests
         GitHubRequestException ex = await Assert.ThrowsAsync<GitHubRequestException>(() => sut.ReadHeadShaAsync(new IssueNumber(new RepoName("o", "r"), 1), TestContext.Current.CancellationToken));
         Assert.Equal(404, ex.StatusCode);
     }
-
-    private const string Old = "d7d0afd495cc64aa2ac153de8d001ad8d86fe074";
 
     private static (PullRequests Sut, WatchHandler Handler, FakeTime Time) MakeHeadWait()
     {

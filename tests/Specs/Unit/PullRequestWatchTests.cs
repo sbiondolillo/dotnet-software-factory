@@ -8,6 +8,7 @@ public sealed class PullRequestWatchTests
 {
     private const string Refusal = "Copilot was unable to review this pull request because the user who requested the review has reached their quota limit.";
     private static readonly (string, string, string?)[] Done = [("build", "completed", "success")];
+    private static readonly IssueNumber Pull = new(new RepoName("o", "r"), 1);
 
     private static (PullRequestWatch Sut, WatchHandler Handler) Make(Func<CancellationToken, Task>? afterWait = null)
     {
@@ -19,8 +20,6 @@ public sealed class PullRequestWatchTests
         var client = new GitHubClient(new HttpClient(handler), "t", TimeSpan.Zero);
         return (WatchHandler.FakeClockWatch(client, new FakeTime(), afterWait), handler);
     }
-
-    private static readonly IssueNumber Pull = new(new RepoName("o", "r"), 1);
 
     private static Task<PullRequestWatchResult> Watch(PullRequestWatch sut, TimeSpan timeout, TimeSpan? wait = null, CancellationToken token = default) =>
         sut.WatchAsync(Pull, "me", wait ?? TimeSpan.Zero, timeout, token);
