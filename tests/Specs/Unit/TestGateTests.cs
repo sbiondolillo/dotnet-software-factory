@@ -127,6 +127,18 @@ public sealed class TestGateTests : IDisposable
     }
 
     [Fact]
+    public async Task AFeatureFileWithABackslashInItsNameFailsTheGate()
+    {
+        using var harness = new TestGateHarness(featurePath: "specs/features/a\\b.feature");
+        await harness.StartAsync(TestContext.Current.CancellationToken);
+
+        GateOutcome result = await harness.RunAsync([], TestContext.Current.CancellationToken);
+
+        Assert.Equal("failed", result.Result);
+        Assert.StartsWith("feature file: specs/features/a\\b.feature: ", Assert.Single(result.RedoTexts), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ALinkedDirectoryUnderTheFeatureDirectoryFailsTheGate()
     {
         using var harness = new TestGateHarness();

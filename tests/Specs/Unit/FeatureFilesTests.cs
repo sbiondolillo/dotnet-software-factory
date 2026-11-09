@@ -57,6 +57,18 @@ public sealed class FeatureFilesTests : IDisposable
         Assert.Equal(named, exception.Path);
     }
 
+    [Theory]
+    [InlineData("specs/features/a\\b.feature")]
+    [InlineData("specs/features/a\\b/c.feature")]
+    public void PathsRefusesAFileWhosePathIsNoFeaturePath(string path)
+    {
+        Write(path, "");
+
+        FeatureFileException exception = Assert.Throws<FeatureFileException>(() => Features.Paths());
+
+        Assert.Equal(path, exception.Path);
+    }
+
     [Fact]
     public void ReadTextIsNullForAnAbsentFile()
     {

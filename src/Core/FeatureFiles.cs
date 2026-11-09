@@ -37,7 +37,8 @@ public sealed class FeatureFiles(string workTree)
 
     /// <summary>The path of each file named <c>*.feature</c> under <see cref="RelativePath"/>, at any depth, in ordinal order. No
     /// file is read. An absent directory gives an empty list. Throws <see cref="FeatureFileException"/> when <c>specs</c>, the
-    /// feature directory or a directory under it is a symbolic link, so a linked tree is never listed as the work tree's own.</summary>
+    /// feature directory or a directory under it is a symbolic link, so a linked tree is never listed as the work tree's own, and
+    /// when a listed path is one that <see cref="IsFeaturePath"/> refuses, so each path it gives can be read.</summary>
     public IReadOnlyList<string> Paths()
     {
         var paths = new List<string>();
@@ -56,7 +57,11 @@ public sealed class FeatureFiles(string workTree)
     private void Collect(string directory, List<string> paths)
     {
         RefuseLinkedDirectory(directory);
-        paths.AddRange(Directory.EnumerateFiles(directory, "*" + Extension).Select(Relative));
+        foreach (string path in Directory.EnumerateFiles(directory, "*" + Extension).Select(Relative))
+        {
+            paths.Add(IsFeaturePath(path) ? path : throw new FeatureFileException(path, "the path holds a character that a feature path refuses"));
+        }
+
         foreach (string child in Directory.EnumerateDirectories(directory))
         {
             Collect(child, paths);
