@@ -83,7 +83,7 @@ public sealed class RunLogTests : IDisposable
         await harness.StartAsync(TestContext.Current.CancellationToken);
         File.WriteAllText(Path.Combine(harness.WorkTree.FullName, "global.json"), "{}");
         GateOutcome result = await harness.RunAsync(
-            new TestGate(harness.Sandbox!, harness.WorkTree.FullName, harness.Pin, [], log: _log), TestContext.Current.CancellationToken);
+            new TestGate(harness.Sandbox!, harness.WorkTree.FullName, new FeatureFiles(harness.WorkTree.FullName), harness.Pin, [], log: _log), TestContext.Current.CancellationToken);
         Assert.Equal("failed", result.Result);
         Assert.Empty(harness.Seen);
         Assert.Empty(Lines);
@@ -97,7 +97,7 @@ public sealed class RunLogTests : IDisposable
         harness.Trx = null;
         await harness.StartAsync(TestContext.Current.CancellationToken);
         GateOutcome result = await harness.RunAsync(
-            new TestGate(harness.Sandbox!, harness.WorkTree.FullName, harness.Pin, [], log: _log), TestContext.Current.CancellationToken);
+            new TestGate(harness.Sandbox!, harness.WorkTree.FullName, new FeatureFiles(harness.WorkTree.FullName), harness.Pin, [], log: _log), TestContext.Current.CancellationToken);
         Assert.Equal("failed", result.Result);
         string last = Lines[^1];
         Assert.StartsWith("command: dotnet test --no-restore --logger trx --results-directory /work/", last, StringComparison.Ordinal);

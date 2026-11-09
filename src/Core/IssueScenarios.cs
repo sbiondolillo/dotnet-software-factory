@@ -13,8 +13,7 @@ public static partial class IssueScenarios
     private const string ScenariosHeading = "## Scenarios";
     private const string RemovedHeading = "## Removed scenarios";
     private const string CriteriaHeading = "## Acceptance criteria";
-    private const string FeatureDirectory = "specs/features/";
-    private const string PathLine = "# " + FeatureDirectory;
+    private const string PathLine = "# " + FeatureFiles.RelativePath;
 
     /// <summary>Tells whether the body holds the heading <c>## Scenarios</c> or <c>## Removed scenarios</c>.</summary>
     public static bool Holds(string body)
@@ -23,10 +22,11 @@ public static partial class IssueScenarios
         return headings.Contains(ScenariosHeading) || headings.Contains(RemovedHeading);
     }
 
-    /// <summary>Applies the scenarios of <paramref name="body"/> to the feature files under <paramref name="workTree"/>.
-    /// Writes and removes nothing when any fault is found, and gives back every fault.</summary>
-    public static IssueScenariosResult Apply(string body, string workTree)
+    /// <summary>Applies the scenarios of <paramref name="body"/> to <paramref name="features"/>. Writes and removes nothing when
+    /// any fault is found, and gives back every fault. A feature file that cannot be read is a fault.</summary>
+    public static IssueScenariosResult Apply(string body, FeatureFiles features)
     {
+        ArgumentNullException.ThrowIfNull(features);
         Body read = Read(body);
         var faults = new List<string>();
         var blocks = new Dictionary<string, List<string>>(StringComparer.Ordinal);
@@ -106,8 +106,17 @@ public static partial class IssueScenarios
         var results = new SortedDictionary<string, string>(StringComparer.Ordinal);
         foreach (string path in blocks.Keys.Union(removals.Keys).Except(twice).Order(StringComparer.Ordinal))
         {
-            string full = Path.Combine(workTree, path);
-            string? main = File.Exists(full) ? File.ReadAllText(full) : null;
+            string? main;
+            try
+            {
+                main = features.ReadText(path);
+            }
+            catch (FeatureFileException exception)
+            {
+                faults.Add($"A feature file on main cannot be read: {exception.Message}");
+                continue;
+            }
+
             List<string> removed = removals.GetValueOrDefault(path) ?? [];
             string? result = blocks.TryGetValue(path, out List<string>? lines)
                 ? ApplyBlock(path, lines, main, removed, faults)
@@ -137,19 +146,17 @@ public static partial class IssueScenarios
             }
         }
 
-        if (faults.Count is 0)
+        if (faults.Count is 0 && Listed(features, faults) is IReadOnlyList<string> listed)
         {
-            string features = Path.Combine(workTree, FeatureDirectory);
-            int left = (Directory.Exists(features) ? Directory.EnumerateFiles(features, "*.feature", SearchOption.AllDirectories) : [])
-                .Select(file => Path.GetRelativePath(workTree, file).Replace('\\', '/'))
+            int left = listed
                 .Union(written)
                 .Except(gone)
                 .Count();
             if (left is 0)
             {
-                faults.Add($"The issue leaves no feature file under {FeatureDirectory}.");
+                faults.Add($"The issue leaves no feature file under {FeatureFiles.RelativePath}.");
             }
-            else if (gone.Count is 0 && written.All(path => File.Exists(Path.Combine(workTree, path)) && File.ReadAllText(Path.Combine(workTree, path)) == results[path]))
+            else if (gone.Count is 0 && written.All(path => features.ReadText(path) == results[path]))
             {
                 faults.Add("The blocks and the removed scenarios leave every feature file as it is on main.");
             }
@@ -162,17 +169,29 @@ public static partial class IssueScenarios
 
         foreach (string path in written)
         {
-            string full = Path.Combine(workTree, path);
-            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-            File.WriteAllText(full, results[path]);
+            features.Write(path, results[path]);
         }
 
         foreach (string path in gone)
         {
-            File.Delete(Path.Combine(workTree, path));
+            features.Remove(path);
         }
 
         return new IssueScenariosResult([], written, gone);
+    }
+
+    /// <summary>The feature files on main, or null with a fault when a directory of them is a symbolic link.</summary>
+    private static IReadOnlyList<string>? Listed(FeatureFiles features, List<string> faults)
+    {
+        try
+        {
+            return features.Paths();
+        }
+        catch (FeatureFileException exception)
+        {
+            faults.Add($"The feature files on main cannot be listed: {exception.Message}");
+            return null;
+        }
     }
 
     private static bool IsWholeFile(List<string>? lines) =>
@@ -192,7 +211,7 @@ public static partial class IssueScenarios
             }
 
             string text = Text(lines);
-            if (Outline(path, text, faults) is not FeatureOutline whole)
+            if (Outline(path, text, TextSource.Issue, faults) is not FeatureOutline whole)
             {
                 return null;
             }
@@ -221,7 +240,7 @@ public static partial class IssueScenarios
 
         // The line "Feature: _" stands in for the path line, so a line number of the block's outline is its line in the block.
         List<string> blockLines = ["Feature: _", .. lines];
-        if (Outline(path, Text(blockLines), faults) is not FeatureOutline block)
+        if (Outline(path, Text(blockLines), TextSource.Issue, faults) is not FeatureOutline block)
         {
             return null;
         }
@@ -260,7 +279,7 @@ public static partial class IssueScenarios
     private static string? Splice(string path, string main, FeatureOutline? block, List<string> blockLines, List<string> removed, List<string> faults)
     {
         string text = main.Replace("\r\n", "\n", StringComparison.Ordinal);
-        if (Outline(path, text, faults) is not FeatureOutline file)
+        if (Outline(path, text, TextSource.Main, faults) is not FeatureOutline file)
         {
             return null;
         }
@@ -361,7 +380,17 @@ public static partial class IssueScenarios
 
     private static string Text(IEnumerable<string> lines) => string.Concat(lines.Select(line => line + "\n"));
 
-    private static FeatureOutline? Outline(string path, string text, List<string> faults)
+    /// <summary>Where a text that <see cref="Outline"/> parses comes from, which decides whether its fault may quote it.</summary>
+    private enum TextSource
+    {
+        /// <summary>The issue's own block, which the fault quotes.</summary>
+        Issue,
+
+        /// <summary>The file on main, or a result that holds its lines, which the fault does not quote.</summary>
+        Main,
+    }
+
+    private static FeatureOutline? Outline(string path, string text, TextSource source, List<string> faults)
     {
         try
         {
@@ -369,7 +398,8 @@ public static partial class IssueScenarios
         }
         catch (FeatureFileException exception)
         {
-            faults.Add($"The feature file {path} does not parse: {exception.Message}");
+            string reason = (source is TextSource.Main ? exception.WithoutText() : exception).Message;
+            faults.Add($"The feature file {path} does not parse: {reason}");
             return null;
         }
     }
@@ -388,7 +418,8 @@ public static partial class IssueScenarios
     private static bool Sound(string path, string text, List<string> faults, out int scenarios)
     {
         scenarios = 0;
-        if (Outline(path, text, faults) is not FeatureOutline outline)
+        // A whole-file block passed its own parse, so a parse that fails here is of a splice that holds lines of main.
+        if (Outline(path, text, TextSource.Main, faults) is not FeatureOutline outline)
         {
             return false;
         }
@@ -507,7 +538,7 @@ public static partial class IssueScenarios
     [GeneratedRegex(@"^ {0,3}#{1,6}(?:[ \t]|$)")]
     private static partial Regex Heading();
 
-    [GeneratedRegex(@"^specs/features/[A-Za-z0-9][A-Za-z0-9._-]*\.feature$")]
+    [GeneratedRegex("^" + FeatureFiles.RelativePath + @"[A-Za-z0-9][A-Za-z0-9._-]*\.feature$")]
     private static partial Regex FeaturePath();
 
     [GeneratedRegex(@"^[-*+][ \t]+`(?<path>[^`]+)`[ \t]*:[ \t]*(?<name>\S.*)$")]

@@ -16,6 +16,7 @@ public sealed record TestGateResult(bool Passed, IReadOnlyList<string> Evidence,
 public sealed class TestGate(
     Sandbox sandbox,
     string workTree,
+    FeatureFiles features,
     Pin pin,
     IReadOnlyList<string> secretNames,
     Func<string, bool>? pinExempt = null,
@@ -35,6 +36,7 @@ public sealed class TestGate(
     public static async Task<TestGate> CreateAsync(
         Sandbox sandbox,
         string workTree,
+        FeatureFiles features,
         Pin pin,
         IReadOnlyList<string> secretNames,
         IReadOnlyList<string>? scope,
@@ -44,11 +46,11 @@ public sealed class TestGate(
     {
         if (scope is null)
         {
-            return new TestGate(sandbox, workTree, pin, secretNames, log: log, skipIntegration: skipIntegration);
+            return new TestGate(sandbox, workTree, features, pin, secretNames, log: log, skipIntegration: skipIntegration);
         }
 
         IReadOnlySet<string> passed = await ReadPassedTestsAsync(sandbox, workTree, log, cancellationToken).ConfigureAwait(false);
-        return new TestGate(sandbox, workTree, pin, secretNames, path => PinExempt(scope, path), passed, log, skipIntegration);
+        return new TestGate(sandbox, workTree, features, pin, secretNames, path => PinExempt(scope, path), passed, log, skipIntegration);
     }
 
     /// <summary>Gives <c>failed</c> with one Redo text for each fact that failed the gate, or <c>passed</c>, with one Redo text
@@ -116,14 +118,35 @@ public sealed class TestGate(
             }
         }
 
-        foreach ((string path, IReadOnlyList<string> titles) in FeatureFiles.ReadScenarioTitlesFromDirectory(Path.Combine(workTree, "specs", "features")))
+        IReadOnlyList<string> paths = [];
+        try
         {
+            paths = features.Paths();
+        }
+        catch (FeatureFileException exception)
+        {
+            evidence.Add($"feature file: {exception.Message}");
+        }
+
+        foreach (string path in paths)
+        {
+            IReadOnlyList<string> titles;
+            try
+            {
+                titles = features.ScenarioTitles(path);
+            }
+            catch (FeatureFileException exception)
+            {
+                evidence.Add($"feature file: {exception.Message}");
+                continue;
+            }
+
             foreach (string title in titles)
             {
                 string name = FeatureFiles.ComputeTestName(title);
                 if (!tests.Any(reported => reported.Method == name))
                 {
-                    evidence.Add($"no test: specs/features/{path}, scenario \"{title}\", test {name}");
+                    evidence.Add($"no test: {path}, scenario \"{title}\", test {name}");
                 }
             }
         }
@@ -195,7 +218,7 @@ public sealed class TestGate(
     }
 
     private static bool PinExempt(IReadOnlyList<string> scope, string path) =>
-        CleanupBody.InScope(scope, path) && !path.StartsWith("specs/features/", StringComparison.Ordinal);
+        CleanupBody.InScope(scope, path) && !FeatureFiles.IsFeaturePath(path);
 
     private static IReadOnlyList<string> LostTests(IReadOnlySet<string> basePassed, TestGateResult gate)
     {

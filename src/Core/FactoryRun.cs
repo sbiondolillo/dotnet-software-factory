@@ -39,7 +39,7 @@ public sealed class FactoryRun(
     public const string SummaryHeading = "Factory run";
 
     private static readonly string[] LayoutFiles = ["Solution.slnx"];
-    private static readonly string[] LayoutDirectories = ["specs/features/", "tests/Specs/", "tests/Integration/"];
+    private static readonly string[] LayoutDirectories = [FeatureFiles.RelativePath, "tests/Specs/", "tests/Integration/"];
 
     private readonly TimeProvider _clock = time ?? TimeProvider.System;
     private readonly Run _run = new(runner, client, startBackend, progress, log, time, summaryPath);
@@ -81,9 +81,9 @@ public sealed class FactoryRun(
         version,
         sessions);
 
-    private Task<PullRequest> DeliverAsync(FactoryRunRequest request, string title, Git git, DeliveryFacts facts, CancellationToken cancellationToken) =>
+    private Task<PullRequest> DeliverAsync(FactoryRunRequest request, string title, Git git, FeatureFiles features, DeliveryFacts facts, CancellationToken cancellationToken) =>
         new Deliver(git, new PullRequests(client), client, facts)
-            .RunAsync(request.Directory, request.RunId, request.Issue, request.BaseBranch, title, request.Token, cancellationToken);
+            .RunAsync(request.Directory, features, request.RunId, request.Issue, request.BaseBranch, title, request.Token, cancellationToken);
 
     /// <summary>Posts the comment of <paramref name="lead"/> and <paramref name="texts"/> on the issue, and gives its body.</summary>
     private async Task<string> CommentAsync(FactoryRunRequest request, string lead, IReadOnlyList<string> texts, CancellationToken cancellationToken)
@@ -109,6 +109,7 @@ public sealed class FactoryRun(
     {
         private readonly RecipeSequence _sequence = RecipeRules.Sequence(choice, RunKind.Factory);
         private Git? _git;
+        private FeatureFiles? _features;
         private string _baseCommit = "";
         private IssueScenariosResult? _scenarios;
 
@@ -126,9 +127,10 @@ public sealed class FactoryRun(
 
         public string SummaryHeading => FactoryRun.SummaryHeading;
 
-        public async Task<BaseOrStop> CheckoutAsync(Git git, CancellationToken cancellationToken = default)
+        public async Task<BaseOrStop> CheckoutAsync(Git git, FeatureFiles features, CancellationToken cancellationToken = default)
         {
             _git = git;
+            _features = features;
             if (request.BaseCommit is string chosen)
             {
                 await git.CheckoutCommitAsync(chosen, request.Directory, cancellationToken).ConfigureAwait(false);
@@ -148,7 +150,7 @@ public sealed class FactoryRun(
 
             if (_sequence.Plan is { Input: PlanInput.IssueScenarios } && IssueScenarios.Holds(issue.Body))
             {
-                _scenarios = IssueScenarios.Apply(issue.Body, request.Directory);
+                _scenarios = IssueScenarios.Apply(issue.Body, features);
                 if (_scenarios.Faults.Count > 0)
                 {
                     string comment = await owner.CommentAsync(request, "The scenarios of the issue are not sound, so there is no run:", _scenarios.Faults, cancellationToken).ConfigureAwait(false);
@@ -178,9 +180,10 @@ public sealed class FactoryRun(
                 return new PinOrStop(RecipeRules.TakePin(_sequence.Pin, request.Directory), null);
             }
 
+            FeatureFiles features = _features ?? throw new InvalidOperationException("The plan runs only after the checkout.");
             await owner.Say("plan: start").ConfigureAwait(false);
             PlanPhaseResult plan = await new PlanPhase(backend.Builder, RecipeRules.PlanText(choice.Recipe, step, _scenarios))
-                .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, request.Directory, cancellationToken).ConfigureAwait(false);
+                .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, request.Directory, features, cancellationToken).ConfigureAwait(false);
             if (!plan.Passed || (_sequence.Pin is PinSource.Plan && plan.Pin is null))
             {
                 await summary.AddRowAsync(Phase.Plan.Text(), null, "failed", cancellationToken).ConfigureAwait(false);
@@ -200,10 +203,11 @@ public sealed class FactoryRun(
             ArgumentNullException.ThrowIfNull(gates);
             ArgumentNullException.ThrowIfNull(result);
             Git git = _git ?? throw new InvalidOperationException("The run delivers only after its checkout.");
+            FeatureFiles features = _features ?? throw new InvalidOperationException("The run delivers only after its checkout.");
             await owner.Say("deliver: start").ConfigureAwait(false);
             TestGate testGate = gates.Gates.OfType<TestGate>().Single();
             DeliveryFacts facts = owner.Facts(_baseCommit, testGate, choice, result.Redos, spend, started, backend.Sessions);
-            PullRequest pullRequest = await owner.DeliverAsync(request, issue.Title, git, facts, cancellationToken).ConfigureAwait(false);
+            PullRequest pullRequest = await owner.DeliverAsync(request, issue.Title, git, features, facts, cancellationToken).ConfigureAwait(false);
             return new Delivered(pullRequest, await git.ReadHeadShaAsync(request.Directory, cancellationToken).ConfigureAwait(false));
         }
     }

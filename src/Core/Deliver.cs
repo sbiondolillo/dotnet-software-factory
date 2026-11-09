@@ -17,26 +17,24 @@ public sealed record DeliveryFacts(
 /// <summary>Delivers a run: pushes its branch, opens a pull request and links it from the issue.</summary>
 public sealed class Deliver(Git git, PullRequests pullRequests, GitHubClient client, DeliveryFacts? facts = null)
 {
-    private const string FeatureDirectory = "specs/features/";
-
     /// <summary>Pushes <c>factory/&lt;runId&gt;</c>, opens a pull request that closes the issue and comments its web address on the issue.</summary>
-    public async Task<PullRequest> RunAsync(string workTree, string runId, IssueNumber issue, string baseBranch, string issueTitle, string token, CancellationToken cancellationToken = default)
+    public async Task<PullRequest> RunAsync(string workTree, FeatureFiles features, string runId, IssueNumber issue, string baseBranch, string issueTitle, string token, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(issue);
         string branch = "factory/" + runId;
         await git.CheckoutBranchAsync(branch, workTree, cancellationToken).ConfigureAwait(false);
         await git.PushAsync(branch, workTree, token, cancellationToken).ConfigureAwait(false);
 
-        string body = await BuildBodyAsync(workTree, issue.Number, cancellationToken).ConfigureAwait(false);
+        string body = await BuildBodyAsync(workTree, features, issue.Number, cancellationToken).ConfigureAwait(false);
         PullRequest pullRequest = await pullRequests.OpenAsync(issue.Repo, branch, baseBranch, issueTitle, body, cancellationToken).ConfigureAwait(false);
         await client.PostCommentAsync(issue, $"Opened {pullRequest.HtmlUrl}", cancellationToken).ConfigureAwait(false);
         return pullRequest;
     }
 
-    private async Task<string> BuildBodyAsync(string workTree, int issueNumber, CancellationToken cancellationToken)
+    private async Task<string> BuildBodyAsync(string workTree, FeatureFiles features, int issueNumber, CancellationToken cancellationToken)
     {
         DeliveryFacts known = facts ?? new DeliveryFacts();
-        IReadOnlyList<string> scenarios = await ScenarioLinesAsync(known, workTree, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<string> scenarios = await ScenarioLinesAsync(known, workTree, features, cancellationToken).ConfigureAwait(false);
         var body = new StringBuilder();
         body.Append(CultureInfo.InvariantCulture, $"Closes #{issueNumber}\n\n## Scenarios\n\n");
         body.AppendJoin('\n', scenarios);
@@ -70,18 +68,16 @@ public sealed class Deliver(Git git, PullRequests pullRequests, GitHubClient cli
     /// <summary>The cents of a session as dollars with two decimal places and a leading dollar sign.</summary>
     internal static string Dollars(int cents) => string.Create(CultureInfo.InvariantCulture, $"${cents / 100m:0.00}");
 
-    private async Task<IReadOnlyList<string>> ScenarioLinesAsync(DeliveryFacts known, string workTree, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<string>> ScenarioLinesAsync(DeliveryFacts known, string workTree, FeatureFiles features, CancellationToken cancellationToken)
     {
         var lines = new List<string>();
         if (known.BaseCommit is not null)
         {
             string[] changed = await git.ListChangedFilesAsync(known.BaseCommit, workTree, cancellationToken).ConfigureAwait(false);
-            foreach (string path in changed.Where(p => p.StartsWith(FeatureDirectory, StringComparison.Ordinal) && p.EndsWith(".feature", StringComparison.Ordinal)).Order(StringComparer.Ordinal))
+            foreach (string path in changed.Where(p => FeatureFiles.IsFeaturePath(p) && p.EndsWith(".feature", StringComparison.Ordinal)).Order(StringComparer.Ordinal))
             {
                 string? before = await git.ReadFileAtAsync(known.BaseCommit, path, workTree, cancellationToken).ConfigureAwait(false);
-                string full = Path.Combine(workTree, path);
-                string? after = File.Exists(full) ? await File.ReadAllTextAsync(full, cancellationToken).ConfigureAwait(false) : null;
-                string line = Describe(path, Read(path, before), Read(path, after));
+                string line = Describe(path, Read(path, before), ReadAfter(features, path));
                 if (line.Length > 0)
                 {
                     lines.Add(line);
@@ -95,6 +91,19 @@ public sealed class Deliver(Git git, PullRequests pullRequests, GitHubClient cli
         }
 
         return lines;
+    }
+
+    /// <summary>The scenarios of the file after the build, or none when no file is there or it cannot be read.</summary>
+    private static IReadOnlyList<(string Title, string Steps)> ReadAfter(FeatureFiles features, string path)
+    {
+        try
+        {
+            return features.ScenarioSteps(path);
+        }
+        catch (FeatureFileException)
+        {
+            return [];
+        }
     }
 
     private static IReadOnlyList<(string Title, string Steps)> Read(string path, string? content)

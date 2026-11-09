@@ -9,6 +9,9 @@ public sealed class FeatureFilesSteps(ExceptionState exceptionState) : IDisposab
 {
     private readonly string _root = Directory.CreateTempSubdirectory("feature-files-").FullName;
 
+    // Each file of a scenario sits in the feature directory of the work tree _root, and a scenario names it relative to that directory.
+    private string Features => Path.Combine(_root, FeatureFiles.RelativePath);
+
     private string _scenarioTitle = "";
     private string _testName = "";
     private IReadOnlyList<string> _titles = [];
@@ -29,7 +32,7 @@ public sealed class FeatureFilesSteps(ExceptionState exceptionState) : IDisposab
 
     [Given("{string} is a symbolic link to the file {string}")]
     public void GivenASymbolicLink(string fileName, string target) =>
-        File.CreateSymbolicLink(Path.Combine(_root, fileName), Path.Combine(_root, target));
+        File.CreateSymbolicLink(Path.Combine(Features, fileName), Path.Combine(Features, target));
 
     [Given("the scenario title {string}")]
     public void GivenTheScenarioTitle(string title) => _scenarioTitle = title;
@@ -39,15 +42,15 @@ public sealed class FeatureFilesSteps(ExceptionState exceptionState) : IDisposab
     {
         try
         {
-            _titles = FeatureFiles.ReadScenarioTitles(Path.Combine(_root, relativePath));
+            _titles = new FeatureFiles(_root).ScenarioTitles(FeatureFiles.RelativePath + relativePath);
             exceptionState.Exception = null;
         }
         catch (FeatureFileException ex)
         {
             // The scenario holds that an unparsable file throws naming the path FeatureFiles was
             // given, so the scenario fails if the library stops naming that path; the Then step
-            // then sees the path relative to the scenario's folder, as the scenario gave it.
-            Assert.Equal(Path.Combine(_root, relativePath), ex.Path);
+            // then sees the path relative to the feature directory, as the scenario gave it.
+            Assert.Equal(FeatureFiles.RelativePath + relativePath, ex.Path);
             exceptionState.Exception = new FeatureFileException(relativePath, ex.Message);
         }
         catch (Exception ex)
@@ -61,7 +64,8 @@ public sealed class FeatureFilesSteps(ExceptionState exceptionState) : IDisposab
     {
         try
         {
-            _directoryResults = FeatureFiles.ReadScenarioTitlesFromDirectory(_root);
+            var features = new FeatureFiles(_root);
+            _directoryResults = [.. features.Paths().Select(path => (path[FeatureFiles.RelativePath.Length..], features.ScenarioTitles(path)))];
             exceptionState.Exception = null;
         }
         catch (Exception ex)
@@ -122,7 +126,7 @@ public sealed class FeatureFilesSteps(ExceptionState exceptionState) : IDisposab
 
     private void WriteFile(string relativePath, string content)
     {
-        string fullPath = Path.Combine(_root, relativePath);
+        string fullPath = Path.Combine(Features, relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         File.WriteAllText(fullPath, content);
     }

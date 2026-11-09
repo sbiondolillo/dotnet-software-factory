@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Gherkin;
 using Gherkin.Ast;
 using Reqnroll.Tracing;
@@ -14,54 +13,170 @@ public sealed record ScenarioSpan(string Name, int FirstLine, int LastLine);
 /// <c>Rule:</c>, a <c>Background:</c>, the description of the feature, and the span of each scenario in file order.</summary>
 public sealed record FeatureOutline(bool HasFeature, bool HasRule, bool HasBackground, bool HasDescription, IReadOnlyList<ScenarioSpan> Scenarios);
 
-/// <summary>Answers the two questions the factory's test-report step needs about a feature file:
-/// which scenarios it holds, and which test method Reqnroll generates for a scenario's title.
-/// Reads with Gherkin's own parser and names with Reqnroll's own identifier logic, so both
-/// answers stay in lock-step with what Reqnroll.xunit.v3 actually compiles.</summary>
-public static partial class FeatureFiles
+/// <summary>The feature files of one work tree. Every path in and out is relative to the work tree, as git names it, and starts
+/// with <see cref="RelativePath"/>. Every read and write refuses a path that holds a symbolic link, and a parse error of a file on
+/// disk holds the parser's positions and no text of the file, since a link or a swap can put a file of the runner there. The static
+/// members parse text that a caller already holds, with Gherkin's own parser, and name a test with Reqnroll's own identifier
+/// logic, so both answers stay in lock-step with what Reqnroll.xunit.v3 compiles.</summary>
+public sealed class FeatureFiles(string workTree)
 {
-    [GeneratedRegex(@"^\(\d+:\d+\)", RegexOptions.Multiline)]
-    private static partial Regex Position();
+    /// <summary>The directory of the feature files, relative to the work tree.</summary>
+    public const string RelativePath = "specs/features/";
 
-    /// <summary>Reads the scenario titles of the feature file at <paramref name="featureFilePath"/>, in the
-    /// order they appear. A <c>Background</c> contributes no title. A <c>Scenario Outline</c> contributes
-    /// its one title regardless of its example rows. A scenario under a <c>Rule</c> is a scenario of the
-    /// file. Throws <see cref="FeatureFileException"/> when the path is a symbolic link, or when the parser rejects the file's content.</summary>
-    public static IReadOnlyList<string> ReadScenarioTitles(string featureFilePath)
+    private const string Extension = ".feature";
+
+    /// <summary>Tells whether <paramref name="path"/>, relative to a work tree, names a file under <see cref="RelativePath"/>,
+    /// with no empty, <c>.</c> or <c>..</c> segment.</summary>
+    public static bool IsFeaturePath(string path)
     {
-        // A parser error quotes the text, so a link to a file of the runner would put that file in a message.
-        if (new FileInfo(featureFilePath).LinkTarget is not null)
+        ArgumentNullException.ThrowIfNull(path);
+        return path.StartsWith(RelativePath, StringComparison.Ordinal)
+            && path.Split('/').All(segment => segment is not ("" or "." or ".."));
+    }
+
+    /// <summary>The path of each file named <c>*.feature</c> under <see cref="RelativePath"/>, at any depth, in ordinal order. No
+    /// file is read. An absent directory gives an empty list. Throws <see cref="FeatureFileException"/> when <c>specs</c>, the
+    /// feature directory or a directory under it is a symbolic link, so a linked tree is never listed as the work tree's own, and
+    /// when a listed path holds a backslash, so each path it gives can be read.</summary>
+    public IReadOnlyList<string> Paths()
+    {
+        var paths = new List<string>();
+        string specs = Path.Combine(workTree, "specs");
+        RefuseLinkedDirectory(specs);
+        string directory = Path.Combine(specs, "features");
+        // A dangling link is no directory, so the link check comes before the check that the directory exists.
+        RefuseLinkedDirectory(directory);
+        if (Directory.Exists(directory))
         {
-            throw new FeatureFileException(featureFilePath, "the file is a symbolic link");
+            Collect(directory, paths);
         }
 
-        string content = File.ReadAllText(featureFilePath);
-        try
+        paths.Sort(StringComparer.Ordinal);
+        return paths;
+    }
+
+    private void Collect(string directory, List<string> paths)
+    {
+        RefuseLinkedDirectory(directory);
+        foreach (string path in Directory.EnumerateFiles(directory, "*" + Extension).Select(Relative))
         {
-            return ReadScenarioTitles(featureFilePath, content);
+            RefuseBackslash(path);
+            paths.Add(path);
         }
-        catch (FeatureFileException exception)
+
+        foreach (string child in Directory.EnumerateDirectories(directory))
         {
-            // A linked directory, or a swap after the check above, can put a file of the runner here, so the error holds no text of the file.
-            IEnumerable<string> positions = Position().Matches(exception.Message).Select(match => match.Value);
-            throw new FeatureFileException(featureFilePath, $"the parser rejects the text at {string.Join(", ", positions)}");
+            Collect(child, paths);
         }
     }
 
-    /// <summary>Scans <paramref name="directoryPath"/> at any depth for files named <c>*.feature</c>, and
-    /// reads the scenario titles of each. No other file is read. Returns each feature file's path relative
-    /// to <paramref name="directoryPath"/> paired with its scenario titles, ordered by that relative path.</summary>
-    public static IReadOnlyList<(string RelativePath, IReadOnlyList<string> Titles)> ReadScenarioTitlesFromDirectory(string directoryPath)
+    /// <summary>Refuses a path that holds a backslash, which Windows reads as a separator, so a read cannot leave the work tree
+    /// there.</summary>
+    private static void RefuseBackslash(string path)
     {
-        var results = new List<(string RelativePath, IReadOnlyList<string> Titles)>();
-        foreach (string filePath in Directory.EnumerateFiles(directoryPath, "*.feature", SearchOption.AllDirectories)
-                     .OrderBy(path => path, StringComparer.Ordinal))
+        if (path.Contains('\\', StringComparison.Ordinal))
         {
-            string relativePath = Path.GetRelativePath(directoryPath, filePath).Replace(Path.DirectorySeparatorChar, '/');
-            results.Add((relativePath, ReadScenarioTitles(filePath)));
+            throw new FeatureFileException(path, "the path holds a backslash");
+        }
+    }
+
+    private void RefuseLinkedDirectory(string directory)
+    {
+        if (new DirectoryInfo(directory).LinkTarget is not null)
+        {
+            throw new FeatureFileException(Relative(directory), "the directory is a symbolic link");
+        }
+    }
+
+    private string Relative(string full) => Path.GetRelativePath(workTree, full).Replace(Path.DirectorySeparatorChar, '/');
+
+    /// <summary>Reads the text of the file at <paramref name="path"/>, or null when no file is there, as for a directory. Throws
+    /// <see cref="ArgumentException"/> for a path outside <see cref="RelativePath"/>, and <see cref="FeatureFileException"/>
+    /// when the path holds a symbolic link.</summary>
+    public string? ReadText(string path)
+    {
+        string full = Full(path);
+        if (Directory.Exists(full))
+        {
+            return null;
         }
 
-        return results;
+        try
+        {
+            return File.ReadAllText(full);
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Reads the scenario titles of the file at <paramref name="path"/>, in file order, or an empty list when no file is
+    /// there. A <c>Background</c> gives no title. A <c>Scenario Outline</c> gives its one title, whatever its example rows. A
+    /// scenario under a <c>Rule</c> is a scenario of the file. Throws as <see cref="ReadText"/> does, and
+    /// <see cref="FeatureFileException"/> when the parser rejects the text.</summary>
+    public IReadOnlyList<string> ScenarioTitles(string path) => ParseFile(path, ReadScenarioTitles, []);
+
+    /// <summary>Reads each scenario of the file at <paramref name="path"/> as <see cref="ReadScenarioSteps"/> does, or an empty
+    /// list when no file is there. Throws as <see cref="ScenarioTitles"/> does.</summary>
+    public IReadOnlyList<(string Title, string Steps)> ScenarioSteps(string path) => ParseFile(path, ReadScenarioSteps, []);
+
+    /// <summary>Reads the doc string lines of the file at <paramref name="path"/> as <see cref="ReadOverIndentedDocStringLines"/>
+    /// does, or an empty list when no file is there. Throws as <see cref="ScenarioTitles"/> does.</summary>
+    public IReadOnlyList<int> OverIndentedDocStringLines(string path) => ParseFile(path, ReadOverIndentedDocStringLines, []);
+
+    /// <summary>Writes <paramref name="text"/> to the file at <paramref name="path"/>, and creates its directory. Throws as
+    /// <see cref="ReadText"/> does.</summary>
+    public void Write(string path, string text)
+    {
+        string full = Full(path);
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        File.WriteAllText(full, text);
+    }
+
+    /// <summary>Removes the file at <paramref name="path"/>. Throws as <see cref="ReadText"/> does.</summary>
+    public void Remove(string path) => File.Delete(Full(path));
+
+    /// <summary>Gives the full path of <paramref name="path"/> after the checks of <see cref="ReadText"/>.</summary>
+    private string Full(string path)
+    {
+        if (!IsFeaturePath(path))
+        {
+            throw new ArgumentException($"The path {path} is not under {RelativePath}.", nameof(path));
+        }
+
+        RefuseBackslash(path);
+
+        string full = workTree;
+        foreach (string segment in path.Split('/'))
+        {
+            full = Path.Combine(full, segment);
+            FileSystemInfo entry = Directory.Exists(full) ? new DirectoryInfo(full) : new FileInfo(full);
+            if (entry.LinkTarget is not null)
+            {
+                throw new FeatureFileException(path, $"{Relative(full)} is a symbolic link");
+            }
+        }
+
+        return full;
+    }
+
+    private T ParseFile<T>(string path, Func<string, string, T> parse, T absent)
+    {
+        if (ReadText(path) is not string content)
+        {
+            return absent;
+        }
+
+        try
+        {
+            return parse(path, content);
+        }
+        catch (FeatureFileException exception)
+        {
+            // A swap after the check of the links can put a file of the runner here, so the error holds no text of the file.
+            throw exception.WithoutText();
+        }
     }
 
     /// <summary>Reads each scenario of <paramref name="content"/>, a feature file's text, as its title and a signature of its steps:
@@ -177,7 +292,7 @@ public static partial class FeatureFiles
     /// <paramref name="scenarioTitle"/>.</summary>
     public static string ComputeTestName(string scenarioTitle) => CodeFormattingExtensions.ToIdentifier(scenarioTitle);
 
-    private static List<string> ReadScenarioTitles(string path, string content)
+    private static IReadOnlyList<string> ReadScenarioTitles(string path, string content)
     {
         GherkinDocument document = Parse(path, content);
         var titles = new List<string>();

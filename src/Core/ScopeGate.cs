@@ -15,7 +15,7 @@ public sealed class ScopeGate(Git git, string baseCommit, string workTree, IRead
         List<string> faults = [];
         foreach (string path in changed.Where(path => !path.StartsWith(".factory/", StringComparison.Ordinal)))
         {
-            if (path.StartsWith("specs/features/", StringComparison.Ordinal))
+            if (FeatureFiles.IsFeaturePath(path))
             {
                 faults.Add($"pin: {path}");
             }

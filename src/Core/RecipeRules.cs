@@ -72,7 +72,6 @@ public static class RecipeRules
     private const string RefactorLabel = "refactor";
     private const string CleanupLabel = "cleanup";
     private const string ReframeLabel = "reframe";
-    private const string FeatureDirectory = "specs/features/";
     private const string PlanPath = ".factory/plan.md";
 
     private const string CannedAnswerText =
@@ -200,7 +199,7 @@ public static class RecipeRules
             PlanMode.PlanOnly),
         Recipe.Behavior => new(
             lead,
-            $"Write Gherkin scenarios for the behavior in feature files under {FeatureDirectory} "
+            $"Write Gherkin scenarios for the behavior in feature files under {FeatureFiles.RelativePath} "
             + $"and write the plan to {PlanPath}, stating each result the build owes. "
             + IntegrationText
             + "Remove each feature file whose behavior the issue removes or replaces. "
@@ -224,18 +223,18 @@ public static class RecipeRules
             + "Change only the paths that the issue names under the heading ## Scope. "
             + "Make the command in the first fenced block under the heading ## Check exit with the code 0. "
             + "Keep every test that passes now passing, and keep every public type and every public or protected member of the code under src/ as it is. "
-            + "Leave each feature file under specs/features/ as it is. Run dotnet build and dotnet test, and work until both pass."),
+            + $"Leave each feature file under {FeatureFiles.RelativePath} as it is. Run dotnet build and dotnet test, and work until both pass."),
         Recipe.Cleanup => new(
             "Do the cleanup of the issue below.",
             "Change only the paths that the issue names under the heading ## Scope. "
             + "Make the command in the first fenced block under the heading ## Check exit with the code 0, and keep every test that passes now passing. "
-            + "Leave each feature file under specs/features/ as it is. Run dotnet build and dotnet test, and work until both pass."),
+            + $"Leave each feature file under {FeatureFiles.RelativePath} as it is. Run dotnet build and dotnet test, and work until both pass."),
         Recipe.Refactor => new(
             "Do the refactor of the issue below.",
             (run is RunKind.Factory
                 ? $"Read the plan, {PlanPath}, and change the structure of the code as it says. "
                 : "Change the structure of the code as the issue says. ")
-            + "Change no file under specs/features/, tests/Specs/ or tests/Integration/: every test stays as it is. "
+            + $"Change no file under {FeatureFiles.RelativePath}, tests/Specs/ or tests/Integration/: every test stays as it is. "
             + "Leave each build settings file as it is; the build settings files are named "
             + SettingsFiles()
             + ". Run dotnet build and dotnet test, and work until both pass."),
@@ -251,26 +250,26 @@ public static class RecipeRules
     public static string ReviewSteps(Recipe recipe, RunKind run) => recipe switch
     {
         Recipe.Reframe =>
-            $"1. Read every feature file under {FeatureDirectory}.\n"
+            $"1. Read every feature file under {FeatureFiles.RelativePath}.\n"
             + "2. " + ReframeReviewText + "\n",
         Recipe.Refactor =>
             (run is RunKind.Factory ? $"1. Read the plan, {PlanPath}.\n" : "1. Read every change since the base commit.\n")
             + (run is RunKind.Factory ? "2. Judge the build against the plan and every sentence of the issue. " : "2. Judge the build against every sentence of the issue. ")
-            + "Block a change to any file under specs/features/, tests/Specs/ or tests/Integration/.\n",
+            + $"Block a change to any file under {FeatureFiles.RelativePath}, tests/Specs/ or tests/Integration/.\n",
         Recipe.Cleanup =>
-            $"1. Read every feature file under {FeatureDirectory}.\n"
+            $"1. Read every feature file under {FeatureFiles.RelativePath}.\n"
             + "2. Judge the build against every sentence of the issue: it changes only the paths under ## Scope and makes the command under ## Check pass, "
             + "and it keeps every test.\n",
         _ =>
             (run is RunKind.Factory
-                ? $"1. Read every feature file under {FeatureDirectory} and the plan, {PlanPath}.\n"
+                ? $"1. Read every feature file under {FeatureFiles.RelativePath} and the plan, {PlanPath}.\n"
                     + "2. Judge the build against every scenario, every result the plan states and every sentence of the issue, "
-                : $"1. Read every feature file under {FeatureDirectory}.\n"
+                : $"1. Read every feature file under {FeatureFiles.RelativePath}.\n"
                     + "2. Judge the build against every scenario and every sentence of the issue, ")
             + "and judge whether the tests cover what each scenario names. "
             + CannedAnswerText
             + "For each canned answer that a scenario depends on, block a build with no test under tests/Integration/ that gets the same answer from the real service. "
-            + "An existing test is a scenario under specs/features/, or a [Fact] or [Theory] method under tests/Specs/Unit/ or tests/Integration/, at the base commit. "
+            + $"An existing test is a scenario under {FeatureFiles.RelativePath}, or a [Fact] or [Theory] method under tests/Specs/Unit/ or tests/Integration/, at the base commit. "
             + "Each row of the Examples of a Scenario Outline, and each [InlineData] row of a [Theory], is a test, and an edit to the row is an edit to that test. "
             + "A step class, a helper and a stub are not tests. "
             + "Block an edit to the text of an existing scenario or to the body of an existing test method, a rename or a removal, when the issue does not name that test. "
@@ -305,10 +304,10 @@ public static class RecipeRules
     }
 
     private static string BehaviorBuild(RunKind run) => run is RunKind.Factory
-        ? $"Read the plan, {PlanPath}, and each feature file under {FeatureDirectory}. "
+        ? $"Read the plan, {PlanPath}, and each feature file under {FeatureFiles.RelativePath}. "
             + "Write the code that the plan and the scenarios ask for. "
             + BindText
-        : $"Read each feature file under {FeatureDirectory}. "
+        : $"Read each feature file under {FeatureFiles.RelativePath}. "
             + "Write the code that the issue and the scenarios ask for. "
             + BindText;
 

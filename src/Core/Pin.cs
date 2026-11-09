@@ -44,7 +44,7 @@ public sealed class Pin
     /// <summary>Records the pinned files of a directory.</summary>
     public static Pin Take(string directory) => new(Scan(directory, wide: false), wide: false);
 
-    /// <summary>Records the files of a refactor run: every file under specs/features/, tests/Specs/ and tests/Integration/, and the settings files.</summary>
+    /// <summary>Records the files of a refactor run: every file under <see cref="FeatureFiles.RelativePath"/>, tests/Specs/ and tests/Integration/, and the settings files.</summary>
     public static Pin TakeRefactor(string directory) => new(Scan(directory, wide: true), wide: true);
 
     /// <summary>Reports which pinned files of a directory differ from this pin.</summary>
@@ -88,14 +88,13 @@ public sealed class Pin
             return false;
         }
 
-        if (wide && (relative.StartsWith("specs/features/", StringComparison.Ordinal)
+        if (wide && (FeatureFiles.IsFeaturePath(relative)
             || relative.StartsWith("tests/Specs/", StringComparison.Ordinal)
             || relative.StartsWith("tests/Integration/", StringComparison.Ordinal)))
         {
             return true;
         }
 
-        return (directories.Length >= 2 && directories[0] == "specs" && directories[1] == "features")
-            || SettingsNames.Contains(segments[^1]);
+        return FeatureFiles.IsFeaturePath(relative) || SettingsNames.Contains(segments[^1]);
     }
 }

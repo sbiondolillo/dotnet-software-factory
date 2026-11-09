@@ -52,6 +52,7 @@ public sealed class PlanPhaseIntegrationTests
                 "claude-sonnet-5-5",
                 50,
                 copy,
+                new FeatureFiles(copy),
                 TestContext.Current.CancellationToken);
 
             Assert.True(result.Passed, string.Join("; ", result.Failures));
