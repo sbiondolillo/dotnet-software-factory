@@ -60,13 +60,25 @@ public sealed class FeatureFilesTests : IDisposable
     [Theory]
     [InlineData("specs/features/a\\b.feature")]
     [InlineData("specs/features/a\\b/c.feature")]
-    public void PathsRefusesAFileWhosePathIsNoFeaturePath(string path)
+    public void PathsRefusesAFileWhosePathHoldsABackslash(string path)
     {
         Write(path, "");
 
         FeatureFileException exception = Assert.Throws<FeatureFileException>(() => Features.Paths());
 
         Assert.Equal(path, exception.Path);
+    }
+
+    [Fact]
+    public void AReadRefusesAPathThatHoldsABackslash()
+    {
+        const string path = "specs/features/..\\outside.feature";
+        Assert.True(FeatureFiles.IsFeaturePath(path));
+
+        FeatureFileException exception = Assert.Throws<FeatureFileException>(() => Features.ReadText(path));
+
+        Assert.Equal(path, exception.Path);
+        Assert.Throws<FeatureFileException>(() => Features.Write(path, "Feature: N\n"));
     }
 
     [Fact]
@@ -119,7 +131,6 @@ public sealed class FeatureFilesTests : IDisposable
     [InlineData("specs/features/../../etc/passwd")]
     [InlineData("specs/features//a.feature")]
     [InlineData("/specs/features/a.feature")]
-    [InlineData("specs/features/..\\outside.feature")]
     public void ReadTextRefusesAPathOutsideTheFeatureDirectory(string path)
     {
         Assert.False(FeatureFiles.IsFeaturePath(path));

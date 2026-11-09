@@ -26,19 +26,18 @@ public sealed class FeatureFiles(string workTree)
     private const string Extension = ".feature";
 
     /// <summary>Tells whether <paramref name="path"/>, relative to a work tree, names a file under <see cref="RelativePath"/>,
-    /// with no empty, <c>.</c> or <c>..</c> segment and no backslash, which Windows reads as a separator.</summary>
+    /// with no empty, <c>.</c> or <c>..</c> segment.</summary>
     public static bool IsFeaturePath(string path)
     {
         ArgumentNullException.ThrowIfNull(path);
         return path.StartsWith(RelativePath, StringComparison.Ordinal)
-            && !path.Contains('\\', StringComparison.Ordinal)
             && path.Split('/').All(segment => segment is not ("" or "." or ".."));
     }
 
     /// <summary>The path of each file named <c>*.feature</c> under <see cref="RelativePath"/>, at any depth, in ordinal order. No
     /// file is read. An absent directory gives an empty list. Throws <see cref="FeatureFileException"/> when <c>specs</c>, the
     /// feature directory or a directory under it is a symbolic link, so a linked tree is never listed as the work tree's own, and
-    /// when a listed path is one that <see cref="IsFeaturePath"/> refuses, so each path it gives can be read.</summary>
+    /// when a listed path holds a backslash, so each path it gives can be read.</summary>
     public IReadOnlyList<string> Paths()
     {
         var paths = new List<string>();
@@ -59,12 +58,23 @@ public sealed class FeatureFiles(string workTree)
         RefuseLinkedDirectory(directory);
         foreach (string path in Directory.EnumerateFiles(directory, "*" + Extension).Select(Relative))
         {
-            paths.Add(IsFeaturePath(path) ? path : throw new FeatureFileException(path, "the path holds a character that a feature path refuses"));
+            RefuseBackslash(path);
+            paths.Add(path);
         }
 
         foreach (string child in Directory.EnumerateDirectories(directory))
         {
             Collect(child, paths);
+        }
+    }
+
+    /// <summary>Refuses a path that holds a backslash, which Windows reads as a separator, so a read cannot leave the work tree
+    /// there.</summary>
+    private static void RefuseBackslash(string path)
+    {
+        if (path.Contains('\\', StringComparison.Ordinal))
+        {
+            throw new FeatureFileException(path, "the path holds a backslash");
         }
     }
 
@@ -132,6 +142,8 @@ public sealed class FeatureFiles(string workTree)
         {
             throw new ArgumentException($"The path {path} is not under {RelativePath}.", nameof(path));
         }
+
+        RefuseBackslash(path);
 
         string full = workTree;
         foreach (string segment in path.Split('/'))
