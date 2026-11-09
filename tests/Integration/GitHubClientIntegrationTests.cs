@@ -82,7 +82,7 @@ public sealed class GitHubClientIntegrationTests
             Assert.True(IssueScenarios.Holds(issue.Body));
             DirectoryInfo directory = Directory.CreateTempSubdirectory("factory-client-integration-");
             cleanup.Add($"delete the directory {directory.FullName}", () => directory.Delete(recursive: true));
-            IssueScenariosResult result = IssueScenarios.Apply(issue.Body, directory.FullName);
+            IssueScenariosResult result = IssueScenarios.Apply(issue.Body, new FeatureFiles(directory.FullName));
             Assert.Contains("holds no fenced block", Assert.Single(result.Faults), StringComparison.Ordinal);
         });
     }

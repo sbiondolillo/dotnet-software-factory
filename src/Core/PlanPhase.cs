@@ -23,7 +23,6 @@ public sealed class PlanPhase(Agent agent, PlanText text)
 {
     private bool PlanOnly => text.Mode is PlanMode.PlanOnly;
 
-    private const string FeatureDirectory = "specs/features/";
     private const string PlanName = "plan.md";
     private const string PlanPath = ".factory/" + PlanName;
 
@@ -38,12 +37,13 @@ public sealed class PlanPhase(Agent agent, PlanText text)
         string model,
         int maxTurns,
         string workTree,
+        FeatureFiles features,
         CancellationToken cancellationToken = default)
     {
         Dictionary<string, string> baseline = Snapshot(workTree, PlanOnly);
         string prompt = BuildPrompt(title, body);
 
-        (List<string> failures, bool isError) = await RunOnceAsync(prompt, model, maxTurns, workTree, baseline, cancellationToken).ConfigureAwait(false);
+        (List<string> failures, bool isError) = await RunOnceAsync(prompt, model, maxTurns, workTree, features, baseline, cancellationToken).ConfigureAwait(false);
         if (isError)
         {
             return new PlanPhaseResult(false, null, failures);
@@ -63,7 +63,7 @@ public sealed class PlanPhase(Agent agent, PlanText text)
 
         correction.Append(CorrectionPlanSentence);
 
-        (failures, _) = await RunOnceAsync(correction.ToString(), model, maxTurns, workTree, baseline, cancellationToken).ConfigureAwait(false);
+        (failures, _) = await RunOnceAsync(correction.ToString(), model, maxTurns, workTree, features, baseline, cancellationToken).ConfigureAwait(false);
         return failures.Count is 0
             ? new PlanPhaseResult(true, Pin.Take(workTree), [])
             : new PlanPhaseResult(false, null, failures);
@@ -79,6 +79,7 @@ public sealed class PlanPhase(Agent agent, PlanText text)
         string model,
         int maxTurns,
         string workTree,
+        FeatureFiles features,
         Dictionary<string, string> baseline,
         CancellationToken cancellationToken)
     {
@@ -89,7 +90,7 @@ public sealed class PlanPhase(Agent agent, PlanText text)
         }
 
         bool planned = answer.Outputs.ContainsKey(PlanName);
-        return (PlanOnly ? RefactorGate(workTree, baseline, planned) : Gate(workTree, baseline, planned), false);
+        return (PlanOnly ? RefactorGate(workTree, baseline, planned) : Gate(workTree, features, baseline, planned), false);
     }
 
     private static List<string> RefactorGate(string workTree, Dictionary<string, string> baseline, bool planned)
@@ -115,7 +116,7 @@ public sealed class PlanPhase(Agent agent, PlanText text)
         return failures;
     }
 
-    private static List<string> Gate(string workTree, Dictionary<string, string> baseline, bool planned)
+    private static List<string> Gate(string workTree, FeatureFiles features, Dictionary<string, string> baseline, bool planned)
     {
         var failures = new List<string>();
         Dictionary<string, string> now = Snapshot(workTree, all: false);
@@ -129,20 +130,20 @@ public sealed class PlanPhase(Agent agent, PlanText text)
 
         if (!featureChanged)
         {
-            failures.Add($"No feature file under {FeatureDirectory} is new or changed.");
+            failures.Add($"No feature file under {FeatureFiles.RelativePath} is new or changed.");
         }
 
         foreach (string path in now.Keys.Where(IsFeature).Order(StringComparer.Ordinal))
         {
             try
             {
-                if (FeatureFiles.ReadScenarioTitles(Path.Combine(workTree, path)).Count is 0)
+                if (features.ScenarioTitles(path).Count is 0)
                 {
                     failures.Add($"The feature file {path} holds no scenario.");
                 }
 
                 bool unchanged = baseline.TryGetValue(path, out string? before) && before == now[path];
-                foreach (int line in unchanged ? [] : FeatureFiles.ReadOverIndentedDocStringLines(path, File.ReadAllText(Path.Combine(workTree, path))))
+                foreach (int line in unchanged ? [] : features.OverIndentedDocStringLines(path))
                 {
                     failures.Add($"The feature file {path}: the doc string at line {line} has text indented past its opening delimiter; start the text at the column of its opening delimiter.");
                 }
@@ -164,15 +165,15 @@ public sealed class PlanPhase(Agent agent, PlanText text)
             bool after = now.TryGetValue(path, out string? current);
             if (!before)
             {
-                failures.Add($"The file {path} is new; leave every file outside {FeatureDirectory} as it is.");
+                failures.Add($"The file {path} is new; leave every file outside {FeatureFiles.RelativePath} as it is.");
             }
             else if (!after)
             {
-                failures.Add($"The file {path} is gone; leave every file outside {FeatureDirectory} as it is.");
+                failures.Add($"The file {path} is gone; leave every file outside {FeatureFiles.RelativePath} as it is.");
             }
             else if (old != current)
             {
-                failures.Add($"The file {path} changed; leave every file outside {FeatureDirectory} as it is.");
+                failures.Add($"The file {path} changed; leave every file outside {FeatureFiles.RelativePath} as it is.");
             }
         }
 
@@ -180,7 +181,7 @@ public sealed class PlanPhase(Agent agent, PlanText text)
     }
 
     private static bool IsFeature(string path) =>
-        path.StartsWith(FeatureDirectory, StringComparison.Ordinal) && path.EndsWith(".feature", StringComparison.Ordinal);
+        FeatureFiles.IsFeaturePath(path) && path.EndsWith(".feature", StringComparison.Ordinal);
 
     private static Dictionary<string, string> Snapshot(string workTree, bool all)
     {
@@ -194,7 +195,7 @@ public sealed class PlanPhase(Agent agent, PlanText text)
                 continue;
             }
 
-            bool inFeatures = relative.StartsWith(FeatureDirectory, StringComparison.Ordinal);
+            bool inFeatures = FeatureFiles.IsFeaturePath(relative);
             if (relative.StartsWith(".factory/", StringComparison.Ordinal) || (!all && inFeatures && !IsFeature(relative)))
             {
                 continue;

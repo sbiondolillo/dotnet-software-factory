@@ -28,7 +28,7 @@ public sealed class GateFactoryTests
             Answer = words => words is ["dotnet", ApiGate.Printer, ..] ? new CommandResult { StandardOutput = "Core: class static Core.Greeter\n" } : new CommandResult(),
         };
         Sandbox sandbox = await box.StartAsync(Ct);
-        var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, "base", []);
+        var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, new FeatureFiles(box.WorkTree.FullName), "base", []);
 
         RecipeSequence sequence = RecipeRules.Sequence(choice, RunKind.Factory);
         GateSet set = await factory.CreateAsync(choice, sequence, Pin.Take(box.WorkTree.FullName), Ct);
@@ -49,7 +49,7 @@ public sealed class GateFactoryTests
     {
         await using var box = new GateSandbox();
         Sandbox sandbox = await box.StartAsync(Ct);
-        var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, "base", []);
+        var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, new FeatureFiles(box.WorkTree.FullName), "base", []);
 
         await CreateAsync(factory, new RecipeChoice(Recipe.Refactor, [], "true"), Pin.Take(box.WorkTree.FullName));
         Assert.Empty(box.Seen);
@@ -67,7 +67,7 @@ public sealed class GateFactoryTests
         };
         Sandbox sandbox = await box.StartAsync(Ct);
         using var progress = new StringWriter();
-        var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, "base", [], progress);
+        var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, new FeatureFiles(box.WorkTree.FullName), "base", [], progress);
 
         GateSet set = await CreateAsync(factory, new RecipeChoice(Recipe.Reframe, ["src/"], "true"), Pin.Take(box.WorkTree.FullName));
 
@@ -83,7 +83,7 @@ public sealed class GateFactoryTests
         await using var box = new GateSandbox();
         Sandbox sandbox = await box.StartAsync(Ct);
         using var progress = new StringWriter();
-        var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, "base", [], progress);
+        var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, new FeatureFiles(box.WorkTree.FullName), "base", [], progress);
 
         await CreateAsync(factory, new RecipeChoice(Recipe.Reframe, ["src/"], "true"), Pin.Take(box.WorkTree.FullName));
 

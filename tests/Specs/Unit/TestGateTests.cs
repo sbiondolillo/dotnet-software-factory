@@ -112,6 +112,21 @@ public sealed class TestGateTests : IDisposable
     }
 
     [Fact]
+    public async Task AFeatureFileThatDoesNotParseFailsTheGateWithItsPathAndNoTextOfTheFile()
+    {
+        using var harness = new TestGateHarness("FACTORY_GITHUB_TOKEN=s3cret\n");
+        await harness.StartAsync(TestContext.Current.CancellationToken);
+
+        GateOutcome result = await harness.RunAsync([], TestContext.Current.CancellationToken);
+
+        Assert.Equal("failed", result.Result);
+        string text = Assert.Single(result.RedoTexts);
+        Assert.StartsWith("feature file: specs/features/checkout.feature: ", text, StringComparison.Ordinal);
+        Assert.Contains("(1:1)", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("s3cret", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ATitleWithAHyphenBecomesADifferentIdentifierThanTheOneInTheFile()
     {
         using var harness = new TestGateHarness("Feature: F\n\n  Scenario: A per-location total\n    Given x\n");
@@ -258,7 +273,7 @@ public sealed class TestGateTests : IDisposable
     public async Task TheGateIsNamedTest()
     {
         await _harness.StartAsync(TestContext.Current.CancellationToken);
-        var gate = new TestGate(_harness.Sandbox!, _harness.WorkTree.FullName, _harness.Pin, []);
+        var gate = new TestGate(_harness.Sandbox!, _harness.WorkTree.FullName, new FeatureFiles(_harness.WorkTree.FullName), _harness.Pin, []);
         Assert.Equal(GateName.Test, GateSandbox.NameOf(gate));
     }
 
@@ -269,7 +284,7 @@ public sealed class TestGateTests : IDisposable
         var basePassed = new HashSet<string>(StringComparer.Ordinal) { "Specs.Unit.CheckoutTests.AddsTwoPrices", "Specs.Unit.GreeterTests.Greets" };
 
         GateOutcome result = await _harness.RunAsync(
-            new TestGate(_harness.Sandbox!, _harness.WorkTree.FullName, _harness.Pin, [], basePassed: basePassed),
+            new TestGate(_harness.Sandbox!, _harness.WorkTree.FullName, new FeatureFiles(_harness.WorkTree.FullName), _harness.Pin, [], basePassed: basePassed),
             TestContext.Current.CancellationToken);
 
         Assert.Equal("passed", result.Result);
@@ -281,7 +296,7 @@ public sealed class TestGateTests : IDisposable
     {
         await _harness.StartAsync(TestContext.Current.CancellationToken);
         TestGate gate = await TestGate.CreateAsync(
-            _harness.Sandbox!, _harness.WorkTree.FullName, _harness.Pin, [], null, cancellationToken: TestContext.Current.CancellationToken);
+            _harness.Sandbox!, _harness.WorkTree.FullName, new FeatureFiles(_harness.WorkTree.FullName), _harness.Pin, [], null, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Empty(_harness.Seen);
 
         _harness.Trx = [TestGateHarness.PassingFeatureTest];
@@ -296,7 +311,7 @@ public sealed class TestGateTests : IDisposable
     {
         await _harness.StartAsync(TestContext.Current.CancellationToken);
         TestGate gate = await TestGate.CreateAsync(
-            _harness.Sandbox!, _harness.WorkTree.FullName, _harness.Pin, [], ["README.md"], cancellationToken: TestContext.Current.CancellationToken);
+            _harness.Sandbox!, _harness.WorkTree.FullName, new FeatureFiles(_harness.WorkTree.FullName), _harness.Pin, [], ["README.md"], cancellationToken: TestContext.Current.CancellationToken);
         await _harness.RunAsync(gate, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, _harness.Seen.Count(c => c.Subcommand is "test"));
@@ -319,7 +334,7 @@ public sealed class TestGateTests : IDisposable
     {
         await _harness.StartAsync(TestContext.Current.CancellationToken);
         TestGate gate = await TestGate.CreateAsync(
-            _harness.Sandbox!, _harness.WorkTree.FullName, _harness.Pin, [], ["README.md"], cancellationToken: TestContext.Current.CancellationToken);
+            _harness.Sandbox!, _harness.WorkTree.FullName, new FeatureFiles(_harness.WorkTree.FullName), _harness.Pin, [], ["README.md"], cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(["restore", "test"], _harness.Seen.Select(c => c.Subcommand));
 
         _harness.Trx = [TestGateHarness.PassingFeatureTest];
@@ -334,7 +349,7 @@ public sealed class TestGateTests : IDisposable
     {
         await _harness.StartAsync(TestContext.Current.CancellationToken);
         TestGate gate = await TestGate.CreateAsync(
-            _harness.Sandbox!, _harness.WorkTree.FullName, _harness.Pin, [], ["global.json"], cancellationToken: TestContext.Current.CancellationToken);
+            _harness.Sandbox!, _harness.WorkTree.FullName, new FeatureFiles(_harness.WorkTree.FullName), _harness.Pin, [], ["global.json"], cancellationToken: TestContext.Current.CancellationToken);
         File.WriteAllText(Path.Combine(_harness.WorkTree.FullName, "global.json"), """{"sdk":{"version":"10.0.101"}}""");
 
         GateOutcome result = await _harness.RunAsync(gate, TestContext.Current.CancellationToken);
@@ -351,7 +366,7 @@ public sealed class TestGateTests : IDisposable
         var basePassed = new HashSet<string>(StringComparer.Ordinal) { "Specs.Unit.GreeterTests.Greets" };
 
         GateOutcome result = await _harness.RunAsync(
-            new TestGate(_harness.Sandbox!, _harness.WorkTree.FullName, _harness.Pin, [], basePassed: basePassed),
+            new TestGate(_harness.Sandbox!, _harness.WorkTree.FullName, new FeatureFiles(_harness.WorkTree.FullName), _harness.Pin, [], basePassed: basePassed),
             TestContext.Current.CancellationToken);
 
         Assert.Equal("failed", result.Result);
@@ -362,6 +377,6 @@ public sealed class TestGateTests : IDisposable
     {
         await harness.StartAsync(TestContext.Current.CancellationToken);
         return await harness.RunAsync(
-            new TestGate(harness.Sandbox!, harness.WorkTree.FullName, Pin.Take(harness.WorkTree.FullName), []), TestContext.Current.CancellationToken);
+            new TestGate(harness.Sandbox!, harness.WorkTree.FullName, new FeatureFiles(harness.WorkTree.FullName), Pin.Take(harness.WorkTree.FullName), []), TestContext.Current.CancellationToken);
     }
 }

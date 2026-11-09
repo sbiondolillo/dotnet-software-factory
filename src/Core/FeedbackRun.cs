@@ -170,7 +170,7 @@ public sealed class FeedbackRun(
 
         public string SummaryHeading => FeedbackRun.SummaryHeading;
 
-        public async Task<BaseOrStop> CheckoutAsync(Git git, CancellationToken cancellationToken = default)
+        public async Task<BaseOrStop> CheckoutAsync(Git git, FeatureFiles features, CancellationToken cancellationToken = default)
         {
             _git = git;
             await git.CheckoutExistingBranchAsync(branch, request.Directory, cancellationToken).ConfigureAwait(false);

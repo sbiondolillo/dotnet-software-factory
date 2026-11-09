@@ -154,8 +154,8 @@ and throws `SandboxException` when either one is a symbolic link, since Docker r
 bind source on the host. A read-only mount is a child of `/work`: a gate cannot rename a
 mount, and it can rename the writable parent of one. A pull that leaves no file under
 `specs` makes git remove the directory, which detaches its mount, so no host read relies
-on that mount alone. `FeatureFiles.ReadScenarioTitles` refuses
-a symbolic link, and its parse error holds positions and no text, since a parser error
+on that mount alone. Each read of a `FeatureFiles` instance refuses
+a path that holds a symbolic link, and its parse error holds positions and no text, since a parser error
 quotes the file and a process of a gate outlives its `docker exec`. A new host read of a work tree file whose text can
 reach a message, a comment or a session keeps to a read-only path and refuses a link.
 

@@ -24,7 +24,7 @@ public sealed class IssueScenariosTests : IDisposable
 
     private string Read(string path = Path0) => File.ReadAllText(Path.Combine(_work.FullName, path));
 
-    private IssueScenariosResult Apply(string body) => IssueScenarios.Apply(body, _work.FullName);
+    private IssueScenariosResult Apply(string body) => IssueScenarios.Apply(body, new FeatureFiles(_work.FullName));
 
     private static string Block(string text, string fence = "```") => $"## Scenarios\n\n{fence}gherkin\n# {Path0}\n{text}{fence}\n";
 
@@ -35,6 +35,22 @@ public sealed class IssueScenariosTests : IDisposable
     [Fact]
     public void HoldsIsTrueForRemovedScenariosAlone() =>
         Assert.True(IssueScenarios.Holds("## Removed scenarios\n\n- `specs/features/a.feature`: One\n"));
+
+    [Fact]
+    public void AFeatureFileOnMainThatIsALinkIsAFaultThatNamesThePathAndHoldsNoTextOfItsTarget()
+    {
+        string target = Path.Combine(_work.FullName, "environ");
+        File.WriteAllText(target, "FACTORY_GITHUB_TOKEN=s3cret\n");
+        Directory.CreateDirectory(Path.Combine(_work.FullName, "specs", "features"));
+        File.CreateSymbolicLink(Path.Combine(_work.FullName, Path0), target);
+
+        IssueScenariosResult result = Apply(Block(Two));
+
+        string fault = Assert.Single(result.Faults);
+        Assert.Contains(Path0, fault, StringComparison.Ordinal);
+        Assert.DoesNotContain("s3cret", fault, StringComparison.Ordinal);
+        Assert.Equal("FACTORY_GITHUB_TOKEN=s3cret\n", File.ReadAllText(target));
+    }
 
     [Fact]
     public void ABlockFencedWithTildesIsRead()

@@ -69,7 +69,7 @@ internal sealed class TestGateHarness : IDisposable
         RunAsync(names, false, cancellationToken);
 
     public Task<GateOutcome> RunAsync(IReadOnlyList<string> names, bool skipIntegration, CancellationToken cancellationToken) =>
-        RunAsync(new TestGate(_sandbox!, WorkTree.FullName, Pin, names, skipIntegration: skipIntegration), cancellationToken);
+        RunAsync(new TestGate(_sandbox!, WorkTree.FullName, new FeatureFiles(WorkTree.FullName), Pin, names, skipIntegration: skipIntegration), cancellationToken);
 
     /// <summary>Runs <paramref name="gate"/> through <see cref="IGate"/>.</summary>
     public Task<GateOutcome> RunAsync(TestGate gate, CancellationToken cancellationToken)

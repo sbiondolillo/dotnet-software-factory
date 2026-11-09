@@ -33,13 +33,13 @@ public sealed partial class StarterIssueBodySteps(StarterState state)
     public void GivenTheCopyHoldsText(string file, string text) => File.WriteAllText(Path.Combine(state.Copy, file), text + "\n");
 
     [When("the scenarios of that body are applied to the copy")]
-    public void WhenTheBodyIsApplied() => _result = IssueScenarios.Apply(_body, state.Copy);
+    public void WhenTheBodyIsApplied() => _result = IssueScenarios.Apply(_body, new FeatureFiles(state.Copy));
 
     [When("the scenarios of the copy's {string} are applied to the copy")]
     public void WhenTheFileIsApplied(string file)
     {
         _body = File.ReadAllText(Path.Combine(state.Copy, file));
-        _result = IssueScenarios.Apply(_body, state.Copy);
+        _result = IssueScenarios.Apply(_body, new FeatureFiles(state.Copy));
     }
 
     [Then("the apply gives no fault")]
