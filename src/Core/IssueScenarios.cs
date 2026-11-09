@@ -113,7 +113,7 @@ public static partial class IssueScenarios
             }
             catch (FeatureFileException exception)
             {
-                faults.Add($"The feature file {path} on main cannot be read: {exception.Message}");
+                faults.Add($"A feature file on main cannot be read: {exception.Message}");
                 continue;
             }
 
@@ -197,7 +197,7 @@ public static partial class IssueScenarios
             }
 
             string text = Text(lines);
-            if (Outline(path, text, faults) is not FeatureOutline whole)
+            if (Outline(path, text, TextSource.Issue, faults) is not FeatureOutline whole)
             {
                 return null;
             }
@@ -226,7 +226,7 @@ public static partial class IssueScenarios
 
         // The line "Feature: _" stands in for the path line, so a line number of the block's outline is its line in the block.
         List<string> blockLines = ["Feature: _", .. lines];
-        if (Outline(path, Text(blockLines), faults) is not FeatureOutline block)
+        if (Outline(path, Text(blockLines), TextSource.Issue, faults) is not FeatureOutline block)
         {
             return null;
         }
@@ -265,7 +265,7 @@ public static partial class IssueScenarios
     private static string? Splice(string path, string main, FeatureOutline? block, List<string> blockLines, List<string> removed, List<string> faults)
     {
         string text = main.Replace("\r\n", "\n", StringComparison.Ordinal);
-        if (Outline(path, text, faults) is not FeatureOutline file)
+        if (Outline(path, text, TextSource.Main, faults) is not FeatureOutline file)
         {
             return null;
         }
@@ -366,7 +366,17 @@ public static partial class IssueScenarios
 
     private static string Text(IEnumerable<string> lines) => string.Concat(lines.Select(line => line + "\n"));
 
-    private static FeatureOutline? Outline(string path, string text, List<string> faults)
+    /// <summary>Where a text that <see cref="Outline"/> parses comes from, which decides whether its fault may quote it.</summary>
+    private enum TextSource
+    {
+        /// <summary>The issue's own block, which the fault quotes.</summary>
+        Issue,
+
+        /// <summary>The file on main, or a result that holds its lines, which the fault does not quote.</summary>
+        Main,
+    }
+
+    private static FeatureOutline? Outline(string path, string text, TextSource source, List<string> faults)
     {
         try
         {
@@ -374,7 +384,8 @@ public static partial class IssueScenarios
         }
         catch (FeatureFileException exception)
         {
-            faults.Add($"The feature file {path} does not parse: {exception.Message}");
+            string reason = (source is TextSource.Main ? exception.WithoutText() : exception).Message;
+            faults.Add($"The feature file {path} does not parse: {reason}");
             return null;
         }
     }
@@ -393,7 +404,8 @@ public static partial class IssueScenarios
     private static bool Sound(string path, string text, List<string> faults, out int scenarios)
     {
         scenarios = 0;
-        if (Outline(path, text, faults) is not FeatureOutline outline)
+        // A whole-file block passed its own parse, so a parse that fails here is of a splice that holds lines of main.
+        if (Outline(path, text, TextSource.Main, faults) is not FeatureOutline outline)
         {
             return false;
         }

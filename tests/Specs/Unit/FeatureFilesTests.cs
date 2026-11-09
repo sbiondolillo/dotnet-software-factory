@@ -46,6 +46,15 @@ public sealed class FeatureFilesTests : IDisposable
     }
 
     [Fact]
+    public void ReadTextIsNullForADirectoryAtThePath()
+    {
+        Directory.CreateDirectory(Path.Combine(_work.FullName, "specs", "features", "dir.feature"));
+
+        Assert.Null(Features.ReadText("specs/features/dir.feature"));
+        Assert.Empty(Features.ScenarioSteps("specs/features/dir.feature"));
+    }
+
+    [Fact]
     public void ReadTextRefusesAFileThatIsASymbolicLink()
     {
         string target = Write("environ", Secret);

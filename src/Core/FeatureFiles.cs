@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Gherkin;
 using Gherkin.Ast;
 using Reqnroll.Tracing;
@@ -19,15 +18,12 @@ public sealed record FeatureOutline(bool HasFeature, bool HasRule, bool HasBackg
 /// disk holds the parser's positions and no text of the file, since a link or a swap can put a file of the runner there. The static
 /// members parse text that a caller already holds, with Gherkin's own parser, and name a test with Reqnroll's own identifier
 /// logic, so both answers stay in lock-step with what Reqnroll.xunit.v3 compiles.</summary>
-public sealed partial class FeatureFiles(string workTree)
+public sealed class FeatureFiles(string workTree)
 {
     /// <summary>The directory of the feature files, relative to the work tree.</summary>
     public const string RelativePath = "specs/features/";
 
     private const string Extension = ".feature";
-
-    [GeneratedRegex(@"^\(\d+:\d+\)", RegexOptions.Multiline)]
-    private static partial Regex Position();
 
     /// <summary>Tells whether <paramref name="path"/>, relative to a work tree, names a file under <see cref="RelativePath"/>,
     /// with no empty, <c>.</c> or <c>..</c> segment.</summary>
@@ -53,12 +49,17 @@ public sealed partial class FeatureFiles(string workTree)
             .Order(StringComparer.Ordinal)];
     }
 
-    /// <summary>Reads the text of the file at <paramref name="path"/>, or null when no file is there. Throws
+    /// <summary>Reads the text of the file at <paramref name="path"/>, or null when no file is there, as for a directory. Throws
     /// <see cref="ArgumentException"/> for a path outside <see cref="RelativePath"/>, and <see cref="FeatureFileException"/>
     /// when the path holds a symbolic link.</summary>
     public string? ReadText(string path)
     {
         string full = Full(path);
+        if (Directory.Exists(full))
+        {
+            return null;
+        }
+
         try
         {
             return File.ReadAllText(full);
@@ -131,8 +132,7 @@ public sealed partial class FeatureFiles(string workTree)
         catch (FeatureFileException exception)
         {
             // A swap after the check of the links can put a file of the runner here, so the error holds no text of the file.
-            IEnumerable<string> positions = Position().Matches(exception.Message).Select(match => match.Value);
-            throw new FeatureFileException(path, $"the parser rejects the text at {string.Join(", ", positions)}");
+            throw exception.WithoutText();
         }
     }
 

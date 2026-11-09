@@ -53,6 +53,29 @@ public sealed class IssueScenariosTests : IDisposable
     }
 
     [Fact]
+    public void AParseFaultOfTheFileOnMainHoldsThePositionAndNoTextOfTheFile()
+    {
+        Main("Feature: G\n\n" + One + "    FACTORY_GITHUB_TOKEN=s3cret\n");
+
+        IssueScenariosResult result = Apply(Block(Two));
+
+        string fault = Assert.Single(result.Faults);
+        Assert.Contains(Path0, fault, StringComparison.Ordinal);
+        Assert.Contains("(5:", fault, StringComparison.Ordinal);
+        Assert.DoesNotContain("s3cret", fault, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AParseFaultOfABlockQuotesTheTextOfTheIssue()
+    {
+        Main("Feature: G\n\n" + One);
+
+        IssueScenariosResult result = Apply(Block(Two + "    words of the issue\n"));
+
+        Assert.Contains("words of the issue", Assert.Single(result.Faults), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ABlockFencedWithTildesIsRead()
     {
         Main("Feature: G\n\n" + One);
