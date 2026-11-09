@@ -236,7 +236,9 @@ between requests and the reading of `Retry-After`.
   GitHub lacks gives `head` in `errors[].field` and `invalid` in `errors[].code`.
 - A line `Closes #<n>` in the body of a pull request links issue `<n>` to it. GitHub's
   GraphQL lists the issue under the pull request's `closingIssuesReferences`, and
-  GitHub closes the issue when the pull request merges into the default branch.
+  GitHub closes the issue when the pull request merges into the default branch. GitHub
+  reads the keyword inside a negation too: `does not close #<n>` closes `<n>` on the
+  merge. A body that leaves an issue open names it as `Part of #<n>`.
 - GitHub stores a comment on an issue when its body is 262144 bytes or fewer in UTF-8.
   A longer body gets the status code 422, and `errors[].message` is
   `Body is too long (maximum is 65536 characters)`. The limit counts bytes: GitHub
