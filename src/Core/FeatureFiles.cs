@@ -44,6 +44,8 @@ public sealed class FeatureFiles(string workTree)
         string specs = Path.Combine(workTree, "specs");
         RefuseLinkedDirectory(specs);
         string directory = Path.Combine(specs, "features");
+        // A dangling link is no directory, so the link check comes before the check that the directory exists.
+        RefuseLinkedDirectory(directory);
         if (Directory.Exists(directory))
         {
             Collect(directory, paths);

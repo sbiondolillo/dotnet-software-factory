@@ -57,6 +57,17 @@ public sealed class FeatureFilesTests : IDisposable
         Assert.Equal(named, exception.Path);
     }
 
+    [Fact]
+    public void PathsRefusesAFeatureDirectoryThatIsADanglingLink()
+    {
+        Directory.CreateDirectory(Path.Combine(_work.FullName, "specs"));
+        Directory.CreateSymbolicLink(Path.Combine(_work.FullName, "specs", "features"), Path.Combine(_work.FullName, "absent"));
+
+        FeatureFileException exception = Assert.Throws<FeatureFileException>(() => Features.Paths());
+
+        Assert.Equal("specs/features", exception.Path);
+    }
+
     [Theory]
     [InlineData("specs/features/a\\b.feature")]
     [InlineData("specs/features/a\\b/c.feature")]
