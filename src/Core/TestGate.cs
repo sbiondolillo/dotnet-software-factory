@@ -118,7 +118,17 @@ public sealed class TestGate(
             }
         }
 
-        foreach (string path in features.Paths())
+        IReadOnlyList<string> paths = [];
+        try
+        {
+            paths = features.Paths();
+        }
+        catch (FeatureFileException exception)
+        {
+            evidence.Add($"feature file: {exception.Message}");
+        }
+
+        foreach (string path in paths)
         {
             IReadOnlyList<string> titles;
             try

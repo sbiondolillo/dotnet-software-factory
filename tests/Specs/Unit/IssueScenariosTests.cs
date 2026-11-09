@@ -53,6 +53,19 @@ public sealed class IssueScenariosTests : IDisposable
     }
 
     [Fact]
+    public void ALinkedDirectoryUnderTheFeatureDirectoryOnMainIsAFault()
+    {
+        Main("Feature: G\n\n" + One);
+        Directory.CreateDirectory(Path.Combine(_work.FullName, "outside"));
+        Directory.CreateSymbolicLink(Path.Combine(_work.FullName, "specs", "features", "sub"), Path.Combine(_work.FullName, "outside"));
+
+        IssueScenariosResult result = Apply(Block(Two));
+
+        Assert.Equal("The feature files on main cannot be listed: specs/features/sub: the directory is a symbolic link", Assert.Single(result.Faults));
+        Assert.Equal("Feature: G\n\n" + One, Read());
+    }
+
+    [Fact]
     public void AParseFaultOfTheFileOnMainHoldsThePositionAndNoTextOfTheFile()
     {
         Main("Feature: G\n\n" + One + "    FACTORY_GITHUB_TOKEN=s3cret\n");

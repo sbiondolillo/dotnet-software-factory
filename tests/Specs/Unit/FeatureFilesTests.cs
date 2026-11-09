@@ -36,6 +36,27 @@ public sealed class FeatureFilesTests : IDisposable
     [Fact]
     public void PathsGivesNoPathWhenTheWorkTreeHasNoFeatureDirectory() => Assert.Empty(Features.Paths());
 
+    [Theory]
+    [InlineData("specs", "specs")]
+    [InlineData("specs/features", "specs/features")]
+    [InlineData("specs/features/sub", "specs/features/sub")]
+    public void PathsRefusesADirectoryThatIsASymbolicLink(string linked, string named)
+    {
+        Directory.CreateDirectory(Path.Combine(_work.FullName, "outside"));
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(_work.FullName, linked))!);
+        Directory.CreateDirectory(Path.Combine(_work.FullName, "specs", "features"));
+        if (linked is not "specs/features/sub")
+        {
+            Directory.Delete(Path.Combine(_work.FullName, linked), recursive: true);
+        }
+
+        Directory.CreateSymbolicLink(Path.Combine(_work.FullName, linked), Path.Combine(_work.FullName, "outside"));
+
+        FeatureFileException exception = Assert.Throws<FeatureFileException>(() => Features.Paths());
+
+        Assert.Equal(named, exception.Path);
+    }
+
     [Fact]
     public void ReadTextIsNullForAnAbsentFile()
     {
@@ -86,6 +107,7 @@ public sealed class FeatureFilesTests : IDisposable
     [InlineData("specs/features/../../etc/passwd")]
     [InlineData("specs/features//a.feature")]
     [InlineData("/specs/features/a.feature")]
+    [InlineData("specs/features/..\\outside.feature")]
     public void ReadTextRefusesAPathOutsideTheFeatureDirectory(string path)
     {
         Assert.False(FeatureFiles.IsFeaturePath(path));

@@ -146,9 +146,9 @@ public static partial class IssueScenarios
             }
         }
 
-        if (faults.Count is 0)
+        if (faults.Count is 0 && Listed(features, faults) is IReadOnlyList<string> listed)
         {
-            int left = features.Paths()
+            int left = listed
                 .Union(written)
                 .Except(gone)
                 .Count();
@@ -178,6 +178,20 @@ public static partial class IssueScenarios
         }
 
         return new IssueScenariosResult([], written, gone);
+    }
+
+    /// <summary>The feature files on main, or null with a fault when a directory of them is a symbolic link.</summary>
+    private static IReadOnlyList<string>? Listed(FeatureFiles features, List<string> faults)
+    {
+        try
+        {
+            return features.Paths();
+        }
+        catch (FeatureFileException exception)
+        {
+            faults.Add($"The feature files on main cannot be listed: {exception.Message}");
+            return null;
+        }
     }
 
     private static bool IsWholeFile(List<string>? lines) =>

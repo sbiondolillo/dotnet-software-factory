@@ -26,28 +26,52 @@ public sealed class FeatureFiles(string workTree)
     private const string Extension = ".feature";
 
     /// <summary>Tells whether <paramref name="path"/>, relative to a work tree, names a file under <see cref="RelativePath"/>,
-    /// with no empty, <c>.</c> or <c>..</c> segment.</summary>
+    /// with no empty, <c>.</c> or <c>..</c> segment and no backslash, which Windows reads as a separator.</summary>
     public static bool IsFeaturePath(string path)
     {
         ArgumentNullException.ThrowIfNull(path);
         return path.StartsWith(RelativePath, StringComparison.Ordinal)
+            && !path.Contains('\\', StringComparison.Ordinal)
             && path.Split('/').All(segment => segment is not ("" or "." or ".."));
     }
 
     /// <summary>The path of each file named <c>*.feature</c> under <see cref="RelativePath"/>, at any depth, in ordinal order. No
-    /// file is read. An absent directory gives an empty list.</summary>
+    /// file is read. An absent directory gives an empty list. Throws <see cref="FeatureFileException"/> when <c>specs</c>, the
+    /// feature directory or a directory under it is a symbolic link, so a linked tree is never listed as the work tree's own.</summary>
     public IReadOnlyList<string> Paths()
     {
-        string directory = Path.Combine(workTree, RelativePath);
-        if (!Directory.Exists(directory))
+        var paths = new List<string>();
+        string specs = Path.Combine(workTree, "specs");
+        RefuseLinkedDirectory(specs);
+        string directory = Path.Combine(specs, "features");
+        if (Directory.Exists(directory))
         {
-            return [];
+            Collect(directory, paths);
         }
 
-        return [.. Directory.EnumerateFiles(directory, "*" + Extension, SearchOption.AllDirectories)
-            .Select(file => Path.GetRelativePath(workTree, file).Replace(Path.DirectorySeparatorChar, '/'))
-            .Order(StringComparer.Ordinal)];
+        paths.Sort(StringComparer.Ordinal);
+        return paths;
     }
+
+    private void Collect(string directory, List<string> paths)
+    {
+        RefuseLinkedDirectory(directory);
+        paths.AddRange(Directory.EnumerateFiles(directory, "*" + Extension).Select(Relative));
+        foreach (string child in Directory.EnumerateDirectories(directory))
+        {
+            Collect(child, paths);
+        }
+    }
+
+    private void RefuseLinkedDirectory(string directory)
+    {
+        if (new DirectoryInfo(directory).LinkTarget is not null)
+        {
+            throw new FeatureFileException(Relative(directory), "the directory is a symbolic link");
+        }
+    }
+
+    private string Relative(string full) => Path.GetRelativePath(workTree, full).Replace(Path.DirectorySeparatorChar, '/');
 
     /// <summary>Reads the text of the file at <paramref name="path"/>, or null when no file is there, as for a directory. Throws
     /// <see cref="ArgumentException"/> for a path outside <see cref="RelativePath"/>, and <see cref="FeatureFileException"/>
@@ -111,7 +135,7 @@ public sealed class FeatureFiles(string workTree)
             FileSystemInfo entry = Directory.Exists(full) ? new DirectoryInfo(full) : new FileInfo(full);
             if (entry.LinkTarget is not null)
             {
-                throw new FeatureFileException(path, $"{Path.GetRelativePath(workTree, full).Replace(Path.DirectorySeparatorChar, '/')} is a symbolic link");
+                throw new FeatureFileException(path, $"{Relative(full)} is a symbolic link");
             }
         }
 
