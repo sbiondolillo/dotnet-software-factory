@@ -1,5 +1,5 @@
 """Unit tests of judge.py: the parse of a reviewer's Report, the read of each angle, for #518, and the dedupe of
-already_judged. The build job of ci.yml runs them with
+already_judged, the outcome of render, and the spec of spec_for. The build job of ci.yml runs them with
 `python3 -B -m unittest discover -s .github/judge -p 'test_*.py'`. No test calls the API: a session is the FakeApi of
 .github/shared/fake_anthropic.py, and GitHub is a FakeGitHub. The read of a session's last events moved to
 .github/shared/test_sessions.py."""
@@ -10,7 +10,7 @@ from unittest import mock
 
 import judge
 from fake_anthropic import FakeApi
-from fake_github import FakeGitHub
+from fake_github import FakeGitHub, closes
 from sessions import Session
 
 ACCEPT = '{"angle": "x", "verdict": "accept", "findings": [], "clean": ["the diff"]}'
@@ -145,6 +145,58 @@ class AlreadyJudgedTests(unittest.TestCase):
 
     def test_no_marker_is_not_judged(self):
         self.assertFalse(self.judged("a comment", judge.MARKER.format(sha="b" * 40, spec=judge.spec_digest("x")))[0])
+
+
+class RenderTests(unittest.TestCase):
+    """The outcome of the reports, which main() posts as the title of judge-verdict, and the head of the review."""
+
+    PR = {"headRefOid": "a" * 40}
+
+    def report(self, verdict):
+        return {"angle": "Conformance", "verdict": verdict, "findings": [], "clean": []}
+
+    def test_every_angle_that_accepts_is_approved(self):
+        outcome, body = judge.render([self.report("accept")], None, self.PR, [], "the spec")
+        self.assertEqual(outcome, "APPROVED")
+        self.assertIn("**APPROVED** by the judge on `aaaaaaa`.", body)
+
+    def test_one_angle_that_rejects_requests_changes(self):
+        outcome, body = judge.render([self.report("accept"), self.report("reject")], None, self.PR, [], "the spec")
+        self.assertEqual(outcome, "CHANGES REQUESTED")
+        self.assertIn("**CHANGES REQUESTED** by the judge", body)
+
+
+class SpecForTests(unittest.TestCase):
+    """The spec is the issue that GitHub reports the pull request closes, else the issue of a line `Part of #<n>`
+    outside code, else the pull request body."""
+
+    def spec(self, body, *numbers):
+        gh = FakeGitHub()
+        for number in (5, 6):
+            issue = {"number": number, "title": f"Issue {number}", "body": f"The spec of #{number}."}
+            gh.answer(("issue", "view", str(number), "-R", "o/r", "--json", "number,title,body"), issue)
+        pr = {"number": 7, "title": "The change", "body": body, **closes("o/r", *numbers)}
+        return judge.spec_for(gh, "o/r", pr)
+
+    def test_the_issue_github_reports_is_the_spec(self):
+        self.assertEqual(self.spec("No keyword here.", 5), ("# Issue 5 (#5)\n\nThe spec of #5.", 5))
+
+    def test_the_closing_issue_wins_over_a_part_of_line(self):
+        self.assertEqual(self.spec("Part of #6", 5)[1], 5)
+
+    def test_a_closing_keyword_that_github_does_not_report_names_no_issue(self):
+        self.assertEqual(self.spec("Fixes #5")[1], None)
+
+    def test_a_part_of_line_names_the_issue_when_github_reports_none(self):
+        self.assertEqual(self.spec("The change.\n\nPart of #6\n"), ("# Issue 6 (#6)\n\nThe spec of #6.", 6))
+
+    def test_a_part_of_line_in_code_names_no_issue(self):
+        for body in ("`Part of #6`", "```\nPart of #6\n```"):
+            with self.subTest(body=body):
+                self.assertEqual(self.spec(body), (f"# The change (pull request #7)\n\n{body}", None))
+
+    def test_a_body_that_names_no_issue_is_the_spec(self):
+        self.assertEqual(self.spec(None), ("# The change (pull request #7)\n\n", None))
 
 
 if __name__ == "__main__":

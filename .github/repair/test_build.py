@@ -9,9 +9,10 @@ import unittest
 from unittest import mock
 
 import build
+import closing
 import runs
 import traveler
-from fake_github import Fail, FakeGitHub
+from fake_github import Fail, FakeGitHub, closes
 
 REPO = "owner/repo"
 BRANCH = "repair-base/7"
@@ -40,7 +41,8 @@ def listing(*flags):
 GREEN = listing("--branch", "main", "--status", "success")
 ISSUE_VIEW = ("issue", "view", "7", "-R", REPO, "--json", "number,state,body,labels,comments")
 OPENED = f"Opened https://github.com/{REPO}/pull/5"
-FACTORY_PR = {"state": "OPEN", "headRefName": "factory/1", "body": "The fix.\n\nCloses #7\n"}
+PR_VIEW = ("pr", "view", "5", "-R", REPO, "--json", f"state,headRefName,{closing.FIELD}")
+FACTORY_PR = {"state": "OPEN", "headRefName": "factory/1", **closes(REPO, 7)}
 
 
 def issue(labels=("repair",), comments=(), **fields):
@@ -121,7 +123,7 @@ class BaseBranchTests(unittest.TestCase):
         job.answer(listing("--branch", BRANCH, "--event", "workflow_dispatch"), [], [own])
         dispatch = (*START, build.WORKFLOW, "-R", REPO, "--ref", BRANCH, "-f", "issue=7", "-f", "base=main")
         job.answer((*dispatch, "-f", "copilot=on"), "")
-        job.answer(("pr", "view", "5", "-R", REPO, "--json", "state,headRefName,body"), FACTORY_PR)
+        job.answer(PR_VIEW, FACTORY_PR)
         job.answer(("pr", "edit", "5", "-R", REPO, "--add-label", build.LABEL), "")
         job.answer(DELETE, "")
         app.answer(REF, Fail(status=404))
@@ -196,7 +198,7 @@ class DispatchTests(unittest.TestCase):
         gh.answer((*START, build.WORKFLOW, "-R", REPO, "-f", "issue=7", "-f", "copilot=on"), "")
         gh.answer(ISSUE_VIEW, *issues)
         gh.answer(self.VIEW, *[{"status": status, "conclusion": conclusion} for status, conclusion in states])
-        gh.answer(("pr", "view", "5", "-R", REPO, "--json", "state,headRefName,body"), FACTORY_PR)
+        gh.answer(PR_VIEW, FACTORY_PR)
         gh.answer(("pr", "edit", "5", "-R", REPO, "--add-label", build.LABEL), "")
         with (
             mock.patch.dict(os.environ, {"GITHUB_OUTPUT": os.devnull}),
@@ -227,7 +229,7 @@ class OpenedTests(unittest.TestCase):
 
     def opened(self, comments, pr=FACTORY_PR):
         gh = FakeGitHub()
-        gh.answer(("pr", "view", "5", "-R", REPO, "--json", "state,headRefName,body"), pr)
+        gh.answer(PR_VIEW, pr)
         return build.opened_pull_request(gh, REPO, issue(comments=comments)), gh
 
     def test_the_owner_s_comment_names_the_pull_request(self):
@@ -280,11 +282,17 @@ class TravelerTests(unittest.TestCase):
         self.assertEqual(gh.args(), [ISSUE_VIEW])
         built.assert_called_once_with(gh, REPO, 7, 3600)
 
-    def test_a_factory_pull_request_closes_its_issue_alone_on_a_line(self):
-        for body, expected in (("The fix.\n\nCloses #7\n", True), ("Closes #8\n", False), ("See Closes #7.", False)):
+    def test_a_factory_pull_request_closes_its_issue_as_github_reports_it(self):
+        cases = (
+            (closes(REPO, 7), True),
+            (closes(REPO, 8), False),
+            (closes(REPO), False),
+            (closes("o/other", 7), False),
+        )
+        for references, expected in cases:
             gh = FakeGitHub()
-            gh.answer(("pr", "view", "5", "-R", REPO, "--json", "state,headRefName,body"), {**FACTORY_PR, "body": body})
-            with self.subTest(body=body):
+            gh.answer(PR_VIEW, {**FACTORY_PR, **references})
+            with self.subTest(references=references):
                 self.assertIs(build.is_factory_pull_request(gh, REPO, 5, 7), expected)
 
 

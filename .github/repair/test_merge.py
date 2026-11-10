@@ -12,7 +12,8 @@ from unittest import mock
 import merge
 import runs
 import traveler
-from fake_github import Fail, FakeGitHub
+import verdict
+from fake_github import Fail, FakeGitHub, closes
 from github import GitHubError
 
 # The module under test puts .github/shared/ on the path, so this test also runs on its own.
@@ -251,8 +252,9 @@ MERGE_SHA = "m" * 40
 PR_VIEW = ("pr", "view", "7", "-R", REPO, "--json", merge.FIELDS)
 ARM = ("pr", "merge", "7", "-R", REPO, "--auto", "--squash", "--delete-branch", "--match-head-commit", SHA)
 DISARM = ("pr", "merge", "7", "-R", REPO, "--disable-auto")
-VERDICT = ("api", f"repos/{REPO}/commits/{SHA}/check-runs?check_name={merge.CHECK}&filter=latest")
+VERDICT = ("api", f"repos/{REPO}/commits/{SHA}/check-runs?check_name={verdict.CHECK}&filter=latest")
 COMMENT = ("api", "-X", "POST", comments.path(REPO, 5), "--input", "-")
+PR_COMMENT = ("api", "-X", "POST", comments.path(REPO, 7), "--input", "-")
 # The verb of a dispatch, one word on each line, so the grep of #516's `## Done when` matches runs.py alone.
 START = (
     "workflow",
@@ -338,6 +340,8 @@ class BaseTests(unittest.TestCase):
         self.addCleanup(signal.signal, signal.SIGTERM, signal.getsignal(signal.SIGTERM))
 
     def pull_request(self, base, **fields):
+        """The pull request on `base`. GitHub links no issue to a pull request whose base is not the default branch,
+        so only a pull request on main closes issue 5."""
         return {
             "number": 7,
             "state": "OPEN",
@@ -346,7 +350,7 @@ class BaseTests(unittest.TestCase):
             "headRefOid": SHA,
             "baseRefName": base,
             "baseRefOid": BASE_SHA,
-            "body": "Closes #5",
+            **(closes(REPO, 5) if base == "main" else closes(REPO)),
             "changedFiles": 1,
             **fields,
         }
@@ -395,13 +399,15 @@ class BaseTests(unittest.TestCase):
 
     @staticmethod
     def take_comments(gh):
-        """Issue 5 takes the comments of comments.py, and its list holds each one posted."""
+        """Issue 5 and pull request 7 take the comments of comments.py, and each list holds each one posted there."""
         gh.answer_list(comments.path(REPO, 5), lambda: [{"body": text} for text in BaseTests.comments(gh)])
         gh.answer(COMMENT, "{}")
+        gh.answer_list(comments.path(REPO, 7), lambda: [{"body": text} for text in BaseTests.comments(gh, PR_COMMENT)])
+        gh.answer(PR_COMMENT, "{}")
 
     @staticmethod
-    def comments(gh):
-        return [json.loads(text)["body"] for args, text in gh.calls if args == COMMENT]
+    def comments(gh, post=COMMENT):
+        return [json.loads(text)["body"] for args, text in gh.calls if args == post]
 
     def test_a_second_stop_on_the_head_posts_no_second_comment(self):
         gh = FakeGitHub()
@@ -418,9 +424,10 @@ class BaseTests(unittest.TestCase):
         self.assertEqual(gh.count(*ARM), 1)
         self.assertEqual(gh.count(*CLOSE), 1)
 
-    def test_a_pull_request_on_another_base_is_refused_with_one_comment(self):
+    def test_a_pull_request_on_another_base_is_refused_with_one_comment_on_the_pull_request(self):
         gh = self.run_main("dev")
-        [text] = self.comments(gh)
+        self.assertEqual(self.comments(gh), [])
+        [text] = self.comments(gh, PR_COMMENT)
         self.assertIn("Pull request #7 targets `dev`, not `main`.", text)
         self.assertEqual(gh.count("api_list", f"repos/{REPO}/pulls/7/files"), 0)
         self.assertEqual(gh.count(*ARM), 0)
@@ -513,12 +520,12 @@ class BaseTests(unittest.TestCase):
     def test_an_absent_check_at_the_timeout_exits(self):
         with self.assertRaises(SystemExit) as stop:
             self.run_main("main", "main", verdicts=[self.ABSENT], env={"REPAIR_MERGE_TIMEOUT_SECONDS": "0"})
-        self.assertEqual(stop.exception.code, f"repair: {merge.CHECK} on {SHA[:7]} is absent after the timeout")
+        self.assertEqual(stop.exception.code, f"repair: {verdict.CHECK} on {SHA[:7]} is absent after the timeout")
 
     def test_a_running_check_at_the_timeout_exits(self):
         with self.assertRaises(SystemExit) as stop:
             self.run_main("main", "main", verdicts=[self.RUNNING], env={"REPAIR_MERGE_TIMEOUT_SECONDS": "0"})
-        self.assertEqual(stop.exception.code, f"repair: {merge.CHECK} on {SHA[:7]} is in_progress after the timeout")
+        self.assertEqual(stop.exception.code, f"repair: {verdict.CHECK} on {SHA[:7]} is in_progress after the timeout")
 
 
 class WaitForMergeTests(unittest.TestCase):

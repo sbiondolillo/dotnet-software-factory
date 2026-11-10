@@ -4,9 +4,6 @@ calls GitHub never. GLOSSARY.md defines the term.
 
 The block has two forms. A factory repair has a line `Story: #<n>`. A plain repair whose red run is on the branch of
 an open pull request has `(pull request #<n>)` at the end of its target line.
-
-`closing_issue` reads the pointer from a pull request to the issue that holds the traveler: a line `Closes #<n>`
-alone on its line of the pull request body.
 """
 
 import re
@@ -19,7 +16,6 @@ SHA = re.compile(r"^Head SHA: `(?P<sha>[^`]+)`$")
 RUN = re.compile(r"^Run: (?P<run>\S+)$")
 STORY = re.compile(r"^Story: #(?P<story>\d+)$")
 SESSION = re.compile(r"^Session: `(?P<session>[^`]+)`$")
-CLOSES = re.compile(r"^Closes #(\d+)\s*$", re.M)
 
 
 @dataclass(frozen=True)
@@ -89,9 +85,3 @@ def parse(body):
         story=int(story["story"]) if story else None,
         pull_request=int(target["pr"]) if target["pr"] else None,
     )
-
-
-def closing_issue(body):
-    """The issue number of a line `Closes #<n>` alone on its line of a pull request body, or None."""
-    match = CLOSES.search(body or "")
-    return int(match.group(1)) if match else None

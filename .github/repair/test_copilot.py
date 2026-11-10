@@ -9,7 +9,7 @@ import unittest
 from unittest import mock
 
 import copilot
-from fake_github import FakeGitHub
+from fake_github import FakeGitHub, closes
 
 # The module under test puts .github/shared/ on the path, so this test also runs on its own.
 comments = copilot.comments
@@ -21,11 +21,11 @@ PR_VIEW = ("pr", "view", "7", "-R", "o/r", "--json", copilot.FIELDS)
 RUN_VIEW = ("run", "view", RUN, "-R", "o/r", "--json", "status,conclusion")
 
 
-def fake(runs, state="OPEN", labels=("repair",), body="Closes #5", heads=(SHA,)):
+def fake(runs, state="OPEN", labels=("repair",), issues=(5,), heads=(SHA,)):
     """The GitHub of copilot.py: the pull request with each head in turn, the run's status in turn, and the comments
     of the issue and of the pull request, which hold each comment the step posts."""
     gh = FakeGitHub()
-    pr = {"state": state, "labels": [{"name": n} for n in labels], "body": body}
+    pr = {"state": state, "labels": [{"name": n} for n in labels], **closes("o/r", *issues)}
     gh.answer(PR_VIEW, *[{**pr, "headRefOid": head} for head in heads])
     gh.answer(RUN_VIEW, *[{"status": status, "conclusion": conclusion} for status, conclusion in runs])
     for number in ("5", "7"):
@@ -88,7 +88,7 @@ class MainTests(unittest.TestCase):
         self.assertEqual(len(posted(gh)), 1)
 
     def test_a_failed_run_on_a_pull_request_that_closes_no_issue_comments_on_the_pull_request(self):
-        gh = fake([("completed", "cancelled")], body="Part of #5")
+        gh = fake([("completed", "cancelled")], issues=())
         self.run_main(gh)
         self.assertEqual(len(posted(gh, "7")), 1)
         self.assertEqual(posted(gh, "5"), [])

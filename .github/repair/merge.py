@@ -15,14 +15,13 @@ The path rule, decided in #406 and in its addendum of 2026-11-01: the job merges
 touches a path of GUARDED. GUARDED holds every path under .github/workflows/ except factory.yml, and .github/judge/,
 .github/repair/, .github/shared/, .github/skills/ and .claude/skills/change/JUDGES.md. The refusal is one comment on
 the issue that names each such path. On pull_request, GitHub runs the pull request's own copy of a workflow. A workflow
-with `checks: write` can post a green judge-verdict, and verdict() reads that check by its name alone. judge.py reads
-.github/judge/ and JUDGES.md as the rules of the judge, and imports .github/shared/. Copilot code review reads the
-skills under .github/skills/ from the head branch, as #545 found. So a repair that adds or edits a workflow, or edits
-those files, judges itself. repair.yml and .github/repair/ execute from main, so an edit there acts
-only after a merge, and this rule is in .github/repair/. So a repair that edits the rule is refused by the rule. A
-change to a path of GUARDED stays the owner's direct change. .github/agents/, src/, sandbox/ and the other paths are
-open to a repair. The rule runs before the wait for the
-judge, so a refused pull request spends no wait and starts no gate run.
+with `checks: write` can post a green judge-verdict, and verdict.latest() reads that check by its name alone.
+judge.py reads .github/judge/ and JUDGES.md as the rules of the judge, and imports .github/shared/. Copilot code review
+reads the skills under .github/skills/ from the head branch, as #545 found. So a repair that adds or edits a workflow,
+or edits those files, judges itself. repair.yml and .github/repair/ execute from main, so an edit there acts only after
+a merge, and this rule is in .github/repair/. So a repair that edits the rule is refused by the rule. A change to a path
+of GUARDED stays the owner's direct change. .github/agents/, src/, sandbox/ and the other paths are open to a repair.
+The rule runs before the wait for the judge, so a refused pull request spends no wait and starts no gate run.
 
 factory.yml is open, so a fault in it stays repairable, except for its `on:` key and its `permissions:` keys. The
 job reads factory.yml at the base SHA and at the head SHA from the contents API. It uses no YAML library, since the
@@ -124,17 +123,21 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "shared"))
+import closing  # noqa: E402
 import comments  # noqa: E402
 import runs  # noqa: E402
 import traveler  # noqa: E402
+import verdict  # noqa: E402
 from github import GitHub, GitHubError  # noqa: E402
 
 LABEL = "repair"
 FACTORY_LABEL = "factory"
 WORKFLOW = runs.WORKFLOW
 HEADS = ("repair/", "factory/")
-CHECK = "judge-verdict"
-FIELDS = "number,state,headRefName,headRefOid,baseRefName,baseRefOid,body,labels,url,mergeCommit,mergedBy,changedFiles"
+FIELDS = (
+    "number,state,headRefName,headRefOid,baseRefName,baseRefOid,labels,url,mergeCommit,mergedBy,changedFiles,"
+    + closing.FIELD
+)
 # The paths a repair never changes, as #406 and its addendum decided. An entry that ends with a slash holds each path
 # under it. OPEN is the exception to GUARDED. A diff of FACTORY changes no key of KEYS, which holds each key with
 # whether it counts at column 0 alone.
@@ -290,14 +293,6 @@ def red_run_branch(gh, repo, ticket):
     return json.loads(gh.run("api", f"repos/{repo}/actions/runs/{match.group(1)}"))["head_branch"]
 
 
-def verdict(gh, repo, sha):
-    """The latest check run named judge-verdict on the commit: (status, conclusion), or None when the judge
-    posted none."""
-    answer = json.loads(gh.run("api", f"repos/{repo}/commits/{sha}/check-runs?check_name={CHECK}&filter=latest"))
-    checks = answer.get("check_runs") or []
-    return (checks[0]["status"], checks[0].get("conclusion")) if checks else None
-
-
 def stop(gh, repo, number, issue, sha, text):
     """One comment for the SHA, on the issue, or on the pull request when it closes no issue."""
     target = issue if issue is not None else number
@@ -309,9 +304,9 @@ def wait_for_judge(gh, repo, sha, deadline, wait):
     """The conclusion of judge-verdict on the commit once its check run is complete."""
 
     def judged():
-        state = verdict(gh, repo, sha)
+        state = verdict.latest(gh, repo, sha)
         done = state is not None and state[0] == "completed"
-        return (state[1] or "") if done else None, f"{CHECK} on {sha[:7]} is {state[0] if state else 'absent'}"
+        return (state[1] or "") if done else None, f"{verdict.CHECK} on {sha[:7]} is {state[0] if state else 'absent'}"
 
     return runs.poll(judged, deadline, wait)
 
@@ -433,7 +428,7 @@ def main(gh=None):
             "nothing to merge"
         )
         return
-    issue = traveler.closing_issue(pr["body"])
+    issue = closing.issue(pr, repo)
     default = default_branch(gh, repo)
     if pr["baseRefName"] != default:
         stop(
@@ -520,7 +515,7 @@ def main(gh=None):
             number,
             issue,
             sha,
-            f"The check `{CHECK}` on `{sha}` of pull request #{number} is `{conclusion}`. No merge. "
+            f"The check `{verdict.CHECK}` on `{sha}` of pull request #{number} is `{conclusion}`. No merge. "
             "The owner reads the judge's review.",
         )
         return
