@@ -51,18 +51,5 @@ class ParseTests(unittest.TestCase):
                 self.assertIsNone(traveler.parse(body))
 
 
-class ClosingIssueTests(unittest.TestCase):
-    def test_a_line_closes_alone_gives_its_issue(self):
-        self.assertEqual(traveler.closing_issue("The fix.\n\nCloses #5\n"), 5)
-
-    def test_a_body_with_no_line_gives_none(self):
-        for body in (None, "", "Part of #5\n"):
-            with self.subTest(body=body):
-                self.assertIsNone(traveler.closing_issue(body))
-
-    def test_a_line_inside_a_sentence_gives_none(self):
-        self.assertIsNone(traveler.closing_issue("This change Closes #5 in passing.\n"))
-
-
 if __name__ == "__main__":
     unittest.main()

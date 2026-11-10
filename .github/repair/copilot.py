@@ -28,13 +28,13 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "shared"))
+import closing  # noqa: E402
 import comments  # noqa: E402
 import runs  # noqa: E402
-import traveler  # noqa: E402
 from github import GitHub  # noqa: E402
 
 LABEL = "repair"
-FIELDS = "state,labels,body,headRefOid"
+FIELDS = f"state,labels,headRefOid,{closing.FIELD}"
 
 
 def read_pull_request(gh, repo, number):
@@ -80,7 +80,7 @@ def main(gh=None):
         gh,
         repo,
         number,
-        traveler.closing_issue(pr["body"]),
+        closing.issue(pr, repo),
         sha,
         f"The factory run {runs.url(repo, run_id)} of pull request #{number} ended `{conclusion}` on `{sha}`. "
         "The loop stops for this head. The owner reads the run: its log and job summary name the reason.",

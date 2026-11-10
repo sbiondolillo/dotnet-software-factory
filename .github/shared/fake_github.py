@@ -9,6 +9,20 @@ import json
 from github import GitHubError
 
 
+def closes(repo, *numbers):
+    """The `closingIssuesReferences` of a pull request that closes each issue number of `repo`, as gh answers it."""
+    owner, name = repo.split("/")
+    return [
+        {
+            "id": f"I_{number}",
+            "number": number,
+            "repository": {"id": "R_1", "name": name, "owner": {"id": "U_1", "login": owner}},
+            "url": f"https://github.com/{repo}/issues/{number}",
+        }
+        for number in numbers
+    ]
+
+
 class Fail:
     """An output that raises GitHubError, as a gh call with the exit code `returncode` does."""
 

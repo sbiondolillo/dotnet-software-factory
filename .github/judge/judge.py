@@ -30,7 +30,9 @@ import time
 import bump
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "shared"))
+import closing  # noqa: E402
 import sessions  # noqa: E402
+import verdict  # noqa: E402
 from anthropic import Anthropic, AnthropicError  # noqa: E402
 from github import GitHub  # noqa: E402
 from sessions import Session, SessionError  # noqa: E402
@@ -46,20 +48,22 @@ def env(name, default=None):
 
 
 def pull_request(gh, repo, number):
-    fields = "number,headRefOid,baseRefOid,baseRefName,headRefName,body,title,url"
+    fields = f"number,headRefOid,baseRefOid,baseRefName,headRefName,body,title,url,{closing.FIELD}"
     return json.loads(gh.run("pr", "view", str(number), "-R", repo, "--json", fields))
 
 
 def spec_for(gh, repo, pr):
     """The spec is the body of the issue the pull request closes, or of the issue a line `Part of #<n>` names, or the
-    pull request body. A pull request names its issue with `Part of #<n>` when a check after the merge keeps it open.
-    Code in the body names no issue, as GitHub reads it, so a quote of a `Closes #<n>` in backticks names none."""
-    body = re.sub(r"`[^`\n]*`", "", re.sub(r"```.*?```", "", pr["body"] or "", flags=re.S))
-    match = re.search(r"(?i)\b(?:closes|fixes|resolves)\s+#(\d+)", body) or re.search(
-        r"^Part of #(\d+)\s*$", body, re.M
-    )
-    if match:
-        issue = json.loads(gh.run("issue", "view", match.group(1), "-R", repo, "--json", "number,title,body"))
+    pull request body. GitHub reports the issue the pull request closes, as closing.py reads it. A pull request names
+    its issue with `Part of #<n>` when a check after the merge keeps it open. Code in the body names no issue, so a
+    quote of a `Part of #<n>` in backticks names none."""
+    number = closing.issue(pr, repo)
+    if number is None:
+        body = re.sub(r"`[^`\n]*`", "", re.sub(r"```.*?```", "", pr["body"] or "", flags=re.S))
+        match = re.search(r"^Part of #(\d+)\s*$", body, re.M)
+        number = int(match.group(1)) if match else None
+    if number is not None:
+        issue = json.loads(gh.run("issue", "view", str(number), "-R", repo, "--json", "number,title,body"))
         return f"# {issue['title']} (#{issue['number']})\n\n{issue['body']}", issue["number"]
     return f"# {pr['title']} (pull request #{pr['number']})\n\n{pr['body'] or ''}", None
 
@@ -222,22 +226,7 @@ def judge_bump(gh, repo, number, pr):
         for line in failed:
             print(f"judge: failed {line}")
         return
-    gh.run(
-        "api",
-        f"repos/{repo}/check-runs",
-        "-f",
-        "name=judge-verdict",
-        "-f",
-        f"head_sha={head}",
-        "-f",
-        "status=completed",
-        "-f",
-        "conclusion=success",
-        "-f",
-        f"output[title]={bump.TITLE}",
-        "-f",
-        f"output[summary]={bump.summary(packages)}",
-    )
+    verdict.post(gh, repo, head, "success", bump.TITLE, bump.summary(packages))
     print(f"judge: {bump.TITLE}, {len(packages)} packages on {head[:7]}")
 
 
@@ -310,26 +299,12 @@ def main(gh=None):
         synthesis, spent = read_synthesis(session, time.time() + 600)
         costs.append((session.sid, "synthesis", spent))
 
-    verdict, body = render(reports, synthesis, pr, costs, spec)
+    outcome, body = render(reports, synthesis, pr, costs, spec)
     gh.run("pr", "comment", str(number), "-R", repo, "--body-file", "-", input_text=body)
-    conclusion = "success" if verdict == "APPROVED" else "failure"
-    gh.run(
-        "api",
-        f"repos/{repo}/check-runs",
-        "-f",
-        "name=judge-verdict",
-        "-f",
-        f"head_sha={head}",
-        "-f",
-        "status=completed",
-        "-f",
-        f"conclusion={conclusion}",
-        "-f",
-        f"output[title]={verdict}",
-        "-f",
-        f"output[summary]={len(reports)} angles, {sum(len(r['findings']) for r in reports)} findings",
-    )
-    print(f"judge: {verdict}")
+    conclusion = "success" if outcome == "APPROVED" else "failure"
+    findings = sum(len(r["findings"]) for r in reports)
+    verdict.post(gh, repo, head, conclusion, outcome, f"{len(reports)} angles, {findings} findings")
+    print(f"judge: {outcome}")
 
 
 if __name__ == "__main__":

@@ -9,10 +9,12 @@ import signal
 import unittest
 from unittest import mock
 
+import closing
 import merge
 import runs
 import traveler
-from fake_github import Fail, FakeGitHub
+import verdict
+from fake_github import Fail, FakeGitHub, closes
 from github import GitHubError
 
 # The module under test puts .github/shared/ on the path, so this test also runs on its own.
@@ -251,7 +253,7 @@ MERGE_SHA = "m" * 40
 PR_VIEW = ("pr", "view", "7", "-R", REPO, "--json", merge.FIELDS)
 ARM = ("pr", "merge", "7", "-R", REPO, "--auto", "--squash", "--delete-branch", "--match-head-commit", SHA)
 DISARM = ("pr", "merge", "7", "-R", REPO, "--disable-auto")
-VERDICT = ("api", f"repos/{REPO}/commits/{SHA}/check-runs?check_name={merge.CHECK}&filter=latest")
+VERDICT = ("api", f"repos/{REPO}/commits/{SHA}/check-runs?check_name={verdict.CHECK}&filter=latest")
 COMMENT = ("api", "-X", "POST", comments.path(REPO, 5), "--input", "-")
 # The verb of a dispatch, one word on each line, so the grep of #516's `## Done when` matches runs.py alone.
 START = (
@@ -346,7 +348,7 @@ class BaseTests(unittest.TestCase):
             "headRefOid": SHA,
             "baseRefName": base,
             "baseRefOid": BASE_SHA,
-            "body": "Closes #5",
+            closing.FIELD: closes(REPO, 5),
             "changedFiles": 1,
             **fields,
         }
@@ -513,12 +515,12 @@ class BaseTests(unittest.TestCase):
     def test_an_absent_check_at_the_timeout_exits(self):
         with self.assertRaises(SystemExit) as stop:
             self.run_main("main", "main", verdicts=[self.ABSENT], env={"REPAIR_MERGE_TIMEOUT_SECONDS": "0"})
-        self.assertEqual(stop.exception.code, f"repair: {merge.CHECK} on {SHA[:7]} is absent after the timeout")
+        self.assertEqual(stop.exception.code, f"repair: {verdict.CHECK} on {SHA[:7]} is absent after the timeout")
 
     def test_a_running_check_at_the_timeout_exits(self):
         with self.assertRaises(SystemExit) as stop:
             self.run_main("main", "main", verdicts=[self.RUNNING], env={"REPAIR_MERGE_TIMEOUT_SECONDS": "0"})
-        self.assertEqual(stop.exception.code, f"repair: {merge.CHECK} on {SHA[:7]} is in_progress after the timeout")
+        self.assertEqual(stop.exception.code, f"repair: {verdict.CHECK} on {SHA[:7]} is in_progress after the timeout")
 
 
 class WaitForMergeTests(unittest.TestCase):

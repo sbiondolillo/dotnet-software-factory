@@ -34,6 +34,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "shared"))
+import closing  # noqa: E402
 import runs  # noqa: E402
 import traveler  # noqa: E402
 from github import GitHub, GitHubError  # noqa: E402
@@ -53,7 +54,7 @@ def opened_pull_request(gh, repo, issue):
     """The number of the pull request the factory posted on the issue as `Opened <url>`, or None.
 
     The factory posts under FACTORY_SELF_TOKEN, the owner's identity, so a comment by anyone else is no result.
-    The pull request is open, on a `factory/` branch, and holds `Closes #<n>` for this issue.
+    The pull request is open, on a `factory/` branch, and closes this issue, as GitHub reports it.
     """
     owner = repo.split("/")[0]
     for comment in issue.get("comments") or []:
@@ -68,11 +69,11 @@ def opened_pull_request(gh, repo, issue):
 
 
 def is_factory_pull_request(gh, repo, pr, number):
-    fields = json.loads(gh.run("pr", "view", str(pr), "-R", repo, "--json", "state,headRefName,body"))
+    fields = json.loads(gh.run("pr", "view", str(pr), "-R", repo, "--json", f"state,headRefName,{closing.FIELD}"))
     return (
         fields["state"] == "OPEN"
         and fields["headRefName"].startswith("factory/")
-        and traveler.closing_issue(fields["body"]) == number
+        and closing.issue(fields, repo) == number
     )
 
 
