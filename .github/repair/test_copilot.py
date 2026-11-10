@@ -8,7 +8,6 @@ import tempfile
 import unittest
 from unittest import mock
 
-import closing
 import copilot
 from fake_github import FakeGitHub, closes
 
@@ -26,7 +25,7 @@ def fake(runs, state="OPEN", labels=("repair",), issues=(5,), heads=(SHA,)):
     """The GitHub of copilot.py: the pull request with each head in turn, the run's status in turn, and the comments
     of the issue and of the pull request, which hold each comment the step posts."""
     gh = FakeGitHub()
-    pr = {"state": state, "labels": [{"name": n} for n in labels], closing.FIELD: closes("o/r", *issues)}
+    pr = {"state": state, "labels": [{"name": n} for n in labels], **closes("o/r", *issues)}
     gh.answer(PR_VIEW, *[{**pr, "headRefOid": head} for head in heads])
     gh.answer(RUN_VIEW, *[{"status": status, "conclusion": conclusion} for status, conclusion in runs])
     for number in ("5", "7"):

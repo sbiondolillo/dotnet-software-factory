@@ -6,13 +6,15 @@ output answers every later call. A call with no entry fails the test. The fake r
 
 import json
 
+from closing import FIELD
 from github import GitHubError
 
 
 def closes(repo, *numbers):
-    """The `closingIssuesReferences` of a pull request that closes each issue number of `repo`, as gh answers it."""
+    """The field `closingIssuesReferences` of a pull request that closes each issue number of `repo`, as gh answers
+    it, to spread into the answer of `gh pr view`. With no number, the pull request closes no issue."""
     owner, name = repo.split("/")
-    return [
+    references = [
         {
             "id": f"I_{number}",
             "number": number,
@@ -21,6 +23,7 @@ def closes(repo, *numbers):
         }
         for number in numbers
     ]
+    return {FIELD: references}
 
 
 class Fail:

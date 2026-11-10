@@ -42,7 +42,7 @@ GREEN = listing("--branch", "main", "--status", "success")
 ISSUE_VIEW = ("issue", "view", "7", "-R", REPO, "--json", "number,state,body,labels,comments")
 OPENED = f"Opened https://github.com/{REPO}/pull/5"
 PR_VIEW = ("pr", "view", "5", "-R", REPO, "--json", f"state,headRefName,{closing.FIELD}")
-FACTORY_PR = {"state": "OPEN", "headRefName": "factory/1", closing.FIELD: closes(REPO, 7)}
+FACTORY_PR = {"state": "OPEN", "headRefName": "factory/1", **closes(REPO, 7)}
 
 
 def issue(labels=("repair",), comments=(), **fields):
@@ -283,10 +283,15 @@ class TravelerTests(unittest.TestCase):
         built.assert_called_once_with(gh, REPO, 7, 3600)
 
     def test_a_factory_pull_request_closes_its_issue_as_github_reports_it(self):
-        cases = ((closes(REPO, 7), True), (closes(REPO, 8), False), ([], False), (closes("o/other", 7), False))
+        cases = (
+            (closes(REPO, 7), True),
+            (closes(REPO, 8), False),
+            (closes(REPO), False),
+            (closes("o/other", 7), False),
+        )
         for references, expected in cases:
             gh = FakeGitHub()
-            gh.answer(PR_VIEW, {**FACTORY_PR, closing.FIELD: references})
+            gh.answer(PR_VIEW, {**FACTORY_PR, **references})
             with self.subTest(references=references):
                 self.assertIs(build.is_factory_pull_request(gh, REPO, 5, 7), expected)
 

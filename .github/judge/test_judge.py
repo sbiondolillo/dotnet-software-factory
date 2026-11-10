@@ -8,7 +8,6 @@ import time
 import unittest
 from unittest import mock
 
-import closing
 import judge
 from fake_anthropic import FakeApi
 from fake_github import FakeGitHub, closes
@@ -171,19 +170,19 @@ class SpecForTests(unittest.TestCase):
     """The spec is the issue that GitHub reports the pull request closes, else the issue of a line `Part of #<n>`
     outside code, else the pull request body."""
 
-    def spec(self, body, references=()):
+    def spec(self, body, *numbers):
         gh = FakeGitHub()
         for number in (5, 6):
             issue = {"number": number, "title": f"Issue {number}", "body": f"The spec of #{number}."}
             gh.answer(("issue", "view", str(number), "-R", "o/r", "--json", "number,title,body"), issue)
-        pr = {"number": 7, "title": "The change", "body": body, closing.FIELD: list(references)}
+        pr = {"number": 7, "title": "The change", "body": body, **closes("o/r", *numbers)}
         return judge.spec_for(gh, "o/r", pr)
 
     def test_the_issue_github_reports_is_the_spec(self):
-        self.assertEqual(self.spec("No keyword here.", closes("o/r", 5)), ("# Issue 5 (#5)\n\nThe spec of #5.", 5))
+        self.assertEqual(self.spec("No keyword here.", 5), ("# Issue 5 (#5)\n\nThe spec of #5.", 5))
 
     def test_the_closing_issue_wins_over_a_part_of_line(self):
-        self.assertEqual(self.spec("Part of #6", closes("o/r", 5))[1], 5)
+        self.assertEqual(self.spec("Part of #6", 5)[1], 5)
 
     def test_a_closing_keyword_that_github_does_not_report_names_no_issue(self):
         self.assertEqual(self.spec("Fixes #5")[1], None)

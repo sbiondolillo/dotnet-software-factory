@@ -9,7 +9,6 @@ import signal
 import unittest
 from unittest import mock
 
-import closing
 import merge
 import runs
 import traveler
@@ -351,7 +350,7 @@ class BaseTests(unittest.TestCase):
             "headRefOid": SHA,
             "baseRefName": base,
             "baseRefOid": BASE_SHA,
-            closing.FIELD: closes(REPO, 5) if base == "main" else [],
+            **(closes(REPO, 5) if base == "main" else closes(REPO)),
             "changedFiles": 1,
             **fields,
         }
