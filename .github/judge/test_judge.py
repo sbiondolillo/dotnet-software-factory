@@ -1,5 +1,5 @@
 """Unit tests of judge.py: the parse of a reviewer's Report, the read of each angle, for #518, and the dedupe of
-already_judged, and the spec of spec_for. The build job of ci.yml runs them with
+already_judged, the outcome of render, and the spec of spec_for. The build job of ci.yml runs them with
 `python3 -B -m unittest discover -s .github/judge -p 'test_*.py'`. No test calls the API: a session is the FakeApi of
 .github/shared/fake_anthropic.py, and GitHub is a FakeGitHub. The read of a session's last events moved to
 .github/shared/test_sessions.py."""
@@ -146,6 +146,25 @@ class AlreadyJudgedTests(unittest.TestCase):
 
     def test_no_marker_is_not_judged(self):
         self.assertFalse(self.judged("a comment", judge.MARKER.format(sha="b" * 40, spec=judge.spec_digest("x")))[0])
+
+
+class RenderTests(unittest.TestCase):
+    """The outcome of the reports, which main() posts as the title of judge-verdict, and the head of the review."""
+
+    PR = {"headRefOid": "a" * 40}
+
+    def report(self, verdict):
+        return {"angle": "Conformance", "verdict": verdict, "findings": [], "clean": []}
+
+    def test_every_angle_that_accepts_is_approved(self):
+        outcome, body = judge.render([self.report("accept")], None, self.PR, [], "the spec")
+        self.assertEqual(outcome, "APPROVED")
+        self.assertIn("**APPROVED** by the judge on `aaaaaaa`.", body)
+
+    def test_one_angle_that_rejects_requests_changes(self):
+        outcome, body = judge.render([self.report("accept"), self.report("reject")], None, self.PR, [], "the spec")
+        self.assertEqual(outcome, "CHANGES REQUESTED")
+        self.assertIn("**CHANGES REQUESTED** by the judge", body)
 
 
 class SpecForTests(unittest.TestCase):

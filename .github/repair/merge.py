@@ -18,12 +18,10 @@ the issue that names each such path. On pull_request, GitHub runs the pull reque
 with `checks: write` can post a green judge-verdict, and verdict.latest() reads that check by its name alone.
 judge.py reads .github/judge/ and JUDGES.md as the rules of the judge, and imports .github/shared/. Copilot code review
 reads the skills under .github/skills/ from the head branch, as #545 found. So a repair that adds or edits a workflow,
-or edits
-those files, judges itself. repair.yml and .github/repair/ execute from main, so an edit there acts
-only after a merge, and this rule is in .github/repair/. So a repair that edits the rule is refused by the rule. A
-change to a path of GUARDED stays the owner's direct change. .github/agents/, src/, sandbox/ and the other paths are
-open to a repair. The rule runs before the wait for the
-judge, so a refused pull request spends no wait and starts no gate run.
+or edits those files, judges itself. repair.yml and .github/repair/ execute from main, so an edit there acts only after
+a merge, and this rule is in .github/repair/. So a repair that edits the rule is refused by the rule. A change to a path
+of GUARDED stays the owner's direct change. .github/agents/, src/, sandbox/ and the other paths are open to a repair.
+The rule runs before the wait for the judge, so a refused pull request spends no wait and starts no gate run.
 
 factory.yml is open, so a fault in it stays repairable, except for its `on:` key and its `permissions:` keys. The
 job reads factory.yml at the base SHA and at the head SHA from the contents API. It uses no YAML library, since the

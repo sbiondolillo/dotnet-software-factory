@@ -180,10 +180,10 @@ def read_synthesis(session, deadline):
 
 
 def render(reports, synthesis, pr, costs, spec):
-    verdict = "CHANGES REQUESTED" if any(r["verdict"] == "reject" for r in reports) else "APPROVED"
+    outcome = "CHANGES REQUESTED" if any(r["verdict"] == "reject" for r in reports) else "APPROVED"
     lines = [
         MARKER.format(sha=pr["headRefOid"], spec=spec_digest(spec)),
-        f"**{verdict}** by the judge on `{pr['headRefOid'][:7]}`.",
+        f"**{outcome}** by the judge on `{pr['headRefOid'][:7]}`.",
         "",
     ]
     if synthesis:
@@ -202,7 +202,7 @@ def render(reports, synthesis, pr, costs, spec):
             lines.append(f"- clean: {c}")
         lines.append("")
     lines.append("Sessions: " + ", ".join(f"`{sid}` {angle} {cost} cents" for sid, angle, cost in costs))
-    return verdict, "\n".join(lines)
+    return outcome, "\n".join(lines)
 
 
 def takes_bump_path(event, author):
