@@ -43,14 +43,15 @@ public static class GateNames
 /// each build, or the text of the comment that stops the run before the first build.</summary>
 public sealed record GateSet(IReadOnlyList<IGate> Gates, LintGate Lint, string? Stop);
 
-/// <summary>Maps each <see cref="GateName"/> of a choice to its gate, over the work tree at <paramref name="baseCommit"/> and its
-/// <paramref name="features"/>. <paramref name="progress"/> takes the progress lines of a gate that reads a baseline before the
+/// <summary>Maps each <see cref="GateName"/> of a choice to its gate, over the work tree at <paramref name="baseCommit"/>, its
+/// <paramref name="features"/> and its <paramref name="files"/>. <paramref name="progress"/> takes the progress lines of a gate that reads a baseline before the
 /// first build.</summary>
 public sealed class GateFactory(
     Sandbox sandbox,
     Git git,
     string workTree,
     FeatureFiles features,
+    FileHashes files,
     string baseCommit,
     IReadOnlyList<string> secretNames,
     TextWriter? progress = null,
@@ -75,7 +76,7 @@ public sealed class GateFactory(
                     break;
                 case GateName.Test:
                     gates.Add(await TestGate
-                        .CreateAsync(sandbox, workTree, features, pin, secretNames, choice.Scope.Count is 0 ? null : choice.Scope, log, skipIntegration, cancellationToken)
+                        .CreateAsync(sandbox, workTree, features, files, pin, secretNames, choice.Scope.Count is 0 ? null : choice.Scope, log, skipIntegration, cancellationToken)
                         .ConfigureAwait(false));
                     break;
                 case GateName.Api:

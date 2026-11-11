@@ -162,7 +162,7 @@ public sealed class FactoryRun(
             return new BaseOrStop(_baseCommit, null);
         }
 
-        public async Task<PinOrStop> BeforeGatesAsync(AgentBackend backend, JobSummary summary, CancellationToken cancellationToken = default)
+        public async Task<PinOrStop> BeforeGatesAsync(AgentBackend backend, FileHashes files, JobSummary summary, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(backend);
             ArgumentNullException.ThrowIfNull(summary);
@@ -177,13 +177,13 @@ public sealed class FactoryRun(
 
             if (_sequence.Plan is not PlanStep step)
             {
-                return new PinOrStop(RecipeRules.TakePin(_sequence.Pin, request.Directory), null);
+                return new PinOrStop(RecipeRules.TakePin(_sequence.Pin, files), null);
             }
 
             FeatureFiles features = _features ?? throw new InvalidOperationException("The plan runs only after the checkout.");
             await owner.Say("plan: start").ConfigureAwait(false);
             PlanPhaseResult plan = await new PlanPhase(backend.Builder, RecipeRules.PlanText(choice.Recipe, step, _scenarios))
-                .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, request.Directory, features, cancellationToken).ConfigureAwait(false);
+                .RunAsync(issue.Title, issue.Body, request.PlanModel, request.PlanTurns, files, features, cancellationToken).ConfigureAwait(false);
             if (!plan.Passed || (_sequence.Pin is PinSource.Plan && plan.Pin is null))
             {
                 await summary.AddRowAsync(Phase.Plan.Text(), null, "failed", cancellationToken).ConfigureAwait(false);
@@ -191,7 +191,7 @@ public sealed class FactoryRun(
             }
 
             await summary.AddRowAsync(Phase.Plan.Text(), null, "passed", cancellationToken).ConfigureAwait(false);
-            return new PinOrStop(plan.Pin is Pin planned && _sequence.Pin is PinSource.Plan ? planned : RecipeRules.TakePin(_sequence.Pin, request.Directory), null);
+            return new PinOrStop(plan.Pin is Pin planned && _sequence.Pin is PinSource.Plan ? planned : RecipeRules.TakePin(_sequence.Pin, files), null);
         }
 
         public IBuild Build(Agent builder) => new FactoryBuild(

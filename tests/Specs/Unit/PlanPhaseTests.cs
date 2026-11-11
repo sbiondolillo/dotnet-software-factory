@@ -97,6 +97,20 @@ public sealed class PlanPhaseTests : IDisposable
     }
 
     [Fact]
+    public async Task ALinkOutsideTheFeatureDirectoryIsANewFile()
+    {
+        _h.AgentWritesSoundFiles(null);
+        _h.Act(1, root =>
+        {
+            Directory.CreateDirectory(Path.Combine(root, "src"));
+            Directory.CreateSymbolicLink(Path.Combine(root, "src", "linked"), "/");
+        });
+        PlanPhaseResult result = await _h.RunAsync();
+        AssertOneFailureNaming(result, "src/linked");
+        Assert.Contains("is new", result.Failures[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ErrorAnswersOnBothRunsFailWithTheTextAndSkipTheGate()
     {
         _h.AgentWritesSoundFiles(null);

@@ -29,7 +29,7 @@ internal sealed class TestGateHarness : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(WorkTree.FullName, featurePath))!);
         File.WriteAllText(Path.Combine(WorkTree.FullName, featurePath), feature);
         File.WriteAllText(Path.Combine(WorkTree.FullName, "global.json"), """{"sdk":{"version":"10.0.100"}}""");
-        Pin = Pin.Take(WorkTree.FullName);
+        Pin = Pin.Take(new FileHashes(WorkTree.FullName));
         foreach (string subcommand in new[] { "restore", "build", "format", "test", "run" })
         {
             Answers[subcommand] = new CommandResult();
@@ -69,7 +69,7 @@ internal sealed class TestGateHarness : IDisposable
         RunAsync(names, false, cancellationToken);
 
     public Task<GateOutcome> RunAsync(IReadOnlyList<string> names, bool skipIntegration, CancellationToken cancellationToken) =>
-        RunAsync(new TestGate(_sandbox!, WorkTree.FullName, new FeatureFiles(WorkTree.FullName), Pin, names, skipIntegration: skipIntegration), cancellationToken);
+        RunAsync(new TestGate(_sandbox!, WorkTree.FullName, new FeatureFiles(WorkTree.FullName), new FileHashes(WorkTree.FullName), Pin, names, skipIntegration: skipIntegration), cancellationToken);
 
     /// <summary>Runs <paramref name="gate"/> through <see cref="IGate"/>.</summary>
     public Task<GateOutcome> RunAsync(TestGate gate, CancellationToken cancellationToken)

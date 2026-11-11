@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text;
 
 namespace Core;
@@ -30,20 +29,21 @@ public sealed class PlanPhase(Agent agent, PlanText text)
     /// first run is gone.</summary>
     public const string CorrectionPlanSentence = "\nWrite the whole plan to " + PlanPath + " again in this run. The host removes the plan of the run before.\n";
 
-    /// <summary>Runs the first prompt and, when its gate fails, one correction prompt.</summary>
+    /// <summary>Runs the first prompt and, when its gate fails, one correction prompt. The gate reads the work tree through
+    /// <paramref name="files"/> and <paramref name="features"/>.</summary>
     public async Task<PlanPhaseResult> RunAsync(
         string title,
         string body,
         string model,
         int maxTurns,
-        string workTree,
+        FileHashes files,
         FeatureFiles features,
         CancellationToken cancellationToken = default)
     {
-        Dictionary<string, string> baseline = Snapshot(workTree, PlanOnly);
+        Dictionary<string, string> baseline = Snapshot(files, PlanOnly);
         string prompt = BuildPrompt(title, body);
 
-        (List<string> failures, bool isError) = await RunOnceAsync(prompt, model, maxTurns, workTree, features, baseline, cancellationToken).ConfigureAwait(false);
+        (List<string> failures, bool isError) = await RunOnceAsync(prompt, model, maxTurns, files, features, baseline, cancellationToken).ConfigureAwait(false);
         if (isError)
         {
             return new PlanPhaseResult(false, null, failures);
@@ -51,7 +51,7 @@ public sealed class PlanPhase(Agent agent, PlanText text)
 
         if (failures.Count is 0)
         {
-            return new PlanPhaseResult(true, Pin.Take(workTree), []);
+            return new PlanPhaseResult(true, Pin.Take(files), []);
         }
 
         StringBuilder correction = new StringBuilder(prompt)
@@ -63,9 +63,9 @@ public sealed class PlanPhase(Agent agent, PlanText text)
 
         correction.Append(CorrectionPlanSentence);
 
-        (failures, _) = await RunOnceAsync(correction.ToString(), model, maxTurns, workTree, features, baseline, cancellationToken).ConfigureAwait(false);
+        (failures, _) = await RunOnceAsync(correction.ToString(), model, maxTurns, files, features, baseline, cancellationToken).ConfigureAwait(false);
         return failures.Count is 0
-            ? new PlanPhaseResult(true, Pin.Take(workTree), [])
+            ? new PlanPhaseResult(true, Pin.Take(files), [])
             : new PlanPhaseResult(false, null, failures);
     }
 
@@ -78,7 +78,7 @@ public sealed class PlanPhase(Agent agent, PlanText text)
         string prompt,
         string model,
         int maxTurns,
-        string workTree,
+        FileHashes files,
         FeatureFiles features,
         Dictionary<string, string> baseline,
         CancellationToken cancellationToken)
@@ -90,13 +90,13 @@ public sealed class PlanPhase(Agent agent, PlanText text)
         }
 
         bool planned = answer.Outputs.ContainsKey(PlanName);
-        return (PlanOnly ? RefactorGate(workTree, baseline, planned) : Gate(workTree, features, baseline, planned), false);
+        return (PlanOnly ? RefactorGate(files, baseline, planned) : Gate(files, features, baseline, planned), false);
     }
 
-    private static List<string> RefactorGate(string workTree, Dictionary<string, string> baseline, bool planned)
+    private static List<string> RefactorGate(FileHashes files, Dictionary<string, string> baseline, bool planned)
     {
         var failures = new List<string>();
-        Dictionary<string, string> now = Snapshot(workTree, all: true);
+        Dictionary<string, string> now = Snapshot(files, all: true);
         if (!planned)
         {
             failures.Add($"The plan {PlanPath} is missing.");
@@ -116,10 +116,10 @@ public sealed class PlanPhase(Agent agent, PlanText text)
         return failures;
     }
 
-    private static List<string> Gate(string workTree, FeatureFiles features, Dictionary<string, string> baseline, bool planned)
+    private static List<string> Gate(FileHashes files, FeatureFiles features, Dictionary<string, string> baseline, bool planned)
     {
         var failures = new List<string>();
-        Dictionary<string, string> now = Snapshot(workTree, all: false);
+        Dictionary<string, string> now = Snapshot(files, all: false);
 
         bool featureChanged = now.Any(pair => IsFeature(pair.Key) && (!baseline.TryGetValue(pair.Key, out string? old) || old != pair.Value))
             || baseline.Keys.Any(path => IsFeature(path) && !now.ContainsKey(path));
@@ -183,27 +183,15 @@ public sealed class PlanPhase(Agent agent, PlanText text)
     private static bool IsFeature(string path) =>
         FeatureFiles.IsFeaturePath(path) && path.EndsWith(".feature", StringComparison.Ordinal);
 
-    private static Dictionary<string, string> Snapshot(string workTree, bool all)
+    private static Dictionary<string, string> Snapshot(FileHashes files, bool all) => files.Read(relative =>
     {
-        var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (string file in Directory.EnumerateFiles(workTree, "*", SearchOption.AllDirectories))
+        string[] segments = relative.Split('/');
+        if (segments[..^1].Any(segment => segment is ".git" or "bin" or "obj"))
         {
-            string relative = Path.GetRelativePath(workTree, file).Replace('\\', '/');
-            string[] segments = relative.Split('/');
-            if (segments[..^1].Any(segment => segment is ".git" or "bin" or "obj"))
-            {
-                continue;
-            }
-
-            bool inFeatures = FeatureFiles.IsFeaturePath(relative);
-            if (relative.StartsWith(".factory/", StringComparison.Ordinal) || (!all && inFeatures && !IsFeature(relative)))
-            {
-                continue;
-            }
-
-            result[relative] = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(file)));
+            return false;
         }
 
-        return result;
-    }
+        bool inFeatures = FeatureFiles.IsFeaturePath(relative);
+        return !relative.StartsWith(".factory/", StringComparison.Ordinal) && (all || !inFeatures || IsFeature(relative));
+    });
 }

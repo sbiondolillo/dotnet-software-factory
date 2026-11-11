@@ -25,10 +25,10 @@ public sealed class PinTests : IDisposable
     {
         Write("global.json", "{}");
         Write("src/Core/Greeter.cs", "a");
-        var pin = Pin.Take(_root);
+        var pin = Pin.Take(new FileHashes(_root));
         Assert.Equal(["global.json"], pin.Hashes.Keys);
         Write("src/Core/Greeter.cs", "b");
-        PinComparison diff = pin.Compare(_root);
+        PinComparison diff = pin.Compare(new FileHashes(_root));
         Assert.Empty(diff.Changed);
         Assert.Empty(diff.Added);
         Assert.Empty(diff.Removed);
@@ -39,10 +39,10 @@ public sealed class PinTests : IDisposable
     {
         Write("global.json", "{}");
         Write("nuget.config", "x");
-        var pin = Pin.Take(_root);
+        var pin = Pin.Take(new FileHashes(_root));
         Write("global.json", "[]");
         File.Delete(Path.Combine(_root, "nuget.config"));
-        PinComparison diff = pin.Compare(_root);
+        PinComparison diff = pin.Compare(new FileHashes(_root));
         Assert.Equal(["global.json"], diff.Changed);
         Assert.Equal(["nuget.config"], diff.Removed);
         Assert.Empty(diff.Added);
@@ -52,7 +52,7 @@ public sealed class PinTests : IDisposable
     public void UnchangedDirectoryHasNoDifferences()
     {
         Write("specs/features/a.feature", "x");
-        PinComparison diff = Pin.Take(_root).Compare(_root);
+        PinComparison diff = Pin.Take(new FileHashes(_root)).Compare(new FileHashes(_root));
         Assert.Empty(diff.Changed);
         Assert.Empty(diff.Added);
         Assert.Empty(diff.Removed);
@@ -71,10 +71,10 @@ public sealed class PinTests : IDisposable
     [InlineData("reqnroll.json")]
     public void EveryNameIsRecognisedAtDepth(string name)
     {
-        var pin = Pin.Take(_root);
+        var pin = Pin.Take(new FileHashes(_root));
         Write(name, "x");
         Write("src/Core/" + name, "x");
-        Assert.Equal([name, "src/Core/" + name], pin.Compare(_root).Added);
+        Assert.Equal([name, "src/Core/" + name], pin.Compare(new FileHashes(_root)).Added);
     }
 
     [Theory]
@@ -86,18 +86,18 @@ public sealed class PinTests : IDisposable
     [InlineData("global.json.bak")]
     public void SkippedAndNearMissFilesAreNotPinned(string path)
     {
-        var pin = Pin.Take(_root);
+        var pin = Pin.Take(new FileHashes(_root));
         Write(path, "x");
-        Assert.Empty(pin.Compare(_root).Added);
-        Assert.Empty(Pin.Take(_root).Hashes);
+        Assert.Empty(pin.Compare(new FileHashes(_root)).Added);
+        Assert.Empty(Pin.Take(new FileHashes(_root)).Hashes);
     }
 
     [Fact]
     public void AnyFileUnderSpecsFeaturesIsAdded()
     {
-        var pin = Pin.Take(_root);
+        var pin = Pin.Take(new FileHashes(_root));
         Write("specs/features/b/notes", "n");
-        Assert.Equal(["specs/features/b/notes"], pin.Compare(_root).Added);
+        Assert.Equal(["specs/features/b/notes"], pin.Compare(new FileHashes(_root)).Added);
     }
 
     [Fact]
@@ -114,7 +114,7 @@ public sealed class PinTests : IDisposable
         }
 
         Write("src/Core/Greeter.cs", "a");
-        var pin = Pin.TakeRefactor(_root);
+        var pin = Pin.TakeRefactor(new FileHashes(_root));
         foreach (string root in roots)
         {
             Write($"{root}/changed.cs", "b");
@@ -125,9 +125,57 @@ public sealed class PinTests : IDisposable
         }
 
         Write("src/Core/Greeter.cs", "b");
-        PinComparison diff = pin.Compare(_root);
+        PinComparison diff = pin.Compare(new FileHashes(_root));
         Assert.Equal([.. roots.Order(StringComparer.Ordinal).Select(r => $"{r}/changed.cs")], diff.Changed);
         Assert.Equal([.. roots.Order(StringComparer.Ordinal).Select(r => $"{r}/added.cs")], diff.Added);
         Assert.Equal([.. roots.Order(StringComparer.Ordinal).Select(r => $"{r}/removed.cs")], diff.Removed);
+    }
+
+    [Fact]
+    public void ALinkAtANewPinnedPathIsAdded()
+    {
+        var pin = Pin.Take(new FileHashes(_root));
+        File.CreateSymbolicLink(Path.Combine(_root, "global.json"), "/dev/zero");
+        PinComparison diff = pin.Compare(new FileHashes(_root));
+        Assert.Equal(["global.json"], diff.Added);
+        Assert.Empty(diff.Changed);
+        Assert.Empty(diff.Removed);
+    }
+
+    [Fact]
+    public void APinnedFileThatALinkReplacedIsChanged()
+    {
+        Write("global.json", "{}");
+        Write("outside/global.json", "{}");
+        var pin = Pin.Take(new FileHashes(_root));
+        File.Delete(Path.Combine(_root, "global.json"));
+        File.CreateSymbolicLink(Path.Combine(_root, "global.json"), Path.Combine(_root, "outside", "global.json"));
+        PinComparison diff = pin.Compare(new FileHashes(_root));
+        Assert.Equal(["global.json"], diff.Changed);
+        Assert.Empty(diff.Added);
+        Assert.Empty(diff.Removed);
+    }
+
+    [Fact]
+    public void AFeatureDirectoryThatALinkReplacedRemovesEachFeatureFileOfThePin()
+    {
+        Write("specs/features/a.feature", "a");
+        Write("specs/features/sub/b.feature", "b");
+        var pin = Pin.Take(new FileHashes(_root));
+        DirectoryInfo outside = Directory.CreateTempSubdirectory("pintests-outside-");
+        try
+        {
+            string features = Path.Combine(_root, "specs", "features");
+            Directory.Move(features, Path.Combine(outside.FullName, "features"));
+            Directory.CreateSymbolicLink(features, Path.Combine(outside.FullName, "features"));
+            PinComparison diff = pin.Compare(new FileHashes(_root));
+            Assert.Equal(["specs/features/a.feature", "specs/features/sub/b.feature"], diff.Removed);
+            Assert.Empty(diff.Changed);
+            Assert.Empty(diff.Added);
+        }
+        finally
+        {
+            outside.Delete(recursive: true);
+        }
     }
 }

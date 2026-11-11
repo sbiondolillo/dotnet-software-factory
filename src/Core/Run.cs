@@ -78,8 +78,9 @@ public interface IRunKind<TOutcome>
     /// the gates of the run read too.</summary>
     Task<BaseOrStop> CheckoutAsync(Git git, FeatureFiles features, CancellationToken cancellationToken = default);
 
-    /// <summary>Runs between the start of the agents and the gates, and gives the pin of the gates or the text of a stop.</summary>
-    Task<PinOrStop> BeforeGatesAsync(AgentBackend backend, JobSummary summary, CancellationToken cancellationToken = default);
+    /// <summary>Runs between the start of the agents and the gates, and gives the pin of the gates or the text of a stop.
+    /// <paramref name="files"/> are the hashes of the clone, which the gates of the run read too.</summary>
+    Task<PinOrStop> BeforeGatesAsync(AgentBackend backend, FileHashes files, JobSummary summary, CancellationToken cancellationToken = default);
 
     /// <summary>The build of the build loop, over the <paramref name="builder"/>.</summary>
     IBuild Build(Agent builder);
@@ -126,6 +127,7 @@ public sealed class Run(
             await Say("clone: start").ConfigureAwait(false);
             await git.CloneAsync($"https://github.com/{request.Repo.Owner}/{request.Repo.Name}.git", request.Token, request.Directory, cancellationToken).ConfigureAwait(false);
             var features = new FeatureFiles(request.Directory);
+            var files = new FileHashes(request.Directory);
             BaseOrStop checkout = await kind.CheckoutAsync(git, features, cancellationToken).ConfigureAwait(false);
             if (checkout.BaseCommit is not string baseCommit)
             {
@@ -144,13 +146,13 @@ public sealed class Run(
             {
                 try
                 {
-                    PinOrStop before = await kind.BeforeGatesAsync(backend, summary, cancellationToken).ConfigureAwait(false);
+                    PinOrStop before = await kind.BeforeGatesAsync(backend, files, summary, cancellationToken).ConfigureAwait(false);
                     if (before.Pin is not Pin pin)
                     {
                         return new RunResult<TOutcome>(null, await PostAsync(request, kind.CommentNumber, before.Stop ?? "", cancellationToken).ConfigureAwait(false), 0);
                     }
 
-                    GateSet gates = await new GateFactory(backend.Sandbox, git, request.Directory, features, baseCommit, request.SecretNames, progress, log, request.SkipIntegration)
+                    GateSet gates = await new GateFactory(backend.Sandbox, git, request.Directory, features, files, baseCommit, request.SecretNames, progress, log, request.SkipIntegration)
                         .CreateAsync(kind.Choice, RecipeRules.Sequence(kind.Choice, kind.Kind), pin, cancellationToken).ConfigureAwait(false);
                     if (gates.Stop is string stop)
                     {

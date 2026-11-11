@@ -8,7 +8,7 @@ namespace Core;
 /// <param name="Tests">The tests of the TRX file, or null when the gate stopped before it read one.</param>
 public sealed record TestGateResult(bool Passed, IReadOnlyList<string> Evidence, IReadOnlyList<ReportedTest>? Tests = null);
 
-/// <summary>The test gate: it judges a work tree the way CI does, by the pin, the four build commands, the TRX file and the
+/// <summary>The test gate: it judges a work tree the way CI does, by the pin over <paramref name="files"/>, the four build commands, the TRX file and the
 /// integration suite, which <paramref name="skipIntegration"/> true leaves out. The integration command alone gets
 /// <paramref name="secretNames"/>. A changed pinned path for which <paramref name="pinExempt"/> is true is no pin fault.
 /// <paramref name="basePassed"/>, the tests that passed on the base commit as <c>class.method</c>, is the baseline of the
@@ -17,6 +17,7 @@ public sealed class TestGate(
     Sandbox sandbox,
     string workTree,
     FeatureFiles features,
+    FileHashes files,
     Pin pin,
     IReadOnlyList<string> secretNames,
     Func<string, bool>? pinExempt = null,
@@ -37,6 +38,7 @@ public sealed class TestGate(
         Sandbox sandbox,
         string workTree,
         FeatureFiles features,
+        FileHashes files,
         Pin pin,
         IReadOnlyList<string> secretNames,
         IReadOnlyList<string>? scope,
@@ -46,11 +48,11 @@ public sealed class TestGate(
     {
         if (scope is null)
         {
-            return new TestGate(sandbox, workTree, features, pin, secretNames, log: log, skipIntegration: skipIntegration);
+            return new TestGate(sandbox, workTree, features, files, pin, secretNames, log: log, skipIntegration: skipIntegration);
         }
 
         IReadOnlySet<string> passed = await ReadPassedTestsAsync(sandbox, workTree, log, cancellationToken).ConfigureAwait(false);
-        return new TestGate(sandbox, workTree, features, pin, secretNames, path => PinExempt(scope, path), passed, log, skipIntegration);
+        return new TestGate(sandbox, workTree, features, files, pin, secretNames, path => PinExempt(scope, path), passed, log, skipIntegration);
     }
 
     /// <summary>Gives <c>failed</c> with one Redo text for each fact that failed the gate, or <c>passed</c>, with one Redo text
@@ -69,7 +71,7 @@ public sealed class TestGate(
 
     private async Task<TestGateResult> JudgeAsync(CancellationToken cancellationToken)
     {
-        PinComparison comparison = pin.Compare(workTree);
+        PinComparison comparison = pin.Compare(files);
         List<string> pinEvidence = [.. comparison.Changed, .. comparison.Added, .. comparison.Removed];
         if (pinExempt is not null)
         {
