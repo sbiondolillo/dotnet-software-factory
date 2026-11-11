@@ -43,6 +43,7 @@ import sessions  # noqa: E402
 import traveler  # noqa: E402
 from anthropic import Anthropic, AnthropicError  # noqa: E402
 from github import GitHub, GitHubError  # noqa: E402
+from repo import Repo  # noqa: E402
 from sessions import Session, SessionError  # noqa: E402
 
 CLASSES = ("code", "flake", "dependency")
@@ -137,7 +138,7 @@ def thread(pr):
 def comment(gh, repo, pr, sha, text):
     """A run takes no comment, so the comment goes on its pull request, on the story of a factory run, or on its
     commit on main, once for the SHA."""
-    comments.post_once(gh, repo, thread(pr), f"<!-- repair:{sha} -->", text, sha=sha)
+    comments.post_once(Repo(gh, repo), thread(pr), f"<!-- repair:{sha} -->", text, sha=sha)
 
 
 def issue_for(gh, repo, sha, factory=False):
@@ -194,7 +195,7 @@ def already_handled(gh, repo, pr, run):
                 held_comment(gh, repo, run, story["number"], issue["number"], None, None)
         print(f"repair: issue #{issue['number']} holds {sha[:7]}; nothing to do")
         return True
-    if comments.has(gh, repo, thread(pr), f"<!-- repair:{sha} -->", sha=sha):
+    if comments.has(Repo(gh, repo), thread(pr), f"<!-- repair:{sha} -->", sha=sha):
         print(f"repair: a marker comment holds {sha[:7]}; nothing to do")
         return True
     return False

@@ -1,17 +1,17 @@
 """Unit tests of judge.py: the parse of a reviewer's Report, the read of each angle, for #518, the dedupe of
 already_judged, the outcome of render, the verdict of main, for #557, and the spec of spec_for. The build job of
 ci.yml runs them with `python3 -B -m unittest discover -s .github/judge -p 'test_*.py'`. No test calls the API: a
-session is the FakeApi of .github/shared/fake_anthropic.py, and GitHub is a FakeGitHub. The read of a session's last
-events moved to .github/shared/test_sessions.py."""
+session is the FakeApi of .github/shared/fake_anthropic.py, and the repo is a FakeRepo of
+.github/shared/fake_repo.py. The read of a session's last events moved to .github/shared/test_sessions.py."""
 
 import time
 import unittest
 from unittest import mock
 
-import closing
 import judge
 from fake_anthropic import FakeApi, FakeSessions
-from fake_github import FakeGitHub, closes
+from fake_github import closes
+from fake_repo import FakeRepo
 from sessions import Session
 
 ACCEPT = '{"angle": "x", "verdict": "accept", "findings": [], "clean": ["the diff"]}'
@@ -119,22 +119,22 @@ class ReadSynthesisTests(unittest.TestCase):
 
 
 class AlreadyJudgedTests(unittest.TestCase):
-    """The marker of the head SHA and the spec digest, read from every comment of the pull request through api_list."""
+    """The marker of the head SHA and the spec digest, read from every comment of the pull request."""
 
     SHA = "a" * 40
 
     def judged(self, *bodies, spec="the spec"):
-        gh = FakeGitHub()
-        gh.answer_list("repos/o/r/issues/7/comments", [{"body": body} for body in bodies])
-        return judge.already_judged(gh, "o/r", 7, self.SHA, spec), gh
+        repo = FakeRepo()
+        repo.answer("comments", (7,), [{"body": body} for body in bodies])
+        return judge.already_judged(repo, 7, self.SHA, spec), repo
 
     def marker(self, spec="the spec"):
         return judge.MARKER.format(sha=self.SHA, spec=judge.spec_digest(spec))
 
     def test_a_comment_with_the_marker_of_the_head_and_the_spec_is_judged(self):
-        judged, gh = self.judged("other", f"{self.marker()}\n**APPROVED**", None)
+        judged, repo = self.judged("other", f"{self.marker()}\n**APPROVED**", None)
         self.assertTrue(judged)
-        self.assertEqual(gh.calls, [(("api_list", "repos/o/r/issues/7/comments"), None)])
+        self.assertEqual(repo.calls, [("comments", {"number": 7, "sha": None})])
 
     def test_the_same_head_with_another_spec_is_not_judged(self):
         self.assertFalse(self.judged(self.marker("the old spec"))[0])
@@ -205,16 +205,8 @@ OVERLOADED = "the API failed: GET /v1/sessions/sesn_r/events?order=desc&limit=10
 
 
 def check_run(conclusion, title, summary):
-    """The args of the gh call that posts judge-verdict."""
-    fields = {
-        "name": "judge-verdict",
-        "head_sha": HEAD,
-        "status": "completed",
-        "conclusion": conclusion,
-        "output[title]": title,
-        "output[summary]": summary,
-    }
-    return ("api", "repos/o/r/check-runs", *[arg for key, value in fields.items() for arg in ("-f", f"{key}={value}")])
+    """The arguments of the call of the repo that posts judge-verdict."""
+    return {"name": "judge-verdict", "sha": HEAD, "conclusion": conclusion, "title": title, "summary": summary}
 
 
 class MainTests(unittest.TestCase):
@@ -222,7 +214,6 @@ class MainTests(unittest.TestCase):
     Only a Report decides: an angle with no Report never rejects and never accepts. JUDGE_TIMEOUT_SECONDS is 0, so an
     angle that is idle gives its Report and an angle that is running passes the deadline at once."""
 
-    COMMENT = ("pr", "comment", "7", "-R", "o/r", "--body-file", "-")
     CAUSES = {
         "a deadline": (lambda: FakeApi([turn()], status="running", sid="sesn_r"), "not idle after 0 s"),
         "an API error in the read": (lambda: FakeApi([turn()], failing=("events",), sid="sesn_r"), OVERLOADED),
@@ -234,16 +225,17 @@ class MainTests(unittest.TestCase):
     def synthesis(self, failing=()):
         return FakeApi([turn(idle(), message("The synthesis."), usage("1"))], sid="sesn_s", failing=failing)
 
-    def run_main(self, *apis, posts=()):
-        """main() for pull request 7, with an answer for each gh call in `posts`. A gh call with no answer fails the
-        test. The result is the FakeGitHub, the FakeSessions, the exit code or None, and the printed lines."""
-        gh = FakeGitHub()
-        fields = f"number,headRefOid,baseRefOid,baseRefName,headRefName,body,title,url,{closing.FIELD}"
+    def run_main(self, *apis, verdict=None):
+        """main() for pull request 7. With `verdict`, the repo takes a comment on the pull request and that check run.
+        A post with no answer fails the test. The result is the FakeRepo, the FakeSessions, the exit code or None, and
+        the printed lines."""
+        repo = FakeRepo()
         pr = {"number": 7, "headRefOid": HEAD, "baseRefOid": "b" * 40, "body": "", "title": "The change"}
-        gh.answer(("pr", "view", "7", "-R", "o/r", "--json", fields), {**pr, **closes("o/r")})
-        gh.answer_list("repos/o/r/issues/7/comments", [])
-        for args in posts:
-            gh.answer(args, "{}")
+        repo.answer("pull_request", (7,), {**pr, **closes("o/r")})
+        repo.answer("comments", (7,), [])
+        if verdict is not None:
+            repo.answer("post_comment", (7, mock.ANY), None)
+            repo.answer("post_check", tuple(verdict.values()), None)
         api = FakeSessions(*apis)
         environment = {
             "GITHUB_REPOSITORY": "o/r",
@@ -262,29 +254,28 @@ class MainTests(unittest.TestCase):
             mock.patch("builtins.print") as printed,
         ):
             try:
-                judge.main(gh, api)
+                judge.main(repo, api)
             except SystemExit as stop:
                 code = stop.code
-        return gh, api, code, [" ".join(map(str, call.args)) for call in printed.call_args_list]
+        return repo, api, code, [" ".join(map(str, call.args)) for call in printed.call_args_list]
 
-    def comment(self, gh):
-        [body] = [text for args, text in gh.calls if args == self.COMMENT]
-        return body
+    def comment(self, repo):
+        [call] = repo.calls_of("post_comment")
+        self.assertIsNone(call["sha"])
+        return call["body"]
 
     def test_a_reject_and_an_angle_with_no_report_post_the_reject_with_a_no_report_section(self):
         for cause, (missing, reason) in self.CAUSES.items():
             with self.subTest(cause=cause):
                 verdict = check_run("failure", "CHANGES REQUESTED", "1 of 2 angles, 1 findings")
-                gh, api, code, _ = self.run_main(
-                    self.angle(REJECT), missing(), self.synthesis(), posts=(self.COMMENT, verdict)
-                )
+                repo, api, code, _ = self.run_main(self.angle(REJECT), missing(), self.synthesis(), verdict=verdict)
                 self.assertIsNone(code)
-                body = self.comment(gh)
+                body = self.comment(repo)
                 self.assertIn("### Conformance: reject\n- `a.py:3` the fault\n", body)
                 self.assertIn(f"\n### Regressions and style: no Report\n- {reason}\n\n", body)
                 self.assertLess(body.index("### Conformance"), body.index("### Regressions and style"))
                 self.assertIn("The synthesis.", body)
-                self.assertIn(verdict, gh.args())
+                self.assertEqual(repo.calls_of("post_check"), [verdict])
                 prompt = api.started["sesn_s"].posts[0][1]["initial_events"][0]["content"][0]["text"]
                 self.assertIn('"angle": "Conformance"', prompt)
                 self.assertNotIn("Regressions and style", prompt)
@@ -292,35 +283,32 @@ class MainTests(unittest.TestCase):
     def test_an_accept_and_an_angle_with_no_report_post_nothing_and_exit_with_the_code_1(self):
         for cause, (missing, reason) in self.CAUSES.items():
             with self.subTest(cause=cause):
-                gh, api, code, printed = self.run_main(self.angle(ACCEPT), missing())
+                repo, api, code, printed = self.run_main(self.angle(ACCEPT), missing())
                 self.assertEqual(code, 1)
-                self.assertNotIn(self.COMMENT, gh.args())
-                self.assertFalse([args for args in gh.args() if "repos/o/r/check-runs" in args])
+                self.assertEqual(repo.calls_of("post_comment"), [])
+                self.assertEqual(repo.calls_of("post_check"), [])
                 self.assertIn(f"judge: no Report from Regressions and style: {reason}", printed)
                 self.assertNotIn("sesn_s", api.started)
 
     def test_every_angle_that_accepts_approves(self):
         verdict = check_run("success", "APPROVED", "2 of 2 angles, 0 findings")
-        gh, _, code, _ = self.run_main(self.angle(ACCEPT), self.angle(ACCEPT, "sesn_r"), posts=(self.COMMENT, verdict))
+        repo, _, code, _ = self.run_main(self.angle(ACCEPT), self.angle(ACCEPT, "sesn_r"), verdict=verdict)
         self.assertIsNone(code)
-        self.assertIn("**APPROVED**", self.comment(gh))
-        self.assertIn(verdict, gh.args())
+        self.assertIn("**APPROVED**", self.comment(repo))
+        self.assertEqual(repo.calls_of("post_check"), [verdict])
 
     def test_a_synthesis_that_fails_to_start_still_posts_the_reject_with_no_synthesis_text(self):
         verdict = check_run("failure", "CHANGES REQUESTED", "2 of 2 angles, 1 findings")
-        gh, _, code, printed = self.run_main(
-            self.angle(REJECT),
-            self.angle(ACCEPT, "sesn_r"),
-            self.synthesis(failing=("start",)),
-            posts=(self.COMMENT, verdict),
+        repo, _, code, printed = self.run_main(
+            self.angle(REJECT), self.angle(ACCEPT, "sesn_r"), self.synthesis(failing=("start",)), verdict=verdict
         )
         self.assertIsNone(code)
-        lines = self.comment(gh).splitlines()
+        lines = self.comment(repo).splitlines()
         self.assertEqual(
             lines[1:4], ["**CHANGES REQUESTED** by the judge on `aaaaaaa`.", "", "### Conformance: reject"]
         )
         self.assertNotIn("synthesis", lines[-1])
-        self.assertIn(verdict, gh.args())
+        self.assertEqual(repo.calls_of("post_check"), [verdict])
         self.assertIn("judge: the synthesis did not start: POST /v1/sessions -> 500: overloaded", printed)
 
 
@@ -329,12 +317,13 @@ class SpecForTests(unittest.TestCase):
     outside code, else the pull request body."""
 
     def spec(self, body, *numbers):
-        gh = FakeGitHub()
+        repo = FakeRepo()
         for number in (5, 6):
-            issue = {"number": number, "title": f"Issue {number}", "body": f"The spec of #{number}."}
-            gh.answer(("issue", "view", str(number), "-R", "o/r", "--json", "number,title,body"), issue)
+            repo.answer(
+                "issue", (number,), {"number": number, "title": f"Issue {number}", "body": f"The spec of #{number}."}
+            )
         pr = {"number": 7, "title": "The change", "body": body, **closes("o/r", *numbers)}
-        return judge.spec_for(gh, "o/r", pr)
+        return judge.spec_for(repo, pr)
 
     def test_the_issue_github_reports_is_the_spec(self):
         self.assertEqual(self.spec("No keyword here.", 5), ("# Issue 5 (#5)\n\nThe spec of #5.", 5))

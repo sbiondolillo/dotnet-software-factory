@@ -1,7 +1,8 @@
 """Unit tests of the automatic path for a pure Dependabot bump, for #448: the four conditions of bump.py, and the
 branch of judge.py that takes it. The build job of ci.yml runs them with
 `python3 -B -m unittest discover -s .github/judge -p 'test_*.py'`. No test calls the API. The pass case is the data
-of pull request #432, head e828943, trimmed to the fields that bump.py reads."""
+of pull request #432, head e828943, trimmed to the fields that bump.py reads. The repo is a FakeRepo of
+.github/shared/fake_repo.py."""
 
 import copy
 import os
@@ -10,7 +11,7 @@ from unittest import mock
 
 import bump
 import judge
-from fake_github import FakeGitHub
+from fake_repo import FakeRepo
 
 FIRST = "327b025692914836179a102b3f03db51a6f10b2b"
 RELOCK = "e828943ed9d3c9cd2a65b2d629c70787c4a3ecf0"
@@ -310,77 +311,63 @@ class PureBumpTests(unittest.TestCase):
 
 
 REPO = "o/r"
-POST = (
-    "api",
-    f"repos/{REPO}/check-runs",
-    "-f",
-    "name=judge-verdict",
-    "-f",
-    f"head_sha={RELOCK}",
-    "-f",
-    "status=completed",
-    "-f",
-    "conclusion=success",
-    "-f",
-    f"output[title]={bump.TITLE}",
-    "-f",
-    f"output[summary]={bump.summary(PACKAGES)}",
-)
+POST = {
+    "name": "judge-verdict",
+    "sha": RELOCK,
+    "conclusion": "success",
+    "title": bump.TITLE,
+    "summary": bump.summary(PACKAGES),
+}
+
+
+def full_judge():
+    raise RuntimeError("the full judge")
 
 
 def fake(pr=PR, heads=None, files=FILES):
-    """The GitHub of #432. `heads` gives the head of each read of the pull request in turn."""
-    gh = FakeGitHub()
-    gh.answer(("api", f"repos/{REPO}/pulls/432"), *[{**pr, "head": {"sha": head}} for head in heads or [RELOCK]])
-    gh.answer_list(f"repos/{REPO}/pulls/432/commits", COMMITS)
-    gh.answer_list(f"repos/{REPO}/pulls/432/files", files)
-    gh.answer(("api", f"repos/{REPO}/commits/{RELOCK}"), DETAILS[RELOCK])
-    gh.answer(POST, "{}")
-    return gh
-
-
-def check_runs(gh):
-    return [args for args in gh.args() if args[:2] == ("api", f"repos/{REPO}/check-runs")]
+    """The repo of #432. `heads` gives the head of each read of the pull request in turn. A read of the pull request
+    for the full judge raises RuntimeError."""
+    repo = FakeRepo(REPO)
+    repo.answer("rest_pull_request", (432,), *[{**pr, "head": {"sha": head}} for head in heads or [RELOCK]])
+    repo.answer("commits", (432,), COMMITS)
+    repo.answer("files", (432,), files)
+    repo.answer("commit", (RELOCK,), DETAILS[RELOCK])
+    repo.answer("post_check", tuple(POST.values()), None)
+    repo.answer("pull_request", (432,), full_judge)
+    return repo
 
 
 class AutomaticPathTests(unittest.TestCase):
     def run_main(self, event, author, extra=None):
-        pr = {**PR, "user": {"login": author}}
-        gh = fake(pr)
+        repo = fake({**PR, "user": {"login": author}})
         variables = {"GITHUB_REPOSITORY": REPO, "GITHUB_EVENT_NAME": event, **(extra or {})}
-        full = mock.Mock(side_effect=RuntimeError("the full judge"))
-        with (
-            mock.patch.dict(os.environ, variables, clear=True),
-            mock.patch.object(judge, "pull_request", full),
-            mock.patch("sys.argv", ["judge.py", "432"]),
-        ):
+        with mock.patch.dict(os.environ, variables, clear=True), mock.patch("sys.argv", ["judge.py", "432"]):
             try:
-                judge.main(gh)
+                judge.main(repo)
             except RuntimeError:
                 pass
-        return gh, full
+        return repo
 
     def test_a_dependabot_pull_request_event_posts_the_verdict_with_no_judge_variable(self):
-        gh, full = self.run_main("pull_request", "dependabot[bot]")
-        full.assert_not_called()
-        self.assertEqual(check_runs(gh), [POST])
+        repo = self.run_main("pull_request", "dependabot[bot]")
+        self.assertEqual(repo.calls_of("pull_request"), [])
+        self.assertEqual(repo.calls_of("post_check"), [POST])
 
     def test_workflow_dispatch_on_a_dependabot_pull_request_runs_the_full_judge(self):
         judge_variables = {"JUDGE_AGENT_ID": "a", "JUDGE_ENVIRONMENT_ID": "e"}
-        gh, full = self.run_main("workflow_dispatch", "dependabot[bot]", judge_variables)
-        full.assert_called_once()
-        self.assertEqual(gh.calls, [])
+        repo = self.run_main("workflow_dispatch", "dependabot[bot]", judge_variables)
+        self.assertEqual(repo.calls, [("pull_request", {"number": 432})])
 
     def test_an_owner_pull_request_event_runs_the_full_judge(self):
         judge_variables = {"JUDGE_AGENT_ID": "a", "JUDGE_ENVIRONMENT_ID": "e"}
-        gh, full = self.run_main("pull_request", "sbiondolillo", judge_variables)
-        full.assert_called_once()
-        self.assertEqual(check_runs(gh), [])
+        repo = self.run_main("pull_request", "sbiondolillo", judge_variables)
+        self.assertEqual(len(repo.calls_of("pull_request")), 1)
+        self.assertEqual(repo.calls_of("post_check"), [])
 
     def test_a_head_that_moved_while_the_job_read_it_posts_nothing(self):
-        gh = fake(heads=["f" * 40])
-        judge.judge_bump(gh, REPO, 432, {**PR})
-        self.assertEqual(check_runs(gh), [])
+        repo = fake(heads=["f" * 40])
+        judge.judge_bump(repo, 432, {**PR})
+        self.assertEqual(repo.calls_of("post_check"), [])
 
     def test_a_dependabot_pull_request_that_is_not_a_pure_bump_posts_nothing(self):
         files = copy.deepcopy(FILES)
@@ -391,10 +378,10 @@ class AutomaticPathTests(unittest.TestCase):
                 '    <PackageVersion Include="Moq" Version="5.0.0" />',
             ),
         )
-        gh = fake(files=files)
+        repo = fake(files=files)
         with mock.patch("builtins.print") as printed:
-            judge.judge_bump(gh, REPO, 432, {**PR})
-        self.assertEqual(check_runs(gh), [])
+            judge.judge_bump(repo, 432, {**PR})
+        self.assertEqual(repo.calls_of("post_check"), [])
         self.assertTrue(any("failed 4:" in str(call) for call in printed.call_args_list))
 
 

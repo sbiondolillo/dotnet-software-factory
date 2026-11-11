@@ -10,9 +10,7 @@ from unittest import mock
 
 import copilot
 from fake_github import FakeGitHub, closes
-
-# The module under test puts .github/shared/ on the path, so this test also runs on its own.
-comments = copilot.comments
+from repo import comments_path
 
 SHA = "a" * 40
 LATER = "c" * 40
@@ -29,14 +27,14 @@ def fake(runs, state="OPEN", labels=("repair",), issues=(5,), heads=(SHA,)):
     gh.answer(PR_VIEW, *[{**pr, "headRefOid": head} for head in heads])
     gh.answer(RUN_VIEW, *[{"status": status, "conclusion": conclusion} for status, conclusion in runs])
     for number in ("5", "7"):
-        gh.answer_list(comments.path("o/r", number), lambda number=number: [{"body": b} for b in posted(gh, number)])
+        gh.answer_list(comments_path("o/r", number), lambda number=number: [{"body": b} for b in posted(gh, number)])
         gh.answer(post(number), "{}")
     return gh
 
 
 def post(number):
     """The call of comments.py that posts a comment on issue or pull request <number>."""
-    return ("api", "-X", "POST", comments.path("o/r", number), "--input", "-")
+    return ("api", "-X", "POST", comments_path("o/r", number), "--input", "-")
 
 
 def posted(gh, number=None):

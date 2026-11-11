@@ -37,10 +37,12 @@ import bump
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "shared"))
 import closing  # noqa: E402
+import comments  # noqa: E402
 import sessions  # noqa: E402
 import verdict  # noqa: E402
 from anthropic import Anthropic, AnthropicError  # noqa: E402
 from github import GitHub  # noqa: E402
+from repo import Repo  # noqa: E402
 from sessions import Session, SessionError  # noqa: E402
 
 MARKER = "<!-- judge:{sha}:{spec} -->"
@@ -53,23 +55,18 @@ def env(name, default=None):
     return value
 
 
-def pull_request(gh, repo, number):
-    fields = f"number,headRefOid,baseRefOid,baseRefName,headRefName,body,title,url,{closing.FIELD}"
-    return json.loads(gh.run("pr", "view", str(number), "-R", repo, "--json", fields))
-
-
-def spec_for(gh, repo, pr):
+def spec_for(repo, pr):
     """The spec is the body of the issue the pull request closes, or of the issue a line `Part of #<n>` names, or the
     pull request body. GitHub reports the issue the pull request closes, as closing.py reads it. A pull request names
     its issue with `Part of #<n>` when a check after the merge keeps it open. Code in the body names no issue, so a
     quote of a `Part of #<n>` in backticks names none."""
-    number = closing.issue(pr, repo)
+    number = closing.issue(pr, repo.name)
     if number is None:
         body = re.sub(r"`[^`\n]*`", "", re.sub(r"```.*?```", "", pr["body"] or "", flags=re.S))
         match = re.search(r"^Part of #(\d+)\s*$", body, re.M)
         number = int(match.group(1)) if match else None
     if number is not None:
-        issue = json.loads(gh.run("issue", "view", str(number), "-R", repo, "--json", "number,title,body"))
+        issue = repo.issue(number)
         return f"# {issue['title']} (#{issue['number']})\n\n{issue['body']}", issue["number"]
     return f"# {pr['title']} (pull request #{pr['number']})\n\n{pr['body'] or ''}", None
 
@@ -79,9 +76,9 @@ def spec_digest(spec):
     return hashlib.sha256(spec.encode()).hexdigest()[:12]
 
 
-def already_judged(gh, repo, number, sha, spec):
-    comments = gh.api_list(f"repos/{repo}/issues/{number}/comments")
-    return any(MARKER.format(sha=sha, spec=spec_digest(spec)) in (c.get("body") or "") for c in comments)
+def already_judged(repo, number, sha, spec):
+    """Whether a comment of the pull request holds the marker of the head SHA and the spec digest."""
+    return comments.has(repo, number, MARKER.format(sha=sha, spec=spec_digest(spec)))
 
 
 REPORT = """Your final answer is one JSON object and nothing else, with no prose before or after it and no code fence:
@@ -227,13 +224,13 @@ def takes_bump_path(event, author):
     return event == "pull_request" and author == bump.DEPENDABOT
 
 
-def judge_bump(gh, repo, number, pr):
+def judge_bump(repo, number, pr):
     """The automatic path for a Dependabot pull request: judge-verdict as success on a pure bump, nothing otherwise."""
     head = pr["head"]["sha"]
-    commits = gh.api_list(f"repos/{repo}/pulls/{number}/commits")
-    details = {c["sha"]: json.loads(gh.run("api", f"repos/{repo}/commits/{c['sha']}")) for c in commits[1:]}
-    files = gh.api_list(f"repos/{repo}/pulls/{number}/files")
-    after = json.loads(gh.run("api", f"repos/{repo}/pulls/{number}"))
+    commits = repo.commits(number)
+    details = {c["sha"]: repo.commit(c["sha"]) for c in commits[1:]}
+    files = repo.files(number)
+    after = repo.rest_pull_request(number)
     if after["head"]["sha"] != head:
         print(f"judge: the head of pull request #{number} moved off {head[:7]} while the job read it; nothing posted")
         return
@@ -243,19 +240,18 @@ def judge_bump(gh, repo, number, pr):
         for line in failed:
             print(f"judge: failed {line}")
         return
-    verdict.post(gh, repo, head, "success", bump.TITLE, bump.summary(packages))
+    verdict.post(repo, head, "success", bump.TITLE, bump.summary(packages))
     print(f"judge: {bump.TITLE}, {len(packages)} packages on {head[:7]}")
 
 
-def main(gh=None, api=None):
-    gh = gh if gh is not None else GitHub.from_env()
-    repo = env("GITHUB_REPOSITORY")
+def main(repo=None, api=None):
+    repo = repo if repo is not None else Repo(GitHub.from_env(), env("GITHUB_REPOSITORY"))
     number = int(sys.argv[1])
     event = os.environ.get("GITHUB_EVENT_NAME")
     if event == "pull_request":
-        rest = json.loads(gh.run("api", f"repos/{repo}/pulls/{number}"))
+        rest = repo.rest_pull_request(number)
         if takes_bump_path(event, (rest.get("user") or {}).get("login")):
-            judge_bump(gh, repo, number, rest)
+            judge_bump(repo, number, rest)
             return
     agent = env("JUDGE_AGENT_ID")
     environment = env("JUDGE_ENVIRONMENT_ID")
@@ -265,10 +261,10 @@ def main(gh=None, api=None):
     budget = int(os.environ.get("JUDGE_BUDGET_CENTS", "500"))
     timeout = int(os.environ.get("JUDGE_TIMEOUT_SECONDS", "1800"))
 
-    pr = pull_request(gh, repo, number)
+    pr = repo.pull_request(number)
     head, base = pr["headRefOid"], pr["baseRefOid"]
-    spec, issue = spec_for(gh, repo, pr)
-    if already_judged(gh, repo, number, head, spec):
+    spec, issue = spec_for(repo, pr)
+    if already_judged(repo, number, head, spec):
         print(f"judge: {head[:7]} with this spec is already judged; nothing to do")
         return
     print(
@@ -277,16 +273,16 @@ def main(gh=None, api=None):
     )
 
     api = api if api is not None else Anthropic.from_env()
-    resources = [sessions.repository(repo, env("JUDGE_GITHUB_RO_TOKEN"))]
+    resources = [sessions.repository(repo.name, env("JUDGE_GITHUB_RO_TOKEN"))]
     started = {}
     for angle in angles:
         session = Session.start(
             api,
             agent,
             environment,
-            f"judge {repo}#{number} {angle}",
-            reviewer_prompt(angle, repo, head, base, spec),
-            {"repo": repo, "pr": str(number), "sha": head, "angle": angle},
+            f"judge {repo.name}#{number} {angle}",
+            reviewer_prompt(angle, repo.name, head, base, spec),
+            {"repo": repo.name, "pr": str(number), "sha": head, "angle": angle},
             budget,
             resources,
         )
@@ -315,9 +311,9 @@ def main(gh=None, api=None):
                 api,
                 agent,
                 environment,
-                f"judge {repo}#{number} synthesis",
+                f"judge {repo.name}#{number} synthesis",
                 prompt,
-                {"repo": repo, "pr": str(number), "sha": head, "angle": "synthesis"},
+                {"repo": repo.name, "pr": str(number), "sha": head, "angle": "synthesis"},
                 100,
                 overrides={"tools": [{"type": "agent_toolset_20260401", "default_config": {"enabled": False}}]},
             )
@@ -328,11 +324,11 @@ def main(gh=None, api=None):
             costs.append((session.sid, "synthesis", spent))
 
     outcome, body = render(results, synthesis, pr, costs, spec)
-    gh.run("pr", "comment", str(number), "-R", repo, "--body-file", "-", input_text=body)
+    repo.post_comment(number, body)
     conclusion = "success" if outcome == "APPROVED" else "failure"
     findings = sum(len(r["findings"]) for r in reports)
     summary = f"{len(reports)} of {len(results)} angles, {findings} findings"
-    verdict.post(gh, repo, head, conclusion, outcome, summary)
+    verdict.post(repo, head, conclusion, outcome, summary)
     print(f"judge: {outcome}")
 
 
