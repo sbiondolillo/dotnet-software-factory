@@ -44,8 +44,8 @@ public static class GateNames
 public sealed record GateSet(IReadOnlyList<IGate> Gates, LintGate Lint, string? Stop);
 
 /// <summary>Maps each <see cref="GateName"/> of a choice to its gate, over the work tree at <paramref name="baseCommit"/>, its
-/// <paramref name="features"/> and its <paramref name="files"/>. <paramref name="progress"/> takes the progress lines of a gate that reads a baseline before the
-/// first build.</summary>
+/// <paramref name="features"/> and its <paramref name="files"/>. <paramref name="progress"/> takes the progress lines of a gate
+/// that reads a baseline before the first build.</summary>
 public sealed class GateFactory(
     Sandbox sandbox,
     Git git,

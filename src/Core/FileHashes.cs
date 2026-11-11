@@ -7,7 +7,8 @@ namespace Core;
 /// one entry, with the hash of its target text, as git stores a link, so no read goes through a link and the walk enters no linked
 /// directory. An entry of 0 bytes gets the hash of empty bytes and is never opened: .NET on Linux gives a named pipe the attributes
 /// of a regular file, and a pipe, a socket and a device node each have the length 0. Each other entry is a regular file, read as a
-/// stream, so the memory use is flat for any size.</summary>
+/// stream up to the length that the walk saw, so the memory use is flat for any size, and a device that a process swaps in after
+/// the walk saw a file is read no further than that length.</summary>
 public sealed class FileHashes(string workTree)
 {
     private static readonly string EmptyHash = Convert.ToHexStringLower(SHA256.HashData(ReadOnlySpan<byte>.Empty));
@@ -49,6 +50,21 @@ public sealed class FileHashes(string workTree)
     private static string Hash(FileInfo file)
     {
         using FileStream stream = file.OpenRead();
-        return Convert.ToHexStringLower(SHA256.HashData(stream));
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        byte[] buffer = new byte[1024 * 1024];
+        long left = file.Length;
+        while (left > 0)
+        {
+            int read = stream.Read(buffer, 0, (int)Math.Min(buffer.Length, left));
+            if (read is 0)
+            {
+                break;
+            }
+
+            hash.AppendData(buffer, 0, read);
+            left -= read;
+        }
+
+        return Convert.ToHexStringLower(hash.GetHashAndReset());
     }
 }

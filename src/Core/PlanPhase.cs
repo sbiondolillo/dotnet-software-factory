@@ -133,6 +133,17 @@ public sealed class PlanPhase(Agent agent, PlanText text)
             failures.Add($"No feature file under {FeatureFiles.RelativePath} is new or changed.");
         }
 
+        // The snapshot drops each entry under the feature directory that is no feature file, a linked directory among them, so
+        // the listing refuses that link here, and the plan pins no link that the test gate refuses.
+        try
+        {
+            features.Paths();
+        }
+        catch (FeatureFileException exception)
+        {
+            failures.Add($"The feature files cannot be listed: {exception.Message}");
+        }
+
         foreach (string path in now.Keys.Where(IsFeature).Order(StringComparer.Ordinal))
         {
             try

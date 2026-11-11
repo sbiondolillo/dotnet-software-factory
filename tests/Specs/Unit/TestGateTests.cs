@@ -160,6 +160,27 @@ public sealed class TestGateTests : IDisposable
     }
 
     [Fact]
+    public async Task ALinkedDirectoryUnderTheFeatureDirectoryAfterThePinFailsThePin()
+    {
+        using var harness = new TestGateHarness();
+        DirectoryInfo outside = Directory.CreateTempSubdirectory("factory-testgate-outside-");
+        try
+        {
+            Directory.CreateSymbolicLink(Path.Combine(harness.WorkTree.FullName, "specs", "features", "sub"), outside.FullName);
+            await harness.StartAsync(TestContext.Current.CancellationToken);
+
+            GateOutcome result = await harness.RunAsync([], TestContext.Current.CancellationToken);
+
+            Assert.Equal("failed", result.Result);
+            Assert.Equal("pin: specs/features/sub", Assert.Single(result.RedoTexts));
+        }
+        finally
+        {
+            outside.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ATitleWithAHyphenBecomesADifferentIdentifierThanTheOneInTheFile()
     {
         using var harness = new TestGateHarness("Feature: F\n\n  Scenario: A per-location total\n    Given x\n");

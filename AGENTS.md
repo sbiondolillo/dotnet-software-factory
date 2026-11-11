@@ -159,7 +159,7 @@ a path that holds a symbolic link, and its parse error holds positions and no te
 quotes the file and a process of a gate outlives its `docker exec`. A new host read of a work tree file whose text can
 reach a message, a comment or a session keeps to a read-only path and refuses a link. A host scan of the work tree
 for a hash goes through `FileHashes`. It opens only an entry that is no link, no directory and longer than 0 bytes,
-and it enters no linked directory, so a link, a named pipe or a large file in the work tree cannot hang the runner.
+and it enters no linked directory, so a link, a named pipe or a large file that the walk sees cannot hang the runner.
 
 - Every command is a `CommandSpec` whose program is `docker`, run through the
   `CommandRunner` that the class is built over.
