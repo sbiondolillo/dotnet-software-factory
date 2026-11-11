@@ -212,7 +212,7 @@ def render(results, synthesis, pr, costs, spec):
             where = f"`{f.get('file')}:{f.get('line')}` " if f.get("file") else ""
             lines.append(f"- {where}{f.get('fault')}{tag}")
             if f.get("evidence"):
-                lines.append(f"  ```\n  {str(f['evidence']).strip()[:1500]}\n  ```")
+                lines.append(block(str(f["evidence"]).strip()[:1500]))
             if f.get("fix"):
                 lines.append(f"  Fix: {f['fix']}")
         for c in r["clean"]:

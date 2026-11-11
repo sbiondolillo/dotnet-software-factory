@@ -184,6 +184,16 @@ class RenderTests(unittest.TestCase):
             body,
         )
 
+    def test_the_evidence_of_a_finding_of_several_lines_stays_in_its_code_block(self):
+        finding = {"file": "a.py", "line": 3, "fault": "the fault", "evidence": "$ cat a.md\n```\nprint(1)\n```"}
+        accept = {"angle": "Regressions", "verdict": "accept", "findings": [], "clean": []}
+        results = [{**self.report("reject"), "findings": [finding]}, accept]
+        outcome, body = judge.render(results, None, self.PR, [], "the spec")
+        self.assertIn(
+            "- `a.py:3` the fault\n  ````\n  $ cat a.md\n  ```\n  print(1)\n  ```\n  ````\n\n### Regressions: accept\n",
+            body,
+        )
+
 
 REJECT = (
     '{"verdict": "reject", "findings": [{"file": "a.py", "line": 3, "fault": "the fault", "evidence": "the output", '
