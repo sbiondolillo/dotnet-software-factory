@@ -277,6 +277,13 @@ class ReadReportTests(unittest.TestCase):
             self.read([refused])
         self.assertEqual(stop.exception.code, f"repair: session {SID} gave no Report: refused: I will not")
 
+    def test_an_api_error_in_the_read_exits_with_the_session_id(self):
+        session = Session(FakeApi([[message(GOOD)]], failing=("events",)), SID)
+        with self.assertRaises(SystemExit) as stop, mock.patch("builtins.print"):
+            read.read_report(session, None, 60)
+        reason = f"the API failed: GET /v1/sessions/{SID}/events?order=desc&limit=100 -> 500: overloaded"
+        self.assertEqual(stop.exception.code, f"repair: session {SID} gave no Report: {reason}: ")
+
     def test_a_cleanup_fault_reaches_the_reader_by_the_correction_turn(self):
         first = [message(factory_answer(f"{SCOPE}## Check\n\nNo block.\n", recipe="cleanup"))]
         first.append({"type": "user.message", "id": "m1"})

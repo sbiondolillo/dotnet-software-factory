@@ -1,15 +1,16 @@
-"""Unit tests of judge.py: the parse of a reviewer's Report, the read of each angle, for #518, and the dedupe of
-already_judged, the outcome of render, and the spec of spec_for. The build job of ci.yml runs them with
-`python3 -B -m unittest discover -s .github/judge -p 'test_*.py'`. No test calls the API: a session is the FakeApi of
-.github/shared/fake_anthropic.py, and GitHub is a FakeGitHub. The read of a session's last events moved to
-.github/shared/test_sessions.py."""
+"""Unit tests of judge.py: the parse of a reviewer's Report, the read of each angle, for #518, the dedupe of
+already_judged, the outcome of render, the verdict of main, for #557, and the spec of spec_for. The build job of
+ci.yml runs them with `python3 -B -m unittest discover -s .github/judge -p 'test_*.py'`. No test calls the API: a
+session is the FakeApi of .github/shared/fake_anthropic.py, and GitHub is a FakeGitHub. The read of a session's last
+events moved to .github/shared/test_sessions.py."""
 
 import time
 import unittest
 from unittest import mock
 
+import closing
 import judge
-from fake_anthropic import FakeApi
+from fake_anthropic import FakeApi, FakeSessions
 from fake_github import FakeGitHub, closes
 from sessions import Session
 
@@ -69,38 +70,33 @@ class ReadAnglesTests(unittest.TestCase):
         with mock.patch("sessions.time.sleep"), mock.patch("builtins.print"):
             return judge.read_angles(started, time.time() + 60)
 
-    def test_a_session_error_on_one_angle_rejects_that_angle_and_the_others_are_read(self):
+    def test_a_session_error_on_one_angle_gives_no_report_of_that_angle_and_the_others_are_read(self):
         started = self.sessions(
             Conformance=turn(idle("refusal"), message("I will not")),
             Regressions=turn(idle(), message(ACCEPT), usage("12")),
         )
-        reports, costs = self.read(started)
-        refused, accepted = reports
-        self.assertEqual(refused["angle"], "Conformance")
-        self.assertEqual(refused["verdict"], "reject")
-        [finding] = refused["findings"]
-        self.assertEqual(finding["fault"], "refused")
-        self.assertEqual(finding["evidence"], "I will not")
+        results, costs = self.read(started)
+        refused, accepted = results
+        self.assertEqual(refused, judge.Missing("Conformance", "refused", "I will not"))
         self.assertEqual(accepted["angle"], "Regressions")
         self.assertEqual(accepted["verdict"], "accept")
         self.assertEqual(costs, [("sesn_Conformance", "Conformance", "?"), ("sesn_Regressions", "Regressions", "12")])
 
-    def test_a_second_bad_message_rejects_with_the_faults_of_both(self):
+    def test_a_second_bad_message_gives_no_report_with_the_faults_of_both(self):
         first = turn(idle(), message("not json"))
         second = [idle(), message('{"verdict": "maybe"}'), {"type": "user.message", "id": "m2"}] + first
         started = self.sessions(Conformance=(first, second))
-        [report], _ = self.read(started)
-        fault = report["findings"][0]["fault"]
-        self.assertTrue(fault.startswith("the parser says: first JSONDecodeError"), fault)
-        self.assertIn("then the verdict 'maybe'", fault)
+        [missing], _ = self.read(started)
+        self.assertTrue(missing.reason.startswith("the parser says: first JSONDecodeError"), missing.reason)
+        self.assertIn("then the verdict 'maybe'", missing.reason)
         self.assertEqual(len(started["Conformance"].api.posts), 1)
 
-    def test_a_deadline_that_passes_rejects_the_angle(self):
+    def test_a_deadline_that_passes_gives_no_report(self):
         started = self.sessions(Conformance=turn(idle(), message(ACCEPT)))
         started["Conformance"].api.status = "running"
         with mock.patch("builtins.print"):
-            [report], _ = judge.read_angles(started, time.time() - 1)
-        self.assertRegex(report["findings"][0]["fault"], r"^not idle after \d+ s$")
+            [missing], _ = judge.read_angles(started, time.time() - 1)
+        self.assertRegex(missing.reason, r"^not idle after \d+ s$")
 
 
 class ReadSynthesisTests(unittest.TestCase):
@@ -164,6 +160,149 @@ class RenderTests(unittest.TestCase):
         outcome, body = judge.render([self.report("accept"), self.report("reject")], None, self.PR, [], "the spec")
         self.assertEqual(outcome, "CHANGES REQUESTED")
         self.assertIn("**CHANGES REQUESTED** by the judge", body)
+
+    def test_an_angle_with_no_report_keeps_its_section_with_the_reason_and_the_last_message(self):
+        results = [
+            judge.Missing("Regressions and style", "refused", "I will not\n"),
+            self.report("reject"),
+            judge.Missing("Test strength, by mutation", "not idle after 1800 s", ""),
+        ]
+        outcome, body = judge.render(results, None, self.PR, [], "the spec")
+        self.assertEqual(outcome, "CHANGES REQUESTED")
+        self.assertIn(
+            "### Regressions and style: no Report\n- refused\n  ```\n  I will not\n  ```\n\n### Conformance: reject\n",
+            body,
+        )
+        self.assertIn("### Test strength, by mutation: no Report\n- not idle after 1800 s\n\n", body)
+
+
+REJECT = (
+    '{"verdict": "reject", "findings": [{"file": "a.py", "line": 3, "fault": "the fault", "evidence": "the output", '
+    '"fix": "the fix"}], "clean": []}'
+)
+HEAD = "a" * 40
+ANGLES = "Conformance,Regressions and style"
+OVERLOADED = "the API failed: GET /v1/sessions/sesn_r/events?order=desc&limit=100 -> 500: overloaded"
+
+
+def check_run(conclusion, title, summary):
+    """The args of the gh call that posts judge-verdict."""
+    fields = {
+        "name": "judge-verdict",
+        "head_sha": HEAD,
+        "status": "completed",
+        "conclusion": conclusion,
+        "output[title]": title,
+        "output[summary]": summary,
+    }
+    return ("api", "repos/o/r/check-runs", *[arg for key, value in fields.items() for arg in ("-f", f"{key}={value}")])
+
+
+class MainTests(unittest.TestCase):
+    """For #557, the verdict of main() over a FakeSessions of the angles, in the order of ANGLES, and the synthesis.
+    Only a Report decides: an angle with no Report never rejects and never accepts. JUDGE_TIMEOUT_SECONDS is 0, so an
+    angle that is idle gives its Report and an angle that is running passes the deadline at once."""
+
+    COMMENT = ("pr", "comment", "7", "-R", "o/r", "--body-file", "-")
+    CAUSES = {
+        "a deadline": (lambda: FakeApi([turn()], status="running", sid="sesn_r"), "not idle after 0 s"),
+        "an API error in the read": (lambda: FakeApi([turn()], failing=("events",), sid="sesn_r"), OVERLOADED),
+    }
+
+    def angle(self, text, sid="sesn_c"):
+        return FakeApi([turn(idle(), message(text), usage("4"))], sid=sid)
+
+    def synthesis(self, failing=()):
+        return FakeApi([turn(idle(), message("The synthesis."), usage("1"))], sid="sesn_s", failing=failing)
+
+    def run_main(self, *apis, posts=()):
+        """main() for pull request 7, with an answer for each gh call in `posts`. A gh call with no answer fails the
+        test. The result is the FakeGitHub, the FakeSessions, the exit code or None, and the printed lines."""
+        gh = FakeGitHub()
+        fields = f"number,headRefOid,baseRefOid,baseRefName,headRefName,body,title,url,{closing.FIELD}"
+        pr = {"number": 7, "headRefOid": HEAD, "baseRefOid": "b" * 40, "body": "", "title": "The change"}
+        gh.answer(("pr", "view", "7", "-R", "o/r", "--json", fields), {**pr, **closes("o/r")})
+        gh.answer_list("repos/o/r/issues/7/comments", [])
+        for args in posts:
+            gh.answer(args, "{}")
+        api = FakeSessions(*apis)
+        environment = {
+            "GITHUB_REPOSITORY": "o/r",
+            "GITHUB_EVENT_NAME": "workflow_dispatch",
+            "JUDGE_AGENT_ID": "agt",
+            "JUDGE_ENVIRONMENT_ID": "env",
+            "JUDGE_GITHUB_RO_TOKEN": "ro",
+            "JUDGE_ANGLES": ANGLES,
+            "JUDGE_TIMEOUT_SECONDS": "0",
+        }
+        code = None
+        with (
+            mock.patch.dict("os.environ", environment),
+            mock.patch("sys.argv", ["judge.py", "7"]),
+            mock.patch("sessions.time.sleep"),
+            mock.patch("builtins.print") as printed,
+        ):
+            try:
+                judge.main(gh, api)
+            except SystemExit as stop:
+                code = stop.code
+        return gh, api, code, [" ".join(map(str, call.args)) for call in printed.call_args_list]
+
+    def comment(self, gh):
+        [body] = [text for args, text in gh.calls if args == self.COMMENT]
+        return body
+
+    def test_a_reject_and_an_angle_with_no_report_post_the_reject_with_a_no_report_section(self):
+        for cause, (missing, reason) in self.CAUSES.items():
+            with self.subTest(cause=cause):
+                verdict = check_run("failure", "CHANGES REQUESTED", "1 of 2 angles, 1 findings")
+                gh, api, code, _ = self.run_main(
+                    self.angle(REJECT), missing(), self.synthesis(), posts=(self.COMMENT, verdict)
+                )
+                self.assertIsNone(code)
+                body = self.comment(gh)
+                self.assertIn("### Conformance: reject\n- `a.py:3` the fault\n", body)
+                self.assertIn(f"\n### Regressions and style: no Report\n- {reason}\n\n", body)
+                self.assertLess(body.index("### Conformance"), body.index("### Regressions and style"))
+                self.assertIn("The synthesis.", body)
+                self.assertIn(verdict, gh.args())
+                prompt = api.started["sesn_s"].posts[0][1]["initial_events"][0]["content"][0]["text"]
+                self.assertIn('"angle": "Conformance"', prompt)
+                self.assertNotIn("Regressions and style", prompt)
+
+    def test_an_accept_and_an_angle_with_no_report_post_nothing_and_exit_with_the_code_1(self):
+        for cause, (missing, reason) in self.CAUSES.items():
+            with self.subTest(cause=cause):
+                gh, api, code, printed = self.run_main(self.angle(ACCEPT), missing())
+                self.assertEqual(code, 1)
+                self.assertNotIn(self.COMMENT, gh.args())
+                self.assertFalse([args for args in gh.args() if "repos/o/r/check-runs" in args])
+                self.assertIn(f"judge: no Report from Regressions and style: {reason}", printed)
+                self.assertNotIn("sesn_s", api.started)
+
+    def test_every_angle_that_accepts_approves(self):
+        verdict = check_run("success", "APPROVED", "2 of 2 angles, 0 findings")
+        gh, _, code, _ = self.run_main(self.angle(ACCEPT), self.angle(ACCEPT, "sesn_r"), posts=(self.COMMENT, verdict))
+        self.assertIsNone(code)
+        self.assertIn("**APPROVED**", self.comment(gh))
+        self.assertIn(verdict, gh.args())
+
+    def test_a_synthesis_that_fails_to_start_still_posts_the_reject_with_no_synthesis_text(self):
+        verdict = check_run("failure", "CHANGES REQUESTED", "2 of 2 angles, 1 findings")
+        gh, _, code, printed = self.run_main(
+            self.angle(REJECT),
+            self.angle(ACCEPT, "sesn_r"),
+            self.synthesis(failing=("start",)),
+            posts=(self.COMMENT, verdict),
+        )
+        self.assertIsNone(code)
+        lines = self.comment(gh).splitlines()
+        self.assertEqual(
+            lines[1:4], ["**CHANGES REQUESTED** by the judge on `aaaaaaa`.", "", "### Conformance: reject"]
+        )
+        self.assertNotIn("synthesis", lines[-1])
+        self.assertIn(verdict, gh.args())
+        self.assertIn("judge: the synthesis did not start: POST /v1/sessions -> 500: overloaded", printed)
 
 
 class SpecForTests(unittest.TestCase):

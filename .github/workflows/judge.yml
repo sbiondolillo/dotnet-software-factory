@@ -8,6 +8,10 @@
 #
 # The job posts its verdict as the check run judge-verdict, which main requires.
 # The check named judge is this job, and it passes when the verdict rejects.
+# Only a Report decides: an angle whose session gives no Report never rejects
+# and never accepts. When no Report rejects and an angle has no Report, the job
+# posts no comment and no judge-verdict, and fails. A rerun of the job then
+# judges the head again.
 #
 # A pull request that the repository owner opened is judged on its head, at each
 # push. The gate reads the author of the pull request, not the pusher.
