@@ -60,6 +60,15 @@ class OutputTests(unittest.TestCase):
         repo.answer("issue", (5,), {})
         with self.assertRaises(AssertionError):
             repo.issue(6)
+        with self.assertRaises(AssertionError) as raised:
+            repo.delete_branch_if_present("b")
+        self.assertIn("delete_branch_if_present", str(raised.exception))
+
+    def test_a_method_that_sends_no_call_needs_no_answer(self):
+        repo = FakeRepo("a/b")
+        self.assertEqual(repo.run_url(9), "https://github.com/a/b/actions/runs/9")
+        self.assertEqual(repo.run_id_of("https://github.com/a/b/actions/runs/9"), 9)
+        self.assertEqual(repo.calls_of("run_url"), [{"run_id": 9}])
 
     def test_any_matches_each_value_and_the_latest_answer_wins(self):
         repo = FakeRepo()

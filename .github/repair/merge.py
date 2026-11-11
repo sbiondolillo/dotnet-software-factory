@@ -257,10 +257,10 @@ def changed_files(repo, number):
 
 def red_run_branch(repo, ticket):
     """The head branch of the red run that the traveler names, or None with no traveler or a run of another repo."""
-    match = ticket and re.fullmatch(rf"https://github\.com/{re.escape(repo.name)}/actions/runs/(\d+)", ticket.run)
-    if not match:
+    run_id = repo.run_id_of(ticket.run) if ticket else None
+    if run_id is None:
         return None
-    return repo.workflow_run(match.group(1))["head_branch"]
+    return repo.workflow_run(run_id)["head_branch"]
 
 
 def stop(repo, number, issue, sha, text):

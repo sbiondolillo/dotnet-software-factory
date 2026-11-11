@@ -2,7 +2,9 @@
 
 It holds scripted answers and no rule of GitHub: a write changes nothing in it. It writes out no method of Repo. Each
 call resolves its name on Repo and binds its arguments against the signature of that method, so a name that Repo
-lacks raises AttributeError and a wrong argument list raises TypeError, in the caller's test.
+lacks raises AttributeError and a wrong argument list raises TypeError, in the caller's test. A call with no answer
+runs the method of Repo over an adapter that refuses each call. So a method that sends no call, such as run_url,
+gives the answer of Repo, and a method that sends a call fails the test.
 """
 
 import inspect
@@ -28,14 +30,27 @@ def arguments(name, args, kwargs):
     return dict(list(bound.arguments.items())[1:])
 
 
+class Refused:
+    """The adapter under a call with no answer: each call of `gh` fails the test, with the call of Repo in the text."""
+
+    def __init__(self, name, called):
+        self.text = f"FakeRepo: no answer for {name}({called})"
+
+    def run(self, *args, input_text=None):
+        raise AssertionError(self.text)
+
+    def api_list(self, path):
+        raise AssertionError(self.text)
+
+
 class FakeRepo:
     """The surface of repo.Repo for the repo `name`.
 
     A test gives the outputs of a method for its arguments with `answer`. A call takes the next output of the latest
     answer whose arguments equal its own, and the last output answers each later call. An argument of
     unittest.mock.ANY equals any value. An output is a value, a Fail, which raises GitHubError, or a function of no
-    argument that gives one of those at the call. A call with no answer fails the test. `calls` holds each call as
-    (name, arguments by parameter), in order."""
+    argument that gives one of those at the call. A call with no answer runs as the module docstring states. `calls`
+    holds each call as (name, arguments by parameter), in order."""
 
     def __init__(self, name="o/r"):
         self.name = name
@@ -56,15 +71,14 @@ class FakeRepo:
         def call(*args, **kwargs):
             called = arguments(name, args, kwargs)
             self.calls.append((name, called))
-            return self.next(name, called)
+            matches = [outputs for each, given, outputs in self.answers if each == name and given == called]
+            if not matches:
+                return method(name)(Repo(Refused(name, called), self.name), *args, **kwargs)
+            return self.next(name, called, matches[-1])
 
         return call
 
-    def next(self, name, called):
-        matches = [outputs for each, given, outputs in self.answers if each == name and given == called]
-        if not matches:
-            raise AssertionError(f"FakeRepo: no answer for {name}({called})")
-        outputs = matches[-1]
+    def next(self, name, called, outputs):
         output = outputs.pop(0) if len(outputs) > 1 else outputs[0]
         output = output() if callable(output) else output
         if isinstance(output, Fail):

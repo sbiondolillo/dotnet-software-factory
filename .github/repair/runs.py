@@ -27,11 +27,6 @@ WORKFLOW = "factory.yml"
 SKEW = 30
 
 
-def url(name, run_id):
-    """The web address of the run in the repo `name`."""
-    return f"https://github.com/{name}/actions/runs/{run_id}"
-
-
 def find(repo, number=None, since=None, *, branch=None, status=None, event=None, exclude=()):
     """The newest run of factory.yml titled `#<number>`, created at `since` or later, on the branch, with the status
     and of the event, with an id outside `exclude`, or None. Each filter left out matches any run."""
@@ -74,7 +69,7 @@ def wait(repo, run_id, deadline, every, name="the run"):
     def state():
         run = repo.run_status(run_id)
         done = run["status"] == "completed"
-        return (run["conclusion"] or "") if done else None, f"{name} {url(repo.name, run_id)} is {run['status']}"
+        return (run["conclusion"] or "") if done else None, f"{name} {repo.run_url(run_id)} is {run['status']}"
 
     return poll(state, deadline, every)
 

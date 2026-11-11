@@ -172,7 +172,8 @@ class WaitTests(unittest.TestCase):
             runs.wait(repo, 9, NOW + 5, 3600, name="the gate run")
         self.assertEqual(clock.slept, [5])
         self.assertEqual(
-            stop.exception.code, f"repair: the gate run {runs.url('o/r', 9)} is in_progress after the timeout"
+            stop.exception.code,
+            "repair: the gate run https://github.com/o/r/actions/runs/9 is in_progress after the timeout",
         )
 
 

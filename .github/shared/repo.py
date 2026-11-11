@@ -9,6 +9,7 @@ fake adapter of fake_github.py.
 """
 
 import json
+import re
 
 import closing
 from github import GitHubError
@@ -94,7 +95,7 @@ class Repo:
         refs = json.loads(self.gh.run("api", f"repos/{self.name}/git/matching-refs/heads/{branch}"))
         if f"refs/heads/{branch}" not in [ref["ref"] for ref in refs]:
             return False
-        self.gh.run("api", "--method", "DELETE", f"repos/{self.name}/git/refs/heads/{branch}")
+        self.delete_branch(branch)
         return True
 
     # Pull requests.
@@ -194,10 +195,6 @@ class Repo:
             args += ["--label", label]
         return self.gh.run(*args, "--body-file", "-", input_text=body).strip()
 
-    def comment_on_issue(self, number, body):
-        """Posts `body` as a comment on the issue, with `gh issue comment`."""
-        self.gh.run("issue", "comment", str(number), "-R", self.name, "--body", body)
-
     def close_issue(self, number, comment):
         """Closes the issue with the comment."""
         self.gh.run("issue", "close", str(number), "-R", self.name, "--comment", comment)
@@ -214,10 +211,6 @@ class Repo:
         None. A commit has no `gh` subcommand for a comment, so one REST call serves each target."""
         text = json.dumps({"body": body})
         self.gh.run("api", "-X", "POST", _comments_path(self.name, number, sha), "--input", "-", input_text=text)
-
-    def comment_on_commit(self, sha, body):
-        """Posts `body` as a comment on the commit, as a form field."""
-        self.gh.run("api", f"repos/{self.name}/commits/{sha}/comments", "-f", f"body={body}")
 
     # Check runs.
 
@@ -249,6 +242,16 @@ class Repo:
         return (checks[0]["status"], checks[0].get("conclusion")) if checks else None
 
     # Workflow runs.
+
+    def run_url(self, run_id):
+        """The web address of the workflow run. It sends no call."""
+        return f"https://github.com/{self.name}/actions/runs/{run_id}"
+
+    def run_id_of(self, url):
+        """The id of the workflow run at the web address `url`, or None for an address of another repo or of no run.
+        It sends no call."""
+        match = re.fullmatch(rf"https://github\.com/{re.escape(self.name)}/actions/runs/(\d+)", url or "")
+        return int(match.group(1)) if match else None
 
     def workflow_run(self, run_id):
         """The workflow run as the REST API gives it."""

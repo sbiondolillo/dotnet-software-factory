@@ -151,7 +151,7 @@ def already_handled(repo, pr, run):
             print(f"repair: issue #{issue['number']} holds {sha[:7]}; closed; nothing to do")
             return True
         if run["html_url"] not in issue["body"] + comments_on(repo, issue):
-            repo.comment_on_issue(issue["number"], f"The run {run['html_url']} on `{sha}` is also red.")
+            repo.post_comment(issue["number"], f"The run {run['html_url']} on `{sha}` is also red.")
             if story is not None:
                 held_comment(repo, run, story["number"], issue["number"], None, None)
         print(f"repair: issue #{issue['number']} holds {sha[:7]}; nothing to do")
@@ -166,10 +166,11 @@ def held_comment(repo, run, story, held, kind, sid):
     """The comment on the red commit of a factory run while the factory repair `held` is open."""
     reader = f", and the reader's class is `{kind}`" if kind else ""
     session = f" Session `{sid}`." if sid else ""
-    repo.comment_on_commit(
-        run["head_sha"],
+    repo.post_comment(
+        None,
         f"The factory run {run['html_url']} on story #{story} is red{reader}. The factory repair #{held} is "
         f"open, so no second repair.{session}",
+        run["head_sha"],
     )
 
 
