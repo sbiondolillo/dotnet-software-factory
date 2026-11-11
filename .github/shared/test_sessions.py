@@ -9,6 +9,7 @@ import unittest
 from unittest import mock
 
 import sessions
+from anthropic import AnthropicError
 from fake_anthropic import SID, FakeApi, paged
 from sessions import Session, SessionError
 
@@ -59,8 +60,8 @@ class Read:
     """A report of one session over a FakeApi, with time.sleep replaced. `result` is the Answer, or `error` the
     SessionError."""
 
-    def __init__(self, listings, status="idle", posted=None, parse=parse_json, deadline=None):
-        self.api = FakeApi(listings, status, posted)
+    def __init__(self, listings, status="idle", posted=None, parse=parse_json, deadline=None, failing=()):
+        self.api = FakeApi(listings, status, posted, failing=failing)
         session = Session(self.api, SID)
         self.result = self.error = None
         with mock.patch.object(sessions.time, "sleep") as self.sleep:
@@ -179,6 +180,25 @@ class StopTests(unittest.TestCase):
             answer = Session(api, SID).report(parse_json, SHAPE, time.time() + 60, poll=7)
         self.assertEqual(answer.value["class"], "code")
         self.assertEqual([call.args for call in sleep.call_args_list], [(7,), (7,)])
+
+
+class ApiErrorTests(unittest.TestCase):
+    """For #557: an AnthropicError in the read becomes a SessionError with the session id, so the caller handles one
+    error, and the reason holds the text of the AnthropicError."""
+
+    def test_an_api_error_in_each_read_raises_session_error(self):
+        first = [idle(), message(STRAY), {"type": "user.message", "id": "m1"}]
+        for kind, path in (
+            ("status", f"GET /v1/sessions/{SID} -> 500: overloaded"),
+            ("events", f"GET /v1/sessions/{SID}/events?order=desc&limit=100 -> 500: overloaded"),
+            ("message", f"POST /v1/sessions/{SID}/events -> 500: overloaded"),
+        ):
+            with self.subTest(kind=kind), mock.patch("builtins.print"):
+                read = Read([first], failing=(kind,))
+                self.assertIsNone(read.result)
+                self.assertEqual(read.error.sid, SID)
+                self.assertEqual(read.error.reason, f"the API failed: {path}")
+                self.assertIsInstance(read.error.__cause__, AnthropicError)
 
 
 class CorrectionTests(unittest.TestCase):

@@ -8,8 +8,10 @@ which sends the fault and the shape and asks for the Report alone, as the factor
 src/Core/ManagedAgentsAgent.cs.
 
 Every request goes through the Anthropic adapter of anthropic.py, which the caller hands to `Session.start`. A session
-that cannot give a Report raises SessionError, and the caller decides what the error means: the judge rejects the
-angle, and the reader ends the job.
+that cannot give a Report raises SessionError. An AnthropicError in the read of the Report becomes a SessionError with
+the session id, so the read raises no other error. Only a Report decides: a SessionError says nothing about the work,
+so the judge neither rejects nor accepts the angle, and the reader ends the job. `Session.start` raises the
+AnthropicError of a start that fails, since no session id exists.
 """
 
 import json
@@ -17,6 +19,8 @@ import re
 import time
 import urllib.parse
 from dataclasses import dataclass
+
+from anthropic import AnthropicError
 
 POLL = 15
 ENDED = ("terminated", "error")
@@ -28,8 +32,8 @@ CORRECTION = (
 
 
 class SessionError(Exception):
-    """A session that gave no Report. `reason` says why, such as `refused`, `not idle after 1800 s`, `ended as error`
-    or `the parser says: ...`. `text` is the last agent message, or the empty string."""
+    """A session that gave no Report. `reason` says why, such as `refused`, `not idle after 1800 s`, `ended as error`,
+    `the parser says: ...` or `the API failed: ...`. `text` is the last agent message, or the empty string."""
 
     def __init__(self, sid, reason, text=""):
         self.sid = sid
@@ -193,7 +197,15 @@ class Session:
         """The Report of the session's first turn, read once the session is idle. `deadline` is a time.time() value,
         and the wait polls every `poll` seconds until it. When `parse` raises ValueError, one correction turn sends
         the fault and `shape`, and its message is parsed again. A second fault, a refusal, a session that ended as
-        terminated or error before the turn it needs, or a deadline that passes raises SessionError."""
+        terminated or error before the turn it needs, a deadline that passes, or an AnthropicError of a request
+        raises SessionError, and no other error."""
+        try:
+            return self.read(parse, shape, deadline, poll)
+        except AnthropicError as error:
+            raise SessionError(self.sid, f"the API failed: {error}") from error
+
+    def read(self, parse, shape, deadline, poll):
+        """The Report as `report` states, with the AnthropicError of a request raised as it is."""
         status = self.status(deadline, poll)
         before, events, rest = self.turn()
         text = self.checked(events)
