@@ -233,6 +233,46 @@ class FinishFactoryTests(unittest.TestCase):
         )
         self.assertIsNone(read.first_block(read.section(filed, "## Check")))
 
+    def held(self, *open_repairs):
+        """The repo after a read of a red factory run of the class `dependency` while each factory repair of
+        `open_repairs` is open: a comment on the red commit and one on the story, and no new issue, for #576."""
+        repo = FakeRepo()
+        repo.answer("open_issues_with_labels", (("repair", "factory"),), [{"number": n} for n in open_repairs])
+        take_comments(repo, None, RUN["head_sha"])
+        take_comments(repo, STORY["number"], RUN["head_sha"])
+        answer = {"class": "dependency", "recipe": "none", "title": "t", "body": "b", "evidence": []}
+        thread = {"number": STORY["number"], "story": True}
+        with mock.patch("builtins.print"):
+            read.finish_factory(repo, RUN, STORY, thread, answer, SID)
+        return repo
+
+    def test_the_red_commit_gets_one_comment_that_names_the_run_the_story_the_class_and_the_session(self):
+        [body] = posted(self.held(12), None, RUN["head_sha"])
+        self.assertEqual(
+            body,
+            f"The factory run {RUN['html_url']} on story #451 is red, and the reader's class is `dependency`. "
+            f"The factory repair #12 is open, so no second repair. Session `{SID}`.",
+        )
+
+    def test_the_story_gets_one_comment_under_the_marker_of_the_sha_that_names_the_open_repair(self):
+        [body] = posted(self.held(12), STORY["number"], RUN["head_sha"])
+        self.assertEqual(
+            body,
+            f"<!-- repair:{RUN['head_sha']} -->\n"
+            f"The factory run {RUN['html_url']} is red on `{RUN['head_sha']}`. The factory repair #12 is open.",
+        )
+
+    def test_no_issue_is_filed(self):
+        self.assertEqual(self.held(12).calls_of("create_issue"), [])
+
+    def test_with_two_open_factory_repairs_each_comment_names_the_lower_number(self):
+        repo = self.held(14, 12)
+        for number in (None, STORY["number"]):
+            with self.subTest(number=number):
+                [body] = posted(repo, number, RUN["head_sha"])
+                self.assertIn("The factory repair #12 is open", body)
+                self.assertNotIn("#14", body)
+
 
 class ReadReportTests(unittest.TestCase):
     """read_report: the Report of the reader's session, or the exit with the reason and the text."""
