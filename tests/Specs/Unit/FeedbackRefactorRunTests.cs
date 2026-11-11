@@ -80,7 +80,7 @@ public sealed class FeedbackRefactorRunTests
     }
 
     [Fact]
-    public async Task ABodyWithNoClosingLineReadsNoIssue()
+    public async Task APullRequestWithNoClosingIssueReadsNoIssue()
     {
         using RunHarness h = Refactor(closing: null);
         h.FirstBuildChanges.Add("tests/Specs/Steps/GreetingSteps.cs");
