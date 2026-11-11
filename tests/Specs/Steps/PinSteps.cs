@@ -28,7 +28,7 @@ public sealed class PinSteps : IDisposable
 
     [Given("I have taken a pin of the directory")]
     [When("I take a pin of the directory")]
-    public void TakePin() => _pin = Pin.Take(_root);
+    public void TakePin() => _pin = Pin.Take(new FileHashes(_root));
 
     [Given("the file {string} is deleted from the directory")]
     public void GivenDeleted(string path) => File.Delete(Path.Combine(_root, path));
@@ -43,7 +43,7 @@ public sealed class PinSteps : IDisposable
     }
 
     [When("I compare the directory with the pin")]
-    public void WhenCompare() => _comparison = _pin!.Compare(_root);
+    public void WhenCompare() => _comparison = _pin!.Compare(new FileHashes(_root));
 
     [Then("the pin holds {string} with the hash {string}")]
     public void ThenPinHolds(string path, string hash) => Assert.Equal(hash, _pin!.Hashes[path]);

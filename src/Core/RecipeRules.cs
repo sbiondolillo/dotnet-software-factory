@@ -170,10 +170,10 @@ public static class RecipeRules
     /// <summary>Records the pin of <paramref name="source"/>: every test file and the settings files for
     /// <see cref="PinSource.TestFiles"/>, and the feature files and the settings files for <see cref="PinSource.FeatureFiles"/>.
     /// The pin of <see cref="PinSource.Plan"/> comes from the plan phase, so it throws.</summary>
-    public static Pin TakePin(PinSource source, string workTree) => source switch
+    public static Pin TakePin(PinSource source, FileHashes files) => source switch
     {
-        PinSource.TestFiles => Pin.TakeRefactor(workTree),
-        PinSource.FeatureFiles => Pin.Take(workTree),
+        PinSource.TestFiles => Pin.TakeRefactor(files),
+        PinSource.FeatureFiles => Pin.Take(files),
         _ => throw new ArgumentOutOfRangeException(nameof(source), source, "The plan phase gives the pin of the plan."),
     };
 

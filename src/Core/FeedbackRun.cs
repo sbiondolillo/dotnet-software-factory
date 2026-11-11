@@ -177,8 +177,8 @@ public sealed class FeedbackRun(
             return new BaseOrStop(await git.ReadHeadShaAsync(request.Directory, cancellationToken).ConfigureAwait(false), null);
         }
 
-        public Task<PinOrStop> BeforeGatesAsync(AgentBackend backend, JobSummary summary, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new PinOrStop(RecipeRules.TakePin(RecipeRules.Sequence(choice, RunKind.Feedback).Pin, request.Directory), null));
+        public Task<PinOrStop> BeforeGatesAsync(AgentBackend backend, FileHashes files, JobSummary summary, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PinOrStop(RecipeRules.TakePin(RecipeRules.Sequence(choice, RunKind.Feedback).Pin, files), null));
 
         public IBuild Build(Agent builder) => _build = new FeedbackBuild(
             new BuildPhase(builder, RecipeRules.BuildText(choice.Recipe, RunKind.Feedback)), title, body, request.BuildModel, request.BuildTurns, threads);

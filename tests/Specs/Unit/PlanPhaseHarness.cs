@@ -72,5 +72,5 @@ public sealed class PlanPhaseHarness : IDisposable
         string body = "The checkout shows the total of the cart.",
         string model = "claude-haiku-4-5-20251001",
         int turns = 40) =>
-        await new PlanPhase(Agent, Text).RunAsync(title, body, model, turns, _work.FullName, new FeatureFiles(_work.FullName));
+        await new PlanPhase(Agent, Text).RunAsync(title, body, model, turns, new FileHashes(_work.FullName), new FeatureFiles(_work.FullName));
 }

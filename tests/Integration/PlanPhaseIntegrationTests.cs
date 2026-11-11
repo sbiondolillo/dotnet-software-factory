@@ -51,7 +51,7 @@ public sealed class PlanPhaseIntegrationTests
                 "The console program converts a length from miles to kilometres. A person runs it with one argument, a number of miles, and it prints the number of kilometres as one line. The conversion replaces the greeting of the starter. The greeting's code, its feature files, including the one that launches the program, and its tests leave the repo.",
                 "claude-sonnet-5-5",
                 50,
-                copy,
+                new FileHashes(copy),
                 new FeatureFiles(copy),
                 TestContext.Current.CancellationToken);
 

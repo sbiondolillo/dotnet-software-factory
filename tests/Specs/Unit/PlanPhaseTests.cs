@@ -97,6 +97,39 @@ public sealed class PlanPhaseTests : IDisposable
     }
 
     [Fact]
+    public async Task ALinkOutsideTheFeatureDirectoryIsANewFile()
+    {
+        _h.AgentWritesSoundFiles(null);
+        _h.Act(1, root =>
+        {
+            Directory.CreateDirectory(Path.Combine(root, "src"));
+            Directory.CreateSymbolicLink(Path.Combine(root, "src", "linked"), "/");
+        });
+        PlanPhaseResult result = await _h.RunAsync();
+        AssertOneFailureNaming(result, "src/linked");
+        Assert.Contains("is new", result.Failures[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ALinkedDirectoryUnderTheFeatureDirectoryFailsBothRuns()
+    {
+        DirectoryInfo outside = Directory.CreateTempSubdirectory("factory-plan-outside-");
+        try
+        {
+            File.WriteAllText(Path.Combine(outside.FullName, "a.feature"), PlanPhaseHarness.SoundFeature);
+            _h.AgentWritesSoundFiles(null);
+            _h.Act(1, root => Directory.CreateSymbolicLink(Path.Combine(root, "specs", "features", "sub"), outside.FullName));
+            PlanPhaseResult result = await _h.RunAsync();
+            Assert.Equal(2, _h.Requests.Count);
+            AssertOneFailureNaming(result, "specs/features/sub: the directory is a symbolic link");
+        }
+        finally
+        {
+            outside.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ErrorAnswersOnBothRunsFailWithTheTextAndSkipTheGate()
     {
         _h.AgentWritesSoundFiles(null);

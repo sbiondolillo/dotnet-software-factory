@@ -75,8 +75,8 @@ public sealed class RecipeRulesTests
         {
             Directory.CreateDirectory(Path.Combine(work.FullName, "tests", "Specs"));
             File.WriteAllText(Path.Combine(work.FullName, "tests", "Specs", "GreeterTests.cs"), "class GreeterTests;");
-            Assert.Contains("tests/Specs/GreeterTests.cs", RecipeRules.TakePin(PinSource.TestFiles, work.FullName).Hashes.Keys);
-            Assert.DoesNotContain("tests/Specs/GreeterTests.cs", RecipeRules.TakePin(PinSource.FeatureFiles, work.FullName).Hashes.Keys);
+            Assert.Contains("tests/Specs/GreeterTests.cs", RecipeRules.TakePin(PinSource.TestFiles, new FileHashes(work.FullName)).Hashes.Keys);
+            Assert.DoesNotContain("tests/Specs/GreeterTests.cs", RecipeRules.TakePin(PinSource.FeatureFiles, new FileHashes(work.FullName)).Hashes.Keys);
         }
         finally
         {
@@ -86,7 +86,7 @@ public sealed class RecipeRulesTests
 
     [Fact]
     public void ThePinOfThePlanIsNoInputOfTakePin() =>
-        Assert.Throws<ArgumentOutOfRangeException>(() => RecipeRules.TakePin(PinSource.Plan, "."));
+        Assert.Throws<ArgumentOutOfRangeException>(() => RecipeRules.TakePin(PinSource.Plan, new FileHashes(".")));
 
     [Fact]
     public void ABehaviorWithNoScenariosWritesFeatureFilesAndAPlan()

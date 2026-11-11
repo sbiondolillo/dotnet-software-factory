@@ -28,10 +28,10 @@ public sealed class GateFactoryTests
             Answer = words => words is ["dotnet", ApiGate.Printer, ..] ? new CommandResult { StandardOutput = "Core: class static Core.Greeter\n" } : new CommandResult(),
         };
         Sandbox sandbox = await box.StartAsync(Ct);
-        var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, new FeatureFiles(box.WorkTree.FullName), "base", []);
+        var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, new FeatureFiles(box.WorkTree.FullName), new FileHashes(box.WorkTree.FullName), "base", []);
 
         RecipeSequence sequence = RecipeRules.Sequence(choice, RunKind.Factory);
-        GateSet set = await factory.CreateAsync(choice, sequence, Pin.Take(box.WorkTree.FullName), Ct);
+        GateSet set = await factory.CreateAsync(choice, sequence, Pin.Take(new FileHashes(box.WorkTree.FullName)), Ct);
 
         Assert.Null(set.Stop);
         Assert.Equal(sequence.Gates, set.Gates.Select(GateSandbox.NameOf));
@@ -49,12 +49,12 @@ public sealed class GateFactoryTests
     {
         await using var box = new GateSandbox();
         Sandbox sandbox = await box.StartAsync(Ct);
-        var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, new FeatureFiles(box.WorkTree.FullName), "base", []);
+        var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, new FeatureFiles(box.WorkTree.FullName), new FileHashes(box.WorkTree.FullName), "base", []);
 
-        await CreateAsync(factory, new RecipeChoice(Recipe.Refactor, [], "true"), Pin.Take(box.WorkTree.FullName));
+        await CreateAsync(factory, new RecipeChoice(Recipe.Refactor, [], "true"), Pin.Take(new FileHashes(box.WorkTree.FullName)));
         Assert.Empty(box.Seen);
 
-        await CreateAsync(factory, new RecipeChoice(Recipe.Cleanup, ["README.md"], "true"), Pin.Take(box.WorkTree.FullName));
+        await CreateAsync(factory, new RecipeChoice(Recipe.Cleanup, ["README.md"], "true"), Pin.Take(new FileHashes(box.WorkTree.FullName)));
         Assert.Contains(box.Seen, words => words is ["dotnet", "test", ..]);
     }
 
@@ -67,9 +67,9 @@ public sealed class GateFactoryTests
         };
         Sandbox sandbox = await box.StartAsync(Ct);
         using var progress = new StringWriter();
-        var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, new FeatureFiles(box.WorkTree.FullName), "base", [], progress);
+        var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, new FeatureFiles(box.WorkTree.FullName), new FileHashes(box.WorkTree.FullName), "base", [], progress);
 
-        GateSet set = await CreateAsync(factory, new RecipeChoice(Recipe.Reframe, ["src/"], "true"), Pin.Take(box.WorkTree.FullName));
+        GateSet set = await CreateAsync(factory, new RecipeChoice(Recipe.Reframe, ["src/"], "true"), Pin.Take(new FileHashes(box.WorkTree.FullName)));
 
         Assert.Empty(set.Gates);
         Assert.StartsWith("The public API of the base commit could not be listed, so there is no build:", set.Stop, StringComparison.Ordinal);
@@ -83,9 +83,9 @@ public sealed class GateFactoryTests
         await using var box = new GateSandbox();
         Sandbox sandbox = await box.StartAsync(Ct);
         using var progress = new StringWriter();
-        var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, new FeatureFiles(box.WorkTree.FullName), "base", [], progress);
+        var factory = new GateFactory(sandbox, new Git(new CommandRunner()), box.WorkTree.FullName, new FeatureFiles(box.WorkTree.FullName), new FileHashes(box.WorkTree.FullName), "base", [], progress);
 
-        await CreateAsync(factory, new RecipeChoice(Recipe.Reframe, ["src/"], "true"), Pin.Take(box.WorkTree.FullName));
+        await CreateAsync(factory, new RecipeChoice(Recipe.Reframe, ["src/"], "true"), Pin.Take(new FileHashes(box.WorkTree.FullName)));
 
         Assert.Equal("api: start\napi: listed\n", progress.ToString().ReplaceLineEndings("\n"));
     }
