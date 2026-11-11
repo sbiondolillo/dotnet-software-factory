@@ -17,11 +17,11 @@ public sealed class FeedbackCleanupScopeSteps(FactoryRunSteps factory, FeedbackR
             .Select(c => c.Arguments.SkipWhile(a => a != GateSandbox.ContainerId).Skip(1).ToArray())
             .Where(a => a is ["sh", "-c", ..]);
 
-    [Given("GitHub answers the read of the pull request with the body {string}")]
-    public void GivenBody(string body) => H.PullBody = body;
+    [Given("GitHub lists the issue {int} as the closing issue of the pull request")]
+    public void GivenClosingIssue(int number) => H.ClosingIssue = number;
 
-    [Given("GitHub answers the read of the pull request with a body that holds no closing line")]
-    public void GivenNoClosing() => H.PullBody = "Answers the review of the cleanup.";
+    [Given("GitHub lists no closing issue of the pull request")]
+    public void GivenNoClosing() => H.ClosingIssue = null;
 
     [Given("the issue {int} has the label {string} and the scope {string}")]
     public void GivenScope(int number, string label, string scope)

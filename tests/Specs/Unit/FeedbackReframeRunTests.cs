@@ -11,7 +11,7 @@ public sealed class FeedbackReframeRunTests
 
     private static RunHarness Reframe()
     {
-        var h = new RunHarness { PullBody = "Closes #11", Body = Body, ApiLines = _ => Symbol + "\n" };
+        var h = new RunHarness { ClosingIssue = 11, Body = Body, ApiLines = _ => Symbol + "\n" };
         h.Labels.Add("reframe");
         return h;
     }

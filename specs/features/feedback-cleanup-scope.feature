@@ -15,21 +15,21 @@ Feature: A feedback run on the pull request of a cleanup issue keeps that issue'
     And GitHub answers each reply and each resolve with the status code 200 and no errors
 
   Scenario: A change outside the scope gets a Redo
-    Given GitHub answers the read of the pull request with the body "Closes #11"
+    Given GitHub lists the issue 11 as the closing issue of the pull request
     And the issue 11 has the label "cleanup" and the scope "README.md"
     And the build changes only "src/Core/Greeter.cs"
     When a caller starts a feedback run
     Then the next build prompt holds a Redo text that holds "outside the scope: src/Core/Greeter.cs"
 
   Scenario: A change to a build settings file that the scope names passes the test gate
-    Given GitHub answers the read of the pull request with the body "Closes #11"
+    Given GitHub lists the issue 11 as the closing issue of the pull request
     And the issue 11 has the label "cleanup" and the scope ".editorconfig"
     And the build changes only ".editorconfig"
     When a caller starts a feedback run
     Then the test gate of the feedback run passes
 
   Scenario: A lost test gets a Redo
-    Given GitHub answers the read of the pull request with the body "Closes #11"
+    Given GitHub lists the issue 11 as the closing issue of the pull request
     And the issue 11 has the label "cleanup"
     And the test "Specs.Unit.GreeterTests.Greets" passed on the head of the pull request
     And the TRX file after the build holds no test of the class "Specs.Unit.GreeterTests" and the method "Greets"
@@ -37,28 +37,28 @@ Feature: A feedback run on the pull request of a cleanup issue keeps that issue'
     Then the next build prompt holds a Redo text that holds "lost test: " and the name "Specs.Unit.GreeterTests.Greets"
 
   Scenario: The check command runs under sh after the test gate passes
-    Given GitHub answers the read of the pull request with the body "Closes #11"
+    Given GitHub lists the issue 11 as the closing issue of the pull request
     And the issue 11 has the label "cleanup" and the first fenced block under "## Check" holding the line "grep -q Feedback README.md"
     And the check command exits with the code 0 after the build
     When a caller starts a feedback run
     Then the feedback run runs "grep -q Feedback README.md" under sh in a copy of the work tree after the test gate passes
 
   Scenario: A failing check gets a Redo
-    Given GitHub answers the read of the pull request with the body "Closes #11"
+    Given GitHub lists the issue 11 as the closing issue of the pull request
     And the issue 11 has the label "cleanup" and the line "grep -q Feedback README.md" under "## Check"
     And the check command exits with the code 1 after the build
     When a caller starts a feedback run
     Then the next build prompt holds a Redo text that holds "The check command exited with the code 1"
 
   Scenario: A passing check starts the review
-    Given GitHub answers the read of the pull request with the body "Closes #11"
+    Given GitHub lists the issue 11 as the closing issue of the pull request
     And the issue 11 has the label "cleanup" and the line "grep -q Feedback README.md" under "## Check"
     And the check command exits with the code 0 after the build
     When a caller starts a feedback run
     Then the feedback run starts the review
 
   Scenario: Standard output shows the check between the test and the review
-    Given GitHub answers the read of the pull request with the body "Closes #11"
+    Given GitHub lists the issue 11 as the closing issue of the pull request
     And the issue 11 has the label "cleanup" and the line "grep -q Feedback README.md" under "## Check"
     And the check command exits with the code 0 after the build
     When a caller starts a feedback run
@@ -70,13 +70,13 @@ Feature: A feedback run on the pull request of a cleanup issue keeps that issue'
       | review: start |
 
   Scenario: An issue with no label cleanup gets no check
-    Given GitHub answers the read of the pull request with the body "Closes #11"
+    Given GitHub lists the issue 11 as the closing issue of the pull request
     And the issue 11 has no label "cleanup" and the line "grep -q Feedback README.md" under "## Check"
     When a caller starts a feedback run
     Then the feedback run runs no check command
 
-  Scenario: A body with no closing line reads no issue
-    Given GitHub answers the read of the pull request with a body that holds no closing line
+  Scenario: A pull request with no closing issue reads no issue
+    Given GitHub lists no closing issue of the pull request
     When a caller starts a feedback run
     Then the feedback run reads no issue
     And the feedback run runs no check command

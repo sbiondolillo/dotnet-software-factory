@@ -60,14 +60,14 @@ public sealed class FeedbackRun(
             return new RunResult<Answered>(new Answered(0, 0, null), null, 0);
         }
 
-        string branch = await new PullRequests(client).ReadHeadBranchAsync(pull, cancellationToken).ConfigureAwait(false);
         var pullRequests = new PullRequests(client);
+        string branch = await pullRequests.ReadHeadBranchAsync(pull, cancellationToken).ConfigureAwait(false);
         // With no closing issue, the round takes the choice of an issue with no label.
         RecipeChoice choice = RecipeRules.Parse([], "");
         string? issueBody = null;
-        if (PullRequests.ParseClosingIssue(await pullRequests.ReadBodyAsync(pull, cancellationToken).ConfigureAwait(false)) is int issueNumber)
+        if (await pullRequests.ReadClosingIssueAsync(pull, cancellationToken).ConfigureAwait(false) is IssueNumber closing)
         {
-            GitHubIssue issue = await client.ReadIssueAsync(new IssueNumber(repo, issueNumber), cancellationToken).ConfigureAwait(false);
+            GitHubIssue issue = await client.ReadIssueAsync(closing, cancellationToken).ConfigureAwait(false);
             issueBody = issue.Body;
             choice = RecipeRules.Parse(issue.Labels, issue.Body);
             if (choice.Declined is string refusal)

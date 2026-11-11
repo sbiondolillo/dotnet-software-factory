@@ -24,7 +24,6 @@ public sealed record ReviewThread(string Id, bool IsResolved, string Path, int? 
 /// <summary>Reads, replies to and resolves review threads through GitHub's GraphQL API.</summary>
 public sealed class ReviewThreads(GitHubClient client)
 {
-    private const string FaultText = "Something went wrong while executing your query";
     private const string ReviewsQuery = "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviews(first: 100) { nodes { state body author { login } commit { oid } } } } } }";
     private const string ThreadsQuery = "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewThreads(first: 100) { nodes { id isResolved path line comments(first: 100) { nodes { author { login } body } } } } } } }";
     private const string ReplyQuery = "mutation($threadId: ID!, $body: String!) { addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $threadId, body: $body}) { comment { id } } }";
@@ -34,7 +33,7 @@ public sealed class ReviewThreads(GitHubClient client)
     /// <summary>Reads every review of a pull request.</summary>
     public async Task<IReadOnlyList<Review>> ReadReviewsAsync(IssueNumber pullRequest, CancellationToken cancellationToken = default)
     {
-        JsonElement data = await SendAsync(ReviewsQuery, Variables(pullRequest), cancellationToken).ConfigureAwait(false);
+        JsonElement data = await client.SendGraphQLAsync(ReviewsQuery, Variables(pullRequest), cancellationToken).ConfigureAwait(false);
         var reviews = new List<Review>();
         foreach (JsonElement node in Nodes(data.GetProperty("repository").GetProperty("pullRequest").GetProperty("reviews")))
         {
@@ -46,12 +45,12 @@ public sealed class ReviewThreads(GitHubClient client)
 
     /// <summary>Requests a review by a bot of a pull request, given the node id of the pull request.</summary>
     public async Task RequestReviewAsync(string pullRequestId, string botLogin, CancellationToken cancellationToken = default) =>
-        await SendAsync(RequestQuery, new { pullRequestId, botLogins = new[] { botLogin } }, cancellationToken).ConfigureAwait(false);
+        await client.SendGraphQLAsync(RequestQuery, new { pullRequestId, botLogins = new[] { botLogin } }, cancellationToken).ConfigureAwait(false);
 
     /// <summary>Reads every review thread of a pull request.</summary>
     public async Task<IReadOnlyList<ReviewThread>> ReadThreadsAsync(IssueNumber pullRequest, CancellationToken cancellationToken = default)
     {
-        JsonElement data = await SendAsync(ThreadsQuery, Variables(pullRequest), cancellationToken).ConfigureAwait(false);
+        JsonElement data = await client.SendGraphQLAsync(ThreadsQuery, Variables(pullRequest), cancellationToken).ConfigureAwait(false);
         var threads = new List<ReviewThread>();
         foreach (JsonElement node in Nodes(data.GetProperty("repository").GetProperty("pullRequest").GetProperty("reviewThreads")))
         {
@@ -75,11 +74,11 @@ public sealed class ReviewThreads(GitHubClient client)
 
     /// <summary>Adds a reply to a review thread.</summary>
     public async Task ReplyAsync(string threadId, string body, CancellationToken cancellationToken = default) =>
-        await SendAsync(ReplyQuery, new { threadId, body }, cancellationToken).ConfigureAwait(false);
+        await client.SendGraphQLAsync(ReplyQuery, new { threadId, body }, cancellationToken).ConfigureAwait(false);
 
     /// <summary>Marks a review thread as resolved.</summary>
     public async Task ResolveAsync(string threadId, CancellationToken cancellationToken = default) =>
-        await SendAsync(ResolveQuery, new { threadId }, cancellationToken).ConfigureAwait(false);
+        await client.SendGraphQLAsync(ResolveQuery, new { threadId }, cancellationToken).ConfigureAwait(false);
 
     private static object Variables(IssueNumber pullRequest)
     {
@@ -104,41 +103,4 @@ public sealed class ReviewThreads(GitHubClient client)
         node.TryGetProperty("author", out JsonElement author) && author.ValueKind is JsonValueKind.Object
             ? author.GetProperty("login").GetString() ?? ""
             : "";
-
-    private async Task<JsonElement> SendAsync(string query, object variables, CancellationToken cancellationToken)
-    {
-        const int MaxSends = 4;
-        for (int sent = 1; ; sent++)
-        {
-            try
-            {
-                return await SendOnceAsync(query, variables, cancellationToken).ConfigureAwait(false);
-            }
-            catch (GitHubGraphQLException ex) when (sent < MaxSends && ex.Messages.Any(m => m.StartsWith(FaultText, StringComparison.Ordinal)))
-            {
-                if (client.BaseWait > TimeSpan.Zero)
-                {
-                    await Task.Delay(client.BaseWait, cancellationToken).ConfigureAwait(false);
-                }
-            }
-        }
-    }
-
-    private async Task<JsonElement> SendOnceAsync(string query, object variables, CancellationToken cancellationToken)
-    {
-        string json = JsonSerializer.Serialize(new { query, variables });
-        JsonElement answer = await client.SendAsync(HttpMethod.Post, "/graphql", json, cancellationToken).ConfigureAwait(false);
-        if (answer.ValueKind is JsonValueKind.Object && answer.TryGetProperty("errors", out JsonElement errors) && errors.ValueKind is JsonValueKind.Array && errors.GetArrayLength() is not 0)
-        {
-            var messages = new List<string>();
-            foreach (JsonElement error in errors.EnumerateArray())
-            {
-                messages.Add(error.ValueKind is JsonValueKind.Object && error.TryGetProperty("message", out JsonElement m) ? m.GetString() ?? "" : "");
-            }
-
-            throw new GitHubGraphQLException(messages);
-        }
-
-        return answer.GetProperty("data");
-    }
 }

@@ -224,7 +224,7 @@ public sealed class SettleTests : IDisposable
     {
         _h.CheckRuns = _ => SettleHarness.RunsJson("build", "completed", "failure");
         _h.Threads = "always";
-        _h.PullBody = "Closes #2";
+        _h.ClosingIssue = 2;
         _h.ClosingLabels = ["cleanup", "refactor"];
         SettleResult result = await IssueAsync();
         Assert.Equal(SettleEnd.Declined, result.End);
@@ -320,7 +320,7 @@ public sealed class SettleTests : IDisposable
     public async Task APullRequestOnADeclinedIssueEndsDeclinedWithOneCommentAndNoClone()
     {
         _h.Threads = "always";
-        _h.PullBody = "Closes #1";
+        _h.ClosingIssue = 1;
         _h.Labels.AddRange(["cleanup", "refactor"]);
         SettleResult result = await PullRequestAsync();
         Assert.Equal(SettleEnd.Declined, result.End);

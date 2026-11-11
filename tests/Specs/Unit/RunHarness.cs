@@ -147,8 +147,8 @@ public sealed class RunHarness : IDisposable
     /// <summary>The status code of the read of the pull request of a feedback run.</summary>
     public int HeadStatus { get; set; } = 200;
 
-    /// <summary>The body of the pull request of a feedback run, or null for an answer with no body.</summary>
-    public string? PullBody { get; set; }
+    /// <summary>The issue that GitHub lists as the closing issue of the pull request of a feedback run, or null for none.</summary>
+    public int? ClosingIssue { get; set; }
 
     /// <summary>The ids of the threads GitHub lists, in order: A, B and C (resolved) are known.</summary>
     public List<string> Threads { get; set; } = [ThreadA, ThreadB];
@@ -623,9 +623,15 @@ public sealed class RunHarness : IDisposable
         return new CommandResult { ExitCode = red ? 1 : 0, StandardOutput = stdout };
     }
 
-    private string PullJson() => PullBody is null
-        ? JsonSerializer.Serialize(new { head = new { @ref = HeadRef, sha = HeadSha } })
-        : JsonSerializer.Serialize(new { body = PullBody, head = new { @ref = HeadRef, sha = HeadSha } });
+    private string PullJson() => JsonSerializer.Serialize(new { head = new { @ref = HeadRef, sha = HeadSha } });
+
+    private string ClosingIssuesJson()
+    {
+        var nodes = ClosingIssue is int number
+            ? new[] { new { number, repository = new { name = Repo, owner = new { login = Owner } } } }
+            : [];
+        return JsonSerializer.Serialize(new { data = new { repository = new { pullRequest = new { closingIssuesReferences = new { nodes } } } } });
+    }
 
     private string IssueJson() => JsonSerializer.Serialize(new
     {
@@ -700,6 +706,11 @@ public sealed class RunHarness : IDisposable
         if (query.Contains("reviewThreads", StringComparison.Ordinal))
         {
             return (200, ThreadsJson());
+        }
+
+        if (query.Contains("closingIssuesReferences", StringComparison.Ordinal))
+        {
+            return (200, ClosingIssuesJson());
         }
 
         string threadId = json.RootElement.GetProperty("variables").GetProperty("threadId").GetString() ?? "";

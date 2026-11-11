@@ -46,7 +46,7 @@ public sealed class RunResultTests
     [Fact]
     public async Task AFeedbackRoundThatDeclinesItsClosingIssueGivesTheEndDeclined()
     {
-        using var h = new RunHarness { PullBody = "Closes #12" };
+        using var h = new RunHarness { ClosingIssue = 12 };
         h.Labels.AddRange(["cleanup", "refactor"]);
         RunResult<Answered> result = await h.RunFeedbackAsync(Ct);
         Assert.Null(result.Passed);
