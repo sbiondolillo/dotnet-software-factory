@@ -175,6 +175,15 @@ class RenderTests(unittest.TestCase):
         )
         self.assertIn("### Test strength, by mutation: no Report\n- not idle after 1800 s\n\n", body)
 
+    def test_a_last_message_of_several_lines_stays_in_its_code_block(self):
+        text = "I will not.\n```\nThe change is out of scope.\n````"
+        outcome, body = judge.render([judge.Missing("Regressions", "refused", text)], None, self.PR, [], "the spec")
+        self.assertIn(
+            "### Regressions: no Report\n- refused\n  `````\n  I will not.\n  ```\n  The change is out of scope.\n"
+            "  ````\n  `````\n\n",
+            body,
+        )
+
 
 REJECT = (
     '{"verdict": "reject", "findings": [{"file": "a.py", "line": 3, "fault": "the fault", "evidence": "the output", '

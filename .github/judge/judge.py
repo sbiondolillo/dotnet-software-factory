@@ -29,6 +29,7 @@ import json
 import os
 import re
 import sys
+import textwrap
 import time
 from dataclasses import dataclass
 
@@ -122,6 +123,13 @@ class Missing:
     text: str
 
 
+def block(text):
+    """The text as a fenced code block inside a list item: each line indented two spaces, and a fence longer than the
+    longest run of backticks in the text, so no line of the text closes the block."""
+    fence = "`" * max(3, max((len(run) for run in re.findall(r"`+", text)), default=0) + 1)
+    return textwrap.indent(f"{fence}\n{text}\n{fence}", "  ")
+
+
 def reports_of(results):
     """The real Reports among the results of the angles, in their order."""
     return [r for r in results if not isinstance(r, Missing)]
@@ -195,7 +203,7 @@ def render(results, synthesis, pr, costs, spec):
         if isinstance(r, Missing):
             lines += [f"### {r.angle}: no Report", f"- {r.reason}"]
             if r.text.strip():
-                lines.append(f"  ```\n  {r.text.strip()[:800]}\n  ```")
+                lines.append(block(r.text.strip()[:800]))
             lines.append("")
             continue
         lines.append(f"### {r['angle']}: {r['verdict']}")
