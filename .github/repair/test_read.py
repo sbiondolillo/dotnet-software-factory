@@ -14,10 +14,8 @@ import runs
 import traveler
 from fake_anthropic import FakeApi
 from fake_github import Fail, FakeGitHub
+from repo import comments_path
 from sessions import Session
-
-# The module under test puts .github/shared/ on the path, so this test also runs on its own.
-comments = read.comments
 
 SID = "sesn_1"
 GOOD = '{"class": "code", "title": "t", "body": "b", "evidence": ["e"]}'
@@ -321,14 +319,14 @@ RED = {"id": 9, "head_sha": "abc1234", "html_url": "https://github.com/o/r/actio
 def take_comments(gh, number, sha):
     """The target of comments.py, issue or pull request <number> or the commit <sha>, takes a post, and its list of
     comments holds each one posted."""
-    path = comments.path("o/r", number, sha)
+    path = comments_path("o/r", number, sha)
     gh.answer_list(path, lambda: [{"body": text} for text in posted(gh, number, sha)])
     gh.answer(("api", "-X", "POST", path, "--input", "-"), "{}")
 
 
 def posted(gh, number, sha):
     """The body of each comment that comments.py posted on the target."""
-    post = ("api", "-X", "POST", comments.path("o/r", number, sha), "--input", "-")
+    post = ("api", "-X", "POST", comments_path("o/r", number, sha), "--input", "-")
     return [json.loads(text)["body"] for args, text in gh.calls if args == post]
 
 

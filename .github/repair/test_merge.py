@@ -15,9 +15,7 @@ import traveler
 import verdict
 from fake_github import Fail, FakeGitHub, closes
 from github import GitHubError
-
-# The module under test puts .github/shared/ on the path, so this test also runs on its own.
-comments = merge.comments
+from repo import comments_path
 
 with open(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "workflows", "factory.yml"), encoding="utf-8"
@@ -253,8 +251,8 @@ PR_VIEW = ("pr", "view", "7", "-R", REPO, "--json", merge.FIELDS)
 ARM = ("pr", "merge", "7", "-R", REPO, "--auto", "--squash", "--delete-branch", "--match-head-commit", SHA)
 DISARM = ("pr", "merge", "7", "-R", REPO, "--disable-auto")
 VERDICT = ("api", f"repos/{REPO}/commits/{SHA}/check-runs?check_name={verdict.CHECK}&filter=latest")
-COMMENT = ("api", "-X", "POST", comments.path(REPO, 5), "--input", "-")
-PR_COMMENT = ("api", "-X", "POST", comments.path(REPO, 7), "--input", "-")
+COMMENT = ("api", "-X", "POST", comments_path(REPO, 5), "--input", "-")
+PR_COMMENT = ("api", "-X", "POST", comments_path(REPO, 7), "--input", "-")
 # The verb of a dispatch, one word on each line, so the grep of #516's `## Done when` matches runs.py alone.
 START = (
     "workflow",
@@ -400,9 +398,9 @@ class BaseTests(unittest.TestCase):
     @staticmethod
     def take_comments(gh):
         """Issue 5 and pull request 7 take the comments of comments.py, and each list holds each one posted there."""
-        gh.answer_list(comments.path(REPO, 5), lambda: [{"body": text} for text in BaseTests.comments(gh)])
+        gh.answer_list(comments_path(REPO, 5), lambda: [{"body": text} for text in BaseTests.comments(gh)])
         gh.answer(COMMENT, "{}")
-        gh.answer_list(comments.path(REPO, 7), lambda: [{"body": text} for text in BaseTests.comments(gh, PR_COMMENT)])
+        gh.answer_list(comments_path(REPO, 7), lambda: [{"body": text} for text in BaseTests.comments(gh, PR_COMMENT)])
         gh.answer(PR_COMMENT, "{}")
 
     @staticmethod
@@ -416,7 +414,7 @@ class BaseTests(unittest.TestCase):
             merge.stop(gh, REPO, 7, 5, SHA, "No merge.")
         [text] = self.comments(gh)
         self.assertIn(f"repair-merge:{SHA}", text.splitlines()[0])
-        self.assertEqual(gh.count("api_list", comments.path(REPO, 5)), 2)
+        self.assertEqual(gh.count("api_list", comments_path(REPO, 5)), 2)
 
     def test_a_pull_request_on_main_arms_the_merge_and_closes_the_issue(self):
         gh = self.run_main("main", "main", "main")

@@ -129,6 +129,7 @@ import runs  # noqa: E402
 import traveler  # noqa: E402
 import verdict  # noqa: E402
 from github import GitHub, GitHubError  # noqa: E402
+from repo import Repo  # noqa: E402
 
 LABEL = "repair"
 FACTORY_LABEL = "factory"
@@ -296,7 +297,7 @@ def red_run_branch(gh, repo, ticket):
 def stop(gh, repo, number, issue, sha, text):
     """One comment for the SHA, on the issue, or on the pull request when it closes no issue."""
     target = issue if issue is not None else number
-    comments.post_once(gh, repo, target, f"<!-- repair-merge:{sha} -->", text)
+    comments.post_once(Repo(gh, repo), target, f"<!-- repair-merge:{sha} -->", text)
     print(f"repair: no merge of #{number} on {sha[:7]}: {text.splitlines()[0]}")
 
 
@@ -304,7 +305,7 @@ def wait_for_judge(gh, repo, sha, deadline, wait):
     """The conclusion of judge-verdict on the commit once its check run is complete."""
 
     def judged():
-        state = verdict.latest(gh, repo, sha)
+        state = verdict.latest(Repo(gh, repo), sha)
         done = state is not None and state[0] == "completed"
         return (state[1] or "") if done else None, f"{verdict.CHECK} on {sha[:7]} is {state[0] if state else 'absent'}"
 

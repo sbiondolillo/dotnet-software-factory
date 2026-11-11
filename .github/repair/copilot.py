@@ -32,6 +32,7 @@ import closing  # noqa: E402
 import comments  # noqa: E402
 import runs  # noqa: E402
 from github import GitHub  # noqa: E402
+from repo import Repo  # noqa: E402
 
 LABEL = "repair"
 FIELDS = f"state,labels,headRefOid,{closing.FIELD}"
@@ -50,7 +51,7 @@ def output(**values):
 def stop(gh, repo, number, issue, sha, text):
     """One comment for the SHA, on the issue, or on the pull request when it closes no issue."""
     target = issue if issue is not None else number
-    comments.post_once(gh, repo, target, f"<!-- repair-copilot:{sha} -->", text)
+    comments.post_once(Repo(gh, repo), target, f"<!-- repair-copilot:{sha} -->", text)
     print(f"repair: unsettled on {sha[:7]}: {text.splitlines()[0]}")
 
 
