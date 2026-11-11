@@ -8,9 +8,9 @@ public sealed class FeedbackRefactorRunTests
     private const string CheckBody = "## Check\n\n```sh\ngrep -q Greeting src/Core/Greeter.cs\n```\n";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static RunHarness Refactor(string label = "refactor", string body = CheckBody, string? pull = "Closes #15")
+    private static RunHarness Refactor(string label = "refactor", string body = CheckBody, int? closing = 15)
     {
-        var h = new RunHarness { PullBody = pull, Body = body };
+        var h = new RunHarness { ClosingIssue = closing, Body = body };
         h.Labels.Add(label);
         return h;
     }
@@ -80,9 +80,9 @@ public sealed class FeedbackRefactorRunTests
     }
 
     [Fact]
-    public async Task ABodyWithNoClosingLineReadsNoIssue()
+    public async Task APullRequestWithNoClosingIssueReadsNoIssue()
     {
-        using RunHarness h = Refactor(pull: "Answers the review.");
+        using RunHarness h = Refactor(closing: null);
         h.FirstBuildChanges.Add("tests/Specs/Steps/GreetingSteps.cs");
         await h.RunFeedbackAsync(Ct);
         Assert.DoesNotContain(h.Requests, r => r.Uri.Contains("/issues/", StringComparison.Ordinal));

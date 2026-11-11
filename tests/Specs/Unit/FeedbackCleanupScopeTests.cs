@@ -10,7 +10,7 @@ public sealed class FeedbackCleanupScopeTests
 
     private static RunHarness Cleanup(string body = CheckBody)
     {
-        var h = new RunHarness { PullBody = "Closes #11", Body = body };
+        var h = new RunHarness { ClosingIssue = 11, Body = body };
         h.Labels.Add("cleanup");
         return h;
     }
@@ -21,18 +21,6 @@ public sealed class FeedbackCleanupScopeTests
         int id = arguments.IndexOf(GateSandbox.ContainerId);
         return id >= 0 && arguments.Skip(id + 1).Take(2).SequenceEqual(["sh", "-c"]);
     }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("Closes #")]
-    [InlineData("Closes #abc")]
-    [InlineData("See the issue")]
-    public void ABodyWithNoClosingLineNamesNoIssue(string? body) => Assert.Null(PullRequests.ParseClosingIssue(body));
-
-    [Fact]
-    public void AClosingLineAmongOtherTextNamesItsIssue() =>
-        Assert.Equal(11, PullRequests.ParseClosingIssue("Answers the review.\n\nCloses #11\nThanks"));
 
     [Fact]
     public async Task AnIssueWithoutTheLabelRunsNoCheckAndAppliesNoScope()

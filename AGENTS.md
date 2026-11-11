@@ -239,6 +239,12 @@ between requests and the reading of `Retry-After`.
   GitHub closes the issue when the pull request merges into the default branch. GitHub
   reads a closing keyword such as `close` inside a negation too: `does not close #<n>`
   closes `<n>` on the merge. A body that leaves an issue open names it as `Part of #<n>`.
+- The closing issue of a pull request is the first issue of its own repo under
+  `closingIssuesReferences`. Core reads it with `PullRequests.ReadClosingIssueAsync`, and
+  the Python under `.github/` reads it with `.github/shared/closing.py`. No code parses a
+  closing keyword. GitHub lists the issue late for a new pull request: in 6 of 8 opens on
+  2026-11-11, the first read gave an empty list. A read about 1.2 seconds after the open
+  listed the issue in each one. A read right after an open polls for it.
 - GitHub stores a comment on an issue when its body is 262144 bytes or fewer in UTF-8.
   A longer body gets the status code 422, and `errors[].message` is
   `Body is too long (maximum is 65536 characters)`. The limit counts bytes: GitHub

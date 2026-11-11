@@ -7,10 +7,11 @@ using Polly.Retry;
 
 namespace Core;
 
-/// <summary>Sends requests to GitHub's REST API through an <see cref="HttpClient"/>.</summary>
+/// <summary>Sends requests to GitHub's REST API and its GraphQL API through an <see cref="HttpClient"/>.</summary>
 public sealed class GitHubClient(HttpClient httpClient, string token, TimeSpan? baseWait = null, TimeSpan? timeout = null)
 {
     private const string Root = "https://api.github.com";
+    private const string GraphQLFaultText = "Something went wrong while executing your query";
 
     private readonly ResiliencePipeline<Answer> _pipeline = BuildPipeline(baseWait ?? TimeSpan.FromSeconds(2));
 
@@ -38,6 +39,48 @@ public sealed class GitHubClient(HttpClient httpClient, string token, TimeSpan? 
 
         using var document = JsonDocument.Parse(string.IsNullOrWhiteSpace(answer.Text) ? "null" : answer.Text);
         return document.RootElement.Clone();
+    }
+
+    /// <summary>
+    /// Sends a query or a mutation to GitHub's GraphQL API and gives back the <c>data</c> of the answer. An answer with
+    /// <c>errors</c> throws <see cref="GitHubGraphQLException"/> with each message. GitHub's fault
+    /// <c>Something went wrong while executing your query</c> is sent again after <see cref="BaseWait"/>, up to 4 sends in all.
+    /// </summary>
+    public async Task<JsonElement> SendGraphQLAsync(string query, object variables, CancellationToken cancellationToken = default)
+    {
+        const int MaxSends = 4;
+        for (int sent = 1; ; sent++)
+        {
+            try
+            {
+                return await SendGraphQLOnceAsync(query, variables, cancellationToken).ConfigureAwait(false);
+            }
+            catch (GitHubGraphQLException ex) when (sent < MaxSends && ex.Messages.Any(m => m.StartsWith(GraphQLFaultText, StringComparison.Ordinal)))
+            {
+                if (BaseWait > TimeSpan.Zero)
+                {
+                    await Task.Delay(BaseWait, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+    }
+
+    private async Task<JsonElement> SendGraphQLOnceAsync(string query, object variables, CancellationToken cancellationToken)
+    {
+        string json = JsonSerializer.Serialize(new { query, variables });
+        JsonElement answer = await SendAsync(HttpMethod.Post, "/graphql", json, cancellationToken).ConfigureAwait(false);
+        if (answer.ValueKind is JsonValueKind.Object && answer.TryGetProperty("errors", out JsonElement errors) && errors.ValueKind is JsonValueKind.Array && errors.GetArrayLength() is not 0)
+        {
+            var messages = new List<string>();
+            foreach (JsonElement error in errors.EnumerateArray())
+            {
+                messages.Add(error.ValueKind is JsonValueKind.Object && error.TryGetProperty("message", out JsonElement m) ? m.GetString() ?? "" : "");
+            }
+
+            throw new GitHubGraphQLException(messages);
+        }
+
+        return answer.GetProperty("data");
     }
 
     private static bool IsTransient(Answer answer) =>

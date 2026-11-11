@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 
 namespace Core;
@@ -11,6 +10,8 @@ public sealed class PullRequests(
     Func<TimeSpan, CancellationToken, Task>? delay = null,
     TimeProvider? time = null)
 {
+    private const string ClosingIssuesQuery = "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { closingIssuesReferences(first: 100) { nodes { number repository { name owner { login } } } } } } }";
+
     private readonly Func<TimeSpan, CancellationToken, Task> _delay = delay ?? ((span, token) => Task.Delay(span, token));
     private readonly TimeProvider _time = time ?? TimeProvider.System;
 
@@ -97,26 +98,30 @@ public sealed class PullRequests(
         return json.GetProperty("head").GetProperty("ref").GetString() ?? "";
     }
 
-    /// <summary>Reads the body of a pull request; empty when it has none.</summary>
-    public async Task<string> ReadBodyAsync(IssueNumber pullRequest, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Reads the issue that the merge of a pull request closes, as GitHub lists it under <c>closingIssuesReferences</c>: the
+    /// first issue of the pull request's own repo, or null when GitHub lists none. An issue of another repo is skipped, and the
+    /// names of the repo compare without case.
+    /// </summary>
+    public async Task<IssueNumber?> ReadClosingIssueAsync(IssueNumber pullRequest, CancellationToken cancellationToken = default)
     {
-        JsonElement json = await ReadAsync(pullRequest, cancellationToken).ConfigureAwait(false);
-        return json.ValueKind is JsonValueKind.Object && json.TryGetProperty("body", out JsonElement body) && body.ValueKind is JsonValueKind.String ? body.GetString() ?? "" : "";
-    }
-
-    /// <summary>The number of the issue that a line <c>Closes #&lt;n&gt;</c> of a pull request body names, or null when there is none.</summary>
-    public static int? ParseClosingIssue(string? body)
-    {
-        if (body is null)
+        ArgumentNullException.ThrowIfNull(pullRequest);
+        RepoName repo = pullRequest.Repo;
+        var variables = new { owner = repo.Owner, name = repo.Name, number = pullRequest.Number };
+        JsonElement data = await client.SendGraphQLAsync(ClosingIssuesQuery, variables, cancellationToken).ConfigureAwait(false);
+        JsonElement nodes = data.GetProperty("repository").GetProperty("pullRequest").GetProperty("closingIssuesReferences").GetProperty("nodes");
+        foreach (JsonElement node in nodes.EnumerateArray())
         {
-            return null;
+            JsonElement repository = node.GetProperty("repository");
+            string owner = repository.GetProperty("owner").GetProperty("login").GetString() ?? "";
+            string name = repository.GetProperty("name").GetString() ?? "";
+            if (string.Equals(owner, repo.Owner, StringComparison.OrdinalIgnoreCase) && string.Equals(name, repo.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                return new IssueNumber(repo, node.GetProperty("number").GetInt32());
+            }
         }
 
-        System.Text.RegularExpressions.Match match = System.Text.RegularExpressions.Regex.Match(
-            body,
-            @"^\s*Closes #(\d+)\s*$",
-            System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
-        return match.Success && int.TryParse(match.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out int number) ? number : null;
+        return null;
     }
 
     private Task<JsonElement> ReadAsync(IssueNumber pullRequest, CancellationToken cancellationToken)

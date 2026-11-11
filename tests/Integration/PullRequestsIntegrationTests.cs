@@ -102,4 +102,35 @@ public sealed class PullRequestsIntegrationTests
             client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/git/ref/heads/{head}", null, ct));
         Assert.Equal(404, gone.StatusCode);
     }
+
+    /// <summary>
+    /// GitHub lists the closing issue of a new pull request late: in 6 of 8 opens on 2026-11-11 the first read gave an empty
+    /// list, and a read about 1.2 seconds after the open listed the issue. So the test reads each second, up to 30 times.
+    /// </summary>
+    [Fact]
+    public async Task AFixesLineInTheBodyMakesItsIssueTheClosingIssue()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        GitHubClient client = Client();
+        await Cleanup.RunAsync(async cleanup =>
+        {
+            JsonElement created = await client.SendAsync(HttpMethod.Post, $"/repos/{Owner}/{Repo}/issues", JsonSerializer.Serialize(new { title = "closing issue test" }), ct);
+            int issue = created.GetProperty("number").GetInt32();
+            cleanup.Add($"close the issue #{issue}", () => client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/issues/{issue}", "{\"state\":\"closed\"}"));
+            string branch = await CreateBranchAsync(client, cleanup, ct);
+            var sut = new PullRequests(client);
+            PullRequest pull = await sut.OpenAsync(new RepoName(Owner, Repo), branch, "main", "test " + branch, $"Fixes #{issue}", ct);
+            cleanup.Add($"close the pull request #{pull.Number}", () => client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/pulls/{pull.Number}", "{\"state\":\"closed\"}"));
+
+            var number = new IssueNumber(new RepoName(Owner, Repo), pull.Number);
+            IssueNumber? closing = await sut.ReadClosingIssueAsync(number, ct);
+            for (int read = 1; read < 30 && closing is null; read++)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1), ct);
+                closing = await sut.ReadClosingIssueAsync(number, ct);
+            }
+
+            Assert.Equal(new IssueNumber(new RepoName(Owner, Repo), issue), closing);
+        });
+    }
 }

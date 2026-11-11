@@ -110,10 +110,10 @@ public sealed class SettleHarness : IDisposable
     /// <summary>The body of the issue, or null for the default.</summary>
     public string? IssueBody { get; set; }
 
-    /// <summary>The body of the pull request, or null for an answer with no body.</summary>
-    public string? PullBody { get; set; }
+    /// <summary>The issue that GitHub lists as the closing issue of the pull request, or null for none.</summary>
+    public int? ClosingIssue { get; set; }
 
-    /// <summary>The labels of the issue 2, which a <see cref="PullBody"/> of "Closes #2" names, or null for <see cref="Labels"/>.</summary>
+    /// <summary>The labels of the issue 2, which a <see cref="ClosingIssue"/> of 2 names, or null for <see cref="Labels"/>.</summary>
     public List<string>? ClosingLabels { get; set; }
 
     /// <summary>What the check command answers after the build of that number (0 is before the first build); a number with no entry answers red before the first build and green after one.</summary>
@@ -454,9 +454,7 @@ public sealed class SettleHarness : IDisposable
         {
             string head = HeadSha(++_headReads);
             _lastHead = head;
-            return (200, PullBody is null
-                ? JsonSerializer.Serialize(new { node_id = "PR_kwDOUpm1Qc6abc", head = new { sha = head, @ref = HeadRef } })
-                : JsonSerializer.Serialize(new { node_id = "PR_kwDOUpm1Qc6abc", body = PullBody, head = new { sha = head, @ref = HeadRef } }));
+            return (200, JsonSerializer.Serialize(new { node_id = "PR_kwDOUpm1Qc6abc", head = new { sha = head, @ref = HeadRef } }));
         }
 
         if (path.Contains("/issues/", StringComparison.Ordinal))
@@ -483,6 +481,14 @@ public sealed class SettleHarness : IDisposable
                 ? new[] { new { id = ThreadA, isResolved, path = "src/Core/Checkout.cs", line = (int?)14, comments = new { nodes = new[] { new { author = new { login = "sbiondolillo" }, body = ThreadABody } } } } }
                 : [];
             return (200, JsonSerializer.Serialize(new { data = new { repository = new { pullRequest = new { reviewThreads = new { nodes } } } } }));
+        }
+
+        if (query.Contains("closingIssuesReferences", StringComparison.Ordinal))
+        {
+            var closing = ClosingIssue is int number
+                ? new[] { new { number, repository = new { name = Repo.Name, owner = new { login = Repo.Owner } } } }
+                : [];
+            return (200, JsonSerializer.Serialize(new { data = new { repository = new { pullRequest = new { closingIssuesReferences = new { nodes = closing } } } } }));
         }
 
         if (query.Contains("addPullRequestReviewThreadReply", StringComparison.Ordinal))
