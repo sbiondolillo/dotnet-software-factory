@@ -1,8 +1,9 @@
 """The GitHub adapter of the judge and the repair loop: the one place that runs `gh`, the GitHub CLI.
 
-It wraps the CLI and nothing else. An operation of the repair loop and a retry live in the caller. Each adapter holds
-one credential, and every function that talks to GitHub takes the adapter as a parameter. A script's `main` builds
-it, so a test hands a FakeGitHub of fake_github.py down in its place.
+It wraps the CLI and nothing else. repo.py is the one module that calls it: every function that talks to GitHub takes
+a Repo of repo.py as a parameter, and a test hands down the FakeRepo of fake_repo.py. Each adapter holds one credential.
+A script's `main` builds the adapter and its Repo. The fake adapter of fake_github.py stands in for it in the tests of
+Repo.
 """
 
 import json

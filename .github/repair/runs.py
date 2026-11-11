@@ -1,8 +1,6 @@
-"""The runs of the repair loop: the one module that starts a workflow, lists the runs of factory.yml and waits for a
-run, over the GitHub adapter of .github/shared/github.py.
+"""The runs of factory.yml for the repair loop: the one module that finds the run a dispatch started and waits for a
+run. `repo` is a Repo of .github/shared/repo.py, which starts, lists and reads the runs.
 
-- `start` dispatches a workflow at a ref with its inputs, and gives back nothing. merge.py starts `ci` with it, and
-  read.py starts the story once more on a flake.
 - `dispatch` starts factory.yml on an issue and gives back the run it started: the newest run titled `#<n>` by the
   run-name of factory.yml, created since the dispatch, on the ref of the dispatch, and absent from the list read
   before the dispatch. The title check is #469's, so a run of another issue dispatched in the same window is not
@@ -21,32 +19,23 @@ dispatches of one title inside one window of SKEW seconds.
 step with one line, as the hand-written loops it replaces did.
 """
 
-import json
 import sys
 import time
 from datetime import datetime
 
 WORKFLOW = "factory.yml"
-FIELDS = "databaseId,displayTitle,headSha,status,conclusion,url,createdAt"
-LIMIT = "30"
 SKEW = 30
 
 
-def url(repo, run_id):
-    return f"https://github.com/{repo}/actions/runs/{run_id}"
+def url(name, run_id):
+    """The web address of the run in the repo `name`."""
+    return f"https://github.com/{name}/actions/runs/{run_id}"
 
 
-def start(gh, repo, workflow, ref=None, inputs=None):
-    """Dispatches the workflow at the ref, or at the default branch with none, with each input as `-f name=value`."""
-    at = ["--ref", ref] if ref else []
-    fields = [arg for name, value in (inputs or {}).items() for arg in ("-f", f"{name}={value}")]
-    gh.run("workflow", "run", workflow, "-R", repo, *at, *fields)
-
-
-def find(gh, repo, number=None, since=None, *, branch=None, status=None, event=None, exclude=()):
+def find(repo, number=None, since=None, *, branch=None, status=None, event=None, exclude=()):
     """The newest run of factory.yml titled `#<number>`, created at `since` or later, on the branch, with the status
     and of the event, with an id outside `exclude`, or None. Each filter left out matches any run."""
-    for run in listed(gh, repo, branch, status, event):
+    for run in repo.workflow_runs(WORKFLOW, branch, status, event):
         if number is not None and run["displayTitle"] != f"#{number}":
             continue
         if since is not None and created(run) < since:
@@ -57,34 +46,21 @@ def find(gh, repo, number=None, since=None, *, branch=None, status=None, event=N
     return None
 
 
-def listed(gh, repo, branch=None, status=None, event=None):
-    """The runs of factory.yml on the branch, with the status and of the event, newest first."""
-    flags = [
-        arg
-        for flag, value in (("--branch", branch), ("--status", status), ("--event", event))
-        if value
-        for arg in (flag, value)
-    ]
-    return json.loads(
-        gh.run("run", "list", "-R", repo, "--workflow", WORKFLOW, *flags, "--limit", LIMIT, "--json", FIELDS)
-    )
-
-
 def created(run):
     """The time of `createdAt`, in the seconds of time.time()."""
     return datetime.fromisoformat(run["createdAt"].replace("Z", "+00:00")).timestamp()
 
 
-def dispatch(gh, repo, number, *, ref=None, inputs=None, timeout=180, every=10):
+def dispatch(repo, number, *, ref=None, inputs=None, timeout=180, every=10):
     """Starts factory.yml on issue <number> at the ref, with `issue=<number>` and then each input, and gives back the
     run it started once the list holds it. The job exits when no such run shows within the timeout."""
     since = time.time() - SKEW
-    before = {run["databaseId"] for run in listed(gh, repo, ref, event="workflow_dispatch")}
-    start(gh, repo, WORKFLOW, ref, {"issue": number, **(inputs or {})})
+    before = {run["databaseId"] for run in repo.workflow_runs(WORKFLOW, ref, None, "workflow_dispatch")}
+    repo.dispatch_workflow(WORKFLOW, ref, {"issue": number, **(inputs or {})})
     where = f" at {ref}" if ref else ""
     return poll(
         lambda: (
-            find(gh, repo, number, since, branch=ref, event="workflow_dispatch", exclude=before),
+            find(repo, number, since, branch=ref, event="workflow_dispatch", exclude=before),
             f"the dispatch of {WORKFLOW}{where} for #{number} shows no run",
         ),
         time.time() + timeout,
@@ -92,18 +68,13 @@ def dispatch(gh, repo, number, *, ref=None, inputs=None, timeout=180, every=10):
     )
 
 
-def read(gh, repo, run_id):
-    """The status and the conclusion of the run."""
-    return json.loads(gh.run("run", "view", str(run_id), "-R", repo, "--json", "status,conclusion"))
-
-
-def wait(gh, repo, run_id, deadline, every, name="the run"):
+def wait(repo, run_id, deadline, every, name="the run"):
     """The conclusion of the run once its status is `completed`. The job exits when the deadline passes first."""
 
     def state():
-        run = read(gh, repo, run_id)
+        run = repo.run_status(run_id)
         done = run["status"] == "completed"
-        return (run["conclusion"] or "") if done else None, f"{name} {url(repo, run_id)} is {run['status']}"
+        return (run["conclusion"] or "") if done else None, f"{name} {url(repo.name, run_id)} is {run['status']}"
 
     return poll(state, deadline, every)
 

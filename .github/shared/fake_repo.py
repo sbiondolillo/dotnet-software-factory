@@ -1,4 +1,4 @@
-"""The fake of Repo of repo.py, for the unit tests of the judge, verdict.py and comments.py.
+"""The fake of Repo of repo.py, for the unit tests of the judge, the repair loop, verdict.py and comments.py.
 
 It holds scripted answers and no rule of GitHub: a write changes nothing in it. It writes out no method of Repo. Each
 call resolves its name on Repo and binds its arguments against the signature of that method, so a name that Repo
