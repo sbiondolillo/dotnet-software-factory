@@ -115,7 +115,6 @@ Arguments: the number of the repair pull request, and the head SHA the Copilot s
 """
 
 import difflib
-import json
 import os
 import re
 import signal
@@ -135,10 +134,6 @@ LABEL = "repair"
 FACTORY_LABEL = "factory"
 WORKFLOW = runs.WORKFLOW
 HEADS = ("repair/", "factory/")
-FIELDS = (
-    "number,state,headRefName,headRefOid,baseRefName,baseRefOid,labels,url,mergeCommit,mergedBy,changedFiles,"
-    + closing.FIELD
-)
 # The paths a repair never changes, as #406 and its addendum decided. An entry that ends with a slash holds each path
 # under it. OPEN is the exception to GUARDED. A diff of FACTORY changes no key of KEYS, which holds each key with
 # whether it counts at column 0 alone.
@@ -167,18 +162,6 @@ ON = re.compile(rf"""^{PREFIX}(?P<quote>["']?)on(?P=quote)[ \t]*:""", re.I)
 # start inside a flow collection alone, and the collection's opener is refused first.
 NODE = r"(?:^[ \t]*|[-?][ \t]+|:[ \t]*)"
 FORM = re.compile(rf"""{NODE}(?:[\[{{!&*"']|\?(?:[ \t]|$))""")
-
-
-def read_pull_request(gh, repo, number):
-    return json.loads(gh.run("pr", "view", str(number), "-R", repo, "--json", FIELDS))
-
-
-def default_branch(gh, repo):
-    return gh.run("api", f"repos/{repo}", "--jq", ".default_branch").strip()
-
-
-def read_issue(gh, repo, issue):
-    return json.loads(gh.run("issue", "view", str(issue), "-R", repo, "--json", "body,labels"))
 
 
 def guarded(paths):
@@ -254,17 +237,6 @@ def changed_keys(base, head):
     return [cause for cause in ("on:", "permissions:", UNREADABLE) if cause in causes]
 
 
-def file_at(gh, repo, path, sha):
-    """The text of the file at the commit, or None when the commit holds no such file. Any other failure ends the job,
-    so a failed read merges nothing."""
-    try:
-        return gh.run("api", "-H", "Accept: application/vnd.github.raw+json", f"repos/{repo}/contents/{path}?ref={sha}")
-    except GitHubError as error:
-        if error.status == 404:
-            return None
-        raise
-
-
 def refused(paths, keys):
     """The items of the refusal comment: each guarded path, then FACTORY with each changed key."""
     items = [f"`{path}`" for path in paths]
@@ -277,79 +249,76 @@ def refused(paths, keys):
     return items
 
 
-def changed_files(gh, repo, number):
-    """The files of the diff of the pull request, as (the count of entries, every path). A rename gives both paths.
-    api_list reads each entry as one JSON line, so a path that holds a line feed stays one path."""
-    entries = gh.api_list(f"repos/{repo}/pulls/{number}/files")
+def changed_files(repo, number):
+    """The files of the diff of the pull request, as (the count of entries, every path). A rename gives both paths."""
+    entries = repo.files(number)
     return len(entries), [
         path for entry in entries for path in (entry["filename"], entry.get("previous_filename")) if path
     ]
 
 
-def red_run_branch(gh, repo, ticket):
+def red_run_branch(repo, ticket):
     """The head branch of the red run that the traveler names, or None with no traveler or a run of another repo."""
-    match = ticket and re.fullmatch(rf"https://github\.com/{re.escape(repo)}/actions/runs/(\d+)", ticket.run)
+    match = ticket and re.fullmatch(rf"https://github\.com/{re.escape(repo.name)}/actions/runs/(\d+)", ticket.run)
     if not match:
         return None
-    return json.loads(gh.run("api", f"repos/{repo}/actions/runs/{match.group(1)}"))["head_branch"]
+    return repo.workflow_run(match.group(1))["head_branch"]
 
 
-def stop(gh, repo, number, issue, sha, text):
+def stop(repo, number, issue, sha, text):
     """One comment for the SHA, on the issue, or on the pull request when it closes no issue."""
     target = issue if issue is not None else number
-    comments.post_once(Repo(gh, repo), target, f"<!-- repair-merge:{sha} -->", text)
+    comments.post_once(repo, target, f"<!-- repair-merge:{sha} -->", text)
     print(f"repair: no merge of #{number} on {sha[:7]}: {text.splitlines()[0]}")
 
 
-def wait_for_judge(gh, repo, sha, deadline, wait):
+def wait_for_judge(repo, sha, deadline, wait):
     """The conclusion of judge-verdict on the commit once its check run is complete."""
 
     def judged():
-        state = verdict.latest(Repo(gh, repo), sha)
+        state = verdict.latest(repo, sha)
         done = state is not None and state[0] == "completed"
         return (state[1] or "") if done else None, f"{verdict.CHECK} on {sha[:7]} is {state[0] if state else 'absent'}"
 
     return runs.poll(judged, deadline, wait)
 
 
-def disarm(gh, repo, number):
+def disarm(repo, number):
     """The auto-merge goes off. A failure of the disarm is one line, so the caller's own exit keeps its message."""
     try:
-        gh.run("pr", "merge", str(number), "-R", repo, "--disable-auto")
+        repo.disable_auto_merge(number)
     except GitHubError as error:
         print(f"repair: the disarm of pull request #{number} failed: {error}")
     else:
         print(f"repair: disarmed the auto-merge of pull request #{number}")
 
 
-def arm_and_wait(gh, repo, number, sha, base, deadline, wait):
+def arm_and_wait(repo, number, sha, base, deadline, wait):
     """Arms the auto-merge and waits for the merge. Any exit before the merge, a timeout, a closed pull request, a
     failed read or a cancel of the job, disarms the auto-merge first, so no armed merge outlives the step. The arm is
     inside the try, so a cancel during the arm command disarms too. A cancel sends SIGINT, which is KeyboardInterrupt,
     then SIGTERM, which the handler turns into an exit."""
     signal.signal(signal.SIGTERM, lambda *_: sys.exit("repair: the job was cancelled"))
     try:
-        gh.run(
-            "pr", "merge", str(number), "-R", repo, "--auto", "--squash", "--delete-branch", "--match-head-commit", sha
-        )
+        repo.enable_auto_merge(number, sha)
         print(f"repair: armed the auto-merge of pull request #{number} on {sha[:7]}")
-        return wait_for_merge(gh, repo, number, sha, base, deadline, wait)
+        return wait_for_merge(repo, number, sha, base, deadline, wait)
     except BaseException:
-        disarm(gh, repo, number)
+        disarm(repo, number)
         raise
 
 
-def wait_for_merge(gh, repo, number, sha, base, deadline, wait):
+def wait_for_merge(repo, number, sha, base, deadline, wait):
     """The merged pull request, or None once its head moved off the settled SHA or its base off the default branch,
     with the auto-merge disarmed."""
     while True:
-        pr = read_pull_request(gh, repo, number)
+        pr = repo.pull_request(number)
         if pr["state"] == "MERGED":
             return pr
         if pr["state"] != "OPEN":
             sys.exit(f"repair: pull request #{number} is {pr['state'].lower()} before the merge")
         if pr["headRefOid"] != sha or pr["baseRefName"] != base:
-            disarm(gh, repo, number)
+            disarm(repo, number)
             print(
                 f"repair: the head or the base of pull request #{number} moved off {sha[:7]} on {base} while the "
                 "auto-merge was armed; no merge"
@@ -363,44 +332,42 @@ def wait_for_merge(gh, repo, number, sha, base, deadline, wait):
         time.sleep(wait)
 
 
-def close_issue(gh, repo, issue, pr):
+def close_issue(repo, issue, pr):
     commit = (pr.get("mergeCommit") or {}).get("oid") or ""
     merger = (pr.get("mergedBy") or {}).get("login") or ""
     text = f"Merged as `{commit}` by pull request #{pr['number']}, merged by `{merger}`."
     if issue is None:
         print(f"repair: {text} The pull request closes no issue.")
         return
-    state = json.loads(gh.run("issue", "view", str(issue), "-R", repo, "--json", "state"))["state"]
+    state = repo.issue(issue)["state"]
     if state != "OPEN":
         print(f"repair: issue #{issue} is {state.lower()} already. {text}")
         return
-    gh.run("issue", "close", str(issue), "-R", repo, "--comment", text)
+    repo.close_issue(issue, text)
     print(f"repair: closed issue #{issue}. {text}")
 
 
-def start_ci(gh, repo, branch):
+def start_ci(repo, branch):
     """A run of ci on the base branch, before the issue closes, so a failed close leaves no merge commit untested. A
     push by GITHUB_TOKEN starts no run, so the merge commit gets one here."""
-    runs.start(gh, repo, "ci.yml", branch)
+    repo.dispatch_workflow("ci.yml", branch)
     print(f"repair: started ci on {branch}")
 
 
-def delete_branch(gh, repo, branch):
+def delete_branch(repo, branch):
     """The fallback for a repo with delete_branch_on_merge off: the head branch goes when it still exists."""
-    refs = json.loads(gh.run("api", f"repos/{repo}/git/matching-refs/heads/{branch}"))
-    if f"refs/heads/{branch}" not in [ref["ref"] for ref in refs]:
-        return
-    gh.run("api", "--method", "DELETE", f"repos/{repo}/git/refs/heads/{branch}")
-    print(f"repair: deleted the branch {branch}")
+    if repo.delete_branch_if_present(branch):
+        print(f"repair: deleted the branch {branch}")
 
 
-def main(gh=None):
-    """`gh` is the adapter of GH_TOKEN, which a test hands in."""
+def main(repo=None):
+    """`repo` is the Repo of GH_TOKEN, which a test hands in."""
     if os.environ.get("REPAIR_ENABLED") != "true":
         print("repair: REPAIR_ENABLED is not true; no merge")
         return
-    gh = gh if gh is not None else GitHub.from_env()
-    repo = os.environ.get("GITHUB_REPOSITORY") or sys.exit("repair: GITHUB_REPOSITORY is not set")
+    if repo is None:
+        gh = GitHub.from_env()
+        repo = Repo(gh, os.environ.get("GITHUB_REPOSITORY") or sys.exit("repair: GITHUB_REPOSITORY is not set"))
     number = (
         int(sys.argv[1])
         if len(sys.argv) > 1 and sys.argv[1].isdigit()
@@ -412,7 +379,7 @@ def main(gh=None):
         else sys.exit("repair: give the head SHA the Copilot stage settled on")
     )
 
-    pr = read_pull_request(gh, repo, number)
+    pr = repo.pull_request(number)
     labels = [item["name"] for item in pr["labels"]]
     if pr["state"] != "OPEN" or LABEL not in labels:
         print(f"repair: pull request #{number} is {pr['state'].lower()} with the labels {labels}; nothing to merge")
@@ -429,11 +396,10 @@ def main(gh=None):
             "nothing to merge"
         )
         return
-    issue = closing.issue(pr, repo)
-    default = default_branch(gh, repo)
+    issue = closing.issue(pr, repo.name)
+    default = repo.default_branch()
     if pr["baseRefName"] != default:
         stop(
-            gh,
             repo,
             number,
             issue,
@@ -442,25 +408,23 @@ def main(gh=None):
             f"against the base, so a repair targets `{default}` alone. No merge. The owner reads the pull request.",
         )
         return
-    fields = read_issue(gh, repo, issue) if issue is not None else {"body": "", "labels": []}
+    fields = repo.issue(issue) if issue is not None else {"body": "", "labels": []}
     gated = FACTORY_LABEL in labels or FACTORY_LABEL in [item["name"] for item in fields.get("labels") or []]
-    count, paths = changed_files(gh, repo, number)
-    after = read_pull_request(gh, repo, number)
+    count, paths = changed_files(repo, number)
+    after = repo.pull_request(number)
     if after["headRefOid"] != sha or after["baseRefName"] != default:
         print(
             f"repair: the head or the base of pull request #{number} moved off {sha[:7]} on {default} while the "
             "job read its files; nothing to merge"
         )
         return
+    # Repo.file_at raises on any failure other than an absent file, which ends the job, so a failed read merges nothing.
     keys = (
-        changed_keys(file_at(gh, repo, FACTORY, after["baseRefOid"]), file_at(gh, repo, FACTORY, sha))
-        if FACTORY in paths
-        else []
+        changed_keys(repo.file_at(FACTORY, after["baseRefOid"]), repo.file_at(FACTORY, sha)) if FACTORY in paths else []
     )
     touched = refused(guarded(paths), keys)
     if touched or count < after["changedFiles"]:
         stop(
-            gh,
             repo,
             number,
             issue,
@@ -478,9 +442,8 @@ def main(gh=None):
         )
         return
     ticket = traveler.parse(fields["body"])
-    if issue is not None and red_run_branch(gh, repo, ticket) == pr["headRefName"]:
+    if issue is not None and red_run_branch(repo, ticket) == pr["headRefName"]:
         stop(
-            gh,
             repo,
             number,
             issue,
@@ -493,7 +456,6 @@ def main(gh=None):
     story_number = ticket.story if ticket else None
     if gated and story_number is None:
         stop(
-            gh,
             repo,
             number,
             issue,
@@ -508,10 +470,9 @@ def main(gh=None):
 
     wait = int(os.environ.get("REPAIR_POLL_SECONDS", "30"))
     deadline = time.time() + int(os.environ.get("REPAIR_MERGE_TIMEOUT_SECONDS", "1800"))
-    conclusion = wait_for_judge(gh, repo, sha, deadline, wait)
+    conclusion = wait_for_judge(repo, sha, deadline, wait)
     if conclusion != "success":
         stop(
-            gh,
             repo,
             number,
             issue,
@@ -522,16 +483,15 @@ def main(gh=None):
         return
     if gated:
         left = deadline - time.time()
-        run = runs.dispatch(gh, repo, story_number, ref=pr["headRefName"], inputs={"base": "main"})
+        run = runs.dispatch(repo, story_number, ref=pr["headRefName"], inputs={"base": "main"})
         print(f"repair: started the gate run {run['url']} of the story #{story_number}")
         if run["headSha"] != sha:
             print(f"repair: the gate run {run['url']} is on {run['headSha'][:7]}, not the settled {sha[:7]}; no merge")
             return
         gate_deadline = time.time() + int(os.environ.get("REPAIR_GATE_TIMEOUT_SECONDS", "3600"))
-        conclusion = runs.wait(gh, repo, run["databaseId"], gate_deadline, wait, name="the gate run")
+        conclusion = runs.wait(repo, run["databaseId"], gate_deadline, wait, name="the gate run")
         if conclusion != "success":
             stop(
-                gh,
                 repo,
                 number,
                 issue,
@@ -542,7 +502,7 @@ def main(gh=None):
             return
         print(f"repair: the gate run {run['url']} is success")
         deadline = time.time() + left
-    current = read_pull_request(gh, repo, number)
+    current = repo.pull_request(number)
     if current["headRefOid"] != sha or current["baseRefName"] != default:
         print(
             f"repair: the head or the base of pull request #{number} moved off {sha[:7]} on {default} while the judge"
@@ -550,12 +510,11 @@ def main(gh=None):
         )
         return
 
-    merged = arm_and_wait(gh, repo, number, sha, default, deadline, wait)
+    merged = arm_and_wait(repo, number, sha, default, deadline, wait)
     if merged is None:
         return
     if merged["headRefOid"] != sha:
         stop(
-            gh,
             repo,
             number,
             issue,
@@ -564,9 +523,9 @@ def main(gh=None):
             "The job closes no issue for it. The owner reads the pull request.",
         )
         return
-    start_ci(gh, repo, merged["baseRefName"])
-    close_issue(gh, repo, issue, merged)
-    delete_branch(gh, repo, pr["headRefName"])
+    start_ci(repo, merged["baseRefName"])
+    close_issue(repo, issue, merged)
+    delete_branch(repo, pr["headRefName"])
 
 
 if __name__ == "__main__":

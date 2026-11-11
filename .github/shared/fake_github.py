@@ -1,4 +1,4 @@
-"""The fake of the GitHub adapter of github.py, for the unit tests of the judge and the repair loop.
+"""The fake of the GitHub adapter of github.py, for the unit tests of repo.py. Any test can use `closes` and `Fail`.
 
 A test fills a table: each call with exactly the arguments of an entry takes the entry's next output, and the last
 output answers every later call. A call with no entry fails the test. The fake records every call in `calls`.

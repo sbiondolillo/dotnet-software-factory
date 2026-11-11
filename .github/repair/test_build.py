@@ -1,48 +1,43 @@
-"""Unit tests of build.py: the adapter of the create, the move and the deletion of repair-base/<n>, decided in #403,
+"""Unit tests of build.py: the token of the create, the move and the deletion of repair-base/<n>, decided in #403,
 the run that the dispatch gives back, from #469, the read of the traveler of the issue, from #513, and the author
 filter of the `Opened <url>` comment. The build job of ci.yml runs them with
-`python3 -B -m unittest discover -s .github/repair -p 'test_*.py'`. A FakeGitHub of .github/shared/ stands in for each
-adapter, so no test calls GitHub."""
+`python3 -B -m unittest discover -s .github/repair -p 'test_*.py'`. A FakeRepo of .github/shared/ stands in for each
+Repo, so no test calls GitHub. A 404 on the read of a ref is a fact of repo.py, and test_repo.py tests it."""
 
 import os
 import unittest
 from unittest import mock
 
 import build
-import closing
 import runs
 import traveler
-from fake_github import Fail, FakeGitHub, closes
+from fake_github import closes
+from fake_repo import Fail, FakeRepo
 
 REPO = "owner/repo"
 BRANCH = "repair-base/7"
 SHA = "0" * 40
 # A `createdAt` far in the future, so it is after the `since` of each dispatch.
 NOW = "2100-01-01T00:00:00Z"
-REF = ("api", f"repos/{REPO}/git/ref/heads/{BRANCH}")
-POST = ("api", "-X", "POST", f"repos/{REPO}/git/refs", "-f", f"ref=refs/heads/{BRANCH}", "-f", f"sha={SHA}")
-PATCH = ("api", "-X", "PATCH", f"repos/{REPO}/git/refs/heads/{BRANCH}", "-f", f"sha={SHA}", "-F", "force=true")
-DELETE = ("api", "-X", "DELETE", f"repos/{REPO}/git/refs/heads/{BRANCH}")
-# The verb of a dispatch, one word on each line, so the grep of #516's `## Done when` matches runs.py alone.
-START = (
-    "workflow",
-    "run",
-)
-
-
-FIELDS = runs.FIELDS
-
-
-def listing(*flags):
-    """The args of runs.find with these flags."""
-    return ("run", "list", "-R", REPO, "--workflow", build.WORKFLOW, *flags, "--limit", "30", "--json", FIELDS)
-
-
-GREEN = listing("--branch", "main", "--status", "success")
-ISSUE_VIEW = ("issue", "view", "7", "-R", REPO, "--json", "number,state,body,labels,comments")
+# The calls of the branch, each as (method, arguments), as FakeRepo.calls holds them.
+REF = ("has_branch", {"branch": BRANCH})
+POST = ("create_branch", {"branch": BRANCH, "sha": SHA})
+PATCH = ("move_branch", {"branch": BRANCH, "sha": SHA})
+DELETE = ("delete_branch", {"branch": BRANCH})
+BRANCH_CALLS = {"has_branch", "create_branch", "move_branch", "delete_branch"}
+GREEN = (build.WORKFLOW, "main", "success", None)
+LABEL = ("label_pull_request", {"number": 5, "label": build.LABEL})
 OPENED = f"Opened https://github.com/{REPO}/pull/5"
-PR_VIEW = ("pr", "view", "5", "-R", REPO, "--json", f"state,headRefName,{closing.FIELD}")
 FACTORY_PR = {"state": "OPEN", "headRefName": "factory/1", **closes(REPO, 7)}
+
+
+def fake(name=REPO):
+    """A repo whose branch calls each succeed, so a test answers only the reads it scripts."""
+    repo = FakeRepo(name)
+    for method in ("create_branch", "move_branch", "delete_branch"):
+        repo.answer(method, (BRANCH, SHA)[: 1 if method == "delete_branch" else 2], None)
+    repo.answer("label_pull_request", (5, build.LABEL), None)
+    return repo
 
 
 def issue(labels=("repair",), comments=(), **fields):
@@ -58,159 +53,172 @@ def issue(labels=("repair",), comments=(), **fields):
     }
 
 
-class AdapterTests(unittest.TestCase):
-    def test_the_ref_adapter_holds_the_ref_token(self):
-        with mock.patch.dict(os.environ, {"GH_TOKEN": "job", "REPAIR_REF_TOKEN": "app"}):
-            job, app = build.adapters()
-        self.assertEqual((job.token, app.token), ("job", "app"))
+def calls(repo, names=None):
+    """Each call of the repo as (method, arguments), or only the calls of the methods in `names`."""
+    return [call for call in repo.calls if names is None or call[0] in names]
 
-    def test_with_no_ref_token_the_ref_adapter_is_the_job_adapter(self):
+
+class TokenTests(unittest.TestCase):
+    def test_the_ref_repo_holds_the_ref_token(self):
+        with mock.patch.dict(os.environ, {"GH_TOKEN": "job", "REPAIR_REF_TOKEN": "app", "GITHUB_REPOSITORY": REPO}):
+            job, app = build.repos()
+        self.assertEqual((job.gh.token, app.gh.token), ("job", "app"))
+        self.assertEqual((job.name, app.name), (REPO, REPO))
+
+    def test_with_no_ref_token_the_ref_repo_is_the_job_repo(self):
         for value in (None, ""):
-            with self.subTest(ref_token=value), mock.patch.dict(os.environ, {"GH_TOKEN": "job"}):
+            env = {"GH_TOKEN": "job", "GITHUB_REPOSITORY": REPO}
+            with self.subTest(ref_token=value), mock.patch.dict(os.environ, env):
                 if value is None:
                     os.environ.pop("REPAIR_REF_TOKEN", None)
                 else:
                     os.environ["REPAIR_REF_TOKEN"] = value
-                job, app = build.adapters()
+                job, app = build.repos()
                 self.assertIs(app, job)
-                self.assertEqual(job.token, "job")
+                self.assertEqual(job.gh.token, "job")
 
 
 class BaseBranchTests(unittest.TestCase):
-    def test_a_missing_branch_gets_a_post(self):
-        app = FakeGitHub()
-        app.answer(REF, Fail(status=404))
-        app.answer(POST, "")
-        build.create_base_branch(app, REPO, BRANCH, SHA)
-        self.assertEqual(app.args(), [REF, POST])
+    def test_a_missing_branch_is_created(self):
+        app = fake()
+        app.answer("has_branch", (BRANCH,), False)
+        build.create_base_branch(app, BRANCH, SHA)
+        self.assertEqual(calls(app), [REF, POST])
 
-    def test_a_branch_left_by_an_earlier_run_gets_a_patch(self):
-        app = FakeGitHub()
-        app.answer(REF, "{}")
-        app.answer(PATCH, "")
-        build.create_base_branch(app, REPO, BRANCH, SHA)
-        self.assertEqual(app.args(), [REF, PATCH])
+    def test_a_branch_left_by_an_earlier_run_is_moved(self):
+        app = fake()
+        app.answer("has_branch", (BRANCH,), True)
+        build.create_base_branch(app, BRANCH, SHA)
+        self.assertEqual(calls(app), [REF, PATCH])
 
-    def test_any_other_failure_of_the_read_exits_with_no_write(self):
+    def test_a_failed_read_exits_with_no_write(self):
         for status in (None, 403, 502):
             with self.subTest(status=status):
-                app = FakeGitHub()
-                app.answer(REF, Fail(status=status, stderr="gh: the reason"))
+                app = fake()
+                app.answer("has_branch", (BRANCH,), Fail(status=status, stderr="gh: the reason"))
                 with self.assertRaises(SystemExit) as stop:
-                    build.create_base_branch(app, REPO, BRANCH, SHA)
+                    build.create_base_branch(app, BRANCH, SHA)
+                self.assertIn("could not be read", stop.exception.code)
                 self.assertIn("the reason", stop.exception.code)
-                self.assertEqual(app.args(), [REF])
+                self.assertEqual(calls(app), [REF])
 
     def test_a_failed_write_exits_with_its_text(self):
-        app = FakeGitHub()
-        app.answer(REF, Fail(status=404))
-        app.answer(POST, Fail(status=422, stderr="gh: Reference update failed (HTTP 422)"))
-        with self.assertRaises(SystemExit) as stop:
-            build.create_base_branch(app, REPO, BRANCH, SHA)
-        self.assertIn("could not be created at", stop.exception.code)
+        for exists, verb, call in ((False, "created at", POST), (True, "moved to", PATCH)):
+            with self.subTest(exists=exists):
+                app = fake()
+                app.answer("has_branch", (BRANCH,), exists)
+                app.answer(call[0], tuple(call[1].values()), Fail(status=422, stderr="gh: Reference update failed"))
+                with self.assertRaises(SystemExit) as stop:
+                    build.create_base_branch(app, BRANCH, SHA)
+                self.assertIn(f"could not be {verb} {SHA}", stop.exception.code)
+                self.assertIn("Reference update failed", stop.exception.code)
 
     def test_a_failed_deletion_is_a_log_line(self):
-        job = FakeGitHub()
-        job.answer(DELETE, Fail(status=422))
-        build.delete_base_branch(job, REPO, BRANCH)
-        self.assertEqual(job.args(), [DELETE])
+        job = FakeRepo(REPO)
+        job.answer("delete_branch", (BRANCH,), Fail(status=422))
+        build.delete_base_branch(job, BRANCH)
+        self.assertEqual(calls(job), [DELETE])
 
-    def test_a_factory_repair_creates_the_branch_on_the_ref_adapter_and_deletes_it_on_the_job_adapter(self):
-        job, app = FakeGitHub("job"), FakeGitHub("app")
-        job.answer(ISSUE_VIEW, issue(labels=("repair", "factory")), issue(comments=[("owner", OPENED)]))
-        job.answer(GREEN, [{"headSha": SHA}])
+    def test_a_factory_repair_creates_the_branch_on_the_ref_repo_and_deletes_it_on_the_job_repo(self):
+        job, app = fake(), fake()
+        job.answer("issue", (7,), issue(labels=("repair", "factory")), issue(comments=[("owner", OPENED)]))
+        job.answer("workflow_runs", GREEN, [{"headSha": SHA}])
         own = {"databaseId": 3, "displayTitle": "#7", "url": "https://example/3", "createdAt": NOW}
-        job.answer(listing("--branch", BRANCH, "--event", "workflow_dispatch"), [], [own])
-        dispatch = (*START, build.WORKFLOW, "-R", REPO, "--ref", BRANCH, "-f", "issue=7", "-f", "base=main")
-        job.answer((*dispatch, "-f", "copilot=on"), "")
-        job.answer(PR_VIEW, FACTORY_PR)
-        job.answer(("pr", "edit", "5", "-R", REPO, "--add-label", build.LABEL), "")
-        job.answer(DELETE, "")
-        app.answer(REF, Fail(status=404))
-        app.answer(POST, "")
+        job.answer("workflow_runs", (build.WORKFLOW, BRANCH, None, "workflow_dispatch"), [], [own])
+        inputs = {"issue": 7, "base": "main", "copilot": "on"}
+        job.answer("dispatch_workflow", (build.WORKFLOW, BRANCH, inputs), None)
+        job.answer("pull_request", (5,), FACTORY_PR)
+        app.answer("has_branch", (BRANCH,), False)
         with (
             mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "GITHUB_OUTPUT": os.devnull}),
             mock.patch.object(build.sys, "argv", ["build.py", "7"]),
             mock.patch.object(runs.time, "sleep"),
         ):
             build.main(job, app)
-        self.assertEqual(app.args(), [REF, POST])
-        self.assertEqual([args for args in job.args() if "git/ref" in " ".join(args)], [DELETE])
-        self.assertEqual(job.args()[-1], DELETE)
-        self.assertEqual(job.count("pr", "edit", "5", "-R", REPO, "--add-label", build.LABEL), 1)
+        self.assertEqual(calls(app), [REF, POST])
+        self.assertEqual(calls(job, BRANCH_CALLS), [DELETE])
+        self.assertEqual(job.calls[-1], DELETE)
+        [dispatch] = job.calls_of("dispatch_workflow")
+        self.assertEqual(list(dispatch["inputs"].items()), list(inputs.items()))
+        self.assertEqual(calls(job, {"label_pull_request"}), [LABEL])
 
-    def test_with_one_adapter_every_ref_call_runs_on_it(self):
-        gh = FakeGitHub()
-        gh.answer(ISSUE_VIEW, issue(labels=("repair", "factory")))
-        gh.answer(GREEN, [{"headSha": SHA}])
-        gh.answer(REF, Fail(status=502))
-        gh.answer(DELETE, "")
+    def test_with_one_repo_every_ref_call_runs_on_it(self):
+        repo = fake()
+        repo.answer("issue", (7,), issue(labels=("repair", "factory")))
+        repo.answer("workflow_runs", GREEN, [{"headSha": SHA}])
+        repo.answer("has_branch", (BRANCH,), Fail(status=502))
         with (
             mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "GITHUB_OUTPUT": os.devnull}),
             mock.patch.object(build.sys, "argv", ["build.py", "7"]),
             self.assertRaises(SystemExit),
         ):
-            build.main(gh)
-        self.assertEqual(gh.args()[-2:], [REF, DELETE])
+            build.main(repo)
+        self.assertEqual(repo.calls[-2:], [REF, DELETE])
 
     def test_with_no_green_run_one_comment_and_no_build(self):
-        gh = FakeGitHub()
-        gh.answer(ISSUE_VIEW, issue(labels=("repair", "factory")))
-        gh.answer(GREEN, [])
+        repo = FakeRepo(REPO)
+        repo.answer("issue", (7,), issue(labels=("repair", "factory")))
+        repo.answer("workflow_runs", GREEN, [])
         text = (
             f"No run of `{build.WORKFLOW}` on `main` ended `success`, so the factory has no green ref to build this "
             "repair at. No build."
         )
-        gh.answer(("issue", "comment", "7", "-R", REPO, "--body", text), "")
+        repo.answer("comment_on_issue", (7, text), None)
         with (
             mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "GITHUB_OUTPUT": os.devnull}),
             mock.patch.object(build.sys, "argv", ["build.py", "7"]),
         ):
-            build.main(gh)
-        self.assertEqual(gh.args(), [ISSUE_VIEW, GREEN, ("issue", "comment", "7", "-R", REPO, "--body", text)])
+            build.main(repo)
+        green = dict(zip(("workflow", "branch", "status", "event"), GREEN))
+        self.assertEqual(
+            calls(repo),
+            [
+                ("issue", {"number": 7}),
+                ("workflow_runs", green),
+                ("comment_on_issue", {"number": 7, "body": text}),
+            ],
+        )
 
     def test_the_branch_is_deleted_when_the_create_fails(self):
-        job, app = FakeGitHub("job"), FakeGitHub("app")
-        job.answer(ISSUE_VIEW, issue(labels=("repair", "factory")))
-        job.answer(GREEN, [{"headSha": SHA}])
-        job.answer(DELETE, "")
-        app.answer(REF, Fail(status=502))
+        job, app = fake(), fake()
+        job.answer("issue", (7,), issue(labels=("repair", "factory")))
+        job.answer("workflow_runs", GREEN, [{"headSha": SHA}])
+        app.answer("has_branch", (BRANCH,), Fail(status=502))
         with (
             mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "GITHUB_OUTPUT": os.devnull}),
             mock.patch.object(build.sys, "argv", ["build.py", "7"]),
             self.assertRaises(SystemExit),
         ):
             build.main(job, app)
-        self.assertEqual(app.args(), [REF])
-        self.assertEqual(job.args()[-1], DELETE)
+        self.assertEqual(calls(app), [REF])
+        self.assertEqual(job.calls[-1], DELETE)
 
 
 class DispatchTests(unittest.TestCase):
     """build() at main dispatches through runs.dispatch with `copilot=on` alone, and waits for the pull request while
     the run is in progress."""
 
-    VIEW = ("run", "view", "3", "-R", REPO, "--json", "status,conclusion")
-
     def build(self, issues, states):
-        gh = FakeGitHub()
+        repo = fake()
         own = {"databaseId": 3, "displayTitle": "#7", "url": "https://example/3", "createdAt": NOW}
-        gh.answer(listing("--event", "workflow_dispatch"), [], [own])
-        gh.answer((*START, build.WORKFLOW, "-R", REPO, "-f", "issue=7", "-f", "copilot=on"), "")
-        gh.answer(ISSUE_VIEW, *issues)
-        gh.answer(self.VIEW, *[{"status": status, "conclusion": conclusion} for status, conclusion in states])
-        gh.answer(PR_VIEW, FACTORY_PR)
-        gh.answer(("pr", "edit", "5", "-R", REPO, "--add-label", build.LABEL), "")
+        repo.answer("workflow_runs", (build.WORKFLOW, None, None, "workflow_dispatch"), [], [own])
+        repo.answer("dispatch_workflow", (build.WORKFLOW, None, {"issue": 7, "copilot": "on"}), None)
+        repo.answer("issue", (7,), *issues)
+        repo.answer(
+            "run_status", (3,), *[{"status": status, "conclusion": conclusion} for status, conclusion in states]
+        )
+        repo.answer("pull_request", (5,), FACTORY_PR)
         with (
             mock.patch.dict(os.environ, {"GITHUB_OUTPUT": os.devnull}),
             mock.patch.object(runs.time, "sleep") as sleep,
         ):
-            build.build(gh, REPO, 7, 3600)
-        return gh, sleep
+            build.build(repo, 7, 3600)
+        return repo, sleep
 
     def test_the_pull_request_opened_while_the_run_is_in_progress_is_labeled(self):
-        gh, sleep = self.build([issue(), issue(), issue(comments=[("owner", OPENED)])], [("in_progress", "")])
-        self.assertEqual(gh.count("pr", "edit", "5", "-R", REPO, "--add-label", build.LABEL), 1)
-        self.assertEqual(gh.count(*self.VIEW), 2)
+        repo, sleep = self.build([issue(), issue(), issue(comments=[("owner", OPENED)])], [("in_progress", "")])
+        self.assertEqual(calls(repo, {"label_pull_request"}), [LABEL])
+        self.assertEqual(len(repo.calls_of("run_status")), 2)
         self.assertEqual([call.args for call in sleep.call_args_list], [(build.POLL,), (build.POLL,)])
 
     def test_a_run_that_ends_with_no_pull_request_exits(self):
@@ -219,8 +227,8 @@ class DispatchTests(unittest.TestCase):
         self.assertIn("ended failure with no pull request on issue #7", stop.exception.code)
 
     def test_the_pull_request_posted_as_the_run_ends_is_labeled(self):
-        gh, _ = self.build([issue(), issue(comments=[("owner", OPENED)])], [("completed", "success")])
-        self.assertEqual(gh.count("pr", "edit", "5", "-R", REPO, "--add-label", build.LABEL), 1)
+        repo, _ = self.build([issue(), issue(comments=[("owner", OPENED)])], [("completed", "success")])
+        self.assertEqual(calls(repo, {"label_pull_request"}), [LABEL])
 
 
 class OpenedTests(unittest.TestCase):
@@ -228,9 +236,9 @@ class OpenedTests(unittest.TestCase):
     FACTORY_SELF_TOKEN."""
 
     def opened(self, comments, pr=FACTORY_PR):
-        gh = FakeGitHub()
-        gh.answer(PR_VIEW, pr)
-        return build.opened_pull_request(gh, REPO, issue(comments=comments)), gh
+        repo = FakeRepo(REPO)
+        repo.answer("pull_request", (5,), pr)
+        return build.opened_pull_request(repo, issue(comments=comments)), repo
 
     def test_the_owner_s_comment_names_the_pull_request(self):
         self.assertEqual(self.opened([("owner", OPENED)])[0], 5)
@@ -238,9 +246,9 @@ class OpenedTests(unittest.TestCase):
     def test_a_comment_by_anyone_else_is_no_result_and_reads_no_pull_request(self):
         for login in ("someone", "owner-x", "github-actions[bot]"):
             with self.subTest(login=login):
-                pr, gh = self.opened([(login, OPENED)])
+                pr, repo = self.opened([(login, OPENED)])
                 self.assertIsNone(pr)
-                self.assertEqual(gh.calls, [])
+                self.assertEqual(repo.calls, [])
 
     def test_a_comment_in_another_form_is_no_result(self):
         for body in (f"See {OPENED}", "Opened https://github.com/other/repo/pull/5", f"{OPENED}/files"):
@@ -261,26 +269,26 @@ TARGET_COMMENT = (
 
 class TravelerTests(unittest.TestCase):
     def run_main(self, issue):
-        gh = FakeGitHub()
-        gh.answer(ISSUE_VIEW, issue)
-        gh.answer(("issue", "comment", "7", "-R", REPO, "--body", TARGET_COMMENT), "")
+        repo = FakeRepo(REPO)
+        repo.answer("issue", (7,), issue)
+        repo.answer("comment_on_issue", (7, TARGET_COMMENT), None)
         with (
             mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "GITHUB_OUTPUT": os.devnull}),
             mock.patch.object(build.sys, "argv", ["build.py", "7"]),
             mock.patch.object(build, "build") as built,
         ):
-            build.main(gh)
-        return gh, built
+            build.main(repo)
+        return repo, built
 
     def test_an_issue_whose_traveler_targets_a_pull_request_gets_one_comment_and_no_build(self):
-        gh, built = self.run_main(issue(pull_request=3))
+        repo, built = self.run_main(issue(pull_request=3))
         built.assert_not_called()
-        self.assertEqual(gh.count("issue", "comment", "7", "-R", REPO, "--body", TARGET_COMMENT), 1)
+        self.assertEqual(repo.calls_of("comment_on_issue"), [{"number": 7, "body": TARGET_COMMENT}])
 
     def test_an_issue_whose_traveler_targets_main_is_built(self):
-        gh, built = self.run_main(issue())
-        self.assertEqual(gh.args(), [ISSUE_VIEW])
-        built.assert_called_once_with(gh, REPO, 7, 3600)
+        repo, built = self.run_main(issue())
+        self.assertEqual(repo.calls, [("issue", {"number": 7})])
+        built.assert_called_once_with(repo, 7, 3600)
 
     def test_a_factory_pull_request_closes_its_issue_as_github_reports_it(self):
         cases = (
@@ -290,10 +298,10 @@ class TravelerTests(unittest.TestCase):
             (closes("o/other", 7), False),
         )
         for references, expected in cases:
-            gh = FakeGitHub()
-            gh.answer(PR_VIEW, {**FACTORY_PR, **references})
+            repo = FakeRepo(REPO)
+            repo.answer("pull_request", (5,), {**FACTORY_PR, **references})
             with self.subTest(references=references):
-                self.assertIs(build.is_factory_pull_request(gh, REPO, 5, 7), expected)
+                self.assertIs(build.is_factory_pull_request(repo, 5, 7), expected)
 
 
 if __name__ == "__main__":

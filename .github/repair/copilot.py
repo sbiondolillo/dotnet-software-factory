@@ -22,7 +22,6 @@ Argument: the number of the repair pull request. The result goes to GITHUB_OUTPU
 `unsettled`, with the head SHA as `sha`, for the merge stage.
 """
 
-import json
 import os
 import sys
 import time
@@ -35,11 +34,6 @@ from github import GitHub  # noqa: E402
 from repo import Repo  # noqa: E402
 
 LABEL = "repair"
-FIELDS = f"state,labels,headRefOid,{closing.FIELD}"
-
-
-def read_pull_request(gh, repo, number):
-    return json.loads(gh.run("pr", "view", str(number), "-R", repo, "--json", FIELDS))
 
 
 def output(**values):
@@ -48,22 +42,24 @@ def output(**values):
             out.write(f"{name}={value}\n")
 
 
-def stop(gh, repo, number, issue, sha, text):
+def stop(repo, number, issue, sha, text):
     """One comment for the SHA, on the issue, or on the pull request when it closes no issue."""
     target = issue if issue is not None else number
-    comments.post_once(Repo(gh, repo), target, f"<!-- repair-copilot:{sha} -->", text)
+    comments.post_once(repo, target, f"<!-- repair-copilot:{sha} -->", text)
     print(f"repair: unsettled on {sha[:7]}: {text.splitlines()[0]}")
 
 
-def main(gh=None):
-    gh = gh if gh is not None else GitHub.from_env()
-    repo = os.environ.get("GITHUB_REPOSITORY") or sys.exit("repair: GITHUB_REPOSITORY is not set")
+def main(repo=None):
+    """`repo` is the Repo of GH_TOKEN, which a test hands in."""
+    if repo is None:
+        gh = GitHub.from_env()
+        repo = Repo(gh, os.environ.get("GITHUB_REPOSITORY") or sys.exit("repair: GITHUB_REPOSITORY is not set"))
     number = (
         int(sys.argv[1])
         if len(sys.argv) > 1 and sys.argv[1].isdigit()
         else sys.exit("repair: give the number of a repair pull request")
     )
-    pr = read_pull_request(gh, repo, number)
+    pr = repo.pull_request(number)
     labels = [item["name"] for item in pr["labels"]]
     if pr["state"] != "OPEN" or LABEL not in labels:
         print(f"repair: pull request #{number} is {pr['state'].lower()} with the labels {labels}; nothing to watch")
@@ -71,19 +67,18 @@ def main(gh=None):
     run_id = os.environ.get("FACTORY_RUN") or sys.exit("repair: FACTORY_RUN is not set; there is no run to wait on")
     wait = int(os.environ.get("REPAIR_POLL_SECONDS", "30"))
     deadline = time.time() + int(os.environ.get("REPAIR_COPILOT_TIMEOUT_SECONDS", "7200"))
-    conclusion = runs.wait(gh, repo, run_id, deadline, wait, name="the factory run")
-    sha = read_pull_request(gh, repo, number)["headRefOid"]
+    conclusion = runs.wait(repo, run_id, deadline, wait, name="the factory run")
+    sha = repo.pull_request(number)["headRefOid"]
     if conclusion == "success":
         output(copilot="settled", sha=sha)
-        print(f"repair: the factory run {runs.url(repo, run_id)} passed; settled on {sha[:7]}")
+        print(f"repair: the factory run {runs.url(repo.name, run_id)} passed; settled on {sha[:7]}")
         return
     stop(
-        gh,
         repo,
         number,
-        closing.issue(pr, repo),
+        closing.issue(pr, repo.name),
         sha,
-        f"The factory run {runs.url(repo, run_id)} of pull request #{number} ended `{conclusion}` on `{sha}`. "
+        f"The factory run {runs.url(repo.name, run_id)} of pull request #{number} ended `{conclusion}` on `{sha}`. "
         "The loop stops for this head. The owner reads the run: its log and job summary name the reason.",
     )
     output(copilot="unsettled", sha=sha)
