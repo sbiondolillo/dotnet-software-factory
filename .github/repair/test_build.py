@@ -163,7 +163,7 @@ class BaseBranchTests(unittest.TestCase):
             f"No run of `{build.WORKFLOW}` on `main` ended `success`, so the factory has no green ref to build this "
             "repair at. No build."
         )
-        repo.answer("comment_on_issue", (7, text), None)
+        repo.answer("post_comment", (7, text), None)
         with (
             mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "GITHUB_OUTPUT": os.devnull}),
             mock.patch.object(build.sys, "argv", ["build.py", "7"]),
@@ -175,7 +175,7 @@ class BaseBranchTests(unittest.TestCase):
             [
                 ("issue", {"number": 7}),
                 ("workflow_runs", green),
-                ("comment_on_issue", {"number": 7, "body": text}),
+                ("post_comment", {"number": 7, "body": text, "sha": None}),
             ],
         )
 
@@ -271,7 +271,7 @@ class TravelerTests(unittest.TestCase):
     def run_main(self, issue):
         repo = FakeRepo(REPO)
         repo.answer("issue", (7,), issue)
-        repo.answer("comment_on_issue", (7, TARGET_COMMENT), None)
+        repo.answer("post_comment", (7, TARGET_COMMENT), None)
         with (
             mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "GITHUB_OUTPUT": os.devnull}),
             mock.patch.object(build.sys, "argv", ["build.py", "7"]),
@@ -283,7 +283,7 @@ class TravelerTests(unittest.TestCase):
     def test_an_issue_whose_traveler_targets_a_pull_request_gets_one_comment_and_no_build(self):
         repo, built = self.run_main(issue(pull_request=3))
         built.assert_not_called()
-        self.assertEqual(repo.calls_of("comment_on_issue"), [{"number": 7, "body": TARGET_COMMENT}])
+        self.assertEqual(repo.calls_of("post_comment"), [{"number": 7, "body": TARGET_COMMENT, "sha": None}])
 
     def test_an_issue_whose_traveler_targets_main_is_built(self):
         repo, built = self.run_main(issue())

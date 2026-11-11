@@ -116,13 +116,6 @@ class CommentTests(unittest.TestCase):
             r.post_comment(None, "The text.")
         self.assertEqual(r.gh.calls, [])
 
-    def test_comment_on_commit_sends_the_body_as_a_form_field(self):
-        r = repo()
-        call = ("api", COMMIT_COMMENTS, "-f", "body=The text.")
-        r.gh.answer(call, "{}")
-        r.comment_on_commit(SHA, "The text.")
-        self.assertEqual(r.gh.args(), [call])
-
 
 class CheckTests(unittest.TestCase):
     LATEST = ("api", f"repos/o/r/commits/{SHA}/check-runs?check_name=a-check&filter=latest")
@@ -278,9 +271,6 @@ class ArgumentTests(unittest.TestCase):
         self.assertEqual(answer, "https://github.com/o/r/issues/7")
         self.assertEqual(r.gh.input_of(*call), "The body.")
 
-    def test_comment_on_issue_uses_gh_issue_comment(self):
-        self.sent(("issue", "comment", "4", "-R", "o/r", "--body", "The text."), "", "comment_on_issue", 4, "The text.")
-
     def test_close_issue_closes_with_the_comment(self):
         self.sent(("issue", "close", "5", "-R", "o/r", "--comment", "The text."), "", "close_issue", 5, "The text.")
 
@@ -328,7 +318,7 @@ class SpecialCaseTests(unittest.TestCase):
     LOG = ("run", "view", "9", "-R", "o/r", "--attempt", "1", "--log-failed")
     REF = ("api", "repos/o/r/git/ref/heads/b")
     MATCHING = ("api", "repos/o/r/git/matching-refs/heads/repair/5")
-    DELETE = ("api", "--method", "DELETE", "repos/o/r/git/refs/heads/repair/5")
+    DELETE = ("api", "-X", "DELETE", "repos/o/r/git/refs/heads/repair/5")
 
     def test_a_404_on_the_content_of_a_file_is_none(self):
         r = repo()
@@ -370,6 +360,17 @@ class SpecialCaseTests(unittest.TestCase):
         self.assertIs(r.delete_branch_if_present("repair/5"), True)
         self.assertEqual(r.gh.args(), [self.MATCHING, self.DELETE])
 
+    def test_both_deletes_send_the_same_delete(self):
+        deleted = repo()
+        deleted.gh.answer(self.DELETE, "")
+        deleted.delete_branch("repair/5")
+        present = repo()
+        present.gh.answer(self.MATCHING, [{"ref": "refs/heads/repair/5"}])
+        present.gh.answer(self.DELETE, "")
+        present.delete_branch_if_present("repair/5")
+        self.assertEqual(deleted.gh.args(), [self.DELETE])
+        self.assertEqual(present.gh.args()[1:], deleted.gh.args())
+
     def test_a_branch_that_is_gone_or_only_a_prefix_of_another_is_not_deleted(self):
         for refs in ([], [{"ref": "refs/heads/repair/50"}]):
             with self.subTest(refs=refs):
@@ -397,6 +398,33 @@ class SpecialCaseTests(unittest.TestCase):
                 r.gh.answer(self.REF, Fail(status=status, stderr="gh: the reason"))
                 with self.assertRaises(GitHubError):
                     r.has_branch("b")
+
+
+class RunAddressTests(unittest.TestCase):
+    """The web address of a workflow run, from #574. Neither method sends a call."""
+
+    def test_a_run_id_gives_its_address(self):
+        r = repo()
+        self.assertEqual(r.run_url(9), "https://github.com/o/r/actions/runs/9")
+        self.assertEqual(r.run_url("9"), "https://github.com/o/r/actions/runs/9")
+        self.assertEqual(r.gh.calls, [])
+
+    def test_the_address_gives_the_run_id_back(self):
+        r = repo()
+        self.assertEqual(r.run_id_of(r.run_url(9)), 9)
+        self.assertEqual(r.gh.calls, [])
+
+    def test_an_address_of_another_repo_or_of_no_run_gives_none(self):
+        for url in (
+            "https://github.com/o/other/actions/runs/9",
+            "https://github.com/o/r/pull/9",
+            "https://github.com/o/r/actions/runs/9/job/1",
+            "https://github.com/o/r/actions/runs/",
+            "",
+            None,
+        ):
+            with self.subTest(url=url):
+                self.assertIsNone(repo().run_id_of(url))
 
 
 if __name__ == "__main__":

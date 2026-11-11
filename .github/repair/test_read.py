@@ -314,35 +314,35 @@ class DedupeTests(unittest.TestCase):
         repo.answer("issues_with_label", ("repair",), issues)
         repo.answer("comments", (4,), [{"body": body} for body in comments])
         take_comments(repo, None, "abc1234")
-        repo.answer("comment_on_issue", tuple(ALSO_RED.values()), None)
+        repo.answer("post_comment", tuple(ALSO_RED.values()), None)
         return read.already_handled(repo, None, RED), repo
 
     def test_an_open_issue_that_holds_the_sha_takes_one_comment(self):
         handled, repo = self.handled([repair(4)])
         self.assertTrue(handled)
-        self.assertEqual(repo.calls_of("comment_on_issue"), [ALSO_RED])
+        self.assertEqual(posted(repo, 4, None), [ALSO_RED["body"]])
 
     def test_an_open_issue_that_names_the_run_already_takes_no_comment(self):
         handled, repo = self.handled(
             [repair(4)], comments=["first", f"The run {RED['html_url']} on `abc1234` is also red."]
         )
         self.assertTrue(handled)
-        self.assertEqual(repo.calls_of("comment_on_issue"), [])
+        self.assertEqual(posted(repo, 4, None), [])
 
     def test_a_comment_with_no_body_names_no_run(self):
         handled, repo = self.handled([repair(4)], comments=[None, ""])
         self.assertTrue(handled)
-        self.assertEqual(repo.calls_of("comment_on_issue"), [ALSO_RED])
+        self.assertEqual(posted(repo, 4, None), [ALSO_RED["body"]])
 
     def test_a_closed_issue_that_holds_the_sha_ends_the_read_with_no_comment(self):
         handled, repo = self.handled([repair(4, state="CLOSED")])
         self.assertTrue(handled)
-        self.assertEqual(repo.calls_of("comment_on_issue"), [])
+        self.assertEqual(posted(repo, 4, None), [])
 
     def test_an_open_issue_wins_over_a_closed_one(self):
         handled, repo = self.handled([repair(3, state="CLOSED"), repair(4)])
         self.assertTrue(handled)
-        self.assertEqual(repo.calls_of("comment_on_issue"), [ALSO_RED])
+        self.assertEqual(posted(repo, 4, None), [ALSO_RED["body"]])
 
     def test_the_oldest_closed_issue_wins_over_a_later_one(self):
         repo = FakeRepo()
@@ -352,7 +352,7 @@ class DedupeTests(unittest.TestCase):
     def test_a_factory_repair_holds_no_ci_run_of_its_sha(self):
         handled, repo = self.handled([repair(4, labels=("repair", "factory"))])
         self.assertFalse(handled)
-        self.assertEqual(repo.calls_of("comment_on_issue"), [])
+        self.assertEqual(posted(repo, 4, None), [])
 
     def test_a_marker_comment_on_the_commit_ends_the_read(self):
         repo = FakeRepo()
@@ -371,10 +371,26 @@ class DedupeTests(unittest.TestCase):
         take_comments(repo, 8, "abc1234")
         self.assertFalse(read.already_handled(repo, {"number": 8}, RED))
 
+    def test_a_second_red_factory_run_comments_on_the_open_issue_and_on_its_commit(self):
+        repo = FakeRepo()
+        repo.answer("issues_with_label", ("repair",), [repair(4, labels=("repair", "factory"))])
+        repo.answer("comments", (4,), [])
+        repo.answer("post_comment", (4, mock.ANY), None)
+        repo.answer("post_comment", (None, mock.ANY, "abc1234"), None)
+        self.assertTrue(read.already_handled(repo, {"number": 451, "story": True}, RED))
+        self.assertEqual(posted(repo, 4, None), [ALSO_RED["body"]])
+        self.assertEqual(
+            posted(repo, None, "abc1234"),
+            [
+                f"The factory run {RED['html_url']} on story #451 is red. The factory repair #4 is open, so no second "
+                "repair."
+            ],
+        )
+
     def test_no_issue_and_no_marker_needs_a_repair(self):
         handled, repo = self.handled([repair(4, body="another SHA")])
         self.assertFalse(handled)
-        self.assertEqual(repo.calls_of("comment_on_issue"), [])
+        self.assertEqual(posted(repo, 4, None), [])
 
 
 class RerunTests(unittest.TestCase):

@@ -71,14 +71,14 @@ def main(repo=None):
     sha = repo.pull_request(number)["headRefOid"]
     if conclusion == "success":
         output(copilot="settled", sha=sha)
-        print(f"repair: the factory run {runs.url(repo.name, run_id)} passed; settled on {sha[:7]}")
+        print(f"repair: the factory run {repo.run_url(run_id)} passed; settled on {sha[:7]}")
         return
     stop(
         repo,
         number,
         closing.issue(pr, repo.name),
         sha,
-        f"The factory run {runs.url(repo.name, run_id)} of pull request #{number} ended `{conclusion}` on `{sha}`. "
+        f"The factory run {repo.run_url(run_id)} of pull request #{number} ended `{conclusion}` on `{sha}`. "
         "The loop stops for this head. The owner reads the run: its log and job summary name the reason.",
     )
     output(copilot="unsettled", sha=sha)

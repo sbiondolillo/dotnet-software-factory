@@ -331,7 +331,7 @@ class BaseTests(unittest.TestCase):
         repo.answer("files", (7,), [{"filename": path} for path in paths])
         repo.answer("file_at", (merge.FACTORY, BASE_SHA), FACTORY_TEXT)
         repo.answer("file_at", (merge.FACTORY, SHA), head_text)
-        repo.answer("workflow_run", ("9",), {"head_branch": red_branch})
+        repo.answer("workflow_run", (9,), {"head_branch": red_branch})
         repo.answer("latest_check", (verdict.CHECK, SHA), *(verdicts or [PASSED]))
         self.take_comments(repo)
         gate_run = {"databaseId": 1, "headSha": gate[0], "displayTitle": "#451", "url": "u", "createdAt": NOW}

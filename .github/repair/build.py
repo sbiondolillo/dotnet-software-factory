@@ -184,7 +184,7 @@ def main(job=None, app=None):
         return
     ticket = traveler.parse(issue["body"])
     if ticket is not None and (target := ticket.pull_request) is not None:
-        job.comment_on_issue(
+        job.post_comment(
             number,
             f"Every repair lands on the head of `main`, and the fault is on the branch of pull request #{target}. "
             "No build. A builder at the red SHA is the Managed Agents builder, #370.",
@@ -198,7 +198,7 @@ def main(job=None, app=None):
         return
     sha = green_sha(job)
     if sha is None:
-        job.comment_on_issue(
+        job.post_comment(
             number,
             f"No run of `{WORKFLOW}` on `main` ended `success`, so the factory has no green ref to build this "
             "repair at. No build.",
