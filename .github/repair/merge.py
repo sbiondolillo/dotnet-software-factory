@@ -69,11 +69,9 @@ comment. It reads the pull request after the list of files and again directly be
 with no comment when the base or the head moved since the check. While the merge is armed, a move of the base disarms
 it, as a move of the head does.
 
-The job reads the paths from `GET /repos/<repo>/pulls/<n>/files`, with `--paginate`, and not from
-`gh pr diff --name-only`. The API names both paths of a rename, `filename` and `previous_filename`, so a move of a
-guarded file is seen. `gh pr diff` reads the diff media type, which GitHub refuses for a large diff. The API lists at
-most 3000 files, so a list shorter than `changedFiles` of the pull request is a refusal too. The job reads the head
-again after the list, so the list belongs to the settled SHA.
+The job reads the paths from `Repo.files`, which states how GitHub lists them. The list names both paths of a
+rename, so a move of a guarded file is seen. A list shorter than `changedFiles` of the pull request is a refusal too.
+The job reads the head again after the list, so the list belongs to the settled SHA.
 
 The loop bound: the job merges nothing on a pull request whose head branch is the branch of the red run that
 started the repair. The run is the one that the traveler of the issue names: the block under `## Run`, which read.py

@@ -15,6 +15,7 @@ import traveler
 import verdict
 from fake_github import closes
 from fake_repo import Fail, FakeRepo
+from github import GitHubError
 
 with open(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "workflows", "factory.yml"), encoding="utf-8"
@@ -306,12 +307,22 @@ class BaseTests(unittest.TestCase):
         return f"The fix.\n\n{traveler.render(ticket)}"
 
     def run_main(
-        self, *bases, paths=("src/x.cs",), issue=None, red_branch="main", gate=("c" * 40,), env=None, verdicts=None
+        self,
+        *bases,
+        paths=("src/x.cs",),
+        issue=None,
+        red_branch="main",
+        gate=("c" * 40,),
+        env=None,
+        verdicts=None,
+        repo=None,
+        head_text=FACTORY_TEXT,
     ):
         """The fake after main() ran. Each read of the pull request gives the next base, and the read after the arm
         gives it merged. `gate` is the head SHA of the gate run, then each status of it in turn, and its
-        conclusion. `verdicts` are the states of judge-verdict in turn, a completed success by default."""
-        repo = FakeRepo(REPO)
+        conclusion. `verdicts` are the states of judge-verdict in turn, a completed success by default. `head_text`
+        answers the read of factory.yml at the head. A test that expects main() to raise hands in its own `repo`."""
+        repo = repo if repo is not None else FakeRepo(REPO)
         merged = self.pull_request("main", state="MERGED", mergeCommit={"oid": MERGE_SHA})
         merged["mergedBy"] = {"login": "github-actions"}
         repo.answer("pull_request", (7,), *[self.pull_request(base) for base in bases], merged)
@@ -319,7 +330,7 @@ class BaseTests(unittest.TestCase):
         repo.answer("issue", (5,), {**(issue or {"body": "", "labels": []}), "state": "OPEN"})
         repo.answer("files", (7,), [{"filename": path} for path in paths])
         repo.answer("file_at", (merge.FACTORY, BASE_SHA), FACTORY_TEXT)
-        repo.answer("file_at", (merge.FACTORY, SHA), FACTORY_TEXT)
+        repo.answer("file_at", (merge.FACTORY, SHA), head_text)
         repo.answer("workflow_run", ("9",), {"head_branch": red_branch})
         repo.answer("latest_check", (verdict.CHECK, SHA), *(verdicts or [PASSED]))
         self.take_comments(repo)
@@ -401,6 +412,14 @@ class BaseTests(unittest.TestCase):
         self.assertEqual(self.comments(repo), [])
         self.assertEqual((count(repo, "file_at", sha=BASE_SHA), count(repo, "file_at", sha=SHA)), (1, 1))
         self.assertEqual(count(repo, "enable_auto_merge"), 1)
+
+    def test_a_failed_read_of_factory_yml_ends_the_job_and_merges_nothing(self):
+        repo = FakeRepo(REPO)
+        with self.assertRaises(GitHubError):
+            self.run_main("main", "main", "main", paths=[merge.FACTORY], repo=repo, head_text=Fail(status=502))
+        self.assertEqual(count(repo, "file_at", sha=SHA), 1)
+        self.assertEqual(self.comments(repo), [])
+        self.assertEqual(count(repo, "enable_auto_merge"), 0)
 
     def test_a_guarded_path_is_refused_with_one_comment_before_the_judge(self):
         repo = self.run_main("main", "main", paths=[".github/workflows/judge.yml"])

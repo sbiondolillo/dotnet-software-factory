@@ -127,7 +127,9 @@ class Repo:
 
     def files(self, number):
         """Each changed file of the pull request, every page. Each entry is parsed whole, so a path that holds a line
-        feed stays one path."""
+        feed stays one path. The API names both paths of a rename, `filename` and `previous_filename`. `gh pr diff`
+        is no route: it reads the diff media type, which GitHub refuses for a large diff. The API lists at most 3000
+        files, so a caller compares the length of the list with `changedFiles` of the pull request."""
         return self.gh.api_list(f"repos/{self.name}/pulls/{number}/files")
 
     def label_pull_request(self, number, label):
