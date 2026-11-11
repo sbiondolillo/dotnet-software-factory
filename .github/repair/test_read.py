@@ -489,7 +489,14 @@ class FailedLogTests(unittest.TestCase):
         return read.failed_log(repo, RED)
 
     def test_the_log_of_the_attempt(self):
-        self.assertEqual(self.log("the log\n"), "the log\n")
+        with mock.patch("builtins.print") as printed:
+            self.assertEqual(self.log(("the log\n", None)), "the log\n")
+        printed.assert_not_called()
+
+    def test_a_kept_log_of_a_failed_read_is_named_in_the_job_log(self):
+        with mock.patch("builtins.print") as printed:
+            self.assertEqual(self.log(("the other jobs\n", "log not found\n")), "the other jobs\n")
+        printed.assert_called_once_with("repair: gh run view 9 exited 1: log not found; kept stdout")
 
     def test_a_failed_read_exits_with_its_text(self):
         with self.assertRaises(SystemExit) as stop:

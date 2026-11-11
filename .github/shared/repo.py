@@ -288,13 +288,17 @@ class Repo:
 
         A failed job with 0 steps, such as a failed judge-verdict, has no log. `gh run view --log-failed` then prints
         the log of the other jobs and exits with the code 1 and `log not found`, as #392 shows. So a failure with the
-        code 1 and output other than whitespace gives that output. Any other failure raises GitHubError."""
+        code 1 and output other than whitespace gives that output. Any other failure raises GitHubError.
+
+        It gives the log, and then None for a clean read, or the standard error of `gh` when the log is the output of
+        such a failure, so that a caller can say so."""
         try:
-            return self.gh.run("run", "view", str(run_id), "-R", self.name, "--attempt", str(attempt), "--log-failed")
+            log = self.gh.run("run", "view", str(run_id), "-R", self.name, "--attempt", str(attempt), "--log-failed")
         except GitHubError as error:
             if error.returncode != 1 or not error.stdout.strip():
                 raise
-            return error.stdout
+            return error.stdout, error.stderr
+        return log, None
 
     def rerun_failed(self, run_id):
         """Reruns the failed jobs of the workflow run, as a new attempt of the same run."""

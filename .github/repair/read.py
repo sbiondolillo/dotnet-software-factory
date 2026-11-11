@@ -87,9 +87,12 @@ def failed_log(repo, run):
     """The failed log of the attempt the reader holds. Repo.failed_log keeps the log of the other jobs when a job
     has none, and a read that gives no log ends the step."""
     try:
-        return repo.failed_log(run["id"], run["run_attempt"])
+        log, kept = repo.failed_log(run["id"], run["run_attempt"])
     except GitHubError as error:
         sys.exit(f"repair: gh run view {run['id']} failed: {error.stderr.strip()[:500]}")
+    if kept is not None:
+        print(f"repair: gh run view {run['id']} exited 1: {kept.strip()[:500]}; kept stdout")
+    return log
 
 
 def run_comments(repo, story, run):

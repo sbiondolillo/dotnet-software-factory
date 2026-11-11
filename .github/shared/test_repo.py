@@ -308,7 +308,7 @@ class ArgumentTests(unittest.TestCase):
     def test_failed_log_reads_the_log_of_the_attempt(self):
         call = ("run", "view", "9", "-R", "o/r", "--attempt", "2", "--log-failed")
         answer, _ = self.sent(call, "the log\n", "failed_log", 9, 2)
-        self.assertEqual(answer, "the log\n")
+        self.assertEqual(answer, ("the log\n", None))
 
     def test_rerun_failed_reruns_the_failed_jobs(self):
         self.sent(("run", "rerun", "9", "-R", "o/r", "--failed"), "", "rerun_failed", 9)
@@ -346,7 +346,7 @@ class SpecialCaseTests(unittest.TestCase):
     def test_a_failed_log_that_exits_1_with_output_gives_the_output(self):
         r = repo()
         r.gh.answer(self.LOG, Fail(stdout="the other jobs\n", stderr="log not found"))
-        self.assertEqual(r.failed_log(9, 1), "the other jobs\n")
+        self.assertEqual(r.failed_log(9, 1), ("the other jobs\n", "log not found"))
 
     def test_a_failed_log_that_exits_1_with_no_output_raises(self):
         r = repo()
