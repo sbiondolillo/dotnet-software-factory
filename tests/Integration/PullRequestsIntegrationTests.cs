@@ -20,7 +20,12 @@ public sealed class PullRequestsIntegrationTests
         return new GitHubClient(new HttpClient(), token);
     }
 
-    private static async Task<string> CreateBranchAsync(GitHubClient client, Cleanup cleanup, CancellationToken ct)
+    /// <summary>
+    /// Creates a branch from the head of main with one new file, and gives its name and the commit of the file. The SHA
+    /// comes from the answer to the write. With a read of the branch after the write, two attempts of CI run 43123503479
+    /// got the check runs of the head of main (#578).
+    /// </summary>
+    private static async Task<(string Branch, string Sha)> CreateBranchAsync(GitHubClient client, Cleanup cleanup, CancellationToken ct)
     {
         string branch = "pr-test/" + Guid.NewGuid().ToString("N");
         JsonElement main = await client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/git/ref/heads/main", null, ct);
@@ -28,14 +33,8 @@ public sealed class PullRequestsIntegrationTests
         await client.SendAsync(HttpMethod.Post, $"/repos/{Owner}/{Repo}/git/refs", JsonSerializer.Serialize(new { @ref = "refs/heads/" + branch, sha }), ct);
         cleanup.Add($"delete the branch {branch}", () => client.SendAsync(HttpMethod.Delete, $"/repos/{Owner}/{Repo}/git/refs/heads/{branch}"));
         string content = Convert.ToBase64String(Encoding.UTF8.GetBytes(branch));
-        await client.SendAsync(HttpMethod.Put, $"/repos/{Owner}/{Repo}/contents/{branch}.txt", JsonSerializer.Serialize(new { message = "add " + branch, content, branch }), ct);
-        return branch;
-    }
-
-    private static async Task<string> HeadShaAsync(GitHubClient client, string branch, CancellationToken ct)
-    {
-        JsonElement json = await client.SendAsync(HttpMethod.Get, $"/repos/{Owner}/{Repo}/git/ref/heads/{branch}", null, ct);
-        return json.GetProperty("object").GetProperty("sha").GetString() ?? "";
+        JsonElement written = await client.SendAsync(HttpMethod.Put, $"/repos/{Owner}/{Repo}/contents/{branch}.txt", JsonSerializer.Serialize(new { message = "add " + branch, content, branch }), ct);
+        return (branch, written.GetProperty("commit").GetProperty("sha").GetString() ?? "");
     }
 
     [Fact]
@@ -46,7 +45,7 @@ public sealed class PullRequestsIntegrationTests
         await Cleanup.RunAsync(async cleanup =>
         {
             var sut = new PullRequests(client);
-            string first = await CreateBranchAsync(client, cleanup, ct);
+            (string first, _) = await CreateBranchAsync(client, cleanup, ct);
             PullRequest a = await sut.OpenAsync(new RepoName(Owner, Repo), first, "main", "test " + first, "body", ct);
             cleanup.Add($"close the pull request #{a.Number}", () => client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/pulls/{a.Number}", "{\"state\":\"closed\"}"));
             PullRequest again = await sut.OpenAsync(new RepoName(Owner, Repo), first, "main", "test " + first, "body", ct);
@@ -74,8 +73,7 @@ public sealed class PullRequestsIntegrationTests
         GitHubClient client = Client();
         await Cleanup.RunAsync(async cleanup =>
         {
-            string branch = await CreateBranchAsync(client, cleanup, ct);
-            string sha = await HeadShaAsync(client, branch, ct);
+            (_, string sha) = await CreateBranchAsync(client, cleanup, ct);
             Assert.Empty(await new PullRequests(client).ReadCheckRunsAsync(new RepoName(Owner, Repo), sha, ct));
         });
     }
@@ -117,7 +115,7 @@ public sealed class PullRequestsIntegrationTests
             JsonElement created = await client.SendAsync(HttpMethod.Post, $"/repos/{Owner}/{Repo}/issues", JsonSerializer.Serialize(new { title = "closing issue test" }), ct);
             int issue = created.GetProperty("number").GetInt32();
             cleanup.Add($"close the issue #{issue}", () => client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/issues/{issue}", "{\"state\":\"closed\"}"));
-            string branch = await CreateBranchAsync(client, cleanup, ct);
+            (string branch, _) = await CreateBranchAsync(client, cleanup, ct);
             var sut = new PullRequests(client);
             PullRequest pull = await sut.OpenAsync(new RepoName(Owner, Repo), branch, "main", "test " + branch, $"Fixes #{issue}", ct);
             cleanup.Add($"close the pull request #{pull.Number}", () => client.SendAsync(HttpMethod.Patch, $"/repos/{Owner}/{Repo}/pulls/{pull.Number}", "{\"state\":\"closed\"}"));
